@@ -45,7 +45,7 @@
     <text x="14" y="88" class="hint" fill="#93c5fd" font-size="7px">Map of the app</text>
     <rect class="box" x="8" y="100" width="112" height="34" rx="4" fill="#1e293b" stroke="#334155"/>
     <text x="14" y="118" class="labelInv" font-size="9px">Admin</text>
-    <text x="14" y="130" class="hint" fill="#94a3b8" font-size="7px">Machines &amp; sign-in</text>
+    <text x="14" y="130" class="hint" fill="#94a3b8" font-size="7px">Machines &amp; access</text>
     <rect class="box" x="8" y="140" width="112" height="34" rx="4" fill="#1e293b" stroke="#334155"/>
     <text x="14" y="158" class="labelInv" font-size="9px">Red Flags</text>
     <text x="14" y="170" class="hint" fill="#94a3b8" font-size="7px">Machines to review</text>
@@ -79,7 +79,7 @@
     <rect class="box" x="580" y="112" width="192" height="132" rx="8" stroke-dasharray="5 4"/>
     <text x="596" y="138" class="label">Admin</text>
     <text x="596" y="156" class="hint" font-size="8px">Shown only if role allows.</text>
-    <text x="596" y="178" class="tiny">Machines, People, My access, Advanced</text>
+    <text x="596" y="178" class="tiny">Machines, Who can use Alert, My access…</text>
 
     <text x="156" y="292" class="hint" font-size="8px">Footer note: signed-in users only; contact admin for access issues.</text>
   </g>
@@ -157,19 +157,20 @@
   </g>
 
   <!-- 4 Admin -->
-  <text x="14" y="1378" class="title">4. Admin - tabs + Machines + People (concept)</text>
+  <text x="14" y="1378" class="title">4. Admin - side nav: Machines, Who can use Alert, My access, Advanced</text>
   <g transform="translate(14, 1388)">
     <rect class="box" x="0" y="0" width="792" height="380" rx="6"/>
     <text x="16" y="26" class="title" font-size="11px">Admin</text>
-    <text x="16" y="42" class="hint" font-size="8px">Page hint: machines, access, team, advanced.</text>
+    <text x="16" y="42" class="hint" font-size="8px">Settings shell — sidebar matches shipped UX.</text>
     <rect class="box" x="16" y="52" width="72" height="22" rx="11" fill="#dcfce7" stroke="#22c55e"/>
     <text x="28" y="67" class="label" font-size="8px">Machines</text>
-    <rect class="box" x="94" y="52" width="78" height="22" rx="11"/>
-    <text x="106" y="67" class="label" font-size="8px">My access</text>
-    <rect class="box" x="180" y="52" width="88" height="22" rx="11"/>
-    <text x="192" y="67" class="label" font-size="8px">People</text>
-    <rect class="box" x="276" y="52" width="78" height="22" rx="11"/>
-    <text x="288" y="67" class="label" font-size="8px">Advanced</text>
+    <rect class="box" x="94" y="52" width="118" height="22" rx="11"/>
+    <text x="100" y="64" class="label" font-size="6.5px">Who can use</text>
+    <text x="108" y="72" class="label" font-size="6.5px">Alert</text>
+    <rect class="box" x="218" y="52" width="78" height="22" rx="11"/>
+    <text x="230" y="67" class="label" font-size="8px">My access</text>
+    <rect class="box" x="302" y="52" width="78" height="22" rx="11"/>
+    <text x="314" y="67" class="label" font-size="8px">Advanced</text>
 
     <rect class="boxMuted" x="16" y="86" width="368" height="140" rx="6"/>
     <text x="28" y="108" class="label" font-size="9px">Machines tab - profiles</text>
@@ -180,7 +181,7 @@
     <text x="36" y="190" class="tiny">Table: machine | operator label | timezone | ...</text>
 
     <rect class="boxMuted" x="396" y="86" width="380" height="276" rx="6"/>
-    <text x="408" y="108" class="label" font-size="9px">People tab (Leet Alert access)</text>
+    <text x="408" y="108" class="label" font-size="9px">Who can use Alert (team access)</text>
     <text x="408" y="124" class="hint" font-size="8px">Same rules store as Monitor people-api.</text>
     <rect class="box" x="408" y="132" width="96" height="20" rx="10" fill="#ecfdf5" stroke="#22c55e"/>
     <text x="420" y="146" class="tiny">Simple editor</text>

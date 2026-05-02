@@ -9,6 +9,6 @@ if [[ ! -d "${VENV}" ]]; then
   python3 -m venv "${VENV}"
 fi
 
-"${VENV}/bin/pip" install -q "markdown>=3.5,<4" "weasyprint>=62,<67"
+"${VENV}/bin/pip" install -q "markdown>=3.5,<4" "weasyprint>=62,<67" "cairosvg>=2.7,<3"
 
 "${VENV}/bin/python" "${ROOT}/scripts/gen-product-prototype-pdf.py"
