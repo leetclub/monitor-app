@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="260" viewBox="0 0 800 260" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <style><![CDATA[
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+      .boxMuted { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1; }
+      .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
+      .hint { fill: #64748b; font-size: 9px; }
+      .title { fill: #0f172a; font-size: 13px; font-weight: 700; }
+      .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
+      .pill { fill: #eef2ff; stroke: #818cf8; stroke-width: 1; }
+      .btn { fill: #ecfdf5; stroke: #22c55e; stroke-width: 1; }
+      .tiny { fill: #475569; font-size: 8px; }
+    ]]></style>
+  </defs>
+  <text x="8" y="18" class="cap">FIGURE 3 - OVERALL</text>
+  <g transform="translate(8, 28)">
+    <rect class="box" x="0" y="0" width="784" height="224" rx="6"/>
+    <text x="12" y="28" class="title">Overall</text>
+    <text x="12" y="46" class="hint" font-size="8px">Full-fleet view - same compare strip as Red Flags.</text>
+    <rect class="pill" x="560" y="12" width="96" height="22" rx="10"/>
+    <text x="572" y="27" class="tiny">Refresh ~1 min</text>
+    <rect class="btn" x="668" y="12" width="100" height="22" rx="4"/>
+    <text x="685" y="27" class="label" font-size="8px">Refresh now</text>
+
+    <rect class="boxMuted" x="12" y="52" width="760" height="52" rx="4"/>
+    <text x="20" y="74" class="tiny">[ Compare preset row - same controls as Red Flags ]</text>
+    <text x="20" y="92" class="hint" font-size="8px">KPI rows grow as backend mapping expands.</text>
+
+    <rect class="box" x="12" y="112" width="760" height="104" rx="4"/>
+    <text x="20" y="136" class="label" font-size="9px">Machines</text>
+    <rect class="pill" x="680" y="120" width="80" height="20" rx="10"/>
+    <text x="698" y="134" class="tiny">N rows</text>
+    <line x1="20" y1="144" x2="764" y2="144" stroke="#cbd5e1"/>
+    <text x="28" y="162" class="label" font-size="8px">Name</text>
+    <text x="340" y="162" class="label" font-size="8px">Id</text>
+    <text x="28" y="182" class="hint" font-size="8px">Alpha Station</text>
+    <text x="340" y="182" class="hint" font-size="8px">393033</text>
+    <text x="28" y="202" class="hint" font-size="8px">…</text>
+  </g>
+</svg>

@@ -1,10 +1,8 @@
 # Leet Alert — product scope (PM / PO)
 
-**For stakeholders:** overview of routes, capabilities, and access. **Living app:** [alert.theleetclub.com](https://alert.theleetclub.com) (confirm ingress with engineering). **Repo:** `monitoring-app/apps/alert-theleetclub-com/`.
-
-**Regenerate PDF:** from this folder, `npm run doc:pdf` (uses WSL/bash if needed). Commit `PRODUCT-PROTOTYPE.md`, `docs/product-prototype/visual-prototype.svg`, and `PRODUCT-PROTOTYPE.pdf` together.
-
-**Note:** The shipped UI does not show “prototype” or lab wording; wireframes below are documentation only.
+**App:** [alert.theleetclub.com](https://alert.theleetclub.com) · **Repo:** `apps/alert-theleetclub-com/`  
+**Refresh PDF:** `npm run doc:pdf` (commit md + `figures/wire-*.svg` + `PRODUCT-PROTOTYPE.pdf`).  
+Shipped UI has no “prototype” wording — wireframes are documentation only.
 
 ---
 
@@ -12,35 +10,53 @@
 
 | Route | Area | What users get |
 |-------|------|----------------|
-| `/` | Entry | Sends signed-in users to **Home**. |
-| `/login` | Login | Google sign-in only. |
-| `/home` | Home | Hub: cards to Red Flags, Overall, and **Admin** (if role allows). |
-| `/red-flags` | Red Flags | Machines failing checks; reasons; compare controls for future KPIs. |
-| `/overall` | Overall | Full fleet list; compare strip; granularity grows with backend. |
-| `/admin` | Admin | **Machines** (workbook Admin columns), **Who can use Alert** (org admins: Leet Alert vs full Monitor), **My access**, **Advanced** (substring cleaning). |
+| `/` | Entry | Redirect to **Home**. |
+| `/login` | Login | Google sign-in. |
+| `/home` | Home | Cards: **Red Flags** → **Overall** → **Admin** (if role allows). |
+| `/red-flags` | Red Flags | Failing machines; reasons; compare strip for KPI work. |
+| `/overall` | Overall | Fleet list; compare strip. |
+| `/admin` | Admin | **Machines** (profiles, location owner / Vendon readout), **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
 
-## Permissions (one line)
+## Permissions (summary)
 
-Same rules store as Monitor (**people-api**): **view** → Red Flags + Overall; **manage Leet Alert** → Admin (machines, own access summary); **org access admin** → edit **Who can use Alert** and optional full Monitor grid. No Leet Alert entitlements → **No access** after sign-in — an admin must grant access.
+**people-api** rules (same store as Monitor): view → Red Flags + Overall; **leetAlertAdmin** → Admin; org **admin** → edit **Who can use Alert** + optional Monitor grid. No entitlements → **No access** after sign-in until an admin grants access.
 
 ---
 
-## Visual reference (wireframe)
+## Visual UI prototype (figures 0–4)
 
-Schematic SVG (not screenshots): login, shell + Home, Red Flags, Overall, Admin (sidebar sections + content sketch).
+Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), and Admin vertical sections (`AdminPage.tsx`).
 
-![Leet Alert visual reference — login through Admin](docs/product-prototype/visual-prototype.svg)
+![0 Login](docs/product-prototype/figures/wire-00-login.svg)
 
-*Figures 0–4: Login; shell + Home destination cards; Red Flags; Overall; Admin.*
+*Figure 0 — Login*
+
+![1 Shell + Home](docs/product-prototype/figures/wire-01-shell-home.svg)
+
+*Figure 1 — Sidebar **Operations**; nav Home · Admin · Red Flags · Overall; Home hero + cards (Priority / Fleet / Configuration).*
+
+![2 Red Flags](docs/product-prototype/figures/wire-02-red-flags.svg)
+
+*Figure 2 — Toolbar, compare preset, table.*
+
+![3 Overall](docs/product-prototype/figures/wire-03-overall.svg)
+
+*Figure 3 — Same compare pattern; fleet table.*
+
+![4 Admin](docs/product-prototype/figures/wire-04-admin.svg)
+
+*Figure 4 — Settings header; **Sections** sidebar (Machines active); Machines tab — machine picker, location owner datalist, Vendon tag.*
+
+**Composite SVG (all panels):** `docs/product-prototype/visual-prototype.svg`
 
 ---
 
 ## PO quick facts
 
-- **Refresh:** lists refetch about every minute; users can **Refresh now**.
-- **Admin IA:** side nav **Machines → Who can use Alert → My access → Advanced** (team access tab only if org admin).
+- Lists refetch ~**1 min**; **Refresh now** on each screen.
+- Admin order: **Machines → Who can use Alert → My access → Advanced** (team tab only if org admin).
 
 ---
 
@@ -48,6 +64,6 @@ Schematic SVG (not screenshots): login, shell + Home, Red Flags, Overall, Admin 
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-05-02 | PO-focused PRODUCT doc; PDF pipeline embeds wireframe raster; Admin wireframe labels match side nav (**Who can use Alert**, order). |
-| 2026-05-01 | Admin **Who can use Alert**: steps 1–3 (Leet Alert–only vs full Monitor); Machines vs xlsx Admin; tab subtitles. |
-| 2026-04-30 | Home hub, sidebar hints; team access in Admin; operator copy on Red Flags / Overall. |
+| 2026-05-02 | **Five per-screen figure SVGs** in `figures/` (PDF no longer clips one tall image); wireframes match **Operations** tagline, **Choose a workspace** home, vertical Admin + Machines (location owner / Vendon); composite `visual-prototype.svg` stacks all panels. |
+| 2026-05-01 | **Who can use Alert** steps; Machines vs workbook Admin; PO doc + PDF raster. |
+| 2026-04-30 | Home hub; team access in Admin. |

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="440" viewBox="0 0 800 440" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <style><![CDATA[
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+      .boxMuted { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1; }
+      .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
+      .hint { fill: #64748b; font-size: 9px; }
+      .title { fill: #0f172a; font-size: 14px; font-weight: 700; }
+      .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
+      .navOn { fill: #ecfdf5; stroke: #22c55e; stroke-width: 1.2; }
+      .navOff { fill: #fff; stroke: #cbd5e1; stroke-width: 1; }
+      .btn { fill: #ecfdf5; stroke: #22c55e; stroke-width: 1; }
+      .tiny { fill: #475569; font-size: 8px; }
+    ]]></style>
+  </defs>
+  <text x="8" y="18" class="cap">FIGURE 4 - ADMIN (VERTICAL SIDEBAR / ADMINPAGE.TSX)</text>
+  <g transform="translate(8, 28)">
+    <rect class="box" x="0" y="0" width="784" height="404" rx="8"/>
+    <text x="16" y="32" class="hint" font-size="9px">Settings</text>
+    <text x="16" y="56" class="title">Admin</text>
+    <text x="16" y="76" class="hint" font-size="9px">Machines, team access, and your permissions - one place.</text>
+    <rect class="boxMuted" x="620" y="12" width="24" height="24" rx="4"/>
+    <text x="652" y="28" class="hint" font-size="8px">Help tip</text>
+
+    <text x="16" y="108" class="label" font-size="9px">Sections</text>
+    <rect class="navOn" x="16" y="116" width="168" height="30" rx="6"/>
+    <text x="28" y="136" class="label" font-size="9px">Machines</text>
+    <text x="130" y="136" class="hint" font-size="7px">workbook Admin cols</text>
+    <rect class="navOff" x="16" y="152" width="168" height="36" rx="6"/>
+    <text x="28" y="168" class="label" font-size="8px">Who can use Alert</text>
+    <text x="28" y="180" class="hint" font-size="7px">org admins - Leet vs Monitor</text>
+    <rect class="navOff" x="16" y="194" width="168" height="30" rx="6"/>
+    <text x="28" y="214" class="label" font-size="9px">My access</text>
+    <rect class="navOff" x="16" y="230" width="168" height="30" rx="6"/>
+    <text x="28" y="250" class="label" font-size="9px">Advanced</text>
+    <text x="24" y="290" class="hint" font-size="7px">Documentation map (PRODUCT-PROTOTYPE.pdf)</text>
+
+    <rect class="boxMuted" x="200" y="100" width="568" height="288" rx="6"/>
+    <text x="216" y="128" class="label" font-size="10px">Machines - per-machine profile</text>
+    <text x="216" y="146" class="hint" font-size="8px">Pick machine - edit location owner (datalist), hours, operators, Vendon tag readout.</text>
+
+    <rect class="box" x="216" y="158" width="320" height="28" rx="4"/>
+    <text x="228" y="176" class="tiny">Machine dropdown (names from API)</text>
+    <text x="216" y="208" class="label" font-size="9px">Location owner</text>
+    <rect class="box" x="216" y="214" width="280" height="26" rx="4"/>
+    <text x="228" y="231" class="tiny">type or pick from list</text>
+    <text x="216" y="258" class="hint" font-size="8px">Vendon location tag (read-only when present): Farwaniya</text>
+
+    <rect class="box" x="216" y="268" width="536" height="56" rx="4"/>
+    <text x="228" y="288" class="tiny">Operating days / cleaning / operators / timezone / Save</text>
+    <text x="216" y="338" class="hint" font-size="8px">Who can use Alert tab: grid editor + import/export JSON (org access admins).</text>
+  </g>
+</svg>

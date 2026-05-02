@@ -2,16 +2,17 @@
 """Render PRODUCT-PROTOTYPE.md → PRODUCT-PROTOTYPE.pdf (Markdown + tables → WeasyPrint)."""
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MD_PATH = ROOT / "PRODUCT-PROTOTYPE.md"
 PDF_PATH = ROOT / "PRODUCT-PROTOTYPE.pdf"
-SVG_VISUAL = ROOT / "docs" / "product-prototype" / "visual-prototype.svg"
-PNG_FOR_PDF = ROOT / "docs" / "product-prototype" / ".visual-for-pdf.png"
-MD_IMG_SVG = "docs/product-prototype/visual-prototype.svg"
-MD_IMG_PNG = "docs/product-prototype/.visual-for-pdf.png"
+
+# Rasterize every linked SVG under docs/product-prototype (one PNG per figure) so the PDF
+# does not clip a single oversized composite (WeasyPrint + page-break-inside).
+MD_IMG_SVG_RE = re.compile(r"!\[([^\]]*)\]\((docs/product-prototype/[^)]+\.svg)\)")
 
 CSS = """
 @page {
@@ -62,54 +63,60 @@ img {
   max-width: 100%;
   height: auto;
   display: block;
-  margin: 0.75em auto;
+  margin: 0.6em auto;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 4px;
   background: #fff;
-  page-break-inside: avoid;
 }
 figure {
-  margin: 1em 0;
+  margin: 0.9em 0;
   page-break-inside: avoid;
 }
 figcaption, .caption {
   font-size: 9pt;
   color: #64748b;
-  margin: 0.35em auto 1em;
+  margin: 0.25em auto 0.75em;
   text-align: center;
   max-width: 540px;
 }
 """
 
 
-def _ensure_png_from_svg_for_pdf(md_text: str) -> str:
-    """WeasyPrint SVG support can miss complex wireframes; rasterize for reliable PDF inclusion."""
-    if MD_IMG_SVG not in md_text:
-        return md_text
-    if not SVG_VISUAL.is_file():
-        return md_text
-    try:
-        import cairosvg  # noqa: WPS433
-    except ImportError:
-        print("cairosvg not installed; PDF will reference SVG (may render empty).", file=sys.stderr)
-        return md_text
-    scale = 2
-    try:
-        cairosvg.svg2png(url=str(SVG_VISUAL.resolve()), write_to=str(PNG_FOR_PDF), scale=scale)
-    except Exception as exc:  # noqa: BLE001 — surface install hints
-        print(f"cairosvg rasterize failed ({exc}); falling back to SVG in PDF.", file=sys.stderr)
-        return md_text
-    return md_text.replace(f"]({MD_IMG_SVG})", f"]({MD_IMG_PNG})")
+def _rasterize_svgs_in_markdown(md_text: str) -> str:
+    """Convert each docs/product-prototype/**/*.svg image link to a sibling .for-pdf.png for reliable PDF output."""
+
+    def _one(match: re.Match[str]) -> str:
+        alt = match.group(1)
+        rel = match.group(2)
+        svg_path = ROOT / rel
+        if not svg_path.is_file():
+            return match.group(0)
+        png_path = svg_path.with_name(svg_path.stem + ".for-pdf.png")
+        try:
+            import cairosvg  # noqa: WPS433
+        except ImportError:
+            print("cairosvg not installed; PDF may render SVG poorly.", file=sys.stderr)
+            return match.group(0)
+        scale = 2
+        try:
+            cairosvg.svg2png(url=str(svg_path.resolve()), write_to=str(png_path), scale=scale)
+        except Exception as exc:  # noqa: BLE001
+            print(f"cairosvg failed for {rel} ({exc})", file=sys.stderr)
+            return match.group(0)
+        rel_png = png_path.relative_to(ROOT).as_posix()
+        return f"![{alt}]({rel_png})"
+
+    return MD_IMG_SVG_RE.sub(_one, md_text)
 
 
 def main() -> int:
     if not MD_PATH.exists():
-        print(f"Missing {MD_PATH.relative_to(Path.cwd()) if Path.cwd() in MD_PATH.parents else MD_PATH}", file=sys.stderr)
+        print(f"Missing {MD_PATH}", file=sys.stderr)
         return 1
 
     md_text = MD_PATH.read_text(encoding="utf-8")
-    md_text = _ensure_png_from_svg_for_pdf(md_text)
+    md_text = _rasterize_svgs_in_markdown(md_text)
     try:
         import markdown  # noqa: WPS433
     except ImportError:

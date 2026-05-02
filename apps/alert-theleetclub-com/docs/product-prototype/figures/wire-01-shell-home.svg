@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <style><![CDATA[
+      .box { fill: #1e293b; stroke: #334155; stroke-width: 1.2; }
+      .boxHi { fill: #1e3a5f; stroke: #3b82f6; stroke-width: 1.2; }
+      .boxMain { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+      .boxAccent { fill: #fef2f2; stroke: #f87171; stroke-width: 1.2; }
+      .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
+      .labelInv { fill: #e2e8f0; font-size: 10px; font-weight: 600; }
+      .hint { fill: #64748b; font-size: 9px; }
+      .hintInv { fill: #94a3b8; font-size: 8px; }
+      .title { fill: #0f172a; font-size: 14px; font-weight: 700; }
+      .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
+      .kicker { fill: #64748b; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+      .btn { fill: #ecfdf5; stroke: #22c55e; stroke-width: 1; }
+    ]]></style>
+  </defs>
+  <text x="8" y="18" class="cap">FIGURE 1 - SIGNED-IN SHELL + HOME (MATCHES APP.TSX + HOMEPAGE)</text>
+  <g transform="translate(8, 28)">
+    <rect class="box" x="0" y="0" width="120" height="384" rx="6" fill="#0f172a"/>
+    <text x="10" y="26" class="labelInv" font-size="12px">Leet Alert</text>
+    <text x="10" y="42" class="hintInv">Operations</text>
+    <rect class="boxHi" x="8" y="52" width="104" height="36" rx="4"/>
+    <text x="14" y="74" class="labelInv" font-size="9px">Home</text>
+    <rect class="box" x="8" y="94" width="104" height="32" rx="4"/>
+    <text x="14" y="114" class="labelInv" font-size="9px">Admin</text>
+    <text x="14" y="126" class="hintInv">Machines &amp; access</text>
+    <rect class="box" x="8" y="132" width="104" height="32" rx="4"/>
+    <text x="14" y="152" class="labelInv" font-size="9px">Red Flags</text>
+    <rect class="box" x="8" y="170" width="104" height="32" rx="4"/>
+    <text x="14" y="190" class="labelInv" font-size="9px">Overall</text>
+    <text x="8" y="372" class="hintInv">Figures refresh ~1 min</text>
+
+    <rect class="boxMain" x="132" y="0" width="652" height="32" rx="4"/>
+    <text x="144" y="21" class="hint">Signed in as user@company.com</text>
+    <rect class="btn" x="560" y="6" width="88" height="22" rx="4"/>
+    <text x="583" y="21" class="label" font-size="9px">Sign out</text>
+
+    <rect class="boxMain" x="132" y="40" width="652" height="344" rx="6"/>
+    <text x="148" y="72" class="kicker">Leet Alert</text>
+    <text x="148" y="98" class="title">Choose a workspace</text>
+    <text x="148" y="122" class="hint" font-size="9px">Live machine data - lists refresh ~1 min; use Refresh on each screen.</text>
+
+    <rect class="boxAccent" x="148" y="138" width="188" height="120" rx="8"/>
+    <text x="164" y="162" class="kicker">Priority</text>
+    <text x="164" y="186" class="label" font-size="12px">Red Flags</text>
+    <text x="164" y="206" class="hint" font-size="8px">Machines failing checks - start here.</text>
+    <text x="164" y="236" class="label" font-size="9px" fill="#b91c1c">Continue</text>
+
+    <rect class="boxMain" x="352" y="138" width="188" height="120" rx="8"/>
+    <text x="368" y="162" class="kicker">Fleet</text>
+    <text x="368" y="186" class="label" font-size="12px">Overall</text>
+    <text x="368" y="206" class="hint" font-size="8px">All machines &amp; roll-up KPIs.</text>
+    <text x="368" y="236" class="label" font-size="9px">Continue</text>
+
+    <rect class="boxMain" x="556" y="138" width="188" height="120" rx="8" stroke-dasharray="4 3"/>
+    <text x="572" y="162" class="kicker">Configuration</text>
+    <text x="572" y="186" class="label" font-size="12px">Admin</text>
+    <text x="572" y="206" class="hint" font-size="8px">If role allows - machines, access.</text>
+    <text x="572" y="236" class="label" font-size="9px">Continue</text>
+
+    <text x="148" y="288" class="hint" font-size="8px">Admin card omitted when user lacks leetAlertAdmin.</text>
+  </g>
+</svg>

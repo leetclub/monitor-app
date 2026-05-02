@@ -1,3 +1,4 @@
-# Generated only for WeasyPrint PDF (source of truth is visual-prototype.svg)
+# WeasyPrint raster outputs (source of truth is figures/*.svg)
+docs/product-prototype/**/*.for-pdf.png
 docs/product-prototype/.visual-for-pdf.png
 .venv-docs/
