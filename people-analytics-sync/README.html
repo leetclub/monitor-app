@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>README</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>People Analytics Sync Service</h1>
+<p>This service fetches people analytics data from Videoloft API and stores it in a PostgreSQL database. It can be deployed as a Kubernetes CronJob to run periodically.</p>
+<h2>Architecture</h2>
+<ul>
+<li><strong>Sync Service</strong> (<code>sync_service.py</code>): Fetches data from Videoloft and stores it in the database</li>
+<li><strong>API Service</strong> (<code>api_service.py</code>): REST API to query stored data</li>
+<li><strong>Database</strong>: PostgreSQL (Digital Ocean managed database)</li>
+</ul>
+<h2>Setup</h2>
+<h3>1. Local Development</h3>
+<ol>
+<li>Install dependencies:</li>
+</ol>
+<pre><code class="language-bash">cd people-analytics-sync
+pip install -r requirements.txt
+</code></pre>
+<ol start="2">
+<li>Set up environment variables (copy <code>.env.example</code> to <code>.env</code> and fill in values):</li>
+</ol>
+<pre><code class="language-bash">cp .env.example .env
+# Edit .env with your Digital Ocean database credentials
+</code></pre>
+<ol start="3">
+<li>Initialize database:</li>
+</ol>
+<pre><code class="language-bash">python init_db.py
+# Or: python -c &quot;from models import init_database; init_database()&quot;
+</code></pre>
+<ol start="4">
+<li>Run sync manually:</li>
+</ol>
+<pre><code class="language-bash">python sync_service.py
+</code></pre>
+<ol start="5">
+<li>Run API service:</li>
+</ol>
+<pre><code class="language-bash">python api_service.py
+</code></pre>
+<h3>2. Docker Build</h3>
+<h4>Build Sync Service Image</h4>
+<pre><code class="language-bash">cd people-analytics-sync
+
+# Build the image
+docker build -t people-analytics-sync:latest .
+
+# Tag for your registry (replace with your registry)
+docker tag people-analytics-sync:latest your-registry/people-analytics-sync:latest
+
+# Push to registry
+docker push your-registry/people-analytics-sync:latest
+</code></pre>
+<h4>Build API Service Image</h4>
+<pre><code class="language-bash">cd people-analytics-sync
+
+# Build the API image
+docker build -f Dockerfile.api -t people-analytics-sync:api-latest .
+
+# Tag for your registry
+docker tag people-analytics-sync:api-latest your-registry/people-analytics-sync:api-latest
+
+# Push to registry
+docker push your-registry/people-analytics-sync:api-latest
+</code></pre>
+<h4>Example: Using Docker Hub</h4>
+<pre><code class="language-bash"># Login to Docker Hub
+docker login
+
+# Build and tag
+docker build -t your-dockerhub-username/people-analytics-sync:latest .
+docker build -f Dockerfile.api -t your-dockerhub-username/people-analytics-sync:api-latest .
+
+# Push
+docker push your-dockerhub-username/people-analytics-sync:latest
+docker push your-dockerhub-username/people-analytics-sync:api-latest
+</code></pre>
+<h4>Example: Using Private Registry (e.g., Digital Ocean Container Registry)</h4>
+<pre><code class="language-bash"># Login to Digital Ocean registry
+doctl registry login
+
+# Build and tag with registry URL
+docker build -t registry.digitalocean.com/your-registry/people-analytics-sync:latest .
+docker build -f Dockerfile.api -t registry.digitalocean.com/your-registry/people-analytics-sync:api-latest .
+
+# Push
+docker push registry.digitalocean.com/your-registry/people-analytics-sync:latest
+docker push registry.digitalocean.com/your-registry/people-analytics-sync:api-latest
+</code></pre>
+<h3>3. Kubernetes Deployment</h3>
+<h4>Prerequisites</h4>
+<ul>
+<li>Kubernetes cluster configured</li>
+<li><code>kubectl</code> configured to access your cluster</li>
+<li>Digital Ocean PostgreSQL database created and accessible</li>
+</ul>
+<h4>Step 1: Update Image References</h4>
+<p>Edit <code>k8s/cronjob.yaml</code> and <code>k8s/api-deployment.yaml</code> to use your image registry:</p>
+<pre><code class="language-yaml"># In cronjob.yaml, change:
+image: your-registry/people-analytics-sync:latest
+
+# In api-deployment.yaml, change:
+image: your-registry/people-analytics-sync:api-latest
+</code></pre>
+<h4>Step 2: Create Secrets</h4>
+<p>Create Kubernetes secrets with your database and Videoloft credentials:</p>
+<pre><code class="language-bash">kubectl create secret generic people-analytics-secrets \
+  --from-literal=db-host=your-db-host.db.ondigitalocean.com \
+  --from-literal=db-port=25060 \
+  --from-literal=db-name=people_analytics \
+  --from-literal=db-user=doadmin \
+  --from-literal=db-password=YOUR_DB_PASSWORD \
+  --from-literal=videoloft-email=YOUR_VIDEOLOFT_EMAIL \
+  --from-literal=videoloft-password=YOUR_VIDEOLOFT_PASSWORD
+
+# OR if using username instead of email:
+# --from-literal=videoloft-username=YOUR_USERNAME \
+</code></pre>
+<p><strong>Note</strong>: Digital Ocean databases typically use:</p>
+<ul>
+<li>Port: <code>25060</code> (SSL) or <code>25061</code> (non-SSL)</li>
+<li>User: Usually <code>doadmin</code> or your custom user</li>
+<li>Host: <code>your-db-name.db.ondigitalocean.com</code></li>
+</ul>
+<h4>Step 3: Initialize Database</h4>
+<p>Before deploying, initialize the database schema. You can either:</p>
+<p><strong>Option A: Run init script locally</strong> (if you have network access to DB):</p>
+<pre><code class="language-bash"># Set environment variables
+export DB_HOST=your-db-host.db.ondigitalocean.com
+export DB_PORT=25060
+export DB_NAME=people_analytics
+export DB_USER=doadmin
+export DB_PASSWORD=your-password
+
+# Run init
+python init_db.py
+</code></pre>
+<p><strong>Option B: Run init in a Kubernetes job</strong>:</p>
+<pre><code class="language-bash"># Create a temporary job to initialize database
+kubectl run db-init --image=your-registry/people-analytics-sync:latest \
+  --restart=Never \
+  --env=&quot;DB_HOST=your-db-host.db.ondigitalocean.com&quot; \
+  --env=&quot;DB_PORT=25060&quot; \
+  --env=&quot;DB_NAME=people_analytics&quot; \
+  --env=&quot;DB_USER=doadmin&quot; \
+  --env=&quot;DB_PASSWORD=your-password&quot; \
+  -- python init_db.py
+
+# Check logs
+kubectl logs db-init
+
+# Clean up
+kubectl delete pod db-init
+</code></pre>
+<h4>Step 4: Run Initial Full Sync (Recommended)</h4>
+<p>For the first sync, fetch all available historical data:</p>
+<pre><code class="language-bash"># Run initial sync (fetches 365 days of historical data)
+kubectl apply -f k8s/initial-sync-job.yaml -n leet-monitor
+
+# Watch the job
+kubectl get jobs -n leet-monitor -w
+
+# Check logs
+kubectl logs job/people-analytics-sync-initial -n leet-monitor -f
+</code></pre>
+<p><strong>Note</strong>: </p>
+<ul>
+<li>Initial sync fetches 365 days back by default</li>
+<li>This may take a while depending on data volume</li>
+<li>To change the number of days, edit <code>SYNC_DAYS_BACK</code> in <code>k8s/initial-sync-job.yaml</code></li>
+</ul>
+<p>After initial sync completes, proceed to deploy the CronJob for regular updates.</p>
+<h4>Step 5: Deploy CronJob</h4>
+<pre><code class="language-bash">kubectl apply -f k8s/cronjob.yaml
+</code></pre>
+<p>Verify deployment:</p>
+<pre><code class="language-bash">kubectl get cronjobs -n leet-monitor
+kubectl describe cronjob people-analytics-sync -n leet-monitor
+</code></pre>
+<p><strong>Note</strong>: The CronJob is configured to run <strong>every minute</strong>. To change the schedule, edit <code>k8s/cronjob.yaml</code>:</p>
+<ul>
+<li><code>&quot;* * * * *&quot;</code> - Every minute (current)</li>
+<li><code>&quot;*/5 * * * *&quot;</code> - Every 5 minutes</li>
+<li><code>&quot;*/15 * * * *&quot;</code> - Every 15 minutes</li>
+<li><code>&quot;0 * * * *&quot;</code> - Every hour</li>
+</ul>
+<h4>Step 5: Deploy API Service</h4>
+<pre><code class="language-bash">kubectl apply -f k8s/api-deployment.yaml
+</code></pre>
+<p>Verify deployment:</p>
+<pre><code class="language-bash">kubectl get deployments
+kubectl get pods -l app=people-analytics-api
+kubectl get svc people-analytics-api
+</code></pre>
+<h4>Step 6: Test the Services</h4>
+<p>Test API service:</p>
+<pre><code class="language-bash"># Port forward to access API locally
+kubectl port-forward svc/people-analytics-api 5000:80
+
+# Test health endpoint
+curl http://localhost:5000/health
+
+# Test people analytics endpoint
+curl &quot;http://localhost:5000/api/people-analytics?start_date=2024-01-01&amp;end_date=2024-01-31&quot;
+</code></pre>
+<p>Check CronJob execution:</p>
+<pre><code class="language-bash"># List recent jobs
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor
+
+# View logs of latest job
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100
+
+# View logs of specific job
+kubectl logs job/people-analytics-sync-&lt;timestamp&gt; -n leet-monitor
+
+# Check CronJob status
+kubectl get cronjob people-analytics-sync -n leet-monitor
+kubectl describe cronjob people-analytics-sync -n leet-monitor
+</code></pre>
+<h3>Manual Execution</h3>
+<p>To run the sync manually at any time:</p>
+<pre><code class="language-bash"># Option 1: Create a manual job
+kubectl apply -f k8s/manual-run-job.yaml -n leet-monitor
+
+# Option 2: Create job from CronJob template
+kubectl create job --from=cronjob/people-analytics-sync people-analytics-sync-$(date +%s) -n leet-monitor
+
+# Check logs
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100
+</code></pre>
+<h2>Configuration</h2>
+<h3>CronJob Schedule</h3>
+<p>Edit <code>k8s/cronjob.yaml</code> to change the schedule. Examples:</p>
+<ul>
+<li><code>&quot;0 * * * *&quot;</code> - Every hour</li>
+<li><code>&quot;0 0 * * *&quot;</code> - Daily at midnight</li>
+<li><code>&quot;*/30 * * * *&quot;</code> - Every 30 minutes</li>
+</ul>
+<h3>Environment Variables</h3>
+<p><strong>Database Configuration:</strong></p>
+<ul>
+<li><code>DB_HOST</code>: Digital Ocean database host (e.g., <code>your-db.db.ondigitalocean.com</code>)</li>
+<li><code>DB_PORT</code>: Database port (usually <code>25060</code> for SSL or <code>25061</code> for non-SSL)</li>
+<li><code>DB_NAME</code>: Database name (default: <code>people_analytics</code>)</li>
+<li><code>DB_USER</code>: Database user (usually <code>doadmin</code> for Digital Ocean)</li>
+<li><code>DB_PASSWORD</code>: Database password</li>
+</ul>
+<p><strong>Videoloft Configuration:</strong></p>
+<ul>
+<li><code>VIDEOLOFT_EMAIL</code>: Your Videoloft account email</li>
+<li><code>VIDEOLOFT_PASSWORD</code>: Your Videoloft account password</li>
+</ul>
+<p><strong>Sync Configuration:</strong></p>
+<ul>
+<li><code>SYNC_DAYS_BACK</code>: Number of days back to fetch (default: 1)</li>
+<li><code>SYNC_INTERVAL</code>: Time interval - &#39;date&#39;, &#39;hour&#39;, or &#39;60000&#39; (default: &#39;date&#39;)</li>
+<li><code>SYNC_UIDDS</code>: Optional comma-separated device IDs (leave empty to sync all cameras)</li>
+<li><code>TIMEZONE</code>: Timezone for data (default: &#39;Asia/Kuwait&#39;)</li>
+</ul>
+<p><strong>API Configuration:</strong></p>
+<ul>
+<li><code>API_PORT</code>: Port for API service (default: 5000)</li>
+<li><code>DEBUG</code>: Enable debug mode (default: false)</li>
+</ul>
+<h2>API Endpoints</h2>
+<h3>GET /health</h3>
+<p>Health check endpoint</p>
+<h3>GET /api/people-analytics</h3>
+<p>Get people analytics data</p>
+<p>Query parameters:</p>
+<ul>
+<li><code>uidds</code>: Comma-separated device IDs</li>
+<li><code>start_date</code>: Start date (YYYY-MM-DD)</li>
+<li><code>end_date</code>: End date (YYYY-MM-DD)</li>
+<li><code>interval</code>: Time interval (&#39;date&#39;, &#39;hour&#39;, &#39;60000&#39;)</li>
+<li><code>limit</code>: Maximum records (default: 1000)</li>
+</ul>
+<p>Example:</p>
+<pre><code>GET /api/people-analytics?uidds=1382465.6&amp;start_date=2024-01-01&amp;end_date=2024-01-31&amp;interval=date
+</code></pre>
+<h3>GET /api/sync-status</h3>
+<p>Get status of recent sync operations</p>
+<h3>GET /api/cameras</h3>
+<p>Get list of available cameras/devices</p>
+<h2>Database Schema</h2>
+<h3>people_analytics_records</h3>
+<p>Stores people analytics data with:</p>
+<ul>
+<li>Device information (uidd, device_id)</li>
+<li>Timestamps (first_timestamp, last_timestamp)</li>
+<li>People counts (people_in, people_out, net_traffic)</li>
+<li>Calculated metrics (traffic_ratio, traffic_pattern, etc.)</li>
+<li>Raw JSON data</li>
+</ul>
+<h3>sync_logs</h3>
+<p>Tracks sync operations with:</p>
+<ul>
+<li>Start/end times</li>
+<li>Status (success/failed/partial)</li>
+<li>Number of records synced</li>
+<li>Error messages</li>
+</ul>
+<h2>Monitoring</h2>
+<p>Check CronJob status:</p>
+<pre><code class="language-bash">kubectl get cronjobs
+kubectl get jobs
+kubectl logs -l app=people-analytics-sync
+</code></pre>
+<p>Check API service:</p>
+<pre><code class="language-bash">kubectl get pods -l app=people-analytics-api
+kubectl logs -l app=people-analytics-api
+</code></pre>
+<h2>Next Steps</h2>
+<p>After deploying this service, you can modify the frontend <code>people-analytics.js</code> to query the API service instead of directly calling Videoloft. The API endpoint <code>/api/people-analytics</code> returns data in a compatible format.</p>
+</body>
+</html>

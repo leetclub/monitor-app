@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>README</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Historical Performance Sync</h1>
+<p>This service caches historical performance data from Vendon API in a PostgreSQL database to speed up the Historical Performance tab in the monitoring app.</p>
+<h2>Structure</h2>
+<ul>
+<li><strong>Separate directory</strong>: <code>historical-performance-sync/</code> (independent from <code>vendon-sync/</code>)</li>
+<li><strong>Separate API</strong>: <code>historical-api.theleetclub.com</code> (port 5002)</li>
+<li><strong>Separate cron job</strong>: Runs daily at 3 AM UTC</li>
+</ul>
+<h2>Components</h2>
+<ol>
+<li><strong>Sync Service</strong> (<code>sync_service.py</code>): Fetches data from Vendon API and stores aggregated results</li>
+<li><strong>API Service</strong> (<code>api_service.py</code>): Serves cached data via REST API</li>
+<li><strong>Database Models</strong> (<code>models.py</code>): SQLAlchemy models for data storage</li>
+<li><strong>Kubernetes Manifests</strong>: CronJob, Deployment, Service, and Ingress</li>
+</ol>
+<h2>Database Schema</h2>
+<ul>
+<li><code>historical_performance_records</code>: Stores aggregated data per machine/date range</li>
+<li><code>historical_performance_sync_logs</code>: Tracks sync operations</li>
+</ul>
+<h2>Setup</h2>
+<ol>
+<li><p><strong>Create database tables</strong>:</p>
+<pre><code class="language-bash">psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f migrations/init_historical_performance_table.sql
+psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f migrations/add_historical_performance_sync_logs_table.sql
+</code></pre>
+</li>
+<li><p><strong>Build and push Docker images</strong>:</p>
+<pre><code class="language-bash"># Sync service image
+docker build -f Dockerfile -t programmeradmin25/historical-performance-sync:latest .
+docker push programmeradmin25/historical-performance-sync:latest
+
+# API service image
+docker build -f Dockerfile.api -t programmeradmin25/historical-performance-api:latest .
+docker push programmeradmin25/historical-performance-api:latest
+</code></pre>
+</li>
+<li><p><strong>Deploy to Kubernetes</strong>:</p>
+<pre><code class="language-bash">kubectl apply -f k8s/cronjob.yaml
+kubectl apply -f k8s/api-deployment.yaml
+kubectl apply -f k8s/api-ingress.yaml
+</code></pre>
+</li>
+<li><p><strong>Add DNS record</strong>: Point <code>historical-api.theleetclub.com</code> to your Kubernetes ingress</p>
+</li>
+</ol>
+<h2>API Endpoints</h2>
+<ul>
+<li><code>GET /health</code>: Health check</li>
+<li><code>GET /api/historical-performance?machine_id={id}&amp;start_date={date}&amp;end_date={date}</code>: Get cached data</li>
+<li><code>GET /api/historical-performance/best-yesterday?exclude_ids={ids}</code>: Get best machine from yesterday (for preload)</li>
+</ul>
+<h2>Frontend Integration</h2>
+<p>The frontend automatically tries the cached API first, then falls back to direct Vendon API if cache misses. No configuration needed - it uses <code>https://historical-api.theleetclub.com</code> by default.</p>
+<h2>Performance</h2>
+<ul>
+<li><strong>Before</strong>: 30-60 seconds to load historical data (direct Vendon API calls with pagination)</li>
+<li><strong>After</strong>: &lt; 1 second (cached database query)</li>
+</ul>
+</body>
+</html>

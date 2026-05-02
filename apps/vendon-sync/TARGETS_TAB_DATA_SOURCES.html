@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TARGETS_TAB_DATA_SOURCES</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Targets Tab Data Sources</h1>
+<h2>Summary</h2>
+<p>The targets tab now uses <strong>cached database</strong> for fast data loading instead of calling Vendon API directly.</p>
+<h2>What Data Comes from Database (Fast) ✅</h2>
+<h3>1. <strong>Lowest Performing Machine Yesterday</strong></h3>
+<ul>
+<li><strong>Function</strong>: <code>fetchLowestMachineYesterdayFromCache()</code></li>
+<li><strong>API Endpoint</strong>: <code>GET /api/vendon-sales/lowest-yesterday</code></li>
+<li><strong>Source</strong>: <code>vendon_sales_records</code> table</li>
+<li><strong>Speed</strong>: ⚡ Very fast (single DB query)</li>
+<li><strong>Used in</strong>: Preloading targets tab on app start</li>
+</ul>
+<h3>2. <strong>Yesterday&#39;s Revenue for Specific Machine</strong></h3>
+<ul>
+<li><strong>Function</strong>: <code>fetchTargetsData()</code> (updated)</li>
+<li><strong>API Endpoint</strong>: <code>GET /api/vendon-sales?machine_ids={id}&amp;date={date}</code></li>
+<li><strong>Source</strong>: <code>vendon_sales_records</code> table</li>
+<li><strong>Speed</strong>: ⚡ Very fast (single DB query with index)</li>
+<li><strong>Used in</strong>: Calculating targets data for selected machine</li>
+<li><strong>Fallback</strong>: If cache fails, falls back to direct Vendon API</li>
+</ul>
+<h2>What Still Comes from Vendon API Directly ❌</h2>
+<h3>1. <strong>Machine List</strong></h3>
+<ul>
+<li><strong>Function</strong>: <code>fetchMachines()</code></li>
+<li><strong>API Endpoint</strong>: <code>GET /machines</code></li>
+<li><strong>Why</strong>: Machine metadata not stored in DB</li>
+<li><strong>Used in</strong>: Machine dropdown, machine name mapping</li>
+</ul>
+<h3>2. <strong>Baseline Data (Best Days)</strong></h3>
+<ul>
+<li><strong>Source</strong>: JSON file (not from API)</li>
+<li><strong>Why</strong>: Historical reference data, doesn&#39;t change frequently</li>
+<li><strong>Used in</strong>: Comparing yesterday vs all-time best days</li>
+</ul>
+<h3>3. <strong>Real-time/Today&#39;s Data</strong></h3>
+<ul>
+<li><strong>When</strong>: Viewing today&#39;s data (not synced yet)</li>
+<li><strong>Why</strong>: Today&#39;s data hasn&#39;t been synced to DB yet</li>
+<li><strong>Used in</strong>: Real-time dashboards (if needed)</li>
+</ul>
+<h2>Data Flow</h2>
+<h3>Preload Flow (App Start):</h3>
+<ol>
+<li>✅ <code>fetchLowestMachineYesterdayFromCache()</code> → DB (fast)</li>
+<li>✅ <code>fetchTargetsData()</code> → DB for revenue (fast)</li>
+<li>❌ <code>fetchMachines()</code> → Vendon API (needed for machine names)</li>
+<li>✅ Baseline data → JSON file (local)</li>
+</ol>
+<h3>User Selection Flow:</h3>
+<ol>
+<li>User selects machine from dropdown</li>
+<li>✅ <code>fetchTargetsData()</code> → DB for revenue (fast)</li>
+<li>✅ Baseline data → JSON file (local)</li>
+<li>Render comparison</li>
+</ol>
+<h2>Performance Improvements</h2>
+<h3>Before:</h3>
+<ul>
+<li>❌ Scanned all machines individually via Vendon API</li>
+<li>❌ Each machine = 1 API call (slow, rate-limited)</li>
+<li>❌ Total time: 30-60 seconds for 50+ machines</li>
+</ul>
+<h3>After:</h3>
+<ul>
+<li>✅ Single DB query for lowest machine</li>
+<li>✅ Single DB query for machine revenue</li>
+<li>✅ Total time: &lt; 2 seconds</li>
+</ul>
+<h2>API Endpoints Used</h2>
+<h3>From Cached DB:</h3>
+<ul>
+<li><code>GET /api/vendon-sales/lowest-yesterday</code> - Lowest machine yesterday</li>
+<li><code>GET /api/vendon-sales?machine_ids={id}&amp;date={date}</code> - Revenue for specific machine/date</li>
+</ul>
+<h3>Still from Vendon API:</h3>
+<ul>
+<li><code>GET /machines</code> - Machine list and metadata</li>
+<li><code>GET /stats/vends</code> (fallback only) - If cache fails</li>
+</ul>
+<h2>Spinner Timing Fix</h2>
+<p>The spinner now uses <code>requestAnimationFrame</code> to ensure it stays visible until data is fully rendered:</p>
+<ul>
+<li>Before: Hidden after 500ms timeout (too early)</li>
+<li>After: Hidden after rendering completes (correct timing)</li>
+</ul>
+<h2>Testing</h2>
+<p>To verify targets tab is using DB:</p>
+<ol>
+<li>Check browser console for logs:<ul>
+<li><code>✅ Got revenue from cache: X KWD</code></li>
+<li><code>✅ Found lowest machine from cache</code></li>
+</ul>
+</li>
+<li>Check network tab:<ul>
+<li>Should see requests to <code>vendon-api.theleetclub.com</code></li>
+<li>Should NOT see requests to <code>cloud.vendon.net</code> (unless fallback)</li>
+</ul>
+</li>
+</ol>
+</body>
+</html>

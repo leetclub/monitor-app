@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WASTE_REASONS_SETUP</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Waste Analysis Reasons – Setup</h1>
+<p>User-entered reasons for waste analysis results are stored per machine per date.</p>
+<p><strong>Database:</strong> We use the existing <strong>people_analytics</strong> database (no new DB created). The waste reasons API runs in the same app as people-analytics-sync, so it uses that DB. One DB, one API.</p>
+<h2>1. Database migration</h2>
+<p>Create the table (run once):</p>
+<pre><code class="language-bash"># If people_analytics DB does not exist:
+createdb people_analytics
+
+# Run migration (psql without username/password – trust auth):
+cd people-analytics-sync
+psql -d people_analytics -f migrations/add_waste_analysis_reasons.sql
+</code></pre>
+<p>Or with host/user:</p>
+<pre><code class="language-bash">psql -h &lt;host&gt; -U &lt;user&gt; -d people_analytics -f migrations/add_waste_analysis_reasons.sql
+</code></pre>
+<p>Or use the script:</p>
+<pre><code class="language-bash">cd people-analytics-sync
+chmod +x run_waste_reasons_migration.sh
+./run_waste_reasons_migration.sh
+</code></pre>
+<h2>2. API (people-analytics-sync)</h2>
+<p>The API service exposes:</p>
+<ul>
+<li><code>GET /api/waste-reasons?date=YYYY-MM-DD&amp;machine_ids=id1,id2</code> – fetch reasons for a date (and optional machine IDs).</li>
+<li><code>POST /api/waste-reasons</code> – body <code>{ &quot;machine_id&quot;: &quot;...&quot;, &quot;date&quot;: &quot;YYYY-MM-DD&quot;, &quot;reason&quot;: &quot;...&quot; }</code> – create/update one reason.</li>
+</ul>
+<p>CORS is enabled so the Google Apps Script web app can call the API.</p>
+<p>Deploy/run the API so it uses the same <code>people_analytics</code> DB (e.g. point <code>WASTE_REASONS_API_BASE</code> in the frontend to this service).</p>
+<h2>3. Apps Script (Waste + Refund reasons)</h2>
+<p>Both <strong>Waste Analysis</strong> and <strong>Refund Tests</strong> tabs call the people-analytics API from <strong>server-side</strong> Apps Script (waste-tab.js, remote-credits-tab.js). Set this in <strong>Apps Script → Project Settings → Script Properties</strong>:</p>
+<ul>
+<li><strong>PEOPLE_ANALYTICS_API_BASE</strong> = <code>https://people-api.theleetclub.com</code> (or your people-api base URL, no trailing slash)</li>
+</ul>
+<p>If unset, the code falls back to <code>https://people-api.theleetclub.com</code>.</p>
+<h2>4. Push to Google</h2>
+<p>From the project root (where <code>.clasp.json</code> is):</p>
+<pre><code class="language-bash">clasp push
+</code></pre>
+<p>(or <code>npx clasp push</code> if clasp is installed via npm).</p>
+</body>
+</html>

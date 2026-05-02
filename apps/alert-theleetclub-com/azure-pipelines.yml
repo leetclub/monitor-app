@@ -1,0 +1,74 @@
+trigger:
+  branches:
+    include:
+      - dev
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+# One-time: Project settings → Service connections → New → Docker Registry → Docker Hub.
+# Connection name: dockerhub-leet-monitor  (must match DOCKER_REGISTRY_SERVICE_CONNECTION)
+# Docker ID = Hub username; Password = Hub access token.
+variables:
+  - name: DOCKER_REGISTRY_SERVICE_CONNECTION
+    value: dockerhub-leet-monitor
+  - name: DOCKER_IMAGE
+    value: programmeradmin25/alert-theleetclub-com
+  - name: DOCKER_TAG
+    value: latest
+  - name: K8S_NAMESPACE
+    value: leet-monitor
+  - name: K8S_DEPLOYMENT
+    value: alert-app
+  - name: K8S_APP_LABEL
+    value: alert-app
+  - name: SECURE_KUBECONFIG_FILE
+    value: leet-monitor-kubeconfig
+
+steps:
+  - checkout: self
+
+  - task: Docker@2
+    displayName: Docker Hub login
+    inputs:
+      command: login
+      containerRegistry: $(DOCKER_REGISTRY_SERVICE_CONNECTION)
+
+  - task: DownloadSecureFile@1
+    name: kubeconfigFile
+    displayName: Download kubeconfig (Library secure file)
+    inputs:
+      secureFile: $(SECURE_KUBECONFIG_FILE)
+
+  - bash: |
+      set -euo pipefail
+      docker build -t "${DOCKER_IMAGE}:${DOCKER_TAG}" .
+      docker push "${DOCKER_IMAGE}:${DOCKER_TAG}"
+    displayName: Build + push alert-theleetclub-com image
+    env:
+      DOCKER_IMAGE: $(DOCKER_IMAGE)
+      DOCKER_TAG: $(DOCKER_TAG)
+
+  - bash: |
+      set -euo pipefail
+      KVER=$(curl -fsSL https://dl.k8s.io/release/stable.txt | tr -d '\n')
+      curl -fsSL -o /tmp/kubectl "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl"
+      sudo install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+      kubectl version --client
+    displayName: Install kubectl
+
+  - bash: |
+      set -euo pipefail
+      export KUBECONFIG="$KUBECONFIG_PATH"
+      kubectl rollout restart "deployment/${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}"
+      kubectl rollout status "deployment/${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}" --timeout=300s
+      kubectl wait --for=condition=available "deployment/${K8S_DEPLOYMENT}" -n "${K8S_NAMESPACE}" --timeout=180s
+      kubectl get pods -n "${K8S_NAMESPACE}" -l "app=${K8S_APP_LABEL}" -o wide
+    displayName: Rollout restart + verify k8s deployment
+    env:
+      KUBECONFIG_PATH: $(kubeconfigFile.secureFilePath)
+      K8S_NAMESPACE: $(K8S_NAMESPACE)
+      K8S_DEPLOYMENT: $(K8S_DEPLOYMENT)
+      K8S_APP_LABEL: $(K8S_APP_LABEL)

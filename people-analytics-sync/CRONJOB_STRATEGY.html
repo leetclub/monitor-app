@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRONJOB_STRATEGY</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>CronJob Strategy: Hourly Sync</h1>
+<h2>Recommended Approach: Fetch Last Hour Only</h2>
+<h3>Why Fetch Only Last Hour?</h3>
+<p>✅ <strong>Efficiency</strong>: </p>
+<ul>
+<li>Less data to process (only ~12 devices × 1 hour = minimal data)</li>
+<li>Faster syncs (typically &lt; 5 seconds)</li>
+<li>Lower API usage</li>
+</ul>
+<p>✅ <strong>Upsert Logic Handles Everything</strong>:</p>
+<ul>
+<li>The unique constraint prevents duplicates</li>
+<li>If a record already exists, it gets updated</li>
+<li>No need to fetch all data every time</li>
+</ul>
+<p>✅ <strong>Better Performance</strong>:</p>
+<ul>
+<li>Less database load</li>
+<li>Faster queries</li>
+<li>Lower bandwidth usage</li>
+</ul>
+<h3>How It Works</h3>
+<ol>
+<li><strong>Hourly CronJob</strong> runs at minute 0 of every hour</li>
+<li><strong>Fetches last 1 hour</strong> of data from Videoloft</li>
+<li><strong>Upsert logic</strong>:<ul>
+<li>If record exists (same device + time period): Updates it</li>
+<li>If record doesn&#39;t exist: Inserts it</li>
+</ul>
+</li>
+<li><strong>Result</strong>: Database always has the latest data without duplicates</li>
+</ol>
+<h3>Configuration</h3>
+<p>The CronJob is configured with:</p>
+<ul>
+<li><code>schedule: &quot;0 * * * *&quot;</code> - Runs every hour at :00</li>
+<li><code>SYNC_DAYS_BACK: &quot;0&quot;</code> - Fetch only last hour</li>
+<li><code>SYNC_INTERVAL: &quot;hour&quot;</code> - Use hour-level intervals</li>
+</ul>
+<h3>Example Timeline</h3>
+<pre><code>10:00 AM - CronJob runs, fetches 9:00-10:00 data
+10:01 AM - New data arrives in Videoloft for 9:00-10:00
+11:00 AM - CronJob runs, fetches 10:00-11:00 data
+          - Also updates 9:00-10:00 if Videoloft updated it
+</code></pre>
+<h3>Alternative: Fetch All Data (NOT Recommended)</h3>
+<p>If you fetch all data every hour:</p>
+<ul>
+<li>❌ Slower (processes hundreds/thousands of records)</li>
+<li>❌ More API calls</li>
+<li>❌ Higher database load</li>
+<li>❌ Unnecessary (upsert already handles it)</li>
+</ul>
+<p><strong>Only fetch all data when:</strong></p>
+<ul>
+<li>Initial historical sync</li>
+<li>Manual full sync</li>
+<li>Recovery from downtime</li>
+</ul>
+<h2>Migration from Every Minute to Every Hour</h2>
+<h3>Step 1: Update CronJob</h3>
+<pre><code class="language-bash">kubectl apply -f people-analytics-sync/k8s/cronjob.yaml -n leet-monitor
+</code></pre>
+<h3>Step 2: Verify</h3>
+<pre><code class="language-bash"># Check schedule
+kubectl get cronjob people-analytics-sync -n leet-monitor -o jsonpath=&#39;{.spec.schedule}&#39;
+# Should show: &quot;0 * * * *&quot;
+
+# Wait for next hour and check job
+kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp | tail -2
+</code></pre>
+<h3>Step 3: Monitor First Hourly Run</h3>
+<pre><code class="language-bash"># Get latest job
+LATEST_JOB=$(kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp -o jsonpath=&#39;{.items[-1].metadata.name}&#39;)
+
+# Check logs
+kubectl logs -l job-name=$LATEST_JOB -n leet-monitor
+</code></pre>
+<p>Look for:</p>
+<ul>
+<li>✅ &quot;Fetching data from [1 hour ago] to [now]&quot;</li>
+<li>✅ &quot;Successfully synced X records&quot;</li>
+<li>✅ No errors</li>
+</ul>
+<h2>Verifying Historical Data Before Switch</h2>
+<p>Before switching the frontend to use the API, verify all historical data is synced:</p>
+<pre><code class="language-bash"># Run verification script
+python3 people-analytics-sync/verify_historical_data.py
+</code></pre>
+<p>This will:</p>
+<ul>
+<li>Compare database date range with Videoloft</li>
+<li>Check if recent data is present</li>
+<li>Recommend if you need to run a full sync</li>
+</ul>
+<h2>Manual Full Sync (If Needed)</h2>
+<p>If you need to sync all historical data:</p>
+<pre><code class="language-bash"># Create a one-time job for full historical sync
+kubectl create job --from=cronjob/people-analytics-sync people-analytics-sync-full-$(date +%s) \
+  -n leet-monitor \
+  --overrides=&#39;{
+    &quot;spec&quot;: {
+      &quot;template&quot;: {
+        &quot;spec&quot;: {
+          &quot;containers&quot;: [{
+            &quot;name&quot;: &quot;sync&quot;,
+            &quot;env&quot;: [
+              {&quot;name&quot;: &quot;SYNC_DAYS_BACK&quot;, &quot;value&quot;: &quot;365&quot;},
+              {&quot;name&quot;: &quot;SYNC_INTERVAL&quot;, &quot;value&quot;: &quot;date&quot;}
+            ]
+          }]
+        }
+      }
+    }
+  }&#39;
+</code></pre>
+<p>Or use the existing initial-sync-job.yaml:</p>
+<pre><code class="language-bash">kubectl apply -f people-analytics-sync/k8s/initial-sync-job.yaml -n leet-monitor
+</code></pre>
+</body>
+</html>

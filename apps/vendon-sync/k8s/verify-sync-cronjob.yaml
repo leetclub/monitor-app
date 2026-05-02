@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vendon-sync-verify
+  namespace: leet-monitor
+spec:
+  # Run 30 minutes after vendon-sales-sync (at 2:30 AM UTC)
+  # This gives the sync job time to complete
+  schedule: "30 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: vendon-sync-verify
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: verify
+            image: programmeradmin25/people-analytics-sync:latest
+            imagePullPolicy: Always
+            command: ["sh", "-c", "cd /app/vendon-sync && python verify_sync_results.py"]
+            env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-password
+            - name: VENDON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: vendon-api-key
+            - name: VENDON_API_BASE
+              value: "https://cloud.vendon.net/rest/v1.9.0"
+            - name: ADMIN_API_URL
+              value: "https://vendon-api.theleetclub.com"
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: admin-api-key
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"

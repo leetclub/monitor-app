@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-panel-api
+  namespace: leet-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-panel-api
+  template:
+    metadata:
+      labels:
+        app: admin-panel-api
+    spec:
+      containers:
+      - name: admin-api
+        image: programmeradmin25/vendon-admin-panel:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5002
+          name: http
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-port
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-password
+        - name: ADMIN_API_PORT
+          value: "5002"
+        - name: ADMIN_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-secret-key
+        - name: ADMIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-api-key
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-username
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /api/admin/health
+            port: 5002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /api/admin/health
+            port: 5002
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-api-service
+  namespace: leet-monitor
+spec:
+  selector:
+    app: admin-panel-api
+  ports:
+  - port: 5002
+    targetPort: 5002
+    protocol: TCP
+  type: ClusterIP

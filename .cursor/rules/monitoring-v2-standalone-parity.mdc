@@ -1,0 +1,29 @@
+---
+description: monitoring-app-v2 must become a standalone replacement for monitoring-app with full parity; never modify legacy GAS or break its APIs
+alwaysApply: true
+---
+
+# monitoring-app-v2 = standalone successor to monitoring-app
+
+## Product goal
+
+- **Refactor** the entire Leet Monitor experience into **`monitoring-app-v2`** (React/TS).
+- v2 must eventually **replace** `monitoring-app` (Google Apps Script). The old app will be **discarded** once parity is proven.
+- v2 is **independent**: no iframe of GAS, no required edits to `monitoring-app` for v2 features.
+
+## Hard rules
+
+1. **Do not change legacy GAS (`monitoring-app-v1/`)** (no `index.html` / `*.js` / clasp) unless the user **explicitly** requests a legacy-only fix.
+2. **Do not remove or break** HTTP APIs, databases, or integrations that **`monitoring-app` or other production clients** still rely on. New work **adds** BFF/Flask routes or extends **people-analytics-api** as needed; deprecate only with an explicit migration plan and user approval.
+3. **Parity** means same tabs, permissions model, and **behavior** (data, flows, edge cases) as the classic app — implemented as React UI + `fetch` to the backend, not `google.script.run`.
+
+## Implementation approach
+
+- Treat `monitoring-app-v1` client files (`events-tab.js`, `people-analytics.js`, `waste-tab.js`, …) and `index.html` as **reference only** for behavior and payloads.
+- Add **`src/features/<tabId>/`** (or `src/pages/tabs/`) per area; lazy-load from `TabPage` when ready.
+- Mirror server behavior in **people-api / shared backend** (session + Postgres rules already used for dashboard access).
+
+## Reference
+
+- Tab ids: `monitoring-app-v2/src/navigation/tabs.ts` (keep aligned with `monitoring-app-v1/auth-access.js` `ALL_DASHBOARD_TAB_IDS`).
+- Living scope checklist: `monitoring-app-v2/REFACTOR-SCOPE.txt`.

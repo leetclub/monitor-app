@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: people-api-ingress
+  namespace: leet-monitor
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # Forward all paths as-is (don't rewrite)
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: people-api.theleetclub.com
+    http:
+      paths:
+      # Forward all paths to the service
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: people-analytics-api
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - people-api.theleetclub.com
+    secretName: theleetclub-tls

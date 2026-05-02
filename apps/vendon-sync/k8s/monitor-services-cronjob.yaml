@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: monitor-services
+  namespace: leet-monitor
+spec:
+  # Run every 30 minutes to check all services and cronjobs
+  schedule: "*/30 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: monitor-services
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: programmeradmin25/vendon-sales-api:latest
+            imagePullPolicy: Always
+            command: ["sh", "-c", "cd /app && python3 monitor_all_services.py"]
+            workingDir: /app
+            env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-password
+            - name: ADMIN_API_URL
+              value: "https://vendon-api.theleetclub.com"
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: admin-api-key
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "50m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"

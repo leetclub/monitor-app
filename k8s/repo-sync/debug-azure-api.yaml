@@ -1,0 +1,36 @@
+# One-off job to list Azure DevOps repos (debug). Delete after use.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: azure-debug-repos
+  namespace: repo-sync-temp
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: debug
+          image: curlimages/curl:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== Azure DevOps org: $AZURE_DEVOPS_ORG ==="
+              for proj in "Leet%20Monitor" "Leet%20Members"; do
+                echo ""
+                echo "=== Project (URL): $proj ==="
+                curl -s -u ":$AZURE_DEVOPS_PAT" "https://dev.azure.com/$AZURE_DEVOPS_ORG/$proj/_apis/git/repositories?api-version=7.0" | head -c 1500
+                echo ""
+              done
+          env:
+            - name: AZURE_DEVOPS_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: repo-sync-tokens
+                  key: azure-devops-pat
+            - name: AZURE_DEVOPS_ORG
+              valueFrom:
+                secretKeyRef:
+                  name: repo-sync-tokens
+                  key: azure-devops-org

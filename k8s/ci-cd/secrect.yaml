@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sa-azure-devops-token
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: sa-azure-devops
+type: kubernetes.io/service-account-token

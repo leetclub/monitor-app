@@ -1,0 +1,61 @@
+# Ignore everything at root except monitor-app files (so only these get pushed to programmerteam25/monitor-app)
+/*
+!/.gitignore
+!/.gitattributes
+!/index.html
+!/appsscript.json
+!/.clasp.json
+!/admin-api.js
+!/analytics-tab.js
+!/api-core.js
+!/attendance-tab.js
+!/cache.js
+!/common.js
+!/config.js
+!/events-tab.js
+!/maintenance-tab.js
+!/notifications.js
+!/operations-tab.js
+!/people-analytics.js
+!/refill-tab.js
+!/remote-credits-tab.js
+!/visit-tracking-tab.js
+!/waste-tab.js
+!/setup-admin-script-properties.js
+!/auth-access.js
+!/dashboard-access-api.js
+!/permissions-sync.js
+
+# k8s: GitHub → Azure DevOps repo sync (mapping + CronJob manifests)
+!/k8s/
+!/k8s/repo-sync/
+!/k8s/repo-sync/**
+
+# Cursor rules (agent workflow)
+!/.cursor/
+!/.cursor/**
+
+# Products for Azure Pipelines (otherwise root `/*` ignores these folders entirely)
+!/apps/
+!/apps/alert-theleetclub-com/
+!/apps/alert-theleetclub-com/**
+!/people-analytics-sync/
+!/people-analytics-sync/**
+!/monitoring-app-v2/
+!/monitoring-app-v2/**
+
+# Do not commit deps / build artifacts inside those products
+apps/alert-theleetclub-com/node_modules/
+apps/alert-theleetclub-com/dist/
+monitoring-app-v2/node_modules/
+monitoring-app-v2/dist/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Local secrets (never commit PAT files)
+azure.txt
+pipeline-vars.local.env

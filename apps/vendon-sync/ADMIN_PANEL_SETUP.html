@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADMIN_PANEL_SETUP</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Admin Panel Setup Guide</h1>
+<h2>Overview</h2>
+<p>The Admin Panel provides:</p>
+<ul>
+<li><strong>Authentication</strong>: Username/password login</li>
+<li><strong>Alerts &amp; Logs</strong>: View all alerts from sync/verification jobs</li>
+<li><strong>Verification Results</strong>: View sync verification results comparing DB vs Vendon API</li>
+</ul>
+<h2>Setup Steps</h2>
+<h3>1. Add Secrets to Kubernetes</h3>
+<p>Add the following secrets to <code>people-analytics-secrets</code>:</p>
+<pre><code class="language-bash">kubectl create secret generic people-analytics-secrets \
+  --from-literal=admin-secret-key=&#39;&lt;generate-random-key&gt;&#39; \
+  --from-literal=admin-api-key=&#39;&lt;generate-random-key&gt;&#39; \
+  --from-literal=admin-username=&#39;admin&#39; \
+  --from-literal=admin-password=&#39;&lt;strong-password&gt;&#39; \
+  -n leet-monitor \
+  --dry-run=client -o yaml | kubectl apply -f -
+</code></pre>
+<p>Or update existing secret:</p>
+<pre><code class="language-bash">kubectl create secret generic people-analytics-secrets \
+  --from-literal=admin-secret-key=&#39;&lt;random-key&gt;&#39; \
+  --from-literal=admin-api-key=&#39;&lt;random-key&gt;&#39; \
+  --from-literal=admin-username=&#39;admin&#39; \
+  --from-literal=admin-password=&#39;&lt;password&gt;&#39; \
+  -n leet-monitor \
+  --dry-run=client -o yaml | kubectl apply -f -
+</code></pre>
+<p>Generate random keys:</p>
+<pre><code class="language-bash">python3 -c &quot;import secrets; print(secrets.token_hex(32))&quot;
+</code></pre>
+<h3>2. Build and Push Docker Image</h3>
+<pre><code class="language-bash">cd vendon-sync
+docker build -f Dockerfile.admin -t programmeradmin25/vendon-admin-panel:latest .
+docker push programmeradmin25/vendon-admin-panel:latest
+</code></pre>
+<h3>3. Deploy Admin Panel</h3>
+<pre><code class="language-bash">kubectl apply -f k8s/admin-deployment.yaml
+</code></pre>
+<h3>4. Create Ingress (Optional - for external access)</h3>
+<pre><code class="language-yaml">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-panel-ingress
+  namespace: leet-monitor
+spec:
+  rules:
+  - host: admin.theleetclub.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-api-service
+            port:
+              number: 5002
+</code></pre>
+<h3>5. Verify Deployment</h3>
+<pre><code class="language-bash"># Check pods
+kubectl get pods -n leet-monitor | grep admin-panel
+
+# Check logs
+kubectl logs -n leet-monitor deployment/admin-panel-api
+
+# Port forward to test locally
+kubectl port-forward -n leet-monitor svc/admin-api-service 5002:5002
+</code></pre>
+<p>Then access: <a href="http://localhost:5002">http://localhost:5002</a></p>
+<h2>How It Works</h2>
+<h3>Verification Flow</h3>
+<ol>
+<li><p><strong>Sync Job</strong> runs at 2 AM UTC</p>
+<ul>
+<li>Syncs yesterday&#39;s data</li>
+<li>Logs any critical errors to admin panel</li>
+</ul>
+</li>
+<li><p><strong>Verification Job</strong> runs at 2:30 AM UTC</p>
+<ul>
+<li>Compares DB vs Vendon API</li>
+<li>Sends results to admin panel</li>
+<li>Creates alerts for failures</li>
+</ul>
+</li>
+<li><p><strong>Admin Panel</strong> displays:</p>
+<ul>
+<li>All alerts (info, warning, error, critical)</li>
+<li>Verification results with pass/fail status</li>
+<li>Detailed error messages</li>
+</ul>
+</li>
+</ol>
+<h3>API Endpoints</h3>
+<ul>
+<li><code>POST /api/admin/login</code> - Login</li>
+<li><code>POST /api/admin/logout</code> - Logout</li>
+<li><code>GET /api/admin/alerts</code> - Get alerts (requires auth)</li>
+<li><code>GET /api/admin/verification-results</code> - Get verification results (requires auth)</li>
+<li><code>POST /api/admin/receive-alert</code> - Receive alert from jobs (uses API key)</li>
+<li><code>POST /api/admin/receive-verification</code> - Receive verification results (uses API key)</li>
+</ul>
+<h2>Default Credentials</h2>
+<ul>
+<li><strong>Username</strong>: Set via <code>ADMIN_USERNAME</code> env var (default: <code>admin</code>)</li>
+<li><strong>Password</strong>: Set via <code>ADMIN_PASSWORD</code> env var (default: <code>admin123</code>)</li>
+</ul>
+<p><strong>⚠️ Change default password in production!</strong></p>
+<h2>Monitoring</h2>
+<p>The admin panel auto-refreshes every 30 seconds to show new alerts and verification results.</p>
+<h2>Troubleshooting</h2>
+<h3>Can&#39;t login</h3>
+<ul>
+<li>Check if admin user was created in database</li>
+<li>Verify <code>ADMIN_USERNAME</code> and <code>ADMIN_PASSWORD</code> are set correctly</li>
+<li>Check pod logs for errors</li>
+</ul>
+<h3>No alerts showing</h3>
+<ul>
+<li>Verify verification cronjob has <code>ADMIN_API_URL</code> and <code>ADMIN_API_KEY</code> set</li>
+<li>Check verification job logs</li>
+<li>Verify admin API is accessible from verification pods</li>
+</ul>
+<h3>Verification results not appearing</h3>
+<ul>
+<li>Check verification job completed successfully</li>
+<li>Verify <code>ADMIN_API_URL</code> points to correct service</li>
+<li>Check admin API logs for incoming requests</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,61 @@
+# CronJob: syncs GitHub repos to Azure DevOps on a schedule.
+# Requires: repo-sync-mapping ConfigMap, repo-sync-script ConfigMap, repo-sync-tokens Secret.
+# Apply: kubectl apply -f configmap-mapping.yaml -f configmap-script.yaml -f cronjob.yaml
+# Create secret first: see secret.example.yaml
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: repo-sync-github-to-azure
+  namespace: repo-sync-temp
+spec:
+  schedule: "*/5 * * * *"    # every 5 minutes
+  concurrencyPolicy: Forbid  # skip if previous run still going
+  successfulJobsHistoryLimit: 1   # keep only latest successful job
+  failedJobsHistoryLimit: 1       # keep only latest failed job
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 300   # delete job 5 min after completion
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: sync
+              image: alpine/git:latest
+              command: ["/bin/sh", "/scripts/sync-script.sh"]
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: repo-sync-tokens
+                      key: github-token
+                - name: AZURE_DEVOPS_PAT
+                  valueFrom:
+                    secretKeyRef:
+                      name: repo-sync-tokens
+                      key: azure-devops-pat
+                - name: AZURE_DEVOPS_ORG
+                  valueFrom:
+                    secretKeyRef:
+                      name: repo-sync-tokens
+                      key: azure-devops-org
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: repos
+                  mountPath: /sync/repos
+          volumes:
+            - name: config
+              configMap:
+                name: repo-sync-mapping
+            - name: scripts
+              configMap:
+                name: repo-sync-script
+                defaultMode: 0755
+            - name: repos
+              emptyDir: {}

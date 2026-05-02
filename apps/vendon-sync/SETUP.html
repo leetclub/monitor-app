@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SETUP</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Vendon Sales Sync Setup Guide</h1>
+<p>This guide explains how to set up the Vendon sales data caching system to speed up the targets tab.</p>
+<h2>Overview</h2>
+<p>The system consists of:</p>
+<ol>
+<li><strong>Database Table</strong>: Stores daily sales data per machine (<code>vendon_sales_records</code>)</li>
+<li><strong>Sync Service</strong>: Fetches data from Vendon API and stores it in the database</li>
+<li><strong>API Endpoints</strong>: Query cached data quickly (endpoints are in <code>people-analytics-sync/api_service.py</code>)</li>
+</ol>
+<h2>Setup Steps</h2>
+<h3>1. Create Database Table</h3>
+<p>Run the migration script:</p>
+<pre><code class="language-bash"># In WSL shell (psql without password)
+psql -h localhost -U postgres -d people_analytics -f migrations/init_vendon_sales_table.sql
+</code></pre>
+<h3>2. Add Vendon API Key to Kubernetes Secrets</h3>
+<p>Update your Kubernetes secrets:</p>
+<pre><code class="language-bash">kubectl patch secret people-analytics-secrets -n leet-monitor --type=&#39;json&#39; \
+  -p=&#39;[{&quot;op&quot;: &quot;add&quot;, &quot;path&quot;: &quot;/data/vendon-api-key&quot;, &quot;value&quot;: &quot;&#39;$(echo -n &#39;7OMcvPEpSGsM6jRNZJnQVKZWlQEBWSqD&#39; | base64)&#39;&quot;}]&#39;
+</code></pre>
+<h3>3. Deploy the CronJob</h3>
+<pre><code class="language-bash">kubectl apply -f k8s/cronjob.yaml
+</code></pre>
+<p>The cronjob runs daily at 2 AM UTC (5 AM Kuwait time) to sync yesterday&#39;s data.</p>
+<h3>4. Manual Sync (Optional)</h3>
+<pre><code class="language-bash"># Sync yesterday&#39;s data
+python sync_service.py
+
+# Sync specific date
+VENDON_SYNC_TARGET_DATE=2025-01-15 python sync_service.py
+</code></pre>
+<h3>5. Verify Setup</h3>
+<pre><code class="language-bash"># Get lowest machine from yesterday
+curl &quot;https://people-api.theleetclub.com/api/vendon-sales/lowest-yesterday&quot;
+</code></pre>
+<h2>API Endpoints</h2>
+<p>The API endpoints are served by the people-analytics API service:</p>
+<ul>
+<li><code>GET /api/vendon-sales/lowest-yesterday</code> - Get lowest performing machine from yesterday</li>
+<li><code>GET /api/vendon-sales</code> - Query sales data by date/machine</li>
+</ul>
+<h2>Performance</h2>
+<p><strong>Before</strong>: 30-60 seconds, 150+ API calls<br><strong>After</strong>: &lt; 1 second, 1 database query</p>
+</body>
+</html>

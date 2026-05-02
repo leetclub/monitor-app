@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TLS CERTS UPDATE</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Wildcard TLS certs update (*.theleetclub.com &amp; *.ee-coffee.com)</h1>
+<p>Your wildcard certs are renewed and stored under Downloads. <strong>GoDaddy only provides certificates</strong> (<code>.crt</code>/<code>.pem</code>); the <strong>private key</strong> is the one you created when generating the CSR and is not in the download.</p>
+<ul>
+<li><strong>_.theleetclub.com:</strong> <code>625ba359f4400ee.crt</code>, <code>gd_bundle-g2.crt</code>, and <strong>you must add</strong> the private key (e.g. <code>theleetclub.key</code> or <code>625ba359f4400ee.key</code>).</li>
+<li><strong>_.ee-coffee.com:</strong> <code>22321af72295307a.crt</code>, <code>gd_bundle-g2.crt</code>, and <strong>you must add</strong> the private key (e.g. <code>ee-coffee.key</code>).</li>
+</ul>
+<p>Place each private key in the same folder as the certs. The script looks for a <code>.key</code> file (or a <code>.pem</code> that is actually a key) in each folder.</p>
+<h2>Quick update (recommended)</h2>
+<p>From the <strong>monitoring-app</strong> repo root, with <code>kubectl</code> pointing at your cluster:</p>
+<p><strong>PowerShell (Windows):</strong></p>
+<pre><code class="language-powershell">cd k8s
+.\update-wildcard-certs.ps1
+</code></pre>
+<p><strong>Preview without applying:</strong></p>
+<pre><code class="language-powershell">.\update-wildcard-certs.ps1 -DryRun
+</code></pre>
+<p><strong>Bash (WSL / Git Bash):</strong> if certs are under Windows Downloads:</p>
+<pre><code class="language-bash">cd k8s
+# WSL: Windows Downloads are e.g. /mnt/c/Users/YourUser/Downloads
+export DOWNLOADS=&quot;/mnt/c/Users/$USER/Downloads&quot;
+chmod +x update-wildcard-certs.sh
+./update-wildcard-certs.sh
+</code></pre>
+<p>Dry run:</p>
+<pre><code class="language-bash">DRY_RUN=1 ./update-wildcard-certs.sh
+</code></pre>
+<h2>What the script does</h2>
+<ol>
+<li><strong>theleetclub:</strong> builds full chain = <code>625ba359f4400ee.crt</code> + <code>gd_bundle-g2.crt</code>, uses <code>625ba359f4400ee.pem</code> as private key, then creates/updates the <code>theleetclub-tls</code> secret in namespace <code>leet-monitor</code>.</li>
+<li><strong>ee-coffee:</strong> same for the ee-coffee files and creates/updates <code>ee-coffee-tls</code> in <code>leet-monitor</code>.</li>
+</ol>
+<p>All ingresses in this repo that use <code>secretName: theleetclub-tls</code> will pick up the new cert once the secret is updated. No need to change Ingress YAML.</p>
+<h2>ee-coffee namespace</h2>
+<p>The script uses namespace <strong>leet-monitor</strong> for both secrets. If your ee-coffee apps run in a <strong>different namespace</strong>, either:</p>
+<ul>
+<li>Edit <code>update-wildcard-certs.ps1</code> / <code>update-wildcard-certs.sh</code> and change the namespace for the ee-coffee secret, or  </li>
+<li>After running the script, copy the secret to the right namespace:<pre><code class="language-bash">kubectl get secret ee-coffee-tls -n leet-monitor -o yaml | sed &#39;s/namespace: leet-monitor/namespace: YOUR-EE-COFFEE-NAMESPACE/&#39; | kubectl apply -f -
+</code></pre>
+</li>
+</ul>
+<p>If your ee-coffee Ingress uses a different <strong>secret name</strong> (e.g. <code>tls-secret</code>), create/update that name instead, e.g.:</p>
+<pre><code class="language-bash">kubectl create secret tls YOUR-SECRET-NAME --cert=chain.crt --key=key.pem -n YOUR-NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+</code></pre>
+<p>(using the same chain = domain cert + <code>gd_bundle-g2.crt</code> and the same <code>.pem</code> as key.)</p>
+<h2>Ingresses in this repo (theleetclub only)</h2>
+<ul>
+<li><code>people-analytics-sync/k8s/api-ingress.yaml</code> → <code>people-api.theleetclub.com</code> → <code>theleetclub-tls</code></li>
+<li><code>apps/vendon-sync/k8s/api-ingress.yaml</code> → <code>vendon-api.theleetclub.com</code> → <code>theleetclub-tls</code></li>
+<li><code>apps/historical-performance-sync/k8s/api-ingress.yaml</code> → <code>historical-api.theleetclub.com</code> → <code>theleetclub-tls</code></li>
+</ul>
+<p>Updating the <code>theleetclub-tls</code> secret is enough for these. For any other app under *.theleetclub.com or *.ee-coffee.com (e.g. admin, other repos), update the TLS secret that their Ingress references in the same way.</p>
+<h2>Optional: stop committing the TLS secret</h2>
+<p><code>people-analytics-sync/k8s/theleetclub-tls.yaml</code> currently contains an old TLS secret (with private key). For security, prefer <strong>not</strong> storing private keys in git. After you’ve applied the new cert with the script above, you can:</p>
+<ul>
+<li>Remove <code>theleetclub-tls.yaml</code> from the repo and add it to <code>.gitignore</code>, and rely on applying from local cert files (or a secret manager), or  </li>
+<li>Keep the file only as a template and strip the <code>data</code> section so the real secret is only created by the script or CI.</li>
+</ul>
+<p>After updating, you can confirm in the cluster:</p>
+<pre><code class="language-bash">kubectl get secret theleetclub-tls -n leet-monitor -o jsonpath=&#39;{.data.tls\.crt}&#39; | base64 -d | openssl x509 -noout -dates
+</code></pre>
+<p>You should see <code>notAfter</code> with the new expiry date.</p>
+</body>
+</html>

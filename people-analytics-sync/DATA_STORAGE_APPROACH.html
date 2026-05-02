@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DATA_STORAGE_APPROACH</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Data Storage Approach</h1>
+<h2>Current Approach: Store Individual Records with Deduplication</h2>
+<h3>Why This Approach?</h3>
+<ol>
+<li><p><strong>Flexibility</strong>: Store granular data (per time period) allows flexible querying</p>
+<ul>
+<li>Can aggregate by hour, day, week, month in queries</li>
+<li>Can see patterns within a day</li>
+<li>Can track changes over time</li>
+</ul>
+</li>
+<li><p><strong>Data Integrity</strong>: Each record represents a specific time period from Videoloft</p>
+<ul>
+<li>Preserves original data structure</li>
+<li>Can see when data was last synced</li>
+<li>Can track if data changed between syncs</li>
+</ul>
+</li>
+<li><p><strong>Deduplication</strong>: Using unique constraint on <code>(uidd, first_timestamp, last_timestamp, interval_type)</code></p>
+<ul>
+<li>Prevents duplicate records from multiple sync runs</li>
+<li>Uses PostgreSQL <code>ON CONFLICT DO UPDATE</code> (upsert) to update existing records</li>
+<li>Keeps the most recent data if Videoloft updates a record</li>
+</ul>
+</li>
+</ol>
+<h3>How It Works</h3>
+<ol>
+<li><p><strong>Sync Process</strong> (every minute):</p>
+<ul>
+<li>Fetches data from Videoloft for the last 1 day (including today)</li>
+<li>For each record, uses upsert logic:<ul>
+<li>If record exists (same device + time period): Updates it</li>
+<li>If record doesn&#39;t exist: Inserts it</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong>Query Process</strong> (from webapp):</p>
+<ul>
+<li>API queries records by date range and device IDs</li>
+<li>Can aggregate on-the-fly:<ul>
+<li>Sum <code>people_in</code> and <code>people_out</code> for date range</li>
+<li>Group by day, hour, etc.</li>
+<li>Calculate totals per machine</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<h3>Example Query Results</h3>
+<p>For a date range query, you get:</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: [
+    {
+      &quot;uidd&quot;: &quot;1382465.21&quot;,
+      &quot;first_timestamp&quot;: &quot;2026-01-13T10:55:00&quot;,
+      &quot;last_timestamp&quot;: &quot;2026-01-13T11:00:00&quot;,
+      &quot;in&quot;: 1,
+      &quot;out&quot;: 4,
+      &quot;netTraffic&quot;: -3
+    },
+    // ... more records
+  ],
+  &quot;summary&quot;: {
+    &quot;totalIn&quot;: 5512,
+    &quot;totalOut&quot;: 5708,
+    &quot;netTraffic&quot;: -196,
+    &quot;totalRecords&quot;: 161
+  }
+}
+</code></pre>
+<p>The API automatically sums up all records in the date range to give you totals per machine.</p>
+<h2>Alternative Approach: Daily Aggregation (NOT Recommended)</h2>
+<h3>Why NOT to use daily aggregation:</h3>
+<ol>
+<li><strong>Loss of Granularity</strong>: Can&#39;t see hourly patterns</li>
+<li><strong>Less Flexible</strong>: Hard to change aggregation later</li>
+<li><strong>More Complex</strong>: Need to handle partial days, timezone issues</li>
+<li><strong>Data Loss</strong>: If Videoloft updates historical data, harder to reconcile</li>
+</ol>
+<h3>If You Still Want Daily Aggregation:</h3>
+<p>You could add a materialized view or separate table:</p>
+<pre><code class="language-sql">CREATE TABLE daily_aggregates AS
+SELECT 
+    uidd,
+    DATE(first_timestamp) as date,
+    SUM(people_in) as total_in,
+    SUM(people_out) as total_out,
+    COUNT(*) as record_count
+FROM people_analytics_records
+GROUP BY uidd, DATE(first_timestamp);
+</code></pre>
+<p>But this adds complexity and the current approach is more flexible.</p>
+<h2>Recommendation</h2>
+<p><strong>Keep the current approach</strong> (individual records with deduplication) because:</p>
+<ul>
+<li>✅ More flexible for future requirements</li>
+<li>✅ Preserves all data</li>
+<li>✅ Easy to query and aggregate</li>
+<li>✅ Prevents duplicates automatically</li>
+<li>✅ Can handle data updates from Videoloft</li>
+</ul>
+<p>The API already handles aggregation in queries, so you get the best of both worlds:</p>
+<ul>
+<li>Granular storage (flexibility)</li>
+<li>Aggregated results (performance)</li>
+</ul>
+</body>
+</html>

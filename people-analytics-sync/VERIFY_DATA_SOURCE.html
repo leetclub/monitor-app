@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VERIFY_DATA_SOURCE</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>How to Verify Data Source and Compare with Videoloft</h1>
+<h2>1. Check Which Source is Being Used</h2>
+<h3>Method 1: Check Browser Console Logs</h3>
+<p>When you load the People Analytics tab, check the browser console (F12 → Console tab). Look for:</p>
+<p><strong>✅ Using Database:</strong></p>
+<pre><code>📊 [DATA SOURCE] Trying database API first...
+✅ [DATA SOURCE] ✅ USING DATABASE API (not Videoloft) ✅
+</code></pre>
+<p><strong>⚠️ Using Videoloft (Fallback):</strong></p>
+<pre><code>📊 [DATA SOURCE] Trying database API first...
+⚠️ [DATA SOURCE] Database API failed or returned no data, falling back to Videoloft
+⚠️ [DATA SOURCE] ⚠️ USING VIDEOLOFT DIRECTLY (not database) ⚠️
+</code></pre>
+<h3>Method 2: Check Apps Script Logs</h3>
+<ol>
+<li>Go to Google Apps Script editor</li>
+<li>View → Executions</li>
+<li>Click on the latest execution</li>
+<li>Check logs for <code>[DATA SOURCE]</code> messages</li>
+</ol>
+<h3>Method 3: Check Network Tab</h3>
+<ol>
+<li>Open browser DevTools (F12)</li>
+<li>Go to Network tab</li>
+<li>Load People Analytics tab</li>
+<li>Look for requests to:<ul>
+<li>✅ <code>people-api.theleetclub.com</code> = Using Database API</li>
+<li>❌ <code>euwest1-analytics.manything.com</code> = Using Videoloft directly</li>
+</ul>
+</li>
+</ol>
+<h2>2. Compare Database vs Videoloft Data</h2>
+<h3>Quick SQL Check</h3>
+<pre><code class="language-bash"># Check what&#39;s in database for today
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT uidd, DATE(first_timestamp) as date, SUM(people_in) as total_in, SUM(people_out) as total_out, COUNT(*) as records FROM people_analytics_records WHERE DATE(first_timestamp) = CURRENT_DATE GROUP BY uidd, DATE(first_timestamp) ORDER BY uidd;&quot;
+</code></pre>
+<h3>Detailed Comparison Script</h3>
+<p>Run the comparison script to verify data matches:</p>
+<pre><code class="language-bash"># Compare today&#39;s data
+python3 people-analytics-sync/compare_db_videoloft.py 2026-01-14 2026-01-14
+
+# Compare specific device
+python3 people-analytics-sync/compare_db_videoloft.py 2026-01-14 2026-01-14 1382465.21
+
+# Compare date range
+python3 people-analytics-sync/compare_db_videoloft.py 2026-01-13 2026-01-14
+</code></pre>
+<p>This will show:</p>
+<ul>
+<li>✅ Matching records</li>
+<li>⚠️ Records with differences</li>
+<li>📦 Records only in database</li>
+<li>🌐 Records only in Videoloft</li>
+<li>Match percentage</li>
+</ul>
+<h2>3. Force Using Database Only</h2>
+<p>If you want to ensure it ALWAYS uses the database (no Videoloft fallback), modify <code>testPeopleAnalyticsWrapper</code>:</p>
+<pre><code class="language-javascript">// In people-analytics.js, change the fallback logic:
+if (!result.success || (result.success &amp;&amp; result.data.length === 0)) {
+  // Instead of falling back, return error
+  console.error(&quot;❌ Database API returned no data - check if data is synced&quot;);
+  return {
+    success: false,
+    error: &quot;No data available in database. Please ensure data is synced.&quot;,
+    data: [],
+    totalRecords: 0,
+    summary: null
+  };
+}
+</code></pre>
+<h2>4. Test API Directly</h2>
+<p>Test the API to see what it returns:</p>
+<pre><code class="language-bash"># Get today&#39;s data
+curl &quot;https://people-api.theleetclub.com/api/people-analytics?start_date=$(date +%Y-%m-%d)&amp;end_date=$(date +%Y-%m-%d)&quot; | jq &#39;.summary&#39;
+
+# Get specific device
+curl &quot;https://people-api.theleetclub.com/api/people-analytics?uidds=1382465.21&amp;start_date=$(date +%Y-%m-%d)&amp;end_date=$(date +%Y-%m-%d)&quot; | jq &#39;.data | length&#39;
+</code></pre>
+<h2>5. Verify Data Completeness</h2>
+<p>Before switching, ensure database has all historical data:</p>
+<pre><code class="language-bash"># Check date range
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -f people-analytics-sync/check_historical_coverage.sql
+</code></pre>
+<h2>6. Expected Behavior</h2>
+<h3>Normal Operation (Database Working):</h3>
+<ol>
+<li>Frontend calls <code>testPeopleAnalyticsWrapper</code></li>
+<li>Wrapper calls <code>fetchPeopleAnalyticsFromDatabase</code></li>
+<li>Database API returns data</li>
+<li>✅ Uses database data</li>
+</ol>
+<h3>Fallback (Database Empty/Failed):</h3>
+<ol>
+<li>Frontend calls <code>testPeopleAnalyticsWrapper</code></li>
+<li>Wrapper calls <code>fetchPeopleAnalyticsFromDatabase</code></li>
+<li>Database API fails or returns empty</li>
+<li>⚠️ Falls back to <code>fetchPeopleAnalytics</code> (Videoloft)</li>
+</ol>
+<h2>7. Troubleshooting</h2>
+<h3>Issue: Always using Videoloft</h3>
+<p><strong>Check:</strong></p>
+<ol>
+<li>Is API accessible? <code>curl https://people-api.theleetclub.com/health</code></li>
+<li>Does database have data? Check with SQL queries above</li>
+<li>Check Apps Script logs for API errors</li>
+</ol>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Ensure API is running and accessible</li>
+<li>Run initial sync to populate database</li>
+<li>Check API logs: <code>kubectl logs -l app=people-analytics-api -n leet-monitor</code></li>
+</ul>
+<h3>Issue: Data doesn&#39;t match</h3>
+<p><strong>Check:</strong></p>
+<ol>
+<li>Run comparison script</li>
+<li>Check if sync is running: <code>kubectl get jobs -n leet-monitor -l app=people-analytics-sync</code></li>
+<li>Check sync logs for errors</li>
+</ol>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>Ensure CronJob is running hourly</li>
+<li>Check for sync errors</li>
+<li>Run manual sync if needed</li>
+</ul>
+</body>
+</html>

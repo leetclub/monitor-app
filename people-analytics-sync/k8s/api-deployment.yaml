@@ -1,0 +1,189 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: people-analytics-api
+  namespace: leet-monitor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: people-analytics-api
+  template:
+    metadata:
+      labels:
+        app: people-analytics-api
+    spec:
+      containers:
+      - name: api
+        image: programmeradmin25/people-analytics-sync:api-latest
+        imagePullPolicy: Always
+        # Note: Update image to your registry URL
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-port
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-name
+        - name: DASHBOARD_DB_NAME
+          value: "monitoring_dashboard"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-password
+        - name: API_PORT
+          value: "5000"
+        - name: DEBUG
+          value: "false"
+        - name: ENV
+          value: "production"
+        - name: SESSION_LIFETIME_HOURS
+          value: "12"
+        - name: MAX_CONTENT_LENGTH_BYTES
+          value: "2097152"
+        - name: CORS_ALLOWED_ORIGINS
+          # Allow GAS web app randomized subdomains (script.googleusercontent.com uses n-<rand>-script.googleusercontent.com)
+          value: "https://monitor-v2.theleetclub.com,https://alert.theleetclub.com,http://localhost:5173,http://127.0.0.1:5173,https://script.googleusercontent.com,https://.*-script\\.googleusercontent\\.com"
+        - name: DASHBOARD_SUPER_ADMIN_EMAILS
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: dashboard-super-admin-emails
+              optional: true
+        - name: SLACK_WEBHOOK_PROXY_PREFIX
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: slack-webhook-proxy-prefix
+              optional: true
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: google-client-id
+              optional: true
+        - name: FLASK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: flask-secret-key
+              optional: true
+        - name: DASHBOARD_ACCESS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: dashboard-access-api-key
+              optional: true
+        - name: VENDON_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: vendon-api-key
+              optional: true
+        - name: VENDON_API_BASE
+          value: "https://cloud.vendon.net/rest/v1.9.0"
+        # General Cleaning (v2): maintenance uses full URL https://cloud.vendon.net/rest/head/... — not under VENDON_API_BASE.
+        # Code defaults correctly; only set VENDON_PREVENTATIVE_MAINTENANCE_URL if Vendon changes the path.
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: slack-webhook-url
+              optional: true
+        # --- Red Alert operator email alerts (optional; safe defaults = disabled) ---
+        - name: RED_ALERT_EMAIL_ENABLED
+          value: "false"
+        - name: RED_ALERT_EMAIL_COOLDOWN_MIN
+          value: "180"
+        - name: RED_ALERT_FROM_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: red-alert-from-email
+              optional: true
+        - name: RED_ALERT_SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: red-alert-smtp-host
+              optional: true
+        - name: RED_ALERT_SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: red-alert-smtp-port
+              optional: true
+        - name: RED_ALERT_SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: red-alert-smtp-user
+              optional: true
+        - name: RED_ALERT_SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: red-alert-smtp-pass
+              optional: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          failureThreshold: 30
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: people-analytics-api
+  namespace: leet-monitor
+spec:
+  selector:
+    app: people-analytics-api
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+  type: ClusterIP
+

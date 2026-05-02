@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-app
+  namespace: leet-monitor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alert-app
+  template:
+    metadata:
+      labels:
+        app: alert-app
+    spec:
+      containers:
+        - name: web
+          image: programmeradmin25/alert-theleetclub-com:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: ALERT_API_URL
+              value: "https://people-api.theleetclub.com"
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: google-client-id
+                  optional: true
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "20m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-app
+  namespace: leet-monitor
+spec:
+  selector:
+    app: alert-app
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
+

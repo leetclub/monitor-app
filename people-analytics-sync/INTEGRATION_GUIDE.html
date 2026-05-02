@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INTEGRATION_GUIDE</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Integration Guide: Updating Frontend to Use Database Service</h1>
+<p>This guide explains how to modify the People Analytics tab to fetch data from the new database service instead of directly from Videoloft.</p>
+<h2>Overview</h2>
+<p>The new architecture:</p>
+<ol>
+<li><strong>CronJob</strong> runs periodically (e.g., hourly) to fetch data from Videoloft and store it in PostgreSQL</li>
+<li><strong>API Service</strong> provides REST endpoints to query the stored data</li>
+<li><strong>Frontend</strong> calls the API service instead of Videoloft directly</li>
+</ol>
+<h2>Step 1: Deploy the Services</h2>
+<p>Follow the setup instructions in <code>README.md</code> to deploy:</p>
+<ul>
+<li>PostgreSQL database</li>
+<li>CronJob for syncing</li>
+<li>API service</li>
+</ul>
+<h2>Step 2: Update Frontend Code</h2>
+<h3>Option A: Modify <code>people-analytics.js</code> (Recommended)</h3>
+<p>In <code>people-analytics.js</code>, modify the <code>fetchPeopleAnalytics</code> function or create a new function that calls your API service:</p>
+<pre><code class="language-javascript">// Add this configuration at the top of people-analytics.js
+const PEOPLE_ANALYTICS_API_BASE = &#39;http://people-analytics-api.default.svc.cluster.local/api&#39;;
+// Or if exposed via ingress: &#39;https://api.yourdomain.com/api&#39;
+
+function fetchPeopleAnalyticsFromDatabase(params) {
+  try {
+    const { uidds, startTime, endTime, interval, timeZone } = params;
+    
+    // Convert timestamps to date strings
+    const startDate = new Date(startTime).toISOString().split(&#39;T&#39;)[0];
+    const endDate = new Date(endTime).toISOString().split(&#39;T&#39;)[0];
+    
+    // Build query parameters
+    const queryParams = new URLSearchParams({
+      uidds: uidds.join(&#39;,&#39;),
+      start_date: startDate,
+      end_date: endDate,
+      interval: interval === &#39;date&#39; ? &#39;date&#39; : (interval === 3600000 ? &#39;hour&#39; : &#39;60000&#39;),
+      limit: &#39;1000&#39;
+    });
+    
+    const url = `${PEOPLE_ANALYTICS_API_BASE}/people-analytics?${queryParams}`;
+    
+    console.log(&#39;📡 Fetching from database API:&#39;, url);
+    
+    // Make the API call
+    const response = UrlFetchApp.fetch(url, {
+      method: &#39;GET&#39;,
+      headers: {
+        &#39;Accept&#39;: &#39;application/json&#39;
+      },
+      muteHttpExceptions: true
+    });
+    
+    if (response.getResponseCode() !== 200) {
+      throw new Error(`API request failed: ${response.getResponseCode()}`);
+    }
+    
+    const data = JSON.parse(response.getContentText());
+    
+    if (!data.success) {
+      throw new Error(data.error || &#39;Unknown error&#39;);
+    }
+    
+    // Transform data to match expected format
+    const transformedData = data.data.map(record =&gt; ({
+      firstTimestamp: new Date(record.first_timestamp).getTime(),
+      lastTimestamp: new Date(record.last_timestamp).getTime(),
+      in: record.in,
+      out: record.out,
+      netTraffic: record.netTraffic,
+      uid: record.uidd.split(&#39;.&#39;)[0],
+      deviceId: record.uidd.split(&#39;.&#39;)[1] || record.device_id,
+      trafficRatio: record.trafficRatio,
+      trafficPattern: record.trafficPattern,
+      durationHours: record.durationHours,
+      eventCount: record.eventCount
+    }));
+    
+    // Process and return in same format as original
+    const processedData = processPeopleAnalyticsData(transformedData);
+    const summary = calculatePeopleAnalyticsSummary(processedData);
+    
+    return {
+      success: true,
+      data: processedData,
+      rawData: transformedData,
+      totalRecords: processedData.length,
+      summary: summary
+    };
+    
+  } catch (error) {
+    console.error(&#39;❌ Error fetching from database:&#39;, error);
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      totalRecords: 0,
+      summary: null
+    };
+  }
+}
+</code></pre>
+<h3>Option B: Modify <code>testPeopleAnalyticsWrapper</code> in <code>people-analytics.js</code></h3>
+<p>Update the <code>testPeopleAnalyticsWrapper</code> function to use the database API:</p>
+<pre><code class="language-javascript">function testPeopleAnalyticsWrapper(params) {
+  try {
+    // Try database API first, fallback to Videoloft if needed
+    const dbResult = fetchPeopleAnalyticsFromDatabase(params);
+    
+    if (dbResult.success &amp;&amp; dbResult.data.length &gt; 0) {
+      console.log(&#39;✅ Using data from database&#39;);
+      return dbResult;
+    } else {
+      console.log(&#39;⚠️ Database empty, falling back to Videoloft&#39;);
+      // Fallback to original Videoloft API
+      return fetchPeopleAnalytics(params);
+    }
+  } catch (error) {
+    console.error(&#39;❌ Error in wrapper:&#39;, error);
+    // Fallback to Videoloft
+    return fetchPeopleAnalytics(params);
+  }
+}
+</code></pre>
+<h2>Step 3: Update API Base URL</h2>
+<p>Set the API base URL based on your deployment:</p>
+<ul>
+<li><strong>Kubernetes ClusterIP</strong>: <code>http://people-analytics-api.default.svc.cluster.local/api</code></li>
+<li><strong>Ingress/External</strong>: <code>https://api.yourdomain.com/api</code></li>
+<li><strong>Local Development</strong>: <code>http://localhost:5000/api</code></li>
+</ul>
+<h2>Step 4: Handle Data Format Differences</h2>
+<p>The API returns data in a slightly different format. Ensure you transform it to match what the frontend expects:</p>
+<ul>
+<li><code>first_timestamp</code> → <code>firstTimestamp</code> (convert to milliseconds)</li>
+<li><code>people_in</code> → <code>in</code></li>
+<li><code>people_out</code> → <code>out</code></li>
+<li><code>net_traffic</code> → <code>netTraffic</code></li>
+</ul>
+<h2>Step 5: Add Fallback Logic</h2>
+<p>It&#39;s recommended to add fallback logic that:</p>
+<ol>
+<li>Tries the database API first</li>
+<li>Falls back to Videoloft if database is empty or unavailable</li>
+<li>Logs which source was used</li>
+</ol>
+<h2>Step 6: Testing</h2>
+<ol>
+<li><strong>Test API directly</strong>:</li>
+</ol>
+<pre><code class="language-bash">curl &quot;http://localhost:5000/api/people-analytics?uidds=1382465.6&amp;start_date=2024-01-01&amp;end_date=2024-01-31&quot;
+</code></pre>
+<ol start="2">
+<li><strong>Check sync status</strong>:</li>
+</ol>
+<pre><code class="language-bash">curl &quot;http://localhost:5000/api/sync-status&quot;
+</code></pre>
+<ol start="3">
+<li><strong>Verify data in database</strong>:</li>
+</ol>
+<pre><code class="language-bash">kubectl exec -it postgres-pod -- psql -U postgres -d people_analytics -c &quot;SELECT COUNT(*) FROM people_analytics_records;&quot;
+</code></pre>
+<h2>Benefits</h2>
+<ol>
+<li><strong>Performance</strong>: Faster queries from local database</li>
+<li><strong>Reliability</strong>: Data persists even if Videoloft API is down</li>
+<li><strong>Cost</strong>: Reduced API calls to Videoloft</li>
+<li><strong>Historical Data</strong>: Can query historical data even if Videoloft doesn&#39;t retain it</li>
+<li><strong>Analytics</strong>: Can perform complex queries and aggregations</li>
+</ol>
+<h2>Monitoring</h2>
+<p>Monitor the sync jobs:</p>
+<pre><code class="language-bash"># Check CronJob status
+kubectl get cronjobs people-analytics-sync
+
+# Check recent jobs
+kubectl get jobs -l app=people-analytics-sync
+
+# View logs
+kubectl logs -l app=people-analytics-sync --tail=100
+</code></pre>
+<h2>Troubleshooting</h2>
+<h3>No data in database</h3>
+<ul>
+<li>Check if CronJob is running: <code>kubectl get cronjobs</code></li>
+<li>Check job logs: <code>kubectl logs &lt;job-pod-name&gt;</code></li>
+<li>Verify Videoloft credentials in secrets</li>
+</ul>
+<h3>API returns empty results</h3>
+<ul>
+<li>Verify date range matches synced data</li>
+<li>Check device IDs (uidds) are correct</li>
+<li>Query sync status to see what was synced</li>
+</ul>
+<h3>Frontend errors</h3>
+<ul>
+<li>Check API service is running: <code>kubectl get pods -l app=people-analytics-api</code></li>
+<li>Verify network connectivity from frontend to API</li>
+<li>Check API logs: <code>kubectl logs -l app=people-analytics-api</code></li>
+</ul>
+</body>
+</html>

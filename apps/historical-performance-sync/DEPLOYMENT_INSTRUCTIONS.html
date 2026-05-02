@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DEPLOYMENT_INSTRUCTIONS</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Historical Performance Sync - Deployment Instructions</h1>
+<h2>✅ Completed Steps</h2>
+<ol>
+<li><p><strong>Database tables created</strong> ✓</p>
+<ul>
+<li><code>historical_performance_records</code> table created</li>
+<li><code>historical_performance_sync_logs</code> table created</li>
+</ul>
+</li>
+<li><p><strong>Kubernetes resources deployed</strong> ✓</p>
+<ul>
+<li>CronJob: <code>historical-performance-sync</code> (scheduled for 3 AM UTC daily)</li>
+<li>Deployment: <code>historical-performance-api</code> (2 replicas)</li>
+<li>Service: <code>historical-performance-api</code></li>
+<li>Ingress: <code>historical-performance-api-ingress</code> (exposed at <code>historical-api.theleetclub.com</code>)</li>
+</ul>
+</li>
+</ol>
+<h2>🔨 Remaining Steps</h2>
+<h3>Step 1: Build and Push Docker Images</h3>
+<p>You need to build and push the Docker images. Run this script (requires Docker and Docker Hub access):</p>
+<pre><code class="language-bash">cd historical-performance-sync
+./build-and-push.sh
+</code></pre>
+<p>Or manually:</p>
+<pre><code class="language-bash"># Build sync service
+docker build -f Dockerfile -t programmeradmin25/historical-performance-sync:latest .
+docker push programmeradmin25/historical-performance-sync:latest
+
+# Build API service
+docker build -f Dockerfile.api -t programmeradmin25/historical-performance-api:latest .
+docker push programmeradmin25/historical-performance-api:latest
+</code></pre>
+<h3>Step 2: Add DNS Record</h3>
+<p>Add a DNS A record pointing <code>historical-api.theleetclub.com</code> to your Kubernetes ingress IP address.</p>
+<p>To get the ingress IP:</p>
+<pre><code class="language-bash">kubectl get ingress historical-performance-api-ingress -n leet-monitor
+</code></pre>
+<h3>Step 3: Verify Deployment</h3>
+<p>After images are pushed, check pod status:</p>
+<pre><code class="language-bash">kubectl get pods -n leet-monitor -l app=historical-performance-api
+kubectl logs -n leet-monitor -l app=historical-performance-api --tail=50
+</code></pre>
+<h3>Step 4: Test API</h3>
+<p>Once pods are running, test the API:</p>
+<pre><code class="language-bash">curl https://historical-api.theleetclub.com/health
+</code></pre>
+<h3>Step 5: Trigger Initial Sync (Optional)</h3>
+<p>To populate data immediately instead of waiting for the cron job:</p>
+<pre><code class="language-bash">kubectl create job --from=cronjob/historical-performance-sync historical-performance-sync-manual-$(date +%s) -n leet-monitor
+</code></pre>
+<p>Monitor the job:</p>
+<pre><code class="language-bash">kubectl get jobs -n leet-monitor -l app=historical-performance-sync
+kubectl logs -n leet-monitor -l job-name=&lt;job-name&gt; --tail=50
+</code></pre>
+<h2>📊 Current Status</h2>
+<ul>
+<li><strong>Database</strong>: ✅ Tables created</li>
+<li><strong>Kubernetes</strong>: ✅ Resources deployed (waiting for Docker images)</li>
+<li><strong>Docker Images</strong>: ⏳ Need to be built and pushed</li>
+<li><strong>DNS</strong>: ⏳ Need to add A record for <code>historical-api.theleetclub.com</code></li>
+</ul>
+<h2>🎯 Expected Behavior</h2>
+<p>Once images are pushed:</p>
+<ol>
+<li>API pods will start and become ready</li>
+<li>CronJob will run daily at 3 AM UTC to sync last 30 days of data</li>
+<li>Frontend will automatically use cached API (falls back to direct Vendon API if cache misses)</li>
+<li>Historical Performance tab preload should be much faster (&lt; 1 second vs 30-60 seconds)</li>
+</ol>
+</body>
+</html>

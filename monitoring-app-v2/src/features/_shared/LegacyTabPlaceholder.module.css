@@ -1,0 +1,66 @@
+.wrap {
+  max-width: 52rem;
+}
+
+.header {
+  margin-bottom: 1.25rem;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.card {
+  padding: 1rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--surface-raised, rgba(255, 255, 255, 0.03));
+  line-height: 1.55;
+}
+
+.card p {
+  margin: 0 0 0.85rem;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+}
+
+.ref {
+  font-size: 0.92rem;
+}
+
+.refLabel {
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
+.scope {
+  font-size: 0.88rem;
+  opacity: 0.9;
+}
+
+.related {
+  margin-top: 1.5rem;
+}
+
+.relatedTitle {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+}
+
+.linkList {
+  margin: 0;
+  padding-left: 1.15rem;
+  line-height: 1.8;
+}
+
+.activeLink {
+  font-weight: 600;
+  color: var(--accent, #818cf8);
+}

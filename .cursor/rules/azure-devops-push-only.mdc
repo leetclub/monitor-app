@@ -1,0 +1,35 @@
+---
+description: Agent commits and pushes to Azure after alert/people-api/v2 changes; no local docker/kubectl unless asked.
+alwaysApply: true
+---
+
+# Azure DevOps deploy (alert, people-api, monitoring-app-v2)
+
+The user’s **Azure DevOps pipelines** **build, push images, and roll out Kubernetes** when code lands on the tracked branch. **Local `docker` / `kubectl` is not the default** for these apps.
+
+## Mandatory for the agent (unless the user says **skip push** or **skip deploy**)
+
+When this session **changes** files under any of the paths below, **do not finish** until **`git commit` and `git push`** have been attempted for the Git repo that contains those changes:
+
+1. **`git status`** — confirm what changed.
+2. **`git add`** the relevant paths (or all intentional changes).
+3. **`git commit -m "…"`** — clear message describing the change.
+4. **`git push`** to the **Azure DevOps remote** (check **`git remote -v`** — often `origin`, `azure`, or `ssh.dev.azure.com` / `dev.azure.com`).
+
+If push fails (auth, branch protection, conflicts): report the error and remaining steps; **do not assume** the pipeline ran.
+
+If this workspace is a **monorepo** with **one** Azure remote, **one push** for that commit is enough (pipelines may filter by path).
+
+If the user uses **separate repo clones** per app, **push in each clone** you modified.
+
+**Do not** run `docker build`, `docker push`, or `kubectl rollout` for alert / people-api / monitoring-app-v2 **unless the user explicitly asks** for a manual image deploy.
+
+## Which paths trigger a required push
+
+| Paths touched | Pipeline / product (typical) |
+|---------------|------------------------------|
+| `apps/alert-theleetclub-com/` | Alert frontend |
+| `people-analytics-sync/` (incl. API, `Dockerfile.api`) | people-analytics-api |
+| `monitoring-app-v2/` | monitoring-app-v2 |
+
+Legacy GAS (`monitoring-app-v1/`) still follows **`deploy-gas-and-people-api.mdc`** (`clasp push` when applicable).

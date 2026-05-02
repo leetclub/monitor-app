@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-app-v2
+  namespace: leet-monitor
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Last-transactions pulls Vendon stats/vends (can be slow); avoid premature proxy timeouts (408/504).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: monitor-v2.theleetclub.com
+      http:
+        paths:
+          # Same-origin /api → people-api (session cookies + dashboard access)
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: people-analytics-api
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-app-v2
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - monitor-v2.theleetclub.com
+      secretName: theleetclub-tls

@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: historical-performance-api-ingress
+  namespace: leet-monitor
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - host: historical-api.theleetclub.com
+    http:
+      paths:
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: historical-performance-api
+            port:
+              number: 80
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: historical-performance-api
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - historical-api.theleetclub.com
+    secretName: theleetclub-tls
+

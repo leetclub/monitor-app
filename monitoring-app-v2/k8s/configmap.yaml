@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-app-v2-public
+  namespace: leet-monitor
+data:
+  # Browser-visible runtime config (no secrets). Matched by docker-entrypoint.sh
+  # Empty = same-origin /api (Ingress routes /api to people-analytics-api)
+  MONITORING_API_URL: ""
+  USE_MOCK_ACCESS: "false"
+  USE_MOCK_RED_ALERT: "false"
+  VITE_MOCK_ALLOWED_TABS: ""
+  VITE_DEV_USER_EMAIL: ""
+  ACCESS_ALLOWED_DOMAIN: "almaghrebrd.com;theleetclub.com"
+  ACCESS_TEST_MODE: "true"
+  # Web client ID — public OAuth Web client (same value as people-analytics-secrets google-client-id).
+  # Do not replace with the placeholder below in-cluster; ./k8s/set-google-oauth-client.sh syncs SPA + API.
+  GOOGLE_CLIENT_ID: "196210956269-kl2es2860sddlu00ta9d0bs13t91on40.apps.googleusercontent.com"

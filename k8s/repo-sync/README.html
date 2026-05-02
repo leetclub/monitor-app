@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>README</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>GitHub → Azure DevOps repo sync (CronJob)</h1>
+<p>Keeps selected GitHub repos mirrored to Azure DevOps on a schedule until the team moves fully to Azure. Each run clones (or fetches) from GitHub and pushes all branches and tags to the mapped Azure DevOps project.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li><strong>Azure DevOps</strong>: Create a project per “destination” and create an <strong>empty repo</strong> in each project for each GitHub repo you want to sync (same repo name as on GitHub).</li>
+<li><strong>GitHub</strong>: Personal Access Token with <code>repo</code> scope.</li>
+<li><strong>Azure DevOps</strong>: PAT with <strong>Code (Read &amp; write)</strong> and <strong>Project and team (Read)</strong> if needed.</li>
+</ul>
+<h2>1. Repo → project mapping (single source of truth)</h2>
+<p>Edit <strong>only</strong> <strong><code>repo-mapping.yaml</code></strong> (two columns: GitHub repo, Azure project name):</p>
+<pre><code class="language-yaml"># Format: &quot;github_org/repo_name&quot;    &quot;AzureProjectName&quot;
+theleetclub/monitoring-app    monitoring
+theleetclub/people-analytics-sync    people-analytics
+</code></pre>
+<p>The ConfigMap is created from this file—you never edit a second file.</p>
+<h2>2. Tokens (Secret)</h2>
+<p>Create the Secret <strong>without</strong> putting real tokens in git:</p>
+<pre><code class="language-bash">kubectl create secret generic repo-sync-tokens \
+  --from-literal=github-token=&#39;ghp_xxxx&#39; \
+  --from-literal=azure-devops-pat=&#39;your-azure-pat&#39; \
+  --from-literal=azure-devops-org=&#39;your-org-name&#39;
+</code></pre>
+<p>Or copy <code>secret.example.yaml</code> to <code>secret.yaml</code>, fill in values, then <code>kubectl apply -f secret.yaml</code> (add <code>secret.yaml</code> to <code>.gitignore</code>).</p>
+<h2>3. Deploy</h2>
+<p>From the <code>k8s/repo-sync</code> directory:</p>
+<pre><code class="language-bash"># Create/update mapping ConfigMap from repo-mapping.yaml (only file you edit)
+kubectl create configmap repo-sync-mapping --from-file=repo-mapping.txt=repo-mapping.yaml -n repo-sync-temp --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl apply -f configmap-script.yaml -f cronjob.yaml
+</code></pre>
+<h2>When you edit the repo mapping</h2>
+<p>Every time you change <strong><code>repo-mapping.yaml</code></strong> (add/remove/change repos):</p>
+<ol>
+<li><p><strong>Push the new mapping to the cluster</strong> (from <code>k8s/repo-sync</code>):</p>
+<pre><code class="language-bash">kubectl create configmap repo-sync-mapping \
+  --from-file=repo-mapping.txt=repo-mapping.yaml \
+  -n repo-sync-temp \
+  --dry-run=client -o yaml | kubectl apply -f -
+</code></pre>
+</li>
+<li><p><strong>Optional:</strong> Run a sync immediately instead of waiting for the next cron:</p>
+<pre><code class="language-bash">kubectl create job --from=cronjob/repo-sync-github-to-azure manual-sync-$(date +%s) -n repo-sync-temp
+kubectl logs job/manual-sync-&lt;timestamp&gt; -n repo-sync-temp -f
+</code></pre>
+</li>
+</ol>
+<p>Use your actual namespace if different from <code>repo-sync-temp</code>.</p>
+<h2>4. Schedule</h2>
+<p>Default in <strong><code>cronjob.yaml</code></strong> is every 5 minutes: <code>*/5 * * * *</code>. Only the latest successful and latest failed job are kept; each job is removed 5 minutes after it finishes.</p>
+<h2>5. Script changes</h2>
+<p>If you edit <strong><code>sync-script.sh</code></strong>, refresh the script ConfigMap:</p>
+<pre><code class="language-bash">kubectl create configmap repo-sync-script --from-file=sync-script.sh=sync-script.sh -o yaml --dry-run=client &gt; configmap-script.yaml
+kubectl apply -f configmap-script.yaml
+</code></pre>
+<h2>Verify</h2>
+<ul>
+<li>List CronJobs: <code>kubectl get cronjobs</code></li>
+<li>Logs of last run: <code>kubectl logs -l job-name=repo-sync-github-to-azure-&lt;suffix&gt;</code> (get exact job name from <code>kubectl get jobs</code>)</li>
+<li>Or trigger once: <code>kubectl create job --from=cronjob/repo-sync-github-to-azure manual-sync-1</code></li>
+</ul>
+<h2>Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>repo-mapping.yaml</code></td>
+<td><strong>Only file you edit</strong> for mapping: GitHub repo → Azure project</td>
+</tr>
+<tr>
+<td><code>sync-script.sh</code></td>
+<td>Sync logic (clone/fetch + push)</td>
+</tr>
+<tr>
+<td><code>configmap-script.yaml</code></td>
+<td>ConfigMap with script (CronJob runs this)</td>
+</tr>
+<tr>
+<td><code>secret.example.yaml</code></td>
+<td>Example Secret; create real secret with kubectl</td>
+</tr>
+<tr>
+<td><code>cronjob.yaml</code></td>
+<td>CronJob definition</td>
+</tr>
+</tbody></table>
+</body>
+</html>

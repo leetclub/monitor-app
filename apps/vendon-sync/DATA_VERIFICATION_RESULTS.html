@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DATA_VERIFICATION_RESULTS</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Data Verification Results</h1>
+<h2>Summary</h2>
+<p><strong>Date</strong>: 2026-01-17<br><strong>Status</strong>: ❌ Data is INACCURATE</p>
+<h2>Findings</h2>
+<h3>1. Machine Count</h3>
+<ul>
+<li><strong>Total machines in Vendon</strong>: 62</li>
+<li><strong>Machines in cached DB</strong>: 37</li>
+<li><strong>Missing</strong>: 25 machines (40% of machines not synced)</li>
+</ul>
+<h3>2. Data Accuracy Test - Machine 393033 (Sultan Hamra)</h3>
+<p><strong>Date</strong>: 2026-01-16</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Revenue</th>
+<th>Transactions</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Vendon API</strong> (Real)</td>
+<td><strong>4.80 KWD</strong></td>
+<td><strong>5</strong></td>
+<td>✅ Correct</td>
+</tr>
+<tr>
+<td><strong>Cached DB</strong></td>
+<td>0.0 KWD</td>
+<td>0</td>
+<td>❌ <strong>INCORRECT</strong></td>
+</tr>
+</tbody></table>
+<p><strong>Conclusion</strong>: The database data is <strong>WRONG</strong>. Machine 393033 had 4.80 KWD in revenue on 2026-01-16, but the database shows 0.0 KWD.</p>
+<h3>3. Root Causes</h3>
+<ol>
+<li><p><strong>Only 37 machines synced</strong> (should be 62)</p>
+<ul>
+<li>Old sync code only got machines with activity in last 7 days</li>
+<li>Fixed code uses <code>/machine</code> endpoint to get ALL machines</li>
+<li>But sync job is failing because Docker image doesn&#39;t have vendon-sync code</li>
+</ul>
+</li>
+<li><p><strong>Incorrect revenue data</strong></p>
+<ul>
+<li>Machine 393033 shows 0.0 KWD in DB but actually had 4.80 KWD</li>
+<li>This suggests the sync either:<ul>
+<li>Failed to fetch data for this machine</li>
+<li>Fetched data but calculated incorrectly</li>
+<li>Stored data incorrectly</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong>Sync job failing</strong></p>
+<ul>
+<li>Error: <code>python: can&#39;t open file &#39;/app/vendon-sync/sync_service.py&#39;: [Errno 2] No such file or directory</code></li>
+<li>The Docker image <code>programmeradmin25/people-analytics-sync:latest</code> doesn&#39;t contain the vendon-sync code</li>
+</ul>
+</li>
+</ol>
+<h2>What Needs to Be Done</h2>
+<h3>Immediate Actions</h3>
+<ol>
+<li><p><strong>Rebuild Docker image</strong> with vendon-sync code included</p>
+<pre><code class="language-bash"># The image needs to include the vendon-sync/ directory
+docker build -t programmeradmin25/people-analytics-sync:latest .
+docker push programmeradmin25/people-analytics-sync:latest
+</code></pre>
+</li>
+<li><p><strong>Run manual sync</strong> after image is fixed</p>
+<pre><code class="language-bash">kubectl create job --from=cronjob/vendon-sales-sync vendon-sync-fixed -n leet-monitor
+</code></pre>
+</li>
+<li><p><strong>Verify data accuracy</strong> after sync</p>
+<pre><code class="language-bash">cd vendon-sync
+python3 verify_and_sync.py
+</code></pre>
+</li>
+</ol>
+<h3>Expected Results After Fix</h3>
+<ul>
+<li>✅ All 62 machines should be in database</li>
+<li>✅ Machine 393033 should show 4.80 KWD (not 0.0)</li>
+<li>✅ All machine revenue should match Vendon API data</li>
+<li>✅ Targets tab should show correct lowest machine</li>
+</ul>
+<h2>Verification Commands</h2>
+<pre><code class="language-bash"># Check machine count
+curl -s &#39;https://cloud.vendon.net/rest/v1.9.0/machine&#39; \
+  -H &#39;Authorization: Token KEY&#39; | jq &#39;.result | length&#39;
+
+# Verify specific machine
+python3 vendon-sync/verify_and_sync.py
+
+# Check DB data
+psql -h DB_HOST -U DB_USER -d DB_NAME -c \
+  &quot;SELECT COUNT(DISTINCT machine_id) FROM vendon_sales_records WHERE DATE(sale_date) = &#39;2026-01-16&#39;&quot;
+</code></pre>
+</body>
+</html>

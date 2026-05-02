@@ -1,0 +1,63 @@
+MONITORING-APP-V2 — STANDALONE PARITY WITH monitoring-app (classic GAS)
+
+MISSION
+  - Replace the entire classic dashboard with this React app. No dependency on editing or
+    embedding monitoring-app.
+  - Do not remove or break external APIs, DB contracts, or HTTP endpoints that monitoring-app
+    (or other clients) still use while both apps coexist. Add/extend Flask/BFF routes for v2.
+
+REFERENCE ONLY (do not require changes here for v2 work)
+  - monitoring-app/index.html — UI structure, tab wiring, inline behavior
+  - monitoring-app/*.js — per-feature client logic and google.script.run call patterns
+
+LEGACY CLIENT MODULES (port source-of-truth for behavior)
+  events-tab.js, maintenance-tab.js, transactions-tab.js, remote-credits-tab.js,
+  refill-tab.js, waste-tab.js, attendance-tab.js, operations-tab.js, machine-logs-tab.js,
+  people-analytics.js, analytics-tab.js, visit-tracking-tab.js, admin-api.js,
+  dashboard-access-api.js, auth-access.js, permissions-sync.js, common.js, api-core.js, cache.js,
+  notifications.js, setup-admin-script-properties.js
+
+ROUTING (v2)
+  - All tab ids in navigation/tabs.ts resolve via src/features/tabFeatureComponents.tsx (lazy).
+  - events: full UI; other tabs: LegacyTabPlaceholder until replaced with src/features/<tabId>/.
+
+TABS (implement in v2 in priority order — mark DONE when shipped)
+  [x] events          — Delay Risk (Vendon via /api/vendon/* + EventsDelayRiskTab)
+  [x] maintenance     — General Cleaning (full UI parity: filters, 5k fetch, client pagination, preload)
+  [~] transactions    — Last Transactions (TransactionsTab → POST /api/vendon/last-transactions on BFF)
+  [ ] remoteCredits   — Refund Tests
+  [ ] refill          — Refill
+  [~] waste           — Waste reasons UI (WasteAnalysisTab → GET/POST /api/waste-reasons); full stock analysis TBD
+  [ ] attendance      — Attendance & Cleaning
+  [ ] operations      — Operations / Slack requests
+  [ ] machineLogs     — Machine logs
+  [ ] slackListsTemp  — Slack lists (temp)
+  [x] redAlert        — Red Alert board (GET /api/red-alert/snapshot only; mock: VITE_USE_MOCK_RED_ALERT — see docs/RED_ALERT_API.md)
+  [ ] people          — People Analytics
+  [ ] analytics       — Product Analytics
+  [ ] targets         — Targets
+  [ ] salesReport     — Sales Report
+  [ ] comparison      — Comparison Reports
+  [ ] historical      — Historical Performance
+  [ ] visitTracking   — Visit Tracking
+  [ ] qaFindings      — QA Findings
+  [ ] postsInsta      — Trend Posts
+  [ ] hr              — HR
+  [ ] strategy        — Strategy
+  [ ] customerFeedback— Customer Feedback
+  [ ] machinesReview  — Machines review
+  [~] admin           — Rules JSON editor (AdminTab → GET/PUT /api/me/dashboard-access/rules for admins)
+
+  (Tabs above without a full React slice still load in v2 via LegacyTabPlaceholder — swap in
+   src/features/tabFeatureComponents.tsx when a real module is ready.)
+
+BACKEND
+  - Session + tab rules: people-analytics-api (existing /api patterns; extend as needed).
+  - Red Alert v2: add GET /api/red-alert/snapshot (see docs/RED_ALERT_API.md); keep legacy GAS POST for v1 until sunset.
+  - Client expands liveDashboard↔redAlert in fetchDashboardAccess so either tab id in rules shows both in the nav.
+  - Server functions today live in Apps Script (not all .gs files are in git); discover names
+    from google.script.run usage in index.html and *.js when adding REST equivalents.
+
+SUGGESTED LAYOUT
+  src/features/<tabId>/ — components, hooks, api.ts for that tab
+  TabPage.tsx — lazy import the feature module when implemented

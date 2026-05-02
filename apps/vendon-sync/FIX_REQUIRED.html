@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FIX_REQUIRED</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Fix Required: Docker Image Missing vendon-sync Code</h1>
+<h2>Problem</h2>
+<p>The sync job is failing with:</p>
+<pre><code>python: can&#39;t open file &#39;/app/vendon-sync/sync_service.py&#39;: [Errno 2] No such file or directory
+</code></pre>
+<p>The Docker image <code>programmeradmin25/people-analytics-sync:latest</code> doesn&#39;t contain the <code>vendon-sync/</code> directory.</p>
+<h2>Solution Options</h2>
+<h3>Option 1: Rebuild Docker Image (Recommended)</h3>
+<p>The <code>people-analytics-sync</code> Docker image needs to include the <code>vendon-sync/</code> directory.</p>
+<ol>
+<li>Check the Dockerfile location</li>
+<li>Ensure it copies <code>vendon-sync/</code> directory</li>
+<li>Rebuild and push the image</li>
+</ol>
+<h3>Option 2: Use ConfigMap (Temporary Workaround)</h3>
+<p>Mount the sync code via ConfigMap (like we did for manual testing).</p>
+<h3>Option 3: Separate Docker Image</h3>
+<p>Create a separate <code>vendon-sync</code> Docker image and update the cronjob to use it.</p>
+<h2>Current Status</h2>
+<ul>
+<li>✅ Code is fixed (uses <code>/machine</code> endpoint to get ALL machines)</li>
+<li>✅ Database tables exist</li>
+<li>❌ Docker image doesn&#39;t have the code</li>
+<li>❌ Sync job failing</li>
+<li>❌ Only 37/62 machines in database</li>
+<li>❌ Data is inaccurate (e.g., machine 393033 shows 0.0 but should be 4.80 KWD)</li>
+</ul>
+<h2>Next Steps</h2>
+<ol>
+<li>Rebuild Docker image with vendon-sync code</li>
+<li>Run new sync job</li>
+<li>Verify all 62 machines are synced</li>
+<li>Verify data accuracy matches Vendon API</li>
+</ol>
+</body>
+</html>

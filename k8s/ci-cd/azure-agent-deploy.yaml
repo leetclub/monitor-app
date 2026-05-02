@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: az-agent-ubuntu
+  namespace: az-agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: az-agent
+  template:
+    metadata:
+      labels:
+        app: az-agent
+    spec:
+      containers:
+      - name: kubernetes-agent
+        # Using a community-standard Ubuntu-based agent image
+        image: mcr.microsoft.com/azure-pipelines/vsts-agent:ubuntu-22.04-stateless
+        env:
+          - name: AZP_URL
+            valueFrom:
+              secretKeyRef:
+                name: azdevops-vars
+                key: AZP_URL
+          - name: AZP_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: azdevops-vars
+                key: AZP_TOKEN
+          - name: VSTS_ACCOUNT # Added this for compatibility
+            valueFrom:
+              secretKeyRef:
+                name: azdevops-vars
+                key: VSTS_ACCOUNT
+          - name: AZP_POOL
+            valueFrom:
+              secretKeyRef:
+                name: azdevops-vars
+                key: AZP_POOL
+          - name: AZP_AGENT_NAME
+            value: "k8s-ubuntu-agent-01"
+        volumeMounts:
+        - name: var-run-docker-sock
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: var-run-docker-sock
+        hostPath:
+          path: /var/run/docker.sock # Required if you need to run 'docker build'

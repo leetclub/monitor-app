@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KUWAIT_TIMEZONE_FIX</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Kuwait Timezone Fix (Permanent)</h1>
+<h2>Problem</h2>
+<p>Sync stored <strong>5.6 KWD</strong> for Sultan Hamra on 2026-01-16 while <strong>Vendon shows 4.8 KWD</strong> for the same day.<br>Using UTC midnight-to-midnight included one extra vend from the next calendar day in Kuwait.</p>
+<h2>Root Cause</h2>
+<p><strong>Vendon uses Kuwait local date</strong> (UTC+3) for daily boundaries.  </p>
+<ul>
+<li>&quot;2026-01-16&quot; in Vendon = 2026-01-16 00:00:00 <strong>Kuwait</strong> to 23:59:59 <strong>Kuwait</strong>  </li>
+<li>In UTC that is: <strong>2026-01-15 21:00:00</strong> to <strong>2026-01-16 20:59:59</strong></li>
+</ul>
+<p>Our sync used UTC midnight-to-midnight (2026-01-16 00:00 to 23:59 UTC), which:</p>
+<ul>
+<li>Excluded vends from 2026-01-16 00:00–02:59 UTC (still 2026-01-16 in Kuwait)</li>
+<li>Included vends from 2026-01-16 21:00–23:59 UTC (already 2026-01-17 in Kuwait)</li>
+</ul>
+<p>So we under-counted some and over-counted one, ending at 5.6 instead of 4.8.</p>
+<h2>Fix (Permanent)</h2>
+<p>In <code>sync_service.py</code>:</p>
+<ol>
+<li><p><strong>Kuwait timezone</strong>  </p>
+<ul>
+<li><code>KUWAIT_TZ = timezone(timedelta(hours=3))</code></li>
+</ul>
+</li>
+<li><p><strong>Date window in Kuwait local time</strong>  </p>
+<ul>
+<li><code>start_dt = datetime.combine(sale_date, datetime.min.time(), tzinfo=KUWAIT_TZ)</code>  </li>
+<li><code>end_dt = datetime.combine(sale_date, datetime.max.time(), tzinfo=KUWAIT_TZ)</code>  </li>
+<li><code>from_timestamp = int(start_dt.timestamp())</code>  </li>
+<li><code>to_timestamp = int(end_dt.timestamp())</code></li>
+</ul>
+</li>
+</ol>
+<p>This aligns our <code>/stats/vends</code> range with Vendon’s “day” and matches Vendon’s numbers (e.g. 4.8 KWD, 5 transactions for 393033 on 2026-01-16).</p>
+<h2>Verification</h2>
+<ul>
+<li><code>./debug_vend_timestamps.py</code> – compares UTC vs Kuwait ranges; Kuwait matches 4.8 KWD.  </li>
+<li>Revert 393033 to 0, run sync for 2026-01-16, then <code>./verify_fix.sh</code> – DB shows 4.8 KWD and 5 transactions.</li>
+</ul>
+<h2>Cronjob</h2>
+<p><code>vendon-sales-sync</code> uses <code>programmeradmin25/people-analytics-sync:latest</code> with <code>imagePullPolicy: Always</code>, so the next run picks up the image that includes this fix.</p>
+</body>
+</html>

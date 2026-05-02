@@ -1,0 +1,43 @@
+# Refreshes vendon_daily_machine_revenue_cache (fast "Top revenue machines" for yesterday).
+# Schedule: once daily shortly after midnight UTC (adjust if desired).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vendon-revenue-cache-refresh
+  namespace: leet-monitor
+spec:
+  schedule: "15 0 * * *"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 900
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.5.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: DASHBOARD_ACCESS_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: people-analytics-secrets
+                      key: dashboard-access-api-key
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  exec curl -fsS
+                  --connect-timeout 10
+                  --max-time 900
+                  --retry 2
+                  --retry-delay 5
+                  -X POST "http://people-analytics-api/api/vendon/internal/cache-revenue"
+                  -H "Content-Type: application/json"
+                  -H "X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}"
+                  -d "{}"
+

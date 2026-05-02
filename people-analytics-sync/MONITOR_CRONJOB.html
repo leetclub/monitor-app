@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MONITOR_CRONJOB</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>How to Monitor CronJob and Verify Data</h1>
+<h2>1. Check CronJob Status</h2>
+<h3>View CronJob Information</h3>
+<pre><code class="language-bash"># List all cronjobs
+kubectl get cronjobs -n leet-monitor
+
+# Get detailed info about the cronjob
+kubectl describe cronjob people-analytics-sync -n leet-monitor
+
+# Check schedule
+kubectl get cronjob people-analytics-sync -n leet-monitor -o jsonpath=&#39;{.spec.schedule}&#39;
+# Should show: &quot;* * * * *&quot; (every minute)
+</code></pre>
+<h3>Check Recent Jobs Created by CronJob</h3>
+<pre><code class="language-bash"># List jobs created by the cronjob
+kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp
+
+# See last 5 jobs
+kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp | tail -6
+</code></pre>
+<h3>Check Job Status</h3>
+<pre><code class="language-bash"># Get latest job
+LATEST_JOB=$(kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp -o jsonpath=&#39;{.items[-1].metadata.name}&#39;)
+
+# Check job status
+kubectl get job $LATEST_JOB -n leet-monitor
+
+# Describe job (shows events and pod status)
+kubectl describe job $LATEST_JOB -n leet-monitor
+</code></pre>
+<h2>2. Check Pod Logs</h2>
+<h3>View Logs from Latest Job</h3>
+<pre><code class="language-bash"># Get pods from latest job
+LATEST_JOB=$(kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp -o jsonpath=&#39;{.items[-1].metadata.name}&#39;)
+POD_NAME=$(kubectl get pods -n leet-monitor -l job-name=$LATEST_JOB -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+
+# View logs
+kubectl logs $POD_NAME -n leet-monitor
+
+# Follow logs in real-time
+kubectl logs -f $POD_NAME -n leet-monitor
+</code></pre>
+<h3>View Logs from All Recent Jobs</h3>
+<pre><code class="language-bash"># View logs from all pods with the label
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=50
+
+# View logs from last 10 jobs
+for job in $(kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp -o jsonpath=&#39;{.items[-10:].metadata.name}&#39;); do
+    echo &quot;=== Job: $job ===&quot;
+    kubectl logs -l job-name=$job -n leet-monitor --tail=20
+    echo &quot;&quot;
+done
+</code></pre>
+<h3>Check for Errors</h3>
+<pre><code class="language-bash"># Search logs for errors
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=1000 | grep -i &quot;error\|failed\|exception&quot;
+
+# Search for success messages
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=1000 | grep -i &quot;success\|synced&quot;
+</code></pre>
+<h2>3. Verify Data in Database</h2>
+<h3>Check Recent Syncs</h3>
+<pre><code class="language-bash"># Connect to database and check sync logs
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT id, sync_started_at, sync_completed_at, status, records_synced, error_message FROM sync_logs ORDER BY sync_started_at DESC LIMIT 10;&quot;
+</code></pre>
+<h3>Check Data Freshness</h3>
+<pre><code class="language-bash"># Check when data was last synced
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT MAX(synced_at) as last_sync, COUNT(*) as total_records, COUNT(DISTINCT uidd) as unique_devices FROM people_analytics_records;&quot;
+</code></pre>
+<h3>Check Today&#39;s Data</h3>
+<pre><code class="language-bash"># Count records synced today
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT DATE(synced_at) as sync_date, COUNT(*) as records, COUNT(DISTINCT uidd) as devices FROM people_analytics_records WHERE synced_at &gt;= CURRENT_DATE GROUP BY DATE(synced_at) ORDER BY sync_date DESC;&quot;
+</code></pre>
+<h3>Check for Recent Data by Device</h3>
+<pre><code class="language-bash"># See latest data per device
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT uidd, MAX(synced_at) as last_sync, COUNT(*) as record_count, SUM(people_in) as total_in, SUM(people_out) as total_out FROM people_analytics_records WHERE synced_at &gt;= CURRENT_DATE GROUP BY uidd ORDER BY last_sync DESC LIMIT 20;&quot;
+</code></pre>
+<h2>4. Verify Data Correctness</h2>
+<h3>Check for Duplicates</h3>
+<pre><code class="language-bash"># Quick duplicate check
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT COUNT(*) - COUNT(DISTINCT (uidd, first_timestamp, last_timestamp, interval_type)) as duplicates FROM people_analytics_records;&quot;
+# Should return 0
+</code></pre>
+<h3>Verify Data Quality</h3>
+<pre><code class="language-bash"># Check for null or invalid data
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT COUNT(*) as null_uidd, COUNT(*) FILTER (WHERE people_in &lt; 0) as negative_in, COUNT(*) FILTER (WHERE people_out &lt; 0) as negative_out FROM people_analytics_records WHERE uidd IS NULL OR people_in &lt; 0 OR people_out &lt; 0;&quot;
+</code></pre>
+<h3>Check Sync Success Rate</h3>
+<pre><code class="language-bash"># Check sync success/failure rate
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT status, COUNT(*) as count, AVG(records_synced) as avg_records FROM sync_logs WHERE sync_started_at &gt;= CURRENT_DATE GROUP BY status;&quot;
+</code></pre>
+<h2>5. Test API Endpoint</h2>
+<h3>Check API Health</h3>
+<pre><code class="language-bash">curl https://people-api.theleetclub.com/health
+</code></pre>
+<h3>Test Data Retrieval</h3>
+<pre><code class="language-bash"># Get today&#39;s data
+curl &quot;https://people-api.theleetclub.com/api/people-analytics?start_date=$(date +%Y-%m-%d)&amp;end_date=$(date +%Y-%m-%d)&quot; | jq &#39;.summary&#39;
+
+# Get data for specific device
+curl &quot;https://people-api.theleetclub.com/api/people-analytics?uidds=1382465.21&amp;start_date=$(date +%Y-%m-%d)&amp;end_date=$(date +%Y-%m-%d)&quot; | jq &#39;.data | length&#39;
+</code></pre>
+<h2>6. Quick Health Check Script</h2>
+<p>Create a simple script to check everything:</p>
+<pre><code class="language-bash">#!/bin/bash
+# health_check.sh
+
+echo &quot;=== CronJob Status ===&quot;
+kubectl get cronjob people-analytics-sync -n leet-monitor
+
+echo -e &quot;\n=== Latest Job ===&quot;
+LATEST_JOB=$(kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp -o jsonpath=&#39;{.items[-1].metadata.name}&#39; 2&gt;/dev/null)
+if [ -n &quot;$LATEST_JOB&quot; ]; then
+    kubectl get job $LATEST_JOB -n leet-monitor
+    echo -e &quot;\n=== Latest Job Logs (last 20 lines) ===&quot;
+    POD_NAME=$(kubectl get pods -n leet-monitor -l job-name=$LATEST_JOB -o jsonpath=&#39;{.items[0].metadata.name}&#39; 2&gt;/dev/null)
+    if [ -n &quot;$POD_NAME&quot; ]; then
+        kubectl logs $POD_NAME -n leet-monitor --tail=20
+    fi
+else
+    echo &quot;No jobs found&quot;
+fi
+
+echo -e &quot;\n=== Database Status ===&quot;
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT MAX(synced_at) as last_sync, COUNT(*) as total_records FROM people_analytics_records;&quot; 2&gt;/dev/null
+
+echo -e &quot;\n=== Recent Syncs ===&quot;
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT status, sync_started_at, records_synced FROM sync_logs ORDER BY sync_started_at DESC LIMIT 5;&quot; 2&gt;/dev/null
+</code></pre>
+<h2>7. Common Issues and Solutions</h2>
+<h3>Issue: CronJob not creating jobs</h3>
+<pre><code class="language-bash"># Check if CronJob is suspended
+kubectl get cronjob people-analytics-sync -n leet-monitor -o jsonpath=&#39;{.spec.suspend}&#39;
+# Should be false or empty
+
+# Check CronJob events
+kubectl describe cronjob people-analytics-sync -n leet-monitor | grep -A 10 Events
+</code></pre>
+<h3>Issue: Jobs failing</h3>
+<pre><code class="language-bash"># Check failed jobs
+kubectl get jobs -n leet-monitor -l app=people-analytics-sync | grep -i fail
+
+# Check pod status
+kubectl get pods -n leet-monitor -l app=people-analytics-sync | grep -v Running
+</code></pre>
+<h3>Issue: No data being synced</h3>
+<pre><code class="language-bash"># Check logs for authentication errors
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100 | grep -i &quot;auth\|token\|login&quot;
+
+# Check database connection
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100 | grep -i &quot;database\|connection\|postgres&quot;
+</code></pre>
+<h2>8. Monitoring Dashboard (Optional)</h2>
+<p>You can set up continuous monitoring with:</p>
+<pre><code class="language-bash"># Watch CronJob in real-time
+watch -n 5 &#39;kubectl get cronjobs,jobs,pods -n leet-monitor -l app=people-analytics-sync&#39;
+
+# Monitor logs continuously
+kubectl logs -f -l app=people-analytics-sync -n leet-monitor
+</code></pre>
+</body>
+</html>

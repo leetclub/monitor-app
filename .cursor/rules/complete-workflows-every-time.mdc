@@ -1,0 +1,28 @@
+---
+description: Finish full workflows every session — run commands, sync, deploy; no hand-offs or “you can run…” endings.
+alwaysApply: true
+---
+
+# Complete all work every time (no shortcuts)
+
+When this session touches infrastructure, CI/CD, secrets, or deployment-related files, **finish the whole pipeline yourself** in this chat/runner — do **not** stop after editing files or tell the user to run steps you are allowed to run.
+
+## Always do
+
+1. **Deploy rule:** When production-facing code or images change, follow **`deploy-gas-and-people-api.mdc`** (and **`scope-v1-v2-and-deploy.mdc`**) — build, `docker push`, `kubectl rollout` + mandatory verification, **`clasp push`** only when `monitoring-app-v1/` changed. Skip only if the user explicitly said **skip deploy**.
+
+2. **Azure DevOps / Docker Hub:** If **`azure.txt`** Docker token changed, or **`azure-pipelines.yml`**, or **`scripts/ado_sync_dockerhub_var_group.py`** changed, **run** from repo root (e.g. WSL):  
+   `python3 scripts/ado_sync_dockerhub_var_group.py`  
+   so Library variable group **`leet-monitor-dockerhub`** stays in sync. If YAML changed for mirrored Azure repos, **sync/push** those repos (`dev`) per your repo workflow — **actually perform** the sync/push when this repo contains the sync scripts and network access works.
+
+3. **Verification:** After rollout or CI-related fixes, **confirm** success (e.g. rollout status, pods Ready, or script exit 0) — do not assume green.
+
+4. **Secrets in chat:** Never paste PATs/tokens in replies; recommend rotation if they were exposed.
+
+## Never default to
+
+- Ending with “you can run X” or “next you should…” when X is a command this agent **can** execute here (network/local/WSL per rules).
+- Partial CI/CD updates (e.g. YAML only, without syncing credentials or pushing).
+- Marking work done while deploy/sync steps were skipped without user **skip deploy** / equivalent.
+
+If blocked (auth, kubectl unreachable, user-only Azure UI like **Authorize resources**), say exactly what failed and what **only the user** must click — then resume anything automatable after.

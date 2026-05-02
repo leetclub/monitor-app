@@ -1,0 +1,109 @@
+---
+description: v2 standalone parity with legacy; run WSL deploys; do not edit monitoring-app or remove APIs unless user asks.
+alwaysApply: true
+---
+
+# Deploy (do the work in WSL — do not only tell the user)
+
+**Primary product:** `monitoring-app-v2` — **standalone** replacement for `monitoring-app`; target **full functional parity** (see `monitoring-v2-standalone-parity.mdc`).
+
+**Legacy:** `monitoring-app` (GAS). Prefer not to change it for **new product features** (use v2 + API) unless the user asks for legacy work — but when this session **does** change GAS files, **`clasp push` is part of the mandatory pipeline** (see above). **Do not remove or break APIs** the legacy app (or others) still use; extend backend routes for v2 instead.
+
+**Azure DevOps:** For **alert**, **people-analytics-api**, and **monitoring-app-v2**, see **`azure-devops-push-only.mdc`**: the agent **commits and pushes** to Azure after changes so pipelines deploy — **do not** run `docker` / `kubectl` unless the user explicitly asks for a manual deploy.
+
+When this session **changes** code **not** covered by those pipelines (or legacy flows), **run the full deploy pipeline yourself** in **Ubuntu WSL** when applicable (unless the user says to skip deploy). **Do not ask for permission** for pull, build, docker push, kubectl, clasp where still required. The user has authorized running commands needed for deploy.
+
+### Full pipeline (run in order when deploying)
+
+1. **`git pull --rebase`** (or `git pull`) in the repo(s) you are about to build/deploy — from WSL, correct `cd` to the Windows path under `/mnt/c/...`. If pull fails (conflicts), report and stop until resolved.
+2. **Build** (npm / Docker) per sections below.
+3. **`docker push`** the image(s) you built.
+4. **`kubectl rollout restart`** + mandatory verification below.
+5. **Legacy GAS:** **`clasp push`** from **`monitoring-app-v1/`** when any v1 source or **`monitoring-app-v1/.clasp.json`** changes.
+
+Skip steps that do not apply (e.g. no GAS changes → no clasp). Never end with “you can run X” — **you run X**.
+
+**After every image push + `kubectl rollout restart`, you must not stop at `rollout status` alone.** Continue until new pods are **Ready** and look healthy; if anything fails, **investigate and fix or report** (do not assume success).
+
+### Mandatory post-rollout verification (run in the same WSL session)
+
+1. `kubectl rollout status deployment/<name> -n leet-monitor --timeout=300s` (already part of the flow).
+2. **`kubectl wait --for=condition=available deployment/<name> -n leet-monitor --timeout=180s`** — waits until the Deployment reports available (avoids `kubectl wait pod` errors when old pods are deleted during a rolling update).
+3. **`kubectl get pods -n leet-monitor -l <app label> -o wide`** — confirm each replica is `READY` `1/1`, `STATUS` `Running`, ages match the rollout.
+
+Do **not** rely on `kubectl wait pod -l ...` alone during rollouts; Kubernetes can remove a pod UID while `wait` still references it, which surfaces as `pods "…" not found` even though the rollout succeeded.
+
+If **`rollout status` / deployment `available` wait fails**, or pods are **CrashLoopBackOff** / **ImagePullBackOff** / not `Running`:
+
+- `kubectl describe pod -n leet-monitor <pod-name>` (events at the bottom).
+- `kubectl logs -n leet-monitor <pod-name> --tail=120` (add `-c <container>` if multi-container).
+- Fix the cause (manifest, image, secrets, probe, app error), rebuild/repush if needed, and **roll out again** with the same verification loop.
+
+**Labels:** `monitoring-app-v2` → `-l app=monitoring-app-v2`. `people-analytics-api` → `-l app=people-analytics-api`. **`alert-app`** → `-l app=alert-app`.
+
+## Paths (WSL)
+
+- **monitoring-app-v2:** `/mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/monitoring-app-v2`
+- **monitoring-app-v1 (GAS / clasp):** `/mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/monitoring-app-v1` — run **`clasp push`** **from inside this folder** (`.clasp.json` lives here).
+- **Repo root:** `/mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app`
+- **KUBECONFIG:** `export KUBECONFIG=/mnt/c/Users/mahdi/OneDrive/theleetclub/k8s-1-31-1-do-5-nyc1-1737653282089-kubeconfig.yaml`
+
+## monitoring-app-v2 — when `src/**`, `docker-entrypoint.sh`, `nginx*.conf`, `Dockerfile`, `package.json`, `public/**`, root `favicon.png` / `leet.png`, or `scripts/generate-assets.mjs` change
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/monitoring-app-v2 && npm run build
+```
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/monitoring-app-v2 && docker build -t programmeradmin25/monitoring-app-v2:latest . && docker push programmeradmin25/monitoring-app-v2:latest
+```
+
+```bash
+export KUBECONFIG=/mnt/c/Users/mahdi/OneDrive/theleetclub/k8s-1-31-1-do-5-nyc1-1737653282089-kubeconfig.yaml
+kubectl rollout restart deployment/monitoring-app-v2 -n leet-monitor
+kubectl rollout status deployment/monitoring-app-v2 -n leet-monitor --timeout=300s
+kubectl wait --for=condition=available deployment/monitoring-app-v2 -n leet-monitor --timeout=180s
+kubectl get pods -n leet-monitor -l app=monitoring-app-v2 -o wide
+```
+
+## monitoring-app (GAS) — **only when user asked to change that project**
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/monitoring-app-v1 && clasp push
+```
+
+Reminder: a **new web app version** in Google may still be needed if the deployment is not pinned to Head.
+
+## people-api — when `people-analytics-sync/**/*.py`, `Dockerfile.api`, or `requirements.txt` under `monitoring-app` change
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/people-analytics-sync && docker build -f Dockerfile.api -t programmeradmin25/people-analytics-sync:api-latest . && docker push programmeradmin25/people-analytics-sync:api-latest
+```
+
+```bash
+export KUBECONFIG=/mnt/c/Users/mahdi/OneDrive/theleetclub/k8s-1-31-1-do-5-nyc1-1737653282089-kubeconfig.yaml
+kubectl rollout restart deployment/people-analytics-api -n leet-monitor
+kubectl rollout status deployment/people-analytics-api -n leet-monitor --timeout=300s
+kubectl wait --for=condition=available deployment/people-analytics-api -n leet-monitor --timeout=180s
+kubectl get pods -n leet-monitor -l app=people-analytics-api -o wide
+```
+
+## Leet Alert (`apps/alert-theleetclub-com`) — when `src/**`, `Dockerfile`, `nginx*.conf`, `docker-entrypoint.sh`, `package.json`, `index.html`, or `public/**` change
+
+Build context is the app directory (Dockerfile runs `npm run build` inside the image).
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/apps/alert-theleetclub-com && docker build -t programmeradmin25/alert-theleetclub-com:latest . && docker push programmeradmin25/alert-theleetclub-com:latest
+```
+
+```bash
+export KUBECONFIG=/mnt/c/Users/mahdi/OneDrive/theleetclub/k8s-1-31-1-do-5-nyc1-1737653282089-kubeconfig.yaml
+kubectl rollout restart deployment/alert-app -n leet-monitor
+kubectl rollout status deployment/alert-app -n leet-monitor --timeout=300s
+kubectl wait --for=condition=available deployment/alert-app -n leet-monitor --timeout=180s
+kubectl get pods -n leet-monitor -l app=alert-app -o wide
+```
+
+**PM handoff + visual:** follow **`leet-alert-docs-with-app-changes.mdc`** and **`leet-alert-prototype-doc.mdc`** — update **`PRODUCT-PROTOTYPE.md`**, **`docs/product-prototype/visual-prototype.svg`**, and run **`npm run doc:pdf`** when the Alert app or PM-facing behavior changes.
+
+**Docker Hub:** `docker push` requires login; if auth fails, report what succeeded.

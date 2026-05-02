@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DEPLOYMENT_STATUS</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Historical Performance Sync - Deployment Status</h1>
+<h2>✅ Completed</h2>
+<ol>
+<li><p><strong>Database Setup</strong> ✓</p>
+<ul>
+<li>Created <code>historical_performance_records</code> table</li>
+<li>Created <code>historical_performance_sync_logs</code> table</li>
+<li>All indexes and constraints in place</li>
+</ul>
+</li>
+<li><p><strong>Kubernetes Resources Deployed</strong> ✓</p>
+<ul>
+<li>CronJob: <code>historical-performance-sync</code> (scheduled 3 AM UTC daily)</li>
+<li>Deployment: <code>historical-performance-api</code> (2 replicas)</li>
+<li>Service: <code>historical-performance-api</code> (ClusterIP)</li>
+<li>Ingress: <code>historical-performance-api-ingress</code> (exposed at <code>historical-api.theleetclub.com</code>)</li>
+</ul>
+</li>
+<li><p><strong>Frontend Integration</strong> ✓</p>
+<ul>
+<li>Updated <code>analytics-tab.js</code> to use cached API first</li>
+<li>Added <code>fetchHistoricalPerformanceDataFromCache()</code> function</li>
+<li>Added <code>fetchBestMachineYesterdayFromCache()</code> for preload optimization</li>
+<li>Automatic fallback to direct Vendon API if cache misses</li>
+</ul>
+</li>
+</ol>
+<h2>⏳ Pending (Requires Manual Steps)</h2>
+<ol>
+<li><p><strong>Build and Push Docker Images</strong></p>
+<ul>
+<li>Images need to be built and pushed to Docker Hub</li>
+<li>Script created: <code>build-and-push.sh</code></li>
+<li>Images required:<ul>
+<li><code>programmeradmin25/historical-performance-sync:latest</code></li>
+<li><code>programmeradmin25/historical-performance-api:latest</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong>Add DNS Record</strong></p>
+<ul>
+<li>Add A record: <code>historical-api.theleetclub.com</code> → Kubernetes ingress IP</li>
+<li>Get ingress IP: <code>kubectl get ingress historical-performance-api-ingress -n leet-monitor</code></li>
+</ul>
+</li>
+<li><p><strong>Initial Data Sync</strong></p>
+<ul>
+<li>After images are available, trigger initial sync:<pre><code class="language-bash">kubectl create job --from=cronjob/historical-performance-sync historical-performance-sync-manual-$(date +%s) -n leet-monitor
+</code></pre>
+</li>
+</ul>
+</li>
+</ol>
+<h2>📋 Current Pod Status</h2>
+<p>Pods are in <code>ImagePullBackOff</code> state (expected - images don&#39;t exist yet):</p>
+<pre><code class="language-bash">kubectl get pods -n leet-monitor -l app=historical-performance-api
+</code></pre>
+<p>Once images are pushed, pods will automatically pull and start.</p>
+<h2>🎯 Next Actions</h2>
+<ol>
+<li>Run <code>./build-and-push.sh</code> to build and push Docker images</li>
+<li>Add DNS record for <code>historical-api.theleetclub.com</code></li>
+<li>Wait for pods to become ready (check with <code>kubectl get pods</code>)</li>
+<li>Test API: <code>curl https://historical-api.theleetclub.com/health</code></li>
+<li>Trigger initial sync to populate data</li>
+</ol>
+<h2>📊 Expected Performance Improvement</h2>
+<ul>
+<li><strong>Before</strong>: 30-60 seconds to load historical data</li>
+<li><strong>After</strong>: &lt; 1 second (cached database query)</li>
+</ul>
+</body>
+</html>

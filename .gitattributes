@@ -1,0 +1,2 @@
+# Keep shell scripts with LF so WSL runs them correctly
+*.sh text eol=lf

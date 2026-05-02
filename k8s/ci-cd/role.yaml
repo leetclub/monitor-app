@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sa-azure-devops-admin-binding
+subjects:
+- kind: ServiceAccount
+  name: sa-azure-devops
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin # Use 'edit' or a custom role for better security
+  apiGroup: rbac.authorization.k8s.io

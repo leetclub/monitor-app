@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TROUBLESHOOTING</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Troubleshooting Guide</h1>
+<h2>Database Connection Issues</h2>
+<h3>Connection Timeout</h3>
+<p><strong>Symptoms:</strong></p>
+<pre><code>connection to server at &quot;...&quot; port 5432 failed: Connection timed out
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p><strong>Check Port</strong>: Digital Ocean databases use port <code>25060</code> (SSL) or <code>25061</code> (non-SSL), not <code>5432</code></p>
+<pre><code class="language-bash"># Verify in secrets
+kubectl get secret people-analytics-secrets -n leet-monitor -o yaml
+
+# Should be:
+# db-port: 25060
+</code></pre>
+</li>
+<li><p><strong>Update Secrets</strong> (if port is wrong):</p>
+<pre><code class="language-bash">kubectl delete secret people-analytics-secrets -n leet-monitor
+
+kubectl create secret generic people-analytics-secrets -n leet-monitor \
+  --from-literal=db-host=your-db-host.db.ondigitalocean.com \
+  --from-literal=db-port=25060 \
+  --from-literal=db-name=people_analytics \
+  --from-literal=db-user=doadmin \
+  --from-literal=db-password=YOUR_PASSWORD \
+  --from-literal=videoloft-email=YOUR_EMAIL \
+  --from-literal=videoloft-password=YOUR_PASSWORD
+</code></pre>
+</li>
+<li><p><strong>Check Firewall Rules</strong>: Ensure your Kubernetes cluster IPs are whitelisted in Digital Ocean database settings</p>
+<ul>
+<li>Go to Digital Ocean Dashboard → Databases → Your Database → Settings → Trusted Sources</li>
+<li>Add your Kubernetes cluster IPs or allow all sources for testing</li>
+</ul>
+</li>
+<li><p><strong>Test Connection from Pod</strong>:</p>
+<pre><code class="language-bash"># Run a test pod
+kubectl run -it --rm psql-test --image=postgres:15-alpine --restart=Never -n leet-monitor -- \
+  psql -h your-db-host.db.ondigitalocean.com -p 25060 -U doadmin -d people_analytics
+</code></pre>
+</li>
+</ol>
+<h3>SSL Connection Issues</h3>
+<p><strong>Symptoms:</strong></p>
+<pre><code>SSL connection required
+</code></pre>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Port 25060 requires SSL (already configured in code)</li>
+<li>Make sure you&#39;re using port 25060, not 5432</li>
+</ul>
+<h3>No Data Synced</h3>
+<p><strong>Check Logs:</strong></p>
+<pre><code class="language-bash"># Get latest job logs
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=200
+
+# Check for errors
+kubectl logs -l app=people-analytics-sync -n leet-monitor | grep ERROR
+</code></pre>
+<p><strong>Common Issues:</strong></p>
+<ol>
+<li><p><strong>Authentication Failed</strong>:</p>
+<pre><code>Authentication failed with status 401
+</code></pre>
+<ul>
+<li>Check Videoloft credentials in secrets</li>
+<li>Verify email/username and password are correct</li>
+</ul>
+</li>
+<li><p><strong>No Cameras Found</strong>:</p>
+<pre><code>No cameras found
+</code></pre>
+<ul>
+<li>Check if Videoloft account has cameras configured</li>
+<li>Verify authentication is working</li>
+</ul>
+</li>
+<li><p><strong>No Data from Videoloft</strong>:</p>
+<pre><code>No data received from Videoloft
+</code></pre>
+<ul>
+<li>Check date range (SYNC_DAYS_BACK)</li>
+<li>Verify cameras have data for the time period</li>
+</ul>
+</li>
+</ol>
+<h3>Check Database</h3>
+<pre><code class="language-bash"># Connect to database
+psql -h your-db-host.db.ondigitalocean.com -p 25060 -U doadmin -d people_analytics
+
+# Check sync logs
+SELECT * FROM sync_logs ORDER BY sync_started_at DESC LIMIT 10;
+
+# Check records
+SELECT COUNT(*) FROM people_analytics_records;
+SELECT * FROM people_analytics_records ORDER BY first_timestamp DESC LIMIT 10;
+</code></pre>
+<h3>Debug Steps</h3>
+<ol>
+<li><p><strong>Check Job Status</strong>:</p>
+<pre><code class="language-bash">kubectl get jobs -n leet-monitor -l app=people-analytics-sync
+kubectl describe job &lt;job-name&gt; -n leet-monitor
+</code></pre>
+</li>
+<li><p><strong>Check Pod Logs</strong>:</p>
+<pre><code class="language-bash">kubectl get pods -n leet-monitor -l app=people-analytics-sync
+kubectl logs &lt;pod-name&gt; -n leet-monitor
+</code></pre>
+</li>
+<li><p><strong>Run Manual Job with Debug</strong>:</p>
+<pre><code class="language-bash"># Edit manual-run-job.yaml to add DEBUG env var
+# Or create job with debug
+kubectl create job --from=cronjob/people-analytics-sync test-sync -n leet-monitor
+kubectl set env job/test-sync DEBUG=true -n leet-monitor
+kubectl logs job/test-sync -n leet-monitor
+</code></pre>
+</li>
+<li><p><strong>Test Database Connection</strong>:</p>
+<pre><code class="language-bash"># From a pod
+kubectl run -it --rm db-test --image=postgres:15-alpine --restart=Never -n leet-monitor -- \
+  psql &quot;postgresql://doadmin:$(kubectl get secret people-analytics-secrets -n leet-monitor -o jsonpath=&#39;{.data.db-password}&#39; | base64 -d)@$(kubectl get secret people-analytics-secrets -n leet-monitor -o jsonpath=&#39;{.data.db-host}&#39; | base64 -d):25060/people_analytics?sslmode=require&quot;
+</code></pre>
+</li>
+</ol>
+<h2>CronJob Not Running</h2>
+<p><strong>Check CronJob Status</strong>:</p>
+<pre><code class="language-bash">kubectl get cronjob people-analytics-sync -n leet-monitor
+kubectl describe cronjob people-analytics-sync -n leet-monitor
+</code></pre>
+<p><strong>Check if Jobs are Created</strong>:</p>
+<pre><code class="language-bash">kubectl get jobs -n leet-monitor -l app=people-analytics-sync
+</code></pre>
+<p><strong>Common Issues:</strong></p>
+<ul>
+<li>CronJob suspended: <code>kubectl patch cronjob people-analytics-sync -p &#39;{&quot;spec&quot;:{&quot;suspend&quot;:false}}&#39; -n leet-monitor</code></li>
+<li>Wrong schedule format</li>
+<li>Resource limits too low</li>
+</ul>
+<h2>API Service Issues</h2>
+<p><strong>Check API Service</strong>:</p>
+<pre><code class="language-bash">kubectl get pods -l app=people-analytics-api -n leet-monitor
+kubectl logs -l app=people-analytics-api -n leet-monitor
+</code></pre>
+<p><strong>Test API</strong>:</p>
+<pre><code class="language-bash"># Port forward
+kubectl port-forward svc/people-analytics-api 5000:80 -n leet-monitor
+
+# Test
+curl http://localhost:5000/health
+curl &quot;http://localhost:5000/api/people-analytics?start_date=2024-01-01&amp;end_date=2024-01-31&quot;
+</code></pre>
+</body>
+</html>

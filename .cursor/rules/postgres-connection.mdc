@@ -1,0 +1,14 @@
+---
+description: PostgreSQL is on cloud; connect with psql without username, password, or host
+alwaysApply: true
+---
+
+# PostgreSQL (monitoring-app)
+
+- **Database is on cloud.** Do not assume local PostgreSQL or Docker.
+- **Connect with psql only:** no `-h`, `-U`, or password. psql connects to the server directly.
+- **Waste reasons migration (run in WSL from project root):**
+  ```bash
+  cd people-analytics-sync && psql -d people_analytics -f migrations/add_waste_analysis_reasons.sql
+  ```
+- For any new migration: `psql -d people_analytics -f <path-to>.sql` (no host, user, or password).

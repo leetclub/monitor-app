@@ -1,0 +1,41 @@
+# Example: use in your app repo (e.g. vendon-app). Copy to repo root as azure-pipelines.yml.
+#
+# Uses VARIABLES so values are derived from the repo and project:
+#   - imageName: programmeradmin25 / <repo name>  (registry fixed, image = repo name)
+#   - k8sNamespace: leave empty → template uses project name (lowercase, spaces → hyphens)
+#   - k8sDeployment, containerName: same as repo name
+#
+# You must set once: k8sServiceConnection. approvalNotifyUsers is dynamic (user who pushed).
+# If you get "No hosted parallelism" error: request a free grant at https://aka.ms/azpipelines-parallelism-request
+# or set poolName to your self-hosted agent pool name (e.g. 'Default').
+
+trigger:
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - v*
+
+extends:
+  template: k8s/ci-cd/azure-pipelines.build-deploy.yml
+  parameters:
+    dockerfilePath: Dockerfile
+    buildContext: .
+    # Registry is always programmeradmin25; image = repo name (e.g. vendon-app → programmeradmin25/vendon-app)
+    imageName: 'programmeradmin25/$(Build.Repository.Name)'
+    # Empty = template uses Azure DevOps project name as namespace (e.g. "Leet Monitor" → leet-monitor)
+    k8sNamespace: ''
+    k8sDeployment: '$(Build.Repository.Name)'
+    containerName: '$(Build.Repository.Name)'
+    # Docker Hub / ACR service connection (Project settings → Service connections)
+    dockerRegistryServiceConnection: 'docker'
+    k8sServiceConnection: 'YOUR_K8S_SERVICE_CONNECTION_NAME'
+    # Dynamic: the user who pushed gets the deploy approval request
+    approvalNotifyUsers: '$(Build.RequestedForEmail)'
+    requireDeployApproval: true
+    # poolName: 'Default'   # Uncomment to use a self-hosted agent pool (avoids Microsoft-hosted parallelism grant)
+
+# To test without approval:  requireDeployApproval: false
+# To override namespace:     k8sNamespace: 'leet-monitor'
+# To notify a fixed user/group:  approvalNotifyUsers: 'you@company.com'

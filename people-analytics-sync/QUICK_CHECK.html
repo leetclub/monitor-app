@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QUICK_CHECK</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Quick Check Commands</h1>
+<h2>One-Liner Health Check</h2>
+<pre><code class="language-bash"># Check CronJob and latest job status
+kubectl get cronjob people-analytics-sync -n leet-monitor &amp;&amp; \
+kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp | tail -2 &amp;&amp; \
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=5
+</code></pre>
+<h2>Check if CronJob is Running</h2>
+<pre><code class="language-bash"># See if CronJob exists and is active
+kubectl get cronjob people-analytics-sync -n leet-monitor
+
+# Check last 5 jobs
+kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp | tail -6
+</code></pre>
+<h2>Check Latest Sync</h2>
+<pre><code class="language-bash"># Get latest job and its logs
+LATEST_JOB=$(kubectl get jobs -n leet-monitor -l app=people-analytics-sync --sort-by=.metadata.creationTimestamp -o jsonpath=&#39;{.items[-1].metadata.name}&#39;)
+kubectl logs -l job-name=$LATEST_JOB -n leet-monitor --tail=20
+</code></pre>
+<h2>Check Database</h2>
+<pre><code class="language-bash"># Quick database check
+psql -h db-postgresql-nyc1-51052-do-user-18469088-0.i.db.ondigitalocean.com \
+     -p 25060 -U doadmin -d people_analytics \
+     -c &quot;SELECT MAX(synced_at) as last_sync, COUNT(*) as records FROM people_analytics_records;&quot;
+</code></pre>
+<h2>Run Full Health Check</h2>
+<pre><code class="language-bash"># Run the health check script
+./people-analytics-sync/health_check.sh
+</code></pre>
+<h2>What to Look For</h2>
+<h3>✅ Good Signs:</h3>
+<ul>
+<li>CronJob exists and schedule is <code>* * * * *</code> (every minute)</li>
+<li>Jobs are being created regularly (every minute)</li>
+<li>Jobs show status <code>Complete</code> or <code>Succeeded</code></li>
+<li>Logs show &quot;Successfully synced X records&quot;</li>
+<li>Database shows recent <code>synced_at</code> timestamps</li>
+<li>No duplicate records</li>
+</ul>
+<h3>❌ Warning Signs:</h3>
+<ul>
+<li>No jobs being created</li>
+<li>Jobs stuck in <code>Pending</code> or <code>Running</code></li>
+<li>Jobs showing <code>Failed</code></li>
+<li>Logs show errors (authentication, database connection, etc.)</li>
+<li>Database <code>last_sync</code> is old (&gt; 5 minutes ago)</li>
+<li>Duplicate records found</li>
+</ul>
+</body>
+</html>

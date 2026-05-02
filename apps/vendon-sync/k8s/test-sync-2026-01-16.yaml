@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vendon-sync-verify-fix
+  namespace: leet-monitor
+spec:
+  template:
+    metadata:
+      labels:
+        app: vendon-sales-sync
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: sync
+        image: programmeradmin25/people-analytics-sync:latest
+        imagePullPolicy: Always
+        command: ["python", "sync_service.py"]
+        workingDir: /app/vendon-sync
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-port
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-password
+        - name: VENDON_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: vendon-api-key
+        - name: VENDON_API_BASE
+          value: "https://cloud.vendon.net/rest/v1.9.0"
+        - name: VENDON_SYNC_TARGET_DATE
+          value: "2026-01-16"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MONITORING</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Vendon Sync Monitoring Guide</h1>
+<h2>Overview</h2>
+<p>This document explains how to monitor the vendon-sync cronjob to ensure it always gets correct results.</p>
+<h2>Protection Mechanisms</h2>
+<h3>1. <strong>Date Validation in Sync Code</strong></h3>
+<p>The sync service now includes built-in validation that prevents syncing today&#39;s data:</p>
+<pre><code class="language-python"># In sync_service.py
+if date == today_kuwait:
+    logger.error(f&quot;❌ CRITICAL: Attempting to sync TODAY ({date})! This should never happen.&quot;)
+</code></pre>
+<p><strong>What it does:</strong></p>
+<ul>
+<li>Checks if the calculated date equals today</li>
+<li>Logs a critical error if it tries to sync today</li>
+<li>The sync will still run, but the error will be visible in logs</li>
+</ul>
+<p><strong>How to check:</strong></p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;job-id&gt; | grep &quot;CRITICAL&quot;
+</code></pre>
+<h3>2. <strong>Automated Verification Cronjob</strong></h3>
+<p>A verification cronjob runs <strong>30 minutes after each sync</strong> (at 2:30 AM UTC) to verify the results.</p>
+<p><strong>What it checks:</strong></p>
+<ol>
+<li>✅ Date is not today (should be yesterday)</li>
+<li>✅ Sync logs show success status</li>
+<li>✅ Data completeness (machines synced, revenue totals)</li>
+<li>✅ Sample verification against Vendon API (compares database vs API for one machine)</li>
+</ol>
+<p><strong>View verification results:</strong></p>
+<pre><code class="language-bash"># List verification jobs
+kubectl get jobs -n leet-monitor | grep vendon-sync-verify
+
+# View latest verification logs
+kubectl logs -n leet-monitor job/vendon-sync-verify-&lt;job-id&gt;
+</code></pre>
+<p><strong>If verification fails:</strong></p>
+<ul>
+<li>The job will exit with code 1</li>
+<li>Check the logs to see which check failed</li>
+<li>Investigate the specific issue</li>
+</ul>
+<h3>3. <strong>Enhanced Logging</strong></h3>
+<p>The sync now includes detailed logging:</p>
+<ul>
+<li><code>📊 Machine {id} on {date}: fetched X vends, revenue=Y KWD, transactions=Z</code></li>
+<li><code>✅ Stored: machine {id} ({name}) on {date}: Y KWD, Z transactions</code></li>
+<li><code>⚠️ Machine {id} on {date}: Got exactly 10000 vends (limit reached)</code> - warns about pagination issues</li>
+</ul>
+<p><strong>Monitor logs:</strong></p>
+<pre><code class="language-bash"># View sync logs
+kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;job-id&gt; | grep -E &quot;(📊|✅|⚠️|❌)&quot;
+</code></pre>
+<h2>Manual Verification</h2>
+<h3>Run Verification Script Manually</h3>
+<pre><code class="language-bash"># Verify yesterday&#39;s data (default)
+kubectl run -it --rm verify-test \
+  --image=programmeradmin25/people-analytics-sync:latest \
+  --restart=Never \
+  -n leet-monitor \
+  --env=&quot;DB_HOST=...&quot; \
+  --env=&quot;DB_PASSWORD=...&quot; \
+  --env=&quot;VENDON_API_KEY=...&quot; \
+  -- sh -c &quot;cd /app/vendon-sync &amp;&amp; python verify_sync_results.py&quot;
+
+# Verify specific date
+kubectl run -it --rm verify-test \
+  --image=programmeradmin25/people-analytics-sync:latest \
+  --restart=Never \
+  -n leet-monitor \
+  --env=&quot;DB_HOST=...&quot; \
+  --env=&quot;DB_PASSWORD=...&quot; \
+  --env=&quot;VENDON_API_KEY=...&quot; \
+  -- sh -c &quot;cd /app/vendon-sync &amp;&amp; python verify_sync_results.py 2026-01-24&quot;
+</code></pre>
+<h3>Check Database Directly</h3>
+<pre><code class="language-bash"># Check what date was last synced
+kubectl exec -n leet-monitor vendon-sales-api-f55cfc9ff-qcjq8 -- python3 &lt;&lt; &#39;EOF&#39;
+import os
+from sqlalchemy import create_engine, text
+from datetime import datetime, timezone, timedelta
+
+KUWAIT_TZ = timezone(timedelta(hours=3))
+now_kuwait = datetime.now(KUWAIT_TZ).date()
+yesterday = (now_kuwait - timedelta(days=1)).date()
+
+db_url = f&quot;postgresql://{os.getenv(&#39;DB_USER&#39;)}:{os.getenv(&#39;DB_PASSWORD&#39;)}@{os.getenv(&#39;DB_HOST&#39;)}:{os.getenv(&#39;DB_PORT&#39;)}/{os.getenv(&#39;DB_NAME&#39;)}?sslmode=require&quot;
+engine = create_engine(db_url)
+
+with engine.connect() as conn:
+    result = conn.execute(text(&quot;&quot;&quot;
+        SELECT DATE(sale_date) as date, COUNT(*) as records, 
+               SUM(total_revenue) as total_revenue
+        FROM vendon_sales_records
+        WHERE DATE(sale_date) &gt;= :yesterday
+        GROUP BY DATE(sale_date)
+        ORDER BY date DESC
+        LIMIT 3
+    &quot;&quot;&quot;), {&quot;yesterday&quot;: yesterday})
+    
+    for row in result:
+        print(f&quot;Date: {row.date}, Records: {row.records}, Revenue: {row.total_revenue:.2f} KWD&quot;)
+        if row.date == now_kuwait:
+            print(&quot;  ❌ WARNING: Today&#39;s data found in database!&quot;)
+        elif row.date == yesterday:
+            print(&quot;  ✅ Correct: Yesterday&#39;s data&quot;)
+EOF
+</code></pre>
+<h2>Monitoring Checklist</h2>
+<p>After each sync, verify:</p>
+<ol>
+<li><p><strong>Date Check:</strong></p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;id&gt; | grep &quot;Calculated dates to sync&quot;
+</code></pre>
+<p>Should show yesterday&#39;s date, NOT today</p>
+</li>
+<li><p><strong>Sync Success:</strong></p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;id&gt; | grep &quot;Successfully synced&quot;
+</code></pre>
+</li>
+<li><p><strong>No Critical Errors:</strong></p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;id&gt; | grep &quot;CRITICAL&quot;
+</code></pre>
+<p>Should return nothing</p>
+</li>
+<li><p><strong>Verification Job:</strong></p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sync-verify-&lt;id&gt;
+</code></pre>
+<p>Should show &quot;✅ All verifications passed&quot;</p>
+</li>
+</ol>
+<h2>Alerting (Future Enhancement)</h2>
+<p>To add Slack/email alerts when verification fails:</p>
+<ol>
+<li>Add a webhook notification in <code>verify_sync_results.py</code></li>
+<li>Or use Kubernetes events:<pre><code class="language-bash">kubectl get events -n leet-monitor --field-selector involvedObject.name=vendon-sync-verify
+</code></pre>
+</li>
+</ol>
+<h2>Troubleshooting</h2>
+<h3>Issue: Sync is syncing today instead of yesterday</h3>
+<p><strong>Check:</strong></p>
+<ol>
+<li><p>Verify the code fix is deployed:</p>
+<pre><code class="language-bash">kubectl get cronjob -n leet-monitor vendon-sales-sync -o yaml | grep imagePullPolicy
+</code></pre>
+<p>Should be <code>Always</code> to pull latest image</p>
+</li>
+<li><p>Check logs for date calculation:</p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;id&gt; | grep &quot;Calculated dates&quot;
+</code></pre>
+</li>
+<li><p>If still wrong, check the running code:</p>
+<pre><code class="language-bash">kubectl exec -n leet-monitor &lt;pod-name&gt; -- cat /app/vendon-sync/sync_service.py | grep &quot;range(1, days_back&quot;
+</code></pre>
+</li>
+</ol>
+<h3>Issue: Verification fails</h3>
+<p><strong>Check which test failed:</strong></p>
+<ul>
+<li>Date check: Date might be today (should never happen)</li>
+<li>Sync logs: Check if sync actually completed</li>
+<li>Data completeness: Might be a holiday (0 revenue is normal)</li>
+<li>API verification: Database vs API mismatch (investigate specific machine)</li>
+</ul>
+<h3>Issue: Missing data for a machine</h3>
+<p><strong>Check:</strong></p>
+<ol>
+<li><p>Did the sync fetch data?</p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;id&gt; | grep &quot;machine_id=&lt;id&gt;&quot;
+</code></pre>
+</li>
+<li><p>Was pagination limit hit?</p>
+<pre><code class="language-bash">kubectl logs -n leet-monitor job/vendon-sales-sync-&lt;id&gt; | grep &quot;limit reached&quot;
+</code></pre>
+</li>
+<li><p>Check database directly:</p>
+<pre><code class="language-bash"># Use check_db.py script
+</code></pre>
+</li>
+</ol>
+<h2>Summary</h2>
+<p>With these monitoring mechanisms in place:</p>
+<ol>
+<li>✅ <strong>Code validation</strong> prevents syncing today</li>
+<li>✅ <strong>Automated verification</strong> runs after each sync</li>
+<li>✅ <strong>Enhanced logging</strong> makes issues visible</li>
+<li>✅ <strong>Manual verification</strong> available on demand</li>
+</ol>
+<p>The cron should now <strong>always get correct results</strong>, and if it doesn&#39;t, you&#39;ll know immediately through:</p>
+<ul>
+<li>Critical error logs</li>
+<li>Failed verification jobs</li>
+<li>Manual verification checks</li>
+</ul>
+</body>
+</html>

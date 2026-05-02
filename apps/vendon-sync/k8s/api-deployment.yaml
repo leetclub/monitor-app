@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vendon-sales-api
+  namespace: leet-monitor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vendon-sales-api
+  template:
+    metadata:
+      labels:
+        app: vendon-sales-api
+    spec:
+      containers:
+      - name: api
+        image: programmeradmin25/vendon-sales-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5001
+          name: http
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-port
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-password
+        - name: API_PORT
+          value: "5001"
+        - name: DEBUG
+          value: "false"
+        - name: ADMIN_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-secret-key
+        - name: ADMIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-api-key
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-username
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: admin-password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vendon-sales-api
+  namespace: leet-monitor
+spec:
+  selector:
+    app: vendon-sales-api
+  ports:
+  - port: 80
+    targetPort: 5001
+    protocol: TCP
+  type: ClusterIP
+

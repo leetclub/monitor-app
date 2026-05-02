@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SUMMARY</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Summary: Making Targets Tab Read from Database</h1>
+<h2>✅ What&#39;s Complete</h2>
+<ol>
+<li><p><strong>Database Setup</strong>: </p>
+<ul>
+<li>Tables created (<code>vendon_sales_records</code>, <code>vendon_sync_logs</code>)</li>
+<li>Data synced (37 machines for 2026-01-16)</li>
+<li>Verified with <code>verify-data.sh</code></li>
+</ul>
+</li>
+<li><p><strong>Code Updates</strong>:</p>
+<ul>
+<li>✅ <code>people-analytics-sync/models.py</code> - Added <code>VendonSalesRecord</code> model</li>
+<li>✅ <code>people-analytics-sync/api_service.py</code> - Added <code>/api/vendon-sales/lowest-yesterday</code> and <code>/api/vendon-sales</code> endpoints</li>
+<li>✅ <code>analytics-tab.js</code> - Added <code>fetchLowestMachineYesterdayFromCache()</code> function</li>
+<li>✅ <code>index.html</code> - Updated to use cached API first, fallback to original</li>
+</ul>
+</li>
+<li><p><strong>Sync Service</strong>:</p>
+<ul>
+<li>✅ CronJob deployed (<code>vendon-sales-sync</code>)</li>
+<li>✅ Manual sync job available</li>
+<li>✅ Data successfully synced</li>
+</ul>
+</li>
+</ol>
+<h2>⏳ What&#39;s Needed</h2>
+<p><strong>Rebuild and push the Docker image</strong> for the API service:</p>
+<pre><code class="language-bash">cd people-analytics-sync
+docker build -f Dockerfile.api -t programmeradmin25/people-analytics-sync:api-latest .
+docker push programmeradmin25/people-analytics-sync:api-latest
+</code></pre>
+<p>After pushing, the deployment will automatically pull the new image (it has <code>imagePullPolicy: Always</code>).</p>
+<h2>🧪 Testing</h2>
+<p>Once the image is rebuilt and deployed, test:</p>
+<pre><code class="language-bash">curl &quot;https://people-api.theleetclub.com/api/vendon-sales/lowest-yesterday&quot;
+</code></pre>
+<p>Should return JSON like:</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;lowestMachine&quot;: {
+    &quot;machineId&quot;: &quot;398499&quot;,
+    &quot;machineName&quot;: null,
+    &quot;revenue&quot;: 0.0,
+    &quot;transactions&quot;: 0,
+    &quot;date&quot;: &quot;2026-01-16&quot;
+  },
+  &quot;totalMachines&quot;: 37,
+  &quot;scannedMachines&quot;: 37
+}
+</code></pre>
+<h2>📝 Current Status</h2>
+<ul>
+<li><strong>Database</strong>: ✅ Ready</li>
+<li><strong>Backend Code</strong>: ✅ Ready (in source files)</li>
+<li><strong>Frontend Code</strong>: ✅ Ready</li>
+<li><strong>Docker Image</strong>: ⏳ Needs rebuild</li>
+<li><strong>Deployment</strong>: ✅ Will auto-update after image push</li>
+</ul>
+<h2>🚀 Next Steps</h2>
+<ol>
+<li>Rebuild Docker image (see command above)</li>
+<li>Push to registry</li>
+<li>Wait for deployment to pull new image (or restart manually)</li>
+<li>Test endpoint</li>
+<li>Targets tab will automatically use cached data!</li>
+</ol>
+</body>
+</html>

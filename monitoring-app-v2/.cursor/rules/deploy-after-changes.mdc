@@ -1,0 +1,25 @@
+---
+description: When v2 code or deploy config changes, build, push image, and update the leet-monitor cluster
+alwaysApply: true
+---
+
+# Build, push, and update the cluster (monitoring-app-v2)
+
+**Rule:** If you change **anything in this repo** that affects what runs in production for **monitoring-app-v2** (`src/`, `public/`, `Dockerfile`, `nginx*.conf`, `docker-entrypoint.sh`, SPA-related `k8s/` such as ConfigMap for `/config.js`), **always deploy to the cluster** before treating the task as done — not only edit files locally.
+
+Do **not** rely on the user to deploy unless they explicitly ask you to skip rollout.
+
+After **substantive changes** to this app (source, Dockerfile, nginx, k8s manifests users care about in prod), **do not stop at code edits**. Finish the loop:
+
+1. **Build + push + rollout** using the repo script (runs `docker build`, `docker push`, `kubectl apply` configmap, `rollout restart` + `rollout status`):
+
+   ```bash
+   # From WSL; monorepo nests v2 under monitoring-app/ (requires ./dockerhub line 2 = Docker Hub PAT, Docker, kubectl)
+   cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app/monitoring-app-v2 && bash scripts/dockerhub-push-rollout.sh
+   ```
+
+2. If only verifying TypeScript/Vite locally first: `npm run build` inside `monitoring-app-v2/` (Dockerfile also runs `npm run build` inside the image).
+
+3. If `dockerhub` is missing or PAT is empty, tell the user and do not commit secrets; they must create `./dockerhub` per project docs.
+
+Image: `programmeradmin25/monitoring-app-v2:latest`. Namespace: `leet-monitor`. Deployment: `monitoring-app-v2`.

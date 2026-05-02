@@ -1,0 +1,78 @@
+# Manual Job to run sync immediately
+# Use this to test or run the sync for the first time
+# 
+# Usage: kubectl apply -f manual-run-job.yaml -n leet-monitor
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: people-analytics-sync-manual
+  namespace: leet-monitor
+spec:
+  template:
+    metadata:
+      labels:
+        app: people-analytics-sync
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: sync
+        image: programmeradmin25/people-analytics-sync:latest
+        imagePullPolicy: Always
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-port
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: db-password
+        - name: VIDEOLOFT_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: videoloft-email
+              optional: true
+        - name: VIDEOLOFT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: videoloft-username
+              optional: true
+        - name: VIDEOLOFT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: videoloft-password
+        - name: SYNC_DAYS_BACK
+          value: "1"
+        - name: SYNC_INTERVAL
+          value: "date"
+        - name: TIMEZONE
+          value: "Asia/Kuwait"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+

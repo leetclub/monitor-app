@@ -1,0 +1,18 @@
+# Generated from repo-mapping.yaml - edit that file and re-run deploy script to update
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: repo-sync-mapping
+  namespace: repo-sync-temp
+data:
+  repo-mapping.txt: |
+    programmerteam25/monitor-app    Leet Monitor
+    programmerteam25/leet-api    Leet Members
+    programmerteam25/leet-admin    Leet Members
+    programmerteam25/leet-front-end-flutter   Leet Members
+    programmerteam25/vendon-app    Leet Motion
+    programmerteam25/call-project Leet Call Center
+    programmerteam25/ee-coffee-api EE-Coffee
+    programmerteam25/ee-coffee EE-Coffee
+    programmerteam25/retention-reports EE-Coffee
+    leetclub/monitoring-app-v2    Leet Monitor

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QUICK_START</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Quick Start Guide</h1>
+<h2>First Time Setup</h2>
+<h3>1. Create Secrets</h3>
+<pre><code class="language-bash">kubectl create secret generic people-analytics-secrets -n leet-monitor \
+  --from-literal=db-host=your-db-host.db.ondigitalocean.com \
+  --from-literal=db-port=25060 \
+  --from-literal=db-name=people_analytics \
+  --from-literal=db-user=doadmin \
+  --from-literal=db-password=YOUR_DB_PASSWORD \
+  --from-literal=videoloft-email=YOUR_EMAIL \
+  --from-literal=videoloft-password=YOUR_PASSWORD
+</code></pre>
+<h3>2. Initialize Database</h3>
+<pre><code class="language-bash"># Connect and run SQL script
+psql -h your-db-host.db.ondigitalocean.com -p 25060 -U doadmin -d people_analytics -f init_database.sql
+</code></pre>
+<h3>3. Run Initial Full Sync (All Historical Data)</h3>
+<p>For the first sync, fetch all available historical data:</p>
+<pre><code class="language-bash"># Run initial sync (fetches 365 days of data)
+kubectl apply -f k8s/initial-sync-job.yaml -n leet-monitor
+
+# Watch the job
+kubectl get jobs -n leet-monitor -w
+
+# Check logs
+kubectl logs job/people-analytics-sync-initial -n leet-monitor -f
+</code></pre>
+<p><strong>Note</strong>: The initial sync fetches 365 days back. To change this, edit <code>k8s/initial-sync-job.yaml</code> and modify <code>SYNC_DAYS_BACK</code>.</p>
+<h3>4. Run Regular Sync (Daily/Incremental)</h3>
+<p>After initial sync, use regular sync for daily updates:</p>
+<pre><code class="language-bash"># Option 1: Use manual job file (1 day back)
+kubectl apply -f k8s/manual-run-job.yaml -n leet-monitor
+
+# Option 2: Create job from CronJob
+kubectl create job --from=cronjob/people-analytics-sync people-analytics-sync-now -n leet-monitor
+
+# Check logs
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100
+</code></pre>
+<h3>4. Deploy CronJob (Runs Every Minute)</h3>
+<pre><code class="language-bash">kubectl apply -f k8s/cronjob.yaml
+</code></pre>
+<h2>Common Commands</h2>
+<h3>Run Sync Manually</h3>
+<pre><code class="language-bash"># Create a one-time job
+kubectl create job --from=cronjob/people-analytics-sync people-analytics-sync-$(date +%s) -n leet-monitor
+
+# Or use the manual job file
+kubectl apply -f k8s/manual-run-job.yaml -n leet-monitor
+</code></pre>
+<h3>Check Status</h3>
+<pre><code class="language-bash"># Check CronJob
+kubectl get cronjob people-analytics-sync -n leet-monitor
+
+# Check recent jobs
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor
+
+# View logs
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100
+</code></pre>
+<h3>Change Schedule</h3>
+<p>Edit <code>k8s/cronjob.yaml</code> and change the schedule:</p>
+<ul>
+<li><code>&quot;* * * * *&quot;</code> - Every minute (current)</li>
+<li><code>&quot;*/5 * * * *&quot;</code> - Every 5 minutes</li>
+<li><code>&quot;*/15 * * * *&quot;</code> - Every 15 minutes</li>
+<li><code>&quot;0 * * * *&quot;</code> - Every hour</li>
+</ul>
+<p>Then apply:</p>
+<pre><code class="language-bash">kubectl apply -f k8s/cronjob.yaml
+</code></pre>
+<h2>Troubleshooting</h2>
+<h3>Job Not Running</h3>
+<pre><code class="language-bash"># Check CronJob status
+kubectl describe cronjob people-analytics-sync -n leet-monitor
+
+# Check if jobs are being created
+kubectl get jobs -n leet-monitor
+</code></pre>
+<h3>Check Logs</h3>
+<pre><code class="language-bash"># Latest job logs
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100
+
+# Specific job logs
+kubectl logs job/people-analytics-sync-&lt;job-name&gt; -n leet-monitor
+</code></pre>
+<h3>Verify Database</h3>
+<pre><code class="language-bash"># Connect to database
+psql -h your-db-host.db.ondigitalocean.com -p 25060 -U doadmin -d people_analytics
+
+# Check records
+SELECT COUNT(*) FROM people_analytics_records;
+SELECT * FROM sync_logs ORDER BY sync_started_at DESC LIMIT 5;
+</code></pre>
+</body>
+</html>

@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vendon-api-ingress
+  namespace: leet-monitor
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # Forward all paths as-is
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: vendon-api.theleetclub.com
+    http:
+      paths:
+      # Forward all paths to the service
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vendon-sales-api
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - vendon-api.theleetclub.com
+    secretName: theleetclub-tls
+
+

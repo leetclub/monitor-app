@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: people-api-ingress
+  namespace: leet-monitor
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # Rewrite target to preserve the full path
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - host: people-api.theleetclub.com
+    http:
+      paths:
+      # Match /api/* and forward to service with /api/* preserved
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: people-analytics-api
+            port:
+              number: 80
+      # Also allow /health directly
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: people-analytics-api
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - people-api.theleetclub.com
+    secretName: theleetclub-tls

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INTRADAY_CHECKUP_SETUP</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Intra-Day Checkup – Setup (psql + kubectl)</h1>
+<p>Control staff can record midday operator readiness (Ready / Not ready) per machine per day from the <strong>Attendance &amp; Cleaning</strong> tab → <strong>Intra-Day Checkup</strong> section. Data is stored in Postgres and served by people-api.</p>
+<h2>1. Database (psql)</h2>
+<p>Run the migration on the <code>people_analytics</code> database (same DB used by people-api).</p>
+<p><strong>Option A – From project root (WSL or where <code>psql</code> is available):</strong></p>
+<pre><code class="language-bash">cd people-analytics-sync
+bash run-intra-day-checkup-migration.sh
+</code></pre>
+<p><strong>Option B – Manual:</strong></p>
+<pre><code class="language-bash">psql -d people_analytics -f people-analytics-sync/migrations/add_intra_day_checkups.sql
+</code></pre>
+<p>This creates the <code>intra_day_checkups</code> table and indexes.</p>
+<h2>2. People API (kubectl)</h2>
+<p>Redeploy the people-api so it loads the new model and routes (<code>/api/intra-day-checkups</code> GET/POST).</p>
+<ul>
+<li>Build and push the updated image (if you use a registry), then update the deployment, <strong>or</strong></li>
+<li>If your deploy applies the repo (e.g. from Git), redeploy the people-api deployment so the new code (models + api_service.py) is used.</li>
+</ul>
+<p>Example (adjust namespace/deployment name to your setup):</p>
+<pre><code class="language-bash">kubectl rollout restart deployment/people-api -n &lt;your-namespace&gt;
+# Or apply the k8s manifest you use for people-api
+kubectl apply -f k8s/api-deployment.yaml
+</code></pre>
+<h2>3. Google Apps Script</h2>
+<ul>
+<li>Deploy the updated Apps Script (e.g. <code>clasp push</code> and deploy a new version).</li>
+<li>Script Properties: optional <code>PEOPLE_ANALYTICS_API_BASE</code> if people-api is not at <code>https://people-api.theleetclub.com</code>.</li>
+</ul>
+<h2>4. Usage in the app</h2>
+<ol>
+<li>Open <strong>Attendance &amp; Cleaning</strong>.</li>
+<li>In <strong>Intra-Day Checkup</strong>:<ul>
+<li>Select <strong>Machine</strong>.</li>
+<li><strong>Operator</strong> is filled from the same criteria as attendance (operator type + machine access); if only one operator, they are selected by default.</li>
+<li>Choose <strong>Date</strong> and <strong>Status</strong> (Ready / Not ready), then <strong>Save checkup</strong>.</li>
+</ul>
+</li>
+<li><strong>Recent checkups</strong> lists the last 14 days; use <strong>Refresh list</strong> to reload.</li>
+</ol>
+</body>
+</html>

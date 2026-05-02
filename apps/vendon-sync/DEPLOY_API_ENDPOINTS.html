@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DEPLOY_API_ENDPOINTS</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>Deploy Vendon API Endpoints</h1>
+<p>The Vendon API endpoints have been added to <code>people-analytics-sync/api_service.py</code>, but the API service needs to be rebuilt and redeployed.</p>
+<h2>Option 1: Rebuild Docker Image (Recommended)</h2>
+<ol>
+<li>Build the new API image:</li>
+</ol>
+<pre><code class="language-bash">cd people-analytics-sync
+docker build -f Dockerfile.api -t programmeradmin25/people-analytics-sync:api-latest .
+docker push programmeradmin25/people-analytics-sync:api-latest
+</code></pre>
+<ol start="2">
+<li>Restart the deployment to pull the new image:</li>
+</ol>
+<pre><code class="language-bash">kubectl rollout restart deployment people-analytics-api -n leet-monitor
+</code></pre>
+<h2>Option 2: Use ConfigMap (Quick Test)</h2>
+<p>If you want to test without rebuilding the image, you can inject the updated code via ConfigMap:</p>
+<pre><code class="language-bash"># Create ConfigMap with updated API code
+kubectl create configmap people-api-code \
+  --from-file=api_service.py=people-analytics-sync/api_service.py \
+  --from-file=models.py=people-analytics-sync/models.py \
+  -n leet-monitor --dry-run=client -o yaml | kubectl apply -f -
+
+# Update deployment to mount ConfigMap (requires modifying deployment YAML)
+</code></pre>
+<h2>Verify Endpoints</h2>
+<p>After deployment, test the endpoints:</p>
+<pre><code class="language-bash"># Test lowest machine endpoint
+curl &quot;https://people-api.theleetclub.com/api/vendon-sales/lowest-yesterday&quot;
+
+# Test general sales endpoint
+curl &quot;https://people-api.theleetclub.com/api/vendon-sales?date=$(date -d yesterday +%Y-%m-%d)&quot;
+</code></pre>
+<h2>Current Status</h2>
+<p>✅ Code updated: <code>people-analytics-sync/api_service.py</code> has Vendon endpoints
+✅ Models added: <code>VendonSalesRecord</code> added to <code>people-analytics-sync/models.py</code>
+✅ Frontend ready: <code>analytics-tab.js</code> has <code>fetchLowestMachineYesterdayFromCache()</code>
+⏳ Pending: API service needs to be rebuilt and redeployed</p>
+</body>
+</html>

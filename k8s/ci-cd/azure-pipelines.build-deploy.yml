@@ -1,0 +1,180 @@
+# Azure DevOps: build Docker image with auto-versioning, push to registry, then deploy to K8s after approval.
+#
+# PARAMETERS vs VARIABLES:
+#   Parameters = set when the pipeline is defined or run (YAML or UI). Use for config that rarely changes.
+#   Variables = can be runtime (variable groups, script output, or built-ins like Build.Repository.Name,
+#               System.TeamProject). In the *calling* pipeline you pass variables as parameter values,
+#               e.g. imageName: programmeradmin25/$(Build.Repository.Name) — the value is resolved at queue time.
+#
+# One-time setup:
+#   - Service connection for container registry (Docker Hub or ACR).
+#   - Kubernetes service connection (Project settings → Service connections → New → Kubernetes).
+#   - Microsoft-hosted agents: if you see "No hosted parallelism has been purchased or granted", request a free
+#     grant at https://aka.ms/azpipelines-parallelism-request — or set poolName to a self-hosted agent pool.
+#   - Pass parameters (or use variables in the calling YAML): imageName, k8sDeployment, containerName,
+#     k8sServiceConnection, approvalNotifyUsers. k8sNamespace can be derived from project name (see template).
+#
+# Flow: Build (main/tag) → Push image → Deploy stage waits for manual approval → kubectl via service connection.
+
+parameters:
+  - name: dockerfilePath
+    default: Dockerfile
+  - name: buildContext
+    default: .
+    displayName: 'Docker build context (use subfolder if Dockerfile is in one, e.g. vendon-sync)'
+  - name: imageName
+    displayName: 'Full image name (e.g. programmeradmin25/vendon-app from repo name)'
+    type: string
+  - name: k8sNamespace
+    default: ''
+    displayName: 'K8s namespace (optional). When empty, derived from Azure DevOps project name (lowercase, spaces → hyphens).'
+    type: string
+  - name: k8sDeployment
+    displayName: 'Deployment name in K8s (often same as repo name)'
+    type: string
+  - name: containerName
+    displayName: 'Container name in the deployment (often same as repo name or "api")'
+    type: string
+  - name: dockerRegistryServiceConnection
+    displayName: 'Name of the Docker Registry service connection (Docker Hub or ACR)'
+    type: string
+  - name: k8sServiceConnection
+    displayName: 'Name of the Kubernetes service connection (Project settings → Service connections)'
+    type: string
+  - name: approvalNotifyUsers
+    default: ''
+    displayName: 'Users/groups to notify for deploy approval (comma-separated; e.g. user@org.com or [org]\Group)'
+    type: string
+  - name: requireDeployApproval
+    default: true
+    displayName: 'Require manual approval before deploying to K8s'
+    type: boolean
+  - name: poolName
+    default: ''
+    displayName: 'Agent pool (optional). When empty, use Microsoft-hosted (ubuntu-latest). When set (e.g. Default), use that self-hosted pool.'
+    type: string
+
+trigger:
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - v*
+
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildImage
+        ${{ if eq(parameters.poolName, '') }}:
+          pool:
+            vmImage: ubuntu-latest
+        ${{ else }}:
+          pool: ${{ parameters.poolName }}
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - bash: |
+              # K8s namespace from Azure DevOps project name (lowercase, spaces → hyphens)
+              NAMESPACE=$(echo "$(System.TeamProject)" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+              echo "##vso[task.setvariable variable=k8sNamespaceComputed;isOutput=true]$NAMESPACE"
+              echo "k8sNamespaceComputed=$NAMESPACE"
+            name: namespace
+            displayName: 'Compute namespace from project name'
+
+          - bash: |
+              BUILD_ID=$(Build.BuildId)
+              if echo "$(Build.SourceBranch)" | grep -q '^refs/tags/'; then
+                GIT_TAG=$(echo "$(Build.SourceBranch)" | sed 's#refs/tags/##')
+                export GIT_TAG
+              fi
+              VERSION=$(bash k8s/ci-cd/get-version.sh "$BUILD_ID")
+              echo "##vso[task.setvariable variable=VERSION;isOutput=true]$VERSION"
+              echo "VERSION=$VERSION"
+            name: version
+            displayName: 'Compute version'
+
+          - task: Docker@2
+            inputs:
+              containerRegistry: ${{ parameters.dockerRegistryServiceConnection }}
+              command: build
+              dockerfile: ${{ parameters.dockerfilePath }}
+              buildContext: ${{ parameters.buildContext }}
+              repository: ${{ parameters.imageName }}
+              tags: |
+                $(version.VERSION)
+                latest
+            displayName: 'Build Docker image'
+
+          - task: Docker@2
+            inputs:
+              containerRegistry: ${{ parameters.dockerRegistryServiceConnection }}
+              command: push
+              repository: ${{ parameters.imageName }}
+              tags: |
+                $(version.VERSION)
+                latest
+            displayName: 'Push image'
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+
+  - stage: Deploy
+    dependsOn: Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      VERSION: $[ stageDependencies.Build.BuildImage.outputs['version.VERSION'] ]
+      k8sNamespaceComputed: $[ stageDependencies.Build.BuildImage.outputs['namespace.k8sNamespaceComputed'] ]
+    jobs:
+      - job: ApproveDeploy
+        pool: server
+        steps:
+          - ${{ if eq(parameters.requireDeployApproval, true) }}:
+            - task: ManualValidation@0
+              inputs:
+                notifyUsers: ${{ parameters.approvalNotifyUsers }}
+                instructions: 'Approve to deploy image to K8s. Version: $(VERSION). Check Build stage for image name.'
+                onTimeout: 'reject'
+              displayName: 'Wait for deployment approval'
+          - ${{ else }}:
+            - script: echo "Deploy approval skipped (requireDeployApproval=false)"
+              displayName: Skip approval
+
+      - job: DeployK8s
+        dependsOn: ApproveDeploy
+        ${{ if eq(parameters.poolName, '') }}:
+          pool:
+            vmImage: ubuntu-latest
+        ${{ else }}:
+          pool: ${{ parameters.poolName }}
+        steps:
+          - bash: |
+              NAMESPACE_TO_USE=""
+              if [ -n '${{ parameters.k8sNamespace }}' ]; then
+                NAMESPACE_TO_USE='${{ parameters.k8sNamespace }}'
+              else
+                NAMESPACE_TO_USE="$(k8sNamespaceComputed)"
+              fi
+              if [ -z "$NAMESPACE_TO_USE" ]; then
+                NAMESPACE_TO_USE="default"
+              fi
+              echo "##vso[task.setvariable variable=namespaceToUse]$NAMESPACE_TO_USE"
+              echo "Using namespace: $NAMESPACE_TO_USE"
+            displayName: 'Set namespace (override or from project name)'
+
+          - task: Kubernetes@1
+            displayName: 'Set deployment image'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: ${{ parameters.k8sServiceConnection }}
+              namespace: '$(namespaceToUse)'
+              command: 'set'
+              arguments: 'image deployment/${{ parameters.k8sDeployment }} ${{ parameters.containerName }}=${{ parameters.imageName }}:$(VERSION)'
+
+          - task: Kubernetes@1
+            displayName: 'Wait for rollout'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: ${{ parameters.k8sServiceConnection }}
+              namespace: '$(namespaceToUse)'
+              command: 'rollout'
+              arguments: 'status deployment/${{ parameters.k8sDeployment }} --timeout=300s'

@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: verify-historical-performance-sync
+  namespace: leet-monitor
+spec:
+  # Run daily at 4 AM UTC (1 hour after sync at 3 AM)
+  schedule: "0 4 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: verify-historical-performance-sync
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: verify
+            image: programmeradmin25/vendon-sales-api:latest
+            imagePullPolicy: Always
+            command: ["sh", "-c", "cd /app && if [ -f verify_historical_performance_sync.py ]; then python verify_historical_performance_sync.py; else echo 'ERROR: verify_historical_performance_sync.py not found' && exit 1; fi"]
+            env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-password
+            - name: ADMIN_API_URL
+              value: "https://vendon-api.theleetclub.com"
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: admin-api-key
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"

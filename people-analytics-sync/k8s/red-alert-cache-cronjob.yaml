@@ -1,0 +1,41 @@
+# Refreshes red_alert_snapshot_cache (fast Red Alert dashboard reads).
+# Apply after: migrations/add_red_alert_snapshot_cache.sql on monitoring_dashboard.
+# Schedule: every 10 minutes (adjust as needed).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: red-alert-cache-refresh
+  namespace: leet-monitor
+spec:
+  schedule: "*/10 * * * *"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.5.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: DASHBOARD_ACCESS_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: people-analytics-secrets
+                      key: dashboard-access-api-key
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  exec curl -fsS
+                  --connect-timeout 10
+                  --max-time 420
+                  --retry 2
+                  --retry-delay 2
+                  -X POST "http://people-analytics-api/api/red-alert/internal/refresh"
+                  -H "X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}"

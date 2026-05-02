@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: people-analytics-sync
+  namespace: leet-monitor
+spec:
+  # Run every hour at minute 0
+  schedule: "0 * * * *"
+  # Note: For different schedules, use:
+  # "* * * * *" - every minute
+  # "*/5 * * * *" - every 5 minutes
+  # "*/15 * * * *" - every 15 minutes
+  # Keep 3 successful and 1 failed job
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: people-analytics-sync
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: sync
+            image: programmeradmin25/people-analytics-sync:latest
+            imagePullPolicy: Always
+            # Note: Update image to your registry URL
+            env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-password
+            - name: VIDEOLOFT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: videoloft-email
+                  optional: true
+            - name: VIDEOLOFT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: videoloft-username
+                  optional: true
+            - name: VIDEOLOFT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: videoloft-password
+            - name: SYNC_DAYS_BACK
+              value: "0"  # 0 = fetch only last hour (for hourly cronjobs)
+            - name: SYNC_INTERVAL
+              value: "hour"  # Use hour interval (will be converted to 3600000 ms for API)
+            - name: TIMEZONE
+              value: "Asia/Kuwait"
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+

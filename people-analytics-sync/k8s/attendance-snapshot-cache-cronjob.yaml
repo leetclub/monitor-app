@@ -1,0 +1,45 @@
+# Warms attendance_snapshot_cache daily (yesterday, UTC).
+# Purpose: allow GAS web app to read attendance via single browser request to people-api,
+# avoiding Apps Script premium UrlFetch quotas.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: attendance-snapshot-cache-warm
+  namespace: leet-monitor
+spec:
+  # Shortly after midnight UTC
+  schedule: "20 0 * * *"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 900
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.5.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: DASHBOARD_ACCESS_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: people-analytics-secrets
+                      key: dashboard-access-api-key
+              command:
+                - /bin/sh
+                - -c
+                - >
+                  exec curl -fsS
+                  --connect-timeout 10
+                  --max-time 1200
+                  --retry 2
+                  --retry-delay 10
+                  -X POST "http://people-analytics-api/api/attendance/internal/warm"
+                  -H "Content-Type: application/json"
+                  -H "X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}"
+                  -d "{}"
+

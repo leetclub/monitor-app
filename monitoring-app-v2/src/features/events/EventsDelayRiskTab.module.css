@@ -1,0 +1,431 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.2rem 1.35rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 639px) {
+  .wrap {
+    padding: 1rem max(1rem, env(safe-area-inset-left, 0px)) 1.15rem max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+.intro {
+  margin: 0;
+  color: var(--muted);
+  max-width: 52rem;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.insights {
+  display: none;
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.insights.visible {
+  display: block;
+}
+
+.insights h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.insightGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.insightCard {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.insightLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.insightValue {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.insightSub {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.cardRed {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+.cardBlue {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(96, 165, 250, 0.35);
+}
+.cardGreen {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 10rem;
+}
+
+.field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.btn {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.btnPrimary {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.err {
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 0.5rem;
+  color: #fecaca;
+  font-size: 0.875rem;
+}
+
+.summary {
+  display: none;
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.summary.visible {
+  display: block;
+}
+
+.summary h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.typeCard {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle);
+}
+
+.typeTitle {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+  color: var(--text);
+}
+
+.typeCount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.typePct {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th,
+.table td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.table th {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tableEmpty {
+  text-align: center;
+  color: var(--muted);
+  padding: 2.25rem 1rem !important;
+}
+
+.rowDesc {
+  display: inline-block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  max-width: 28rem;
+}
+
+/* Row + summary card tones (dark UI) */
+.toneRefill {
+  background: rgba(56, 189, 248, 0.09);
+  box-shadow: inset 4px 0 0 rgba(56, 189, 248, 0.55);
+}
+
+.toneMachineOff {
+  background: rgba(248, 113, 113, 0.08);
+  box-shadow: inset 4px 0 0 rgba(248, 113, 113, 0.55);
+}
+
+.toneKnetOff {
+  background: rgba(251, 191, 36, 0.08);
+  box-shadow: inset 4px 0 0 rgba(251, 191, 36, 0.5);
+}
+
+.toneVendonOff {
+  background: rgba(250, 204, 21, 0.07);
+  box-shadow: inset 4px 0 0 rgba(250, 204, 21, 0.45);
+}
+
+.toneDispense {
+  background: rgba(244, 114, 182, 0.08);
+  box-shadow: inset 4px 0 0 rgba(244, 114, 182, 0.5);
+}
+
+.toneAllProducts {
+  background: rgba(74, 222, 128, 0.08);
+  box-shadow: inset 4px 0 0 rgba(74, 222, 128, 0.45);
+}
+
+.toneDefault {
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 4px 0 0 rgba(125, 143, 163, 0.35);
+}
+
+.strikeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.strikeBtn {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: rgba(12, 15, 20, 0.55);
+  color: var(--text);
+  backdrop-filter: blur(6px);
+}
+
+.strikeBtn.sent {
+  opacity: 0.7;
+}
+
+.pag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.note {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Mobile / tablet: touch targets, readable inputs, scrollable table */
+@media (max-width: 767px) {
+  .wrap {
+    gap: 0.85rem;
+  }
+
+  .intro {
+    font-size: 0.9rem;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+    padding: 0.85rem;
+  }
+
+  .field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .field input,
+  .field select {
+    min-height: 48px;
+    font-size: 16px;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .btn,
+  .btnPrimary {
+    min-height: 44px;
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .insightGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .typeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .tableWrap {
+    margin: 0 calc(-1 * min(1rem, 4vw));
+    border-radius: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table {
+    font-size: 0.8125rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.55rem 0.5rem;
+    vertical-align: top;
+  }
+
+  .strikeBtn {
+    min-height: 36px;
+    min-width: 2.5rem;
+    font-size: 0.72rem;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .insightGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .field {
+    min-width: 12rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .intro {
+    max-width: 56rem;
+  }
+
+  .insightGrid {
+    gap: 1rem;
+  }
+}

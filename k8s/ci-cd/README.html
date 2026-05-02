@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>README</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>CI/CD: Versioning and K8s Deploy</h1>
+<h2>Contents</h2>
+<ul>
+<li><strong>get-version.sh</strong> – Used by pipelines to compute version (from git tag or <code>1.0.0-YYYYMMDD.BuildId</code>).</li>
+<li><strong>azure-pipelines.build-deploy.yml</strong> – Template pipeline: build image with version, push, deploy to K8s.</li>
+</ul>
+<h2>Quick setup in Azure DevOps</h2>
+<h3>1. Registry</h3>
+<ul>
+<li>Create a <strong>service connection</strong> for your container registry (Docker Hub or Azure ACR).</li>
+<li>Ensure the pipeline has permission to use it.</li>
+</ul>
+<h3>2. Kubernetes</h3>
+<ul>
+<li>Create a <strong>Kubernetes</strong> service connection (kubeconfig or AKS).</li>
+<li>Create an <strong>Environment</strong> (e.g. <code>k8s-leet-monitor</code>) and add the Kubernetes resource so the deploy job can run <code>kubectl</code>.</li>
+</ul>
+<h3>3. Pipeline</h3>
+<ul>
+<li>In the repo (e.g. vendon-sync synced to Azure DevOps), add a pipeline that uses the template, or copy <strong>azure-pipelines.build-deploy.yml</strong> into the repo root as <code>azure-pipelines.yml</code>.</li>
+<li>Set <strong>parameters</strong> (or variables):<ul>
+<li><code>imageName</code>: e.g. <code>programmeradmin25/vendon-sales-api</code></li>
+<li><code>dockerfilePath</code>: e.g. <code>Dockerfile.api</code></li>
+<li><code>k8sDeployment</code>: e.g. <code>vendon-sales-api</code></li>
+<li><code>k8sNamespace</code>: e.g. <code>leet-monitor</code></li>
+<li><code>containerName</code>: e.g. <code>api</code></li>
+</ul>
+</li>
+</ul>
+<h3>4. Versioning behaviour</h3>
+<ul>
+<li><strong>Push to <code>main</code></strong>: version = <code>1.0.0-YYYYMMDD.BuildId</code>, image tagged with that and <code>latest</code>.</li>
+<li><strong>Push tag <code>v1.2.3</code></strong>: version = <code>1.2.3</code>, image tagged with that (and optionally <code>latest</code>).</li>
+</ul>
+<p>Deploy stage runs after a successful build and updates the deployment with the new image tag.</p>
+<h2>Example: vendon-sync</h2>
+<p>In Azure DevOps (Leet Motion or the project where vendon-app is synced), create a pipeline:</p>
+<ul>
+<li><strong>Pipeline YAML</strong>: point to the template or use:</li>
+</ul>
+<pre><code class="language-yaml"># azure-pipelines.yml (in vendon-app repo)
+trigger:
+  - main
+resources:
+  repositories:
+    - repository: self
+parameters:
+  - name: imageName
+    value: programmeradmin25/vendon-sales-api
+  - name: dockerfilePath
+    value: Dockerfile.api
+  - name: k8sDeployment
+    value: vendon-sales-api
+  - name: k8sNamespace
+    value: leet-monitor
+  - name: containerName
+    value: api
+# Then extend the template or copy stages from azure-pipelines.build-deploy.yml
+</code></pre>
+<p>If the template lives in another repo, use <code>extends</code> or copy the template into this repo and reference it.</p>
+</body>
+</html>

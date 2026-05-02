@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"kubernetes.io/ingress.class":"nginx"},"name":"leet-admin-ingress","namespace":"leet"},"spec":{"rules":[{"host":"admin.theleetclub.com","http":{"paths":[{"backend":{"service":{"name":"leet-admin","port":{"number":80}}},"path":"/","pathType":"Prefix"}]}}],"tls":[{"hosts":["admin.theleetclub.com"],"secretName":"theleetclub-tls"}]}}
+    kubernetes.io/ingress.class: nginx
+  creationTimestamp: "2025-02-06T15:57:04Z"
+  generation: 1
+  name: people-api-ingress
+  namespace: leet-monitor
+  resourceVersion: "22624307"
+  uid: 04b6ef5a-14b1-4898-a620-fec241cd02e4
+spec:
+  rules:
+  - host: people-api.theleetclub.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: leet-admin
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - people-api.theleetclub.com
+    secretName: theleetclub-tls
+status:
+  loadBalancer:
+    ingress:
+    - ip: 24.144.65.112

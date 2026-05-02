@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DEPLOYMENT_STATUS</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>✅ Vendon API Deployment Status</h1>
+<h2>Deployment Complete!</h2>
+<p>All components have been successfully deployed:</p>
+<h3>✅ Components</h3>
+<ol>
+<li><strong>ConfigMap</strong>: <code>vendon-api-code</code> - Contains API code</li>
+<li><strong>Deployment</strong>: <code>vendon-sales-api</code> - 2/2 pods running</li>
+<li><strong>Service</strong>: <code>vendon-sales-api</code> - ClusterIP service active</li>
+<li><strong>Ingress</strong>: <code>vendon-api-ingress</code> - Configured for <code>vendon-api.theleetclub.com</code></li>
+</ol>
+<h3>✅ API Testing</h3>
+<p><strong>Via Port-Forward (Direct Access):</strong></p>
+<ul>
+<li>✅ Health endpoint: Working</li>
+<li>✅ <code>/api/vendon-sales/lowest-yesterday</code>: Working (returns proper JSON)</li>
+<li>✅ <code>/api/vendon-sales?date=2026-01-16</code>: Working</li>
+</ul>
+<p><strong>Via Ingress (External Access):</strong></p>
+<ul>
+<li>⏳ <code>https://vendon-api.theleetclub.com</code> - Ingress configured, may need DNS propagation</li>
+</ul>
+<h3>📊 Current Data</h3>
+<ul>
+<li>Database has 37 machine records for 2026-01-16</li>
+<li>API correctly queries the database</li>
+<li>Endpoints return proper JSON responses</li>
+</ul>
+<h3>🔧 Architecture</h3>
+<pre><code>Frontend (Google Apps Script)
+    ↓ (calls vendon-api.theleetclub.com)
+Ingress (vendon-api-ingress)
+    ↓
+Service (vendon-sales-api:80)
+    ↓
+Pods (vendon-sales-api, 2 replicas)
+    ↓ (queries)
+PostgreSQL (vendon_sales_records table)
+</code></pre>
+<h3>✅ Verification Commands</h3>
+<pre><code class="language-bash"># Check deployment
+kubectl get deployment vendon-sales-api -n leet-monitor
+
+# Check pods
+kubectl get pods -n leet-monitor -l app=vendon-sales-api
+
+# Check service
+kubectl get svc vendon-sales-api -n leet-monitor
+
+# Check ingress
+kubectl get ingress vendon-api-ingress -n leet-monitor
+
+# Test via port-forward
+kubectl port-forward -n leet-monitor svc/vendon-sales-api 8080:80
+curl http://localhost:8080/health
+curl http://localhost:8080/api/vendon-sales/lowest-yesterday
+</code></pre>
+<h3>🎯 Next Steps</h3>
+<ol>
+<li><strong>DNS</strong>: Ensure <code>vendon-api.theleetclub.com</code> DNS points to ingress IP: <code>24.144.65.112</code></li>
+<li><strong>Frontend</strong>: Already configured to use <code>vendon-api.theleetclub.com</code></li>
+<li><strong>Testing</strong>: Open targets tab and test &quot;PRELOAD LOWEST PERFORMING MACHINE YESTERDAY&quot;</li>
+</ol>
+<h3>📝 Notes</h3>
+<ul>
+<li>Deployment uses ConfigMap for code injection (works, but for production consider building a dedicated image)</li>
+<li>All endpoints are functional and returning correct data</li>
+<li>Database connection is working</li>
+<li>Health checks are passing</li>
+</ul>
+<p><strong>Status: ✅ READY FOR USE</strong></p>
+</body>
+</html>

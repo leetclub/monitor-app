@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1880" viewBox="0 0 820 1880" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <style><![CDATA[
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+      .boxDark { fill: #0f172a; stroke: #334155; stroke-width: 1.2; }
+      .boxAccent { fill: #fef2f2; stroke: #f87171; stroke-width: 1.2; }
+      .boxMuted { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1; }
+      .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
+      .labelInv { fill: #e2e8f0; font-size: 10px; font-weight: 600; }
+      .hint { fill: #64748b; font-size: 9px; }
+      .title { fill: #0f172a; font-size: 13px; font-weight: 700; }
+      .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
+      .tiny { fill: #475569; font-size: 8px; }
+      .pill { fill: #eef2ff; stroke: #818cf8; stroke-width: 1; }
+      .btn { fill: #ecfdf5; stroke: #22c55e; stroke-width: 1; }
+    ]]></style>
+  </defs>
+
+  <text x="14" y="22" class="cap">VISUAL REFERENCE (DOCS ONLY) - NOT LIVE UI PIXELS</text>
+  <text x="14" y="40" class="hint">Low-fi wireframe for PM/engineering alignment. Real app is dark-themed SPA with live APIs.</text>
+  <text x="14" y="56" class="tiny">Update this file when IA or primary widgets change; then PRODUCT-PROTOTYPE.md + npm run doc:pdf.</text>
+
+  <!-- 0 Login -->
+  <text x="14" y="88" class="title">0. Login (unauthenticated)</text>
+  <g transform="translate(14, 96)">
+    <rect class="boxMuted" x="0" y="0" width="792" height="128" rx="8"/>
+    <rect class="box" x="260" y="16" width="272" height="96" rx="10"/>
+    <rect x="276" y="28" width="48" height="48" rx="10" fill="#e2e8f0" stroke="#94a3b8"/>
+    <text x="332" y="48" class="label" font-size="12px">Leet Alert</text>
+    <text x="332" y="64" class="hint" font-size="8px">Operational alerts</text>
+    <rect class="box" x="276" y="82" width="240" height="22" rx="4" fill="#fff" stroke="#cbd5e1"/>
+    <text x="286" y="97" class="tiny">[ Google sign-in button ]</text>
+    <text x="276" y="118" class="hint" font-size="8px">Subtitle: Operational alerts - sign in to continue</text>
+  </g>
+
+  <!-- 1 Shell + Home -->
+  <text x="14" y="252" class="title">1. Signed-in shell - sidebar, top bar, Home</text>
+  <g transform="translate(14, 262)">
+    <rect class="boxDark" x="0" y="0" width="128" height="452" rx="6"/>
+    <text x="12" y="26" class="labelInv" font-size="12px">Leet Alert</text>
+    <text x="12" y="44" class="hint" fill="#94a3b8" font-size="8px">Operational snapshot</text>
+    <rect class="box" x="8" y="56" width="112" height="38" rx="4" fill="#1e3a5f" stroke="#3b82f6"/>
+    <text x="14" y="74" class="labelInv" font-size="9px">Home</text>
+    <text x="14" y="88" class="hint" fill="#93c5fd" font-size="7px">Map of the app</text>
+    <rect class="box" x="8" y="100" width="112" height="34" rx="4" fill="#1e293b" stroke="#334155"/>
+    <text x="14" y="118" class="labelInv" font-size="9px">Admin</text>
+    <text x="14" y="130" class="hint" fill="#94a3b8" font-size="7px">Machines &amp; sign-in</text>
+    <rect class="box" x="8" y="140" width="112" height="34" rx="4" fill="#1e293b" stroke="#334155"/>
+    <text x="14" y="158" class="labelInv" font-size="9px">Red Flags</text>
+    <text x="14" y="170" class="hint" fill="#94a3b8" font-size="7px">Machines to review</text>
+    <rect class="box" x="8" y="180" width="112" height="34" rx="4" fill="#1e293b" stroke="#334155"/>
+    <text x="14" y="198" class="labelInv" font-size="9px">Overall</text>
+    <text x="14" y="210" class="hint" fill="#94a3b8" font-size="7px">Fleet overview</text>
+    <text x="8" y="428" class="hint" fill="#94a3b8" font-size="8px">Figures refresh ~1 min</text>
+
+    <rect class="box" x="140" y="0" width="652" height="36" rx="4"/>
+    <text x="440" y="23" class="hint">Signed in as ops.user@company.com</text>
+    <rect class="btn" x="676" y="8" width="100" height="22" rx="4"/>
+    <text x="694" y="23" class="label" font-size="9px">Sign out</text>
+
+    <rect class="box" x="140" y="48" width="652" height="404" rx="6"/>
+    <text x="156" y="78" class="title" font-size="13px">Where do you want to go?</text>
+    <text x="156" y="96" class="hint">Intro text + links to main areas (below).</text>
+
+    <rect class="boxAccent" x="156" y="112" width="192" height="132" rx="8"/>
+    <text x="172" y="138" class="label">Red Flags</text>
+    <text x="172" y="156" class="hint" font-size="8px">Attention needed - machines failing checks.</text>
+    <text x="172" y="178" class="tiny">Short body copy...</text>
+    <rect class="box" x="172" y="206" width="88" height="20" rx="4" fill="#fee2e2" stroke="#f87171"/>
+    <text x="182" y="220" class="label" font-size="8px">Open Red Flags</text>
+
+    <rect class="box" x="368" y="112" width="192" height="132" rx="8"/>
+    <text x="384" y="138" class="label">Overall</text>
+    <text x="384" y="156" class="hint" font-size="8px">Full fleet roll-up.</text>
+    <rect class="box" x="384" y="206" width="72" height="20" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+    <text x="394" y="220" class="label" font-size="8px">Open Overall</text>
+
+    <rect class="box" x="580" y="112" width="192" height="132" rx="8" stroke-dasharray="5 4"/>
+    <text x="596" y="138" class="label">Admin</text>
+    <text x="596" y="156" class="hint" font-size="8px">Shown only if role allows.</text>
+    <text x="596" y="178" class="tiny">Machines, People, My access, Advanced</text>
+
+    <text x="156" y="292" class="hint" font-size="8px">Footer note: signed-in users only; contact admin for access issues.</text>
+  </g>
+
+  <!-- 2 Red Flags -->
+  <text x="14" y="742" class="title">2. Red Flags - toolbar, compare strip, table</text>
+  <g transform="translate(14, 752)">
+    <rect class="box" x="0" y="0" width="792" height="308" rx="6"/>
+    <text x="16" y="28" class="title" font-size="12px">Red Flags</text>
+    <text x="16" y="46" class="hint" font-size="8px">Subtitle: lists machines that need attention (failed checks).</text>
+    <rect class="pill" x="420" y="14" width="96" height="22" rx="10"/>
+    <text x="432" y="29" class="tiny">Refresh: 1 min</text>
+    <rect class="pill" x="524" y="14" width="120" height="22" rx="10"/>
+    <text x="536" y="29" class="tiny">Cache: timestamp</text>
+    <rect class="btn" x="656" y="14" width="112" height="22" rx="4"/>
+    <text x="674" y="29" class="label" font-size="8px">Refresh now</text>
+
+    <rect class="boxMuted" x="16" y="58" width="760" height="72" rx="4"/>
+    <text x="24" y="78" class="label" font-size="9px">Compare preset</text>
+    <rect class="box" x="24" y="86" width="140" height="22" rx="3"/>
+    <text x="32" y="101" class="tiny">Today vs Yesterday</text>
+    <rect class="box" x="172" y="86" width="88" height="22" rx="3"/>
+    <text x="180" y="101" class="tiny">Range A start</text>
+    <rect class="box" x="268" y="86" width="88" height="22" rx="3"/>
+    <text x="276" y="101" class="tiny">Range A end</text>
+    <rect class="box" x="364" y="86" width="88" height="22" rx="3"/>
+    <text x="372" y="101" class="tiny">Range B start</text>
+    <rect class="box" x="460" y="86" width="88" height="22" rx="3"/>
+    <text x="468" y="101" class="tiny">Range B end</text>
+    <text x="24" y="122" class="hint" font-size="8px">Hint: date ranges feed comparisons when KPI wiring is complete.</text>
+
+    <rect class="box" x="16" y="138" width="760" height="154" rx="4"/>
+    <line x1="16" y1="164" x2="776" y2="164" stroke="#cbd5e1"/>
+    <text x="24" y="158" class="label" font-size="8px">Machine</text>
+    <text x="168" y="158" class="label" font-size="8px">Location</text>
+    <text x="268" y="158" class="label" font-size="8px">Operator</text>
+    <text x="368" y="158" class="label" font-size="8px">Min since tx</text>
+    <text x="468" y="158" class="label" font-size="8px">WTD</text>
+    <text x="548" y="158" class="label" font-size="8px">Reasons</text>
+    <text x="24" y="188" class="hint" font-size="8px">Vend-A12</text>
+    <text x="24" y="200" class="tiny">uuid...</text>
+    <text x="168" y="188" class="hint" font-size="8px">Farwaniya</text>
+    <text x="268" y="188" class="hint" font-size="8px">Ahmed</text>
+    <text x="368" y="188" class="hint" font-size="8px">142</text>
+    <text x="468" y="188" class="hint" font-size="8px">3</text>
+    <text x="548" y="182" class="hint" font-size="7px">Stale transaction</text>
+    <text x="548" y="194" class="hint" font-size="7px">Below target</text>
+    <line x1="16" y1="212" x2="776" y2="212" stroke="#e2e8f0"/>
+    <text x="24" y="236" class="hint" font-size="8px">(more rows...)</text>
+  </g>
+
+  <!-- 3 Overall -->
+  <text x="14" y="1088" class="title">3. Overall - fleet list + compare panel</text>
+  <g transform="translate(14, 1098)">
+    <rect class="box" x="0" y="0" width="792" height="248" rx="6"/>
+    <text x="16" y="28" class="title" font-size="12px">Overall</text>
+    <text x="16" y="46" class="hint" font-size="8px">Subtitle: full-fleet view.</text>
+    <rect class="pill" x="560" y="14" width="96" height="22" rx="10"/>
+    <text x="572" y="29" class="tiny">Refresh: 1 min</text>
+    <rect class="btn" x="668" y="14" width="100" height="22" rx="4"/>
+    <text x="682" y="29" class="label" font-size="8px">Refresh now</text>
+    <rect class="boxMuted" x="16" y="54" width="760" height="56" rx="4"/>
+    <text x="24" y="74" class="tiny">[ Same compare preset row as Red Flags ]</text>
+    <text x="24" y="92" class="hint" font-size="8px">KPI rows evolve with backend mapping.</text>
+    <rect class="box" x="16" y="118" width="760" height="114" rx="4"/>
+    <text x="24" y="138" class="label" font-size="9px">Machines</text>
+    <rect class="pill" x="680" y="122" width="80" height="20" rx="10"/>
+    <text x="692" y="136" class="tiny">N rows</text>
+    <line x1="24" y1="148" x2="768" y2="148" stroke="#cbd5e1"/>
+    <text x="32" y="166" class="label" font-size="8px">Name</text>
+    <text x="320" y="166" class="label" font-size="8px">Id</text>
+    <text x="32" y="186" class="hint" font-size="8px">Alpha Station</text>
+    <text x="320" y="186" class="hint" font-size="8px">393033</text>
+    <text x="32" y="206" class="hint" font-size="8px">...</text>
+  </g>
+
+  <!-- 4 Admin -->
+  <text x="14" y="1378" class="title">4. Admin - tabs + Machines + People (concept)</text>
+  <g transform="translate(14, 1388)">
+    <rect class="box" x="0" y="0" width="792" height="380" rx="6"/>
+    <text x="16" y="26" class="title" font-size="11px">Admin</text>
+    <text x="16" y="42" class="hint" font-size="8px">Page hint: machines, access, team, advanced.</text>
+    <rect class="box" x="16" y="52" width="72" height="22" rx="11" fill="#dcfce7" stroke="#22c55e"/>
+    <text x="28" y="67" class="label" font-size="8px">Machines</text>
+    <rect class="box" x="94" y="52" width="78" height="22" rx="11"/>
+    <text x="106" y="67" class="label" font-size="8px">My access</text>
+    <rect class="box" x="180" y="52" width="88" height="22" rx="11"/>
+    <text x="192" y="67" class="label" font-size="8px">People</text>
+    <rect class="box" x="276" y="52" width="78" height="22" rx="11"/>
+    <text x="288" y="67" class="label" font-size="8px">Advanced</text>
+
+    <rect class="boxMuted" x="16" y="86" width="368" height="140" rx="6"/>
+    <text x="28" y="108" class="label" font-size="9px">Machines tab - profiles</text>
+    <text x="28" y="126" class="hint" font-size="8px">Exact machine names from API / DB (detail omitted).</text>
+    <rect class="box" x="28" y="136" width="320" height="28" rx="3"/>
+    <text x="36" y="154" class="tiny">Search / filter...</text>
+    <rect class="box" x="28" y="172" width="344" height="44" rx="3"/>
+    <text x="36" y="190" class="tiny">Table: machine | operator label | timezone | ...</text>
+
+    <rect class="boxMuted" x="396" y="86" width="380" height="276" rx="6"/>
+    <text x="408" y="108" class="label" font-size="9px">People tab (Leet Alert access)</text>
+    <text x="408" y="124" class="hint" font-size="8px">Same rules store as Monitor people-api.</text>
+    <rect class="box" x="408" y="132" width="96" height="20" rx="10" fill="#ecfdf5" stroke="#22c55e"/>
+    <text x="420" y="146" class="tiny">Simple editor</text>
+    <rect class="box" x="512" y="132" width="112" height="20" rx="10"/>
+    <text x="524" y="146" class="tiny">Import / export JSON</text>
+    <text x="408" y="166" class="tiny">Defaults for new users: [checkbox grid]</text>
+    <rect class="box" x="408" y="176" width="352" height="56" rx="4"/>
+    <text x="416" y="194" class="tiny">email@co.com | Leet Alert view | Admin | ...</text>
+    <text x="416" y="212" class="tiny">new.user@... | [x] [ ] [ ] ... | Same as defaults</text>
+    <rect class="btn" x="408" y="242" width="112" height="24" rx="4"/>
+    <text x="428" y="258" class="label" font-size="8px">Save changes</text>
+    <text x="408" y="286" class="hint" font-size="8px">My access tab = read-only summary for signed-in user.</text>
+    <text x="408" y="302" class="hint" font-size="8px">Advanced = substring cleaning rules (legacy).</text>
+  </g>
+
+  <text x="14" y="1805" class="hint" font-size="8px">Sync with PRODUCT-PROTOTYPE.md; regenerate PDF: npm run doc:pdf. Never show prototype wording in the shipped UI.</text>
+</svg>

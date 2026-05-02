@@ -1,0 +1,22 @@
+FROM python:3.11-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    postgresql-client \
+    postgresql-dev
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --retries 10 --default-timeout=100 -r requirements.txt flask
+
+COPY . .
+
+RUN adduser -D -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 5002
+
+CMD ["python", "api_service.py"]
+

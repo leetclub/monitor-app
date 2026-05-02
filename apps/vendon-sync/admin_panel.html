@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vendon Sync Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Login Page */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .login-box h1 {
+            margin-bottom: 30px;
+            text-align: center;
+            color: #2c3e50;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+        }
+        
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        /* Dashboard */
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: white;
+            border: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .tab.active {
+            background: #3498db;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .alert-item {
+            padding: 15px;
+            border-left: 4px solid #ddd;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .alert-item.level-info {
+            border-left-color: #3498db;
+        }
+        
+        .alert-item.level-warning {
+            border-left-color: #f39c12;
+        }
+        
+        .alert-item.level-error {
+            border-left-color: #e74c3c;
+        }
+        
+        .alert-item.level-critical {
+            border-left-color: #c0392b;
+            background: #fee;
+        }
+        
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+        
+        .alert-title {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .alert-meta {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        
+        .alert-message {
+            color: #555;
+            margin-bottom: 10px;
+        }
+        
+        .alert-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-resolve {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .verification-item {
+            padding: 15px;
+            border-left: 4px solid #ddd;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .verification-item.status-passed {
+            border-left-color: #27ae60;
+        }
+        
+        .verification-item.status-failed {
+            border-left-color: #e74c3c;
+        }
+        
+        .verification-item.status-warning {
+            border-left-color: #f39c12;
+        }
+        
+        .check-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .check-item.passed {
+            color: #27ae60;
+        }
+        
+        .check-item.failed {
+            color: #e74c3c;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Page -->
+    <div id="loginPage" class="login-container">
+        <div class="login-box">
+            <h1>Admin Panel Login</h1>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="btn" id="loginBtn">Login</button>
+                <div id="loginError" class="error-message" style="display: none;"></div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Dashboard -->
+    <div id="dashboard" style="display: none;">
+        <div class="container">
+            <div class="header">
+                <h1>Vendon Sync Admin Panel</h1>
+                <div class="user-info">
+                    <span id="currentUser"></span>
+                    <button class="btn btn-small" onclick="logout()">Logout</button>
+                </div>
+            </div>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('alerts')">Alerts & Logs</button>
+                <button class="tab" onclick="switchTab('verification')">Verification Results</button>
+            </div>
+            
+            <!-- Alerts Tab -->
+            <div id="alertsTab" class="tab-content active">
+                <div class="card">
+                    <h2>Alerts & Logs</h2>
+                    <div class="filters">
+                        <select id="levelFilter" class="filter-select" onchange="loadAlerts()">
+                            <option value="">All Levels</option>
+                            <option value="info">Info</option>
+                            <option value="warning">Warning</option>
+                            <option value="error">Error</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <select id="sourceFilter" class="filter-select" onchange="loadAlerts()">
+                            <option value="">All Sources</option>
+                            <option value="sync">Sync</option>
+                            <option value="verification">Verification</option>
+                            <option value="api">API</option>
+                        </select>
+                        <select id="resolvedFilter" class="filter-select" onchange="loadAlerts()">
+                            <option value="false">Unresolved Only</option>
+                            <option value="">All</option>
+                            <option value="true">Resolved Only</option>
+                        </select>
+                    </div>
+                    <div id="alertsList">
+                        <div class="loading">Loading alerts...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Verification Tab -->
+            <div id="verificationTab" class="tab-content">
+                <div class="card">
+                    <h2>Sync Verification Results</h2>
+                    <div id="verificationList">
+                        <div class="loading">Loading verification results...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin.replace(/:\d+$/, ':5002') || 'http://localhost:5002';
+        
+        // Check if already logged in
+        checkAuth();
+        
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/me`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    showDashboard(data.username);
+                } else {
+                    showLogin();
+                }
+            } catch (e) {
+                showLogin();
+            }
+        }
+        
+        function showLogin() {
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+        }
+        
+        function showDashboard(username) {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('currentUser').textContent = `Logged in as: ${username}`;
+            loadAlerts();
+            loadVerificationResults();
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const errorDiv = document.getElementById('loginError');
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            btn.disabled = true;
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({username, password})
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showDashboard(data.username);
+                } else {
+                    errorDiv.textContent = data.error || 'Login failed';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Connection error. Please check if admin API is running.';
+                errorDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+        
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/api/admin/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (e) {
+                console.error('Logout error:', e);
+            }
+            showLogin();
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            if (tabName === 'alerts') {
+                loadAlerts();
+            } else if (tabName === 'verification') {
+                loadVerificationResults();
+            }
+        }
+        
+        async function loadAlerts() {
+            const level = document.getElementById('levelFilter').value;
+            const source = document.getElementById('sourceFilter').value;
+            const resolved = document.getElementById('resolvedFilter').value;
+            
+            const params = new URLSearchParams();
+            if (level) params.append('level', level);
+            if (source) params.append('source', source);
+            if (resolved) params.append('resolved', resolved);
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/alerts?${params}`, {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        showLogin();
+                        return;
+                    }
+                    throw new Error('Failed to load alerts');
+                }
+                
+                const data = await response.json();
+                displayAlerts(data.data || []);
+            } catch (e) {
+                document.getElementById('alertsList').innerHTML = 
+                    `<div class="error-message">Error loading alerts: ${e.message}</div>`;
+            }
+        }
+        
+        function displayAlerts(alerts) {
+            const container = document.getElementById('alertsList');
+            
+            if (alerts.length === 0) {
+                container.innerHTML = '<div class="empty-state">No alerts found</div>';
+                return;
+            }
+            
+            container.innerHTML = alerts.map(alert => `
+                <div class="alert-item level-${alert.level}">
+                    <div class="alert-header">
+                        <div>
+                            <div class="alert-title">${escapeHtml(alert.title)}</div>
+                            <div class="alert-meta">
+                                ${alert.source} • ${new Date(alert.created_at).toLocaleString()}
+                            </div>
+                        </div>
+                        ${alert.is_resolved ? 
+                            '<span style="color: #27ae60;">✓ Resolved</span>' : 
+                            '<button class="btn-small btn-resolve" onclick="resolveAlert(' + alert.id + ')">Mark Resolved</button>'
+                        }
+                    </div>
+                    <div class="alert-message">${escapeHtml(alert.message)}</div>
+                    ${alert.details ? `<pre style="font-size: 12px; background: #f0f0f0; padding: 10px; border-radius: 4px; overflow-x: auto;">${escapeHtml(JSON.stringify(alert.details, null, 2))}</pre>` : ''}
+                </div>
+            `).join('');
+        }
+        
+        async function resolveAlert(alertId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/alerts/${alertId}/resolve`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    loadAlerts();
+                } else {
+                    alert('Failed to resolve alert');
+                }
+            } catch (e) {
+                alert('Error resolving alert: ' + e.message);
+            }
+        }
+        
+        async function loadVerificationResults() {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/verification-results?days=7`, {
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        showLogin();
+                        return;
+                    }
+                    throw new Error('Failed to load verification results');
+                }
+                
+                const data = await response.json();
+                displayVerificationResults(data.data || []);
+            } catch (e) {
+                document.getElementById('verificationList').innerHTML = 
+                    `<div class="error-message">Error loading verification results: ${e.message}</div>`;
+            }
+        }
+        
+        function displayVerificationResults(results) {
+            const container = document.getElementById('verificationList');
+            
+            if (results.length === 0) {
+                container.innerHTML = '<div class="empty-state">No verification results found</div>';
+                return;
+            }
+            
+            container.innerHTML = results.map(result => `
+                <div class="verification-item status-${result.status}">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                        <div>
+                            <strong>Sync Date: ${new Date(result.sync_date).toLocaleDateString()}</strong>
+                            <div style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
+                                Verified: ${new Date(result.verification_date).toLocaleString()}
+                            </div>
+                        </div>
+                        <span style="padding: 5px 10px; border-radius: 4px; background: ${result.status === 'passed' ? '#27ae60' : result.status === 'failed' ? '#e74c3c' : '#f39c12'}; color: white; font-size: 12px;">
+                            ${result.status.toUpperCase()}
+                        </span>
+                    </div>
+                    <div class="check-list">
+                        <div class="check-item ${result.date_check ? 'passed' : 'failed'}">
+                            ${result.date_check ? '✓' : '✗'} Date Check
+                        </div>
+                        <div class="check-item ${result.sync_logs_check ? 'passed' : 'failed'}">
+                            ${result.sync_logs_check ? '✓' : '✗'} Sync Logs
+                        </div>
+                        <div class="check-item ${result.data_completeness_check ? 'passed' : 'failed'}">
+                            ${result.data_completeness_check ? '✓' : '✗'} Data Completeness
+                        </div>
+                        <div class="check-item ${result.api_verification_check ? 'passed' : 'failed'}">
+                            ${result.api_verification_check ? '✓' : '✗'} API Verification
+                        </div>
+                    </div>
+                    ${result.summary ? `<div style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px; font-size: 14px;">${escapeHtml(result.summary)}</div>` : ''}
+                    ${result.errors ? `<div style="margin-top: 10px; color: #e74c3c;"><strong>Errors:</strong><pre style="font-size: 12px; margin-top: 5px;">${escapeHtml(JSON.stringify(result.errors, null, 2))}</pre></div>` : ''}
+                    ${result.warnings ? `<div style="margin-top: 10px; color: #f39c12;"><strong>Warnings:</strong><pre style="font-size: 12px; margin-top: 5px;">${escapeHtml(JSON.stringify(result.warnings, null, 2))}</pre></div>` : ''}
+                    ${result.machine_count > 0 ? `<div style="margin-top: 10px; font-size: 14px;">Machines: ${result.machine_count} | Revenue: ${result.total_revenue} | Transactions: ${result.total_transactions}</div>` : ''}
+                </div>
+            `).join('');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            if (document.getElementById('dashboard').style.display !== 'none') {
+                if (document.getElementById('alertsTab').classList.contains('active')) {
+                    loadAlerts();
+                } else {
+                    loadVerificationResults();
+                }
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

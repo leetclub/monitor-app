@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WHAT_NEEDS_TO_BE_DONE</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>What&#39;s Needed to Make Targets Tab Read from Database</h1>
+<h2>Current Status</h2>
+<p>✅ <strong>Database</strong>: Tables created and data synced (37 machines)
+✅ <strong>Frontend Code</strong>: Updated to call cached API (<code>fetchLowestMachineYesterdayFromCache</code>)
+✅ <strong>API Code</strong>: Endpoints added to <code>people-analytics-sync/api_service.py</code>
+✅ <strong>Models</strong>: <code>VendonSalesRecord</code> added to <code>people-analytics-sync/models.py</code>
+⏳ <strong>API Deployment</strong>: Needs Docker image rebuild</p>
+<h2>What&#39;s Missing</h2>
+<p>The API service Docker image needs to be rebuilt with the updated code that includes the Vendon endpoints.</p>
+<h2>Steps to Complete</h2>
+<h3>1. Rebuild Docker Image</h3>
+<pre><code class="language-bash">cd people-analytics-sync
+docker build -f Dockerfile.api -t programmeradmin25/people-analytics-sync:api-latest .
+docker push programmeradmin25/people-analytics-sync:api-latest
+</code></pre>
+<h3>2. Restart Deployment (Already Done)</h3>
+<p>The deployment was already restarted, but it will use the new image once it&#39;s pushed.</p>
+<h3>3. Verify</h3>
+<pre><code class="language-bash"># Test the endpoint
+curl &quot;https://people-api.theleetclub.com/api/vendon-sales/lowest-yesterday&quot;
+
+# Should return JSON with lowestMachine data
+</code></pre>
+<h2>Alternative: Quick Test Without Rebuilding</h2>
+<p>If you want to test immediately without rebuilding, you can exec into a pod and manually update the code:</p>
+<pre><code class="language-bash"># Get a pod name
+POD=$(kubectl get pods -n leet-monitor -l app=people-analytics-api -o jsonpath=&#39;{.items[0].metadata.name}&#39;)
+
+# Copy updated files into the pod
+kubectl cp people-analytics-sync/api_service.py leet-monitor/$POD:/app/api_service.py
+kubectl cp people-analytics-sync/models.py leet-monitor/$POD:/app/models.py
+
+# Restart the container (or the pod will restart automatically)
+kubectl delete pod $POD -n leet-monitor
+</code></pre>
+<p>But this is temporary - the proper solution is to rebuild the image.</p>
+<h2>Summary</h2>
+<p><strong>Everything is ready except the Docker image needs to be rebuilt with the new code.</strong></p>
+<p>Once the image is rebuilt and pushed, the targets tab will automatically use the cached database instead of scanning all machines!</p>
+</body>
+</html>

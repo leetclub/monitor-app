@@ -1,0 +1,16 @@
+---
+description: Leet Alert — any app change updates PRODUCT-PROTOTYPE.md + visual SVG + PDF; no prototype wording in UI.
+alwaysApply: true
+---
+
+# Leet Alert — docs + visual stay in sync with the app
+
+Whenever **any chat or agent** changes **`apps/alert-theleetclub-com`** in ways that affect **routes, screens, layout, permissions behavior, operator-visible copy, or data/API behavior**, finish the same task by updating **all** of:
+
+1. **`apps/alert-theleetclub-com/PRODUCT-PROTOTYPE.md`** — routes table, audience/permissions, changelog row (newest first).
+2. **`apps/alert-theleetclub-com/docs/product-prototype/visual-prototype.svg`** — schematic wireframes must match navigation and primary widgets (add panels if new screens matter for PM review).
+3. **`npm run doc:pdf`** from **`apps/alert-theleetclub-com`** (WSL if needed) → refresh **`PRODUCT-PROTOTYPE.pdf`** and commit it with the markdown/SVG.
+
+**UI rule:** Do **not** add “prototype”, “draft”, or experimental badges/wording **inside the running app**. Roadmap and fidelity belong in **`PRODUCT-PROTOTYPE.md`** / PDF / SVG only.
+
+Full checklist and deploy lives in **`leet-alert-prototype-doc.mdc`** and **`deploy-gas-and-people-api.mdc`**.

@@ -1,0 +1,29 @@
+FROM python:3.11-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    postgresql-client \
+    postgresql-dev
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --retries 10 --default-timeout=100 -r requirements.txt
+
+# Copy application code
+COPY admin_api.py .
+COPY admin_models.py .
+COPY models.py .
+
+# Copy admin panel HTML
+COPY admin_panel.html .
+
+RUN adduser -D -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 5002
+
+CMD ["python", "admin_api.py"]

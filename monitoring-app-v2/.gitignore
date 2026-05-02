@@ -1,0 +1,14 @@
+node_modules
+dist
+.commitmsg
+*.local
+.env
+.env.*.local
+# Local dump of Script Properties — never commit
+env
+# K8s secret env (never commit)
+k8s/.secret.env
+# Google OAuth client id/secret (local only)
+google.creds
+# Docker Hub PAT (local only — never commit)
+dockerhub

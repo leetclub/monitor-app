@@ -1,0 +1,33 @@
+---
+description: Leet Alert (alert-theleetclub-com) — keep PRODUCT-PROTOTYPE.md in sync for PMs; deploy image after app changes.
+alwaysApply: false
+globs: apps/alert-theleetclub-com/**/*
+---
+
+# Leet Alert — prototype doc + deploy discipline
+
+**Always-on reminder:** **`leet-alert-docs-with-app-changes.mdc`** applies to **every** conversation — any Alert app change must update Markdown + **`visual-prototype.svg`** + PDF; never add prototype wording to the UI.
+
+## Product document (mandatory when UX changes)
+
+Path: **`apps/alert-theleetclub-com/PRODUCT-PROTOTYPE.md`**
+
+Whenever this session **changes** anything that affects how PMs or operators understand the product, **update that file** in the same change:
+
+- New or renamed **routes**, tabs, major **screens**, or IA — also edit **`docs/product-prototype/visual-prototype.svg`** so the embedded wireframe stays honest
+- **Permissions** behavior or audience table
+- **Login** or onboarding messaging visible to operators
+- **Data refresh** behavior or API ownership
+- Meaningful **copy** changes on Home, Red Flags, Overall, Admin, or login
+
+At minimum, append a row to the **Changelog** table with date and a one-line summary.
+
+After **`PRODUCT-PROTOTYPE.md`** or **`docs/product-prototype/visual-prototype.svg`** changes, run **`npm run doc:pdf`** in **`apps/alert-theleetclub-com`** (Ubuntu/WSL if `bash` missing on Windows) to refresh **`PRODUCT-PROTOTYPE.pdf`**, and **commit the PDF** with the markdown so PMs can download it without tooling.
+
+Do **not** replace the doc with vague placeholders — keep tables accurate.
+
+## Deploy (when `apps/alert-theleetclub-com` sources or Docker/nginx/k8s change)
+
+Run the **Leet Alert** pipeline from **`deploy-gas-and-people-api.mdc`** (WSL): build image `programmeradmin25/alert-theleetclub-com:latest`, push, `kubectl rollout restart deployment/alert-app -n leet-monitor`, full verification.
+
+Skip deploy only if the user explicitly says to skip.

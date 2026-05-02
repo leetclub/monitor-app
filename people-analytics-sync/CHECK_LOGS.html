@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CHECK_LOGS</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 1rem auto; padding: 0 1rem; line-height: 1.5; }
+    code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #0066cc; }
+    ul, ol { margin: 0.5rem 0; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; }
+  </style>
+</head>
+<body>
+<h1>How to Check CronJob Logs</h1>
+<h2>Check CronJob Status</h2>
+<pre><code class="language-bash"># View CronJob
+kubectl get cronjob people-analytics-sync -n leet-monitor
+
+# Get detailed info
+kubectl describe cronjob people-analytics-sync -n leet-monitor
+</code></pre>
+<h2>View Recent Jobs</h2>
+<pre><code class="language-bash"># List all jobs created by the CronJob
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor
+
+# List with timestamps
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor --sort-by=.metadata.creationTimestamp
+</code></pre>
+<h2>View Logs</h2>
+<h3>Latest Job Logs</h3>
+<pre><code class="language-bash"># Get logs from the most recent job
+kubectl logs -l app=people-analytics-sync -n leet-monitor --tail=100
+
+# Follow logs in real-time
+kubectl logs -f -l app=people-analytics-sync -n leet-monitor
+</code></pre>
+<h3>Specific Job Logs</h3>
+<pre><code class="language-bash"># List jobs to get the job name
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor
+
+# View logs for a specific job (replace &lt;job-name&gt; with actual name)
+kubectl logs job/&lt;job-name&gt; -n leet-monitor
+
+# Example:
+kubectl logs job/people-analytics-sync-28451234 -n leet-monitor
+</code></pre>
+<h3>Last N Jobs Logs</h3>
+<pre><code class="language-bash"># Get logs from last 5 jobs
+for job in $(kubectl get jobs -l app=people-analytics-sync -n leet-monitor --sort-by=.metadata.creationTimestamp -o name | tail -5); do
+  echo &quot;=== $job ===&quot;
+  kubectl logs $job -n leet-monitor --tail=20
+  echo &quot;&quot;
+done
+</code></pre>
+<h2>Monitor in Real-Time</h2>
+<pre><code class="language-bash"># Watch jobs being created
+watch -n 5 &#39;kubectl get jobs -l app=people-analytics-sync -n leet-monitor&#39;
+
+# Follow latest logs continuously
+kubectl logs -f -l app=people-analytics-sync -n leet-monitor --tail=50
+</code></pre>
+<h2>Check for Errors</h2>
+<pre><code class="language-bash"># Filter for errors only
+kubectl logs -l app=people-analytics-sync -n leet-monitor | grep -i error
+
+# Check failed jobs
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor | grep -i failed
+
+# View logs of failed jobs
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor -o json | \
+  jq -r &#39;.items[] | select(.status.failed &gt; 0) | .metadata.name&#39; | \
+  xargs -I {} kubectl logs job/{} -n leet-monitor
+</code></pre>
+<h2>Check Sync Status in Database</h2>
+<pre><code class="language-bash"># Connect to database
+psql -h your-db-host.db.ondigitalocean.com -p 25060 -U doadmin -d people_analytics
+
+# View recent sync logs
+SELECT 
+    id,
+    sync_started_at,
+    sync_completed_at,
+    status,
+    records_synced,
+    error_message
+FROM sync_logs
+ORDER BY sync_started_at DESC
+LIMIT 10;
+
+# Check record counts
+SELECT COUNT(*) as total_records FROM people_analytics_records;
+SELECT DATE(first_timestamp) as date, COUNT(*) as records 
+FROM people_analytics_records 
+GROUP BY DATE(first_timestamp) 
+ORDER BY date DESC 
+LIMIT 10;
+</code></pre>
+<h2>Quick Status Check</h2>
+<pre><code class="language-bash"># One-liner to see latest sync status
+kubectl get jobs -l app=people-analytics-sync -n leet-monitor --sort-by=.metadata.creationTimestamp | tail -1 | awk &#39;{print $1}&#39; | xargs -I {} kubectl logs job/{} -n leet-monitor --tail=10
+</code></pre>
+</body>
+</html>

@@ -1,0 +1,23 @@
+---
+description: User labels v1/v2/both per request; never edit both unless asked; deploy clasp / v2 image / people-api image after changes.
+alwaysApply: true
+---
+
+# Scope: v1 vs v2 vs people-api
+
+## Agreement with the user
+
+- The user will **tag each request** as **v1**, **v2**, **both**, and/or **people-api** (or equivalent wording) so the target is explicit.
+- **Do not edit `monitoring-app-v1/` and `monitoring-app-v2/` in the same change** unless the user asked for **both** (or the fix truly requires both and they confirmed — default is **one target per task**).
+
+## After code changes — mandatory deploy (unless user says skip deploy)
+
+Run these in **WSL** when the matching files changed. Full commands and verification live in **`deploy-gas-and-people-api.mdc`**.
+
+| Target | What to run after changes |
+|--------|---------------------------|
+| **v1** (GAS, `monitoring-app-v1/`) | **`clasp push`** from **`monitoring-app-v1/`** — **every time** v1 sources change (`.js`, `index.html`, `appsscript.json`, `.clasp.json`). |
+| **v2** (`monitoring-app-v2/`) | **`npm run build`**, **`docker build` + `docker push`** `monitoring-app-v2:latest`, **`kubectl rollout restart`** deployment **`monitoring-app-v2`** + verification (see deploy rule). |
+| **people-api** (`people-analytics-sync/`, `Dockerfile.api`, `requirements.txt`) | **`docker build`** API image, **`docker push`** `people-analytics-sync:api-latest`, **`kubectl rollout restart`** **`people-analytics-api`** + verification. |
+
+Skip steps that do not apply to the touched codebase. Do not run **clasp** when only v2 or people-api changed; do not rebuild images when only v1 GAS changed.
