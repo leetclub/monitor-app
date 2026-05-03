@@ -9,7 +9,7 @@ alwaysApply: true
 
 **Legacy:** `monitoring-app` (GAS). Prefer not to change it for **new product features** (use v2 + API) unless the user asks for legacy work — but when this session **does** change GAS files, **`clasp push` is part of the mandatory pipeline** (see above). **Do not remove or break APIs** the legacy app (or others) still use; extend backend routes for v2 instead.
 
-**Azure DevOps:** For **alert**, **people-analytics-api**, and **monitoring-app-v2**, see **`azure-devops-push-only.mdc`**: the agent **commits and pushes** to Azure after changes so pipelines deploy — **do not** run `docker` / `kubectl` unless the user explicitly asks for a manual deploy.
+**Azure DevOps:** For **alert**, **people-analytics-api**, and **monitoring-app-v2**, see **`azure-devops-push-only.mdc`**: the agent **`git commit`**, then **`git push origin`**, then **`scripts/sync-to-azure-dev.sh`** for each changed mapped folder (normal **`git push`** into Azure **`dev`** — see **`azure-repos-sync-from-monorepo.mdc`**). Subtree script is fallback only. **Do not** run `docker` / `kubectl` unless the user explicitly asks for a manual deploy.
 
 When this session **changes** code **not** covered by those pipelines (or legacy flows), **run the full deploy pipeline yourself** in **Ubuntu WSL** when applicable (unless the user says to skip deploy). **Do not ask for permission** for pull, build, docker push, kubectl, clasp where still required. The user has authorized running commands needed for deploy.
 

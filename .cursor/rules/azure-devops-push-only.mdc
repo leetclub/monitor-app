@@ -1,35 +1,44 @@
 ---
-description: Agent commits and pushes to Azure after alert/people-api/v2 changes; no local docker/kubectl unless asked.
+description: After commits — git push origin (monorepo); mirror alert/v2/people to Azure Repos dev via sync script (normal git push), not subtree by default.
 alwaysApply: true
 ---
 
-# Azure DevOps deploy (alert, people-api, monitoring-app-v2)
+# Azure DevOps — pipelines on Azure Repos `dev`
 
-The user’s **Azure DevOps pipelines** **build, push images, and roll out Kubernetes** when code lands on the tracked branch. **Local `docker` / `kubectl` is not the default** for these apps.
+Pipelines are wired to **Azure Repos**, not GitHub `origin`. Still: **`git push origin` is mandatory** for this monorepo so GitHub stays current; Azure sync is **additional** for CI.
 
-## Mandatory for the agent (unless the user says **skip push** or **skip deploy**)
+| Folder in this monorepo | Azure DevOps repo |
+|-------------------------|-------------------|
+| `apps/alert-theleetclub-com/` | `https://dev.azure.com/leetclub/Leet%20Monitor/_git/alert` |
+| `monitoring-app-v2/` | `https://dev.azure.com/leetclub/Leet%20Monitor/_git/monitoring-app-v2` |
+| `people-analytics-sync/` | `https://dev.azure.com/leetclub/Leet%20Monitor/_git/people-analytics-sync` |
 
-When this session **changes** files under any of the paths below, **do not finish** until **`git commit` and `git push`** have been attempted for the Git repo that contains those changes:
+## Mandatory for the agent (unless the user says **skip push**)
 
-1. **`git status`** — confirm what changed.
-2. **`git add`** the relevant paths (or all intentional changes).
-3. **`git commit -m "…"`** — clear message describing the change.
-4. **`git push`** to the **Azure DevOps remote** (check **`git remote -v`** — often `origin`, `azure`, or `ssh.dev.azure.com` / `dev.azure.com`).
+After changing files under **any** of the three folders above (or other monorepo edits you committed in the same session):
 
-If push fails (auth, branch protection, conflicts): report the error and remaining steps; **do not assume** the pipeline ran.
+1. **`git status` / `git add` / `git commit`** in this monorepo (clear message).
 
-If this workspace is a **monorepo** with **one** Azure remote, **one push** for that commit is enough (pipelines may filter by path).
+2. **`git push origin`** (or the branch’s upstream, usually **`main`**) from repo root — **WSL bash** if Windows breaks `git`. This is the **normal monorepo push**; do **not** leave `main` only local while claiming the session is done.
 
-If the user uses **separate repo clones** per app, **push in each clone** you modified.
+3. **Mirror to Azure Repos branch `dev`** for each product tree you touched — **prefer the sync script** (clone + rsync + **normal `git push`** — fast, reliable). From repo root in **WSL**:
 
-**Do not** run `docker build`, `docker push`, or `kubectl rollout` for alert / people-api / monitoring-app-v2 **unless the user explicitly asks** for a manual image deploy.
+   ```bash
+   bash scripts/sync-to-azure-dev.sh alert apps/alert-theleetclub-com
+   bash scripts/sync-to-azure-dev.sh monitoring-app-v2 monitoring-app-v2
+   bash scripts/sync-to-azure-dev.sh people-analytics-sync people-analytics-sync
+   ```
 
-## Which paths trigger a required push
+   Run **only the line(s)** for the folder(s) you changed. Full mapping and auth: **`azure-repos-sync-from-monorepo.mdc`**. PAT: repo-root **`azure.txt`** (via **`scripts/ado-curl-auth.sh`**). **Do not** paste the PAT in chat.
 
-| Paths touched | Pipeline / product (typical) |
-|---------------|------------------------------|
-| `apps/alert-theleetclub-com/` | Alert frontend |
-| `people-analytics-sync/` (incl. API, `Dockerfile.api`) | people-analytics-api |
-| `monitoring-app-v2/` | monitoring-app-v2 |
+4. **Pipelines:** `dev` is what **`azure-pipelines.yml`** triggers on in each Azure repo — **not** `main` unless you changed pipelines.
 
-Legacy GAS (`monitoring-app-v1/`) still follows **`deploy-gas-and-people-api.mdc`** (`clasp push` when applicable).
+5. **Do not treat `git push origin` alone as “Azure / CI done”.** Origin does **not** replace step 3. Conversely, **do not** skip **`git push origin`** just because you ran Azure sync.
+
+6. **Fallback (slow):** If **`sync-to-azure-dev.sh`** cannot be used, **`bash scripts/push-to-azure-repos.sh`** (`git subtree push`) is a last resort — it can take a long time and look stuck; see script for remotes **`ado-alert`**, **`ado-v2`**, **`ado-people`**.
+
+7. If either push fails: print the **exact** error (no credentials). Do not assume the pipeline ran.
+
+**Do not** run `docker` / `kubectl` for these products unless the user explicitly asks.
+
+Legacy GAS (`monitoring-app-v1/`) still follows **`deploy-gas-and-people-api.mdc`** where applicable.
