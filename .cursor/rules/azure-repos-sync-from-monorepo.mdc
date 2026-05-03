@@ -1,0 +1,49 @@
+---
+description: After edits under monitoring-app-v2, alert app, or people-analytics-sync — sync all changed ADO repos in one session (no user reminder needed).
+alwaysApply: true
+---
+
+# Azure Repos sync (monorepo → separate ADO repos)
+
+Source of truth for CI is **Azure Repos `dev`**, not only local files or GitHub. When you change anything under these paths — especially **`azure-pipelines.yml`**, Docker/k8s files, or app source — **finish by mirroring every affected repo** in the same session (WSL), unless the user said **skip Azure sync**.
+
+## Preferred: one command for all changed products
+
+From repo root, **after `git commit` and before `git push origin`**:
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app   # or your WSL path to repo root
+
+bash scripts/sync-changed-azure-repos.sh
+```
+
+That script runs **`sync-to-azure-dev.sh`** once per product folder (**alert**, **monitoring-app-v2**, **people-analytics-sync**) that appears in commits since **`merge-base(origin/main, HEAD)`**. **Always use this** when more than one product path may have changed, so you never push only one ADO repo.
+
+## Manual: single repo
+
+```bash
+bash scripts/sync-to-azure-dev.sh monitoring-app-v2 monitoring-app-v2
+bash scripts/sync-to-azure-dev.sh alert apps/alert-theleetclub-com
+bash scripts/sync-to-azure-dev.sh people-analytics-sync people-analytics-sync
+```
+
+Mappings:
+
+| Azure DevOps repo slug | Monorepo folder |
+|------------------------|-----------------|
+| `monitoring-app-v2` | `monitoring-app-v2/` |
+| `alert` | `apps/alert-theleetclub-com/` |
+| `people-analytics-sync` | `people-analytics-sync/` |
+
+Requires **`azure.txt`** at repo root with PAT on **line 2** (after `azuredevops:` line). Requires **network**. Auth: **`scripts/ado-curl-auth.sh`**.
+
+## Do not
+
+- Sync **only one** ADO repo when the same commit batch touched **multiple** product folders — run **`sync-changed-azure-repos.sh`** (or the three **`sync-to-azure-dev.sh`** lines for each changed path).
+- Stop after editing YAML or app code without running the sync step(s).
+- Tell the user to “push to Azure” when this agent can run the script(s) above.
+
+## If sync fails
+
+- Fix auth (`azure.txt`), PAT scopes (**Code: Read & write**), or script errors; report the exact stderr.
+- UI-only steps (e.g. **Authorize** secure files / service connections) still belong to the user — say what to click.

@@ -35,6 +35,14 @@
 !/.cursor/
 !/.cursor/**
 
+# ADO sync: unignore `scripts/`, ignore its contents, then allow only these files
+!/scripts/
+/scripts/*
+!/scripts/sync-to-azure-dev.sh
+!/scripts/sync-changed-azure-repos.sh
+!/scripts/push-to-azure-repos.sh
+!/scripts/ado-curl-auth.sh
+
 # Products for Azure Pipelines (otherwise root `/*` ignores these folders entirely)
 !/apps/
 !/apps/alert-theleetclub-com/

@@ -1,5 +1,5 @@
 ---
-description: After commits — git push origin (monorepo); mirror alert/v2/people to Azure Repos dev via sync script (normal git push), not subtree by default.
+description: After commits — sync every changed ADO product (script), then git push origin; mirror via sync-to-azure-dev.sh, not subtree by default.
 alwaysApply: true
 ---
 
@@ -15,13 +15,23 @@ Pipelines are wired to **Azure Repos**, not GitHub `origin`. Still: **`git push 
 
 ## Mandatory for the agent (unless the user says **skip push**)
 
-After changing files under **any** of the three folders above (or other monorepo edits you committed in the same session):
+After commits that should go to GitHub and Azure:
 
 1. **`git status` / `git add` / `git commit`** in this monorepo (clear message).
 
-2. **`git push origin`** (or the branch’s upstream, usually **`main`**) from repo root — **WSL bash** if Windows breaks `git`. This is the **normal monorepo push**; do **not** leave `main` only local while claiming the session is done.
+2. **Mirror every product repo that has new commits** (not just one folder). From repo root in **WSL**:
 
-3. **Mirror to Azure Repos branch `dev`** for each product tree you touched — **prefer the sync script** (clone + rsync + **normal `git push`** — fast, reliable). From repo root in **WSL**:
+   ```bash
+   bash scripts/sync-changed-azure-repos.sh
+   ```
+
+   This compares **`merge-base(origin/main, HEAD)..HEAD`** and runs **`sync-to-azure-dev.sh`** for **each** of **alert**, **monitoring-app-v2**, and **people-analytics-sync** whose paths appear in that diff. **Do not** sync only alert when people-api or v2 also changed in the same batch.
+
+   Run **`before`** **`git push origin`** so unpushed commits are still visible to the script. Details: **`azure-repos-sync-from-monorepo.mdc`**.
+
+3. **`git push origin`** (usually **`main`**) — **WSL bash** if Windows breaks `git`.
+
+4. **Manual / recovery:** To force one tree without relying on commit detection:
 
    ```bash
    bash scripts/sync-to-azure-dev.sh alert apps/alert-theleetclub-com
@@ -29,15 +39,15 @@ After changing files under **any** of the three folders above (or other monorepo
    bash scripts/sync-to-azure-dev.sh people-analytics-sync people-analytics-sync
    ```
 
-   Run **only the line(s)** for the folder(s) you changed. Full mapping and auth: **`azure-repos-sync-from-monorepo.mdc`**. PAT: repo-root **`azure.txt`** (via **`scripts/ado-curl-auth.sh`**). **Do not** paste the PAT in chat.
+   Use if **`sync-changed-azure-repos.sh`** skipped a path you still need (e.g. you already pushed and the diff vs `origin/main` is empty).
 
-4. **Pipelines:** `dev` is what **`azure-pipelines.yml`** triggers on in each Azure repo — **not** `main` unless you changed pipelines.
+5. **Pipelines:** `dev` is what **`azure-pipelines.yml`** triggers on in each Azure repo — **not** `main` unless you changed pipelines.
 
-5. **Do not treat `git push origin` alone as “Azure / CI done”.** Origin does **not** replace step 3. Conversely, **do not** skip **`git push origin`** just because you ran Azure sync.
+6. **Do not treat `git push origin` alone as “Azure / CI done”.** Conversely, **do not** skip **`git push origin`** after a successful Azure sync.
 
-6. **Fallback (slow):** If **`sync-to-azure-dev.sh`** cannot be used, **`bash scripts/push-to-azure-repos.sh`** (`git subtree push`) is a last resort — it can take a long time and look stuck; see script for remotes **`ado-alert`**, **`ado-v2`**, **`ado-people`**.
+7. **Fallback (slow):** If **`sync-to-azure-dev.sh`** cannot be used, **`bash scripts/push-to-azure-repos.sh`** (`git subtree push`) is a last resort.
 
-7. If either push fails: print the **exact** error (no credentials). Do not assume the pipeline ran.
+8. If either push fails: print the **exact** error (no credentials). PAT: **`azure.txt`** / **`scripts/ado-curl-auth.sh`** — **do not** paste tokens in chat.
 
 **Do not** run `docker` / `kubectl` for these products unless the user explicitly asks.
 

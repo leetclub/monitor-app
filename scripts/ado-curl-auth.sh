@@ -13,6 +13,8 @@ if [[ -z "$TOKEN" ]]; then
   echo "Empty PAT on line 2 of azure.txt" >&2
   return 1 2>/dev/null || exit 1
 fi
+# sync-to-azure-dev.sh encodes this into the git HTTPS URL
+ADO_PAT="$TOKEN"
 if command -v base64 >/dev/null 2>&1; then
   ADO_BASIC_B64="$(printf ':%s' "$TOKEN" | base64 -w0 2>/dev/null || printf ':%s' "$TOKEN" | base64)"
 else
