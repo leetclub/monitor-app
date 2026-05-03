@@ -4,7 +4,7 @@ import { ComparePresetPicker, CompareSelection } from '@/components/ComparePrese
 import { apiGet } from '@/lib/api';
 import { safeText } from '@/lib/safeText';
 
-type Machine = { id: string; name: string };
+type Machine = { id: string; name: string; vendon_location_owner?: string | null };
 type MachinesResponse = { machines: Machine[] };
 
 function defaultCompare(): CompareSelection {
@@ -35,6 +35,10 @@ export function OverallPage() {
     return raw.map((m) => ({
       id: safeText(m?.id),
       name: safeText(m?.name) || safeText(m?.id),
+      vendon_location_owner:
+        m?.vendon_location_owner != null && String(m.vendon_location_owner).trim()
+          ? safeText(m.vendon_location_owner)
+          : null,
     }));
   }, [machinesQ.data]);
 
@@ -43,7 +47,10 @@ export function OverallPage() {
       <header className="pageHero">
         <div className="pageHeroMain">
           <h1 className="pageTitle">Overall</h1>
-          <p className="pageSubtitle">All machines in scope. KPI columns fill in as data sources connect.</p>
+          <p className="pageSubtitle">
+            Full fleet from Vendon (same machine list as Admin). Test / IMEI-excluded machines are omitted server-side.
+            Row-level Red Alert criteria (stale tx, OFF, vend fails) apply on the Red Flags tab only.
+          </p>
         </div>
         <div className="pageHeroAside">
           <p className="pageMeta">Auto refresh ~1 min</p>
@@ -56,7 +63,10 @@ export function OverallPage() {
       <section className="surfaceCard surfaceCardSpaced">
         <div className="surfaceSectionLabel">Comparison</div>
         <ComparePresetPicker value={compare} onChange={setCompare} />
-        <p className="surfaceHint">Preset ranges apply when metrics are wired; the machine list below is always current.</p>
+        <p className="surfaceHint">
+          Presets mirror workbook-style ranges for when KPI columns are wired from analytics. The fleet table is live
+          Vendon metadata.
+        </p>
       </section>
 
       {machinesQ.isError ? (
@@ -78,16 +88,14 @@ export function OverallPage() {
             <thead>
               <tr>
                 <th>Machine</th>
-                <th>ID</th>
-                <th>KPI A</th>
-                <th>KPI B</th>
-                <th>KPI C</th>
+                <th>Machine ID</th>
+                <th>Location / site tag</th>
               </tr>
             </thead>
             <tbody>
               {machinesQ.isLoading ? (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={3} className="muted">
                     Loading…
                   </td>
                 </tr>
@@ -96,14 +104,12 @@ export function OverallPage() {
                 <tr key={m.id}>
                   <td>{m.name}</td>
                   <td className="muted">{m.id}</td>
-                  <td className="muted">—</td>
-                  <td className="muted">—</td>
-                  <td className="muted">—</td>
+                  <td>{m.vendon_location_owner || '—'}</td>
                 </tr>
               ))}
               {machines.length === 0 && !machinesQ.isLoading ? (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={3} className="muted">
                     No machines returned.
                   </td>
                 </tr>
@@ -115,4 +121,3 @@ export function OverallPage() {
     </div>
   );
 }
-

@@ -37,6 +37,7 @@ from dashboard_access_models import (
 )
 from dashboard_access_routes import ALL_DASHBOARD_TAB_IDS, SUPER_ADMIN_EMAILS, _check_secret
 from vendon_constants import EVENT_NAME_MAPPING, EXCLUDED_EVENT_NAMES
+from vendon_machine_helpers import machine_location_for_red_alert, machine_row_excluded
 
 logger = logging.getLogger(__name__)
 
@@ -644,16 +645,21 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
         return {"error": m_err, "rows": []}
     mrows = mdata.get("result") if isinstance(mdata, dict) else None
     mrows = mrows if isinstance(mrows, list) else []
-    machine_list = [
-        {
-            "id": str(m.get("id")),
-            "name": m.get("name") or str(m.get("id")),
-            # Vendon machine payload varies; try common fields.
-            "location": (m.get("location_name") or m.get("location") or m.get("site") or m.get("address") or "") or "",
-        }
-        for m in mrows
-        if m.get("id") is not None
-    ]
+    machine_list = []
+    for m in mrows:
+        if m.get("id") is None:
+            continue
+        mid = str(m.get("id"))
+        name = m.get("name") or mid
+        if machine_row_excluded(name, mid):
+            continue
+        machine_list.append(
+            {
+                "id": mid,
+                "name": name,
+                "location": machine_location_for_red_alert(m),
+            }
+        )
 
     cleaning_rules: List[MachineCleaningSchedule] = []
     db_sched = _dash_session()

@@ -17,6 +17,7 @@ from dashboard_access_models import (
     create_dashboard_engine_and_session,
 )
 from dashboard_access_routes import resolve_session_allowed_tabs
+from vendon_machine_helpers import machine_row_excluded, vendon_location_owner_tag
 
 logger = logging.getLogger(__name__)
 
@@ -138,42 +139,6 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
         return None, str(ex)
 
 
-def _vendon_location_owner_tag(m: Dict[str, Any]) -> Optional[str]:
-    """Best-effort location / site tag from a Vendon ``/machine`` row (schema varies by tenant)."""
-    if not isinstance(m, dict):
-        return None
-    loc = m.get("location")
-    if isinstance(loc, str) and loc.strip():
-        return loc.strip()
-    if isinstance(loc, dict):
-        for key in ("name", "title", "label", "location_name"):
-            v = loc.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-    for key in ("location_name", "site_name", "customer_name", "branch_name"):
-        v = m.get(key)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    site = m.get("site")
-    if isinstance(site, dict):
-        for key in ("name", "title", "label"):
-            v = site.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-    customer = m.get("customer")
-    if isinstance(customer, dict):
-        for key in ("name", "title", "label"):
-            v = customer.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-    grp = m.get("group")
-    if isinstance(grp, dict):
-        v = grp.get("name") or grp.get("title")
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    return None
-
-
 def _vendon_location_endpoint_names() -> List[str]:
     """Optional ``/location`` list — empty if the endpoint is missing or errors."""
     data, err = _vendon_get("/location", None)
@@ -212,13 +177,17 @@ def register_alert_routes(app) -> None:
         for m in rows:
             if m.get("id") is None:
                 continue
-            tag = _vendon_location_owner_tag(m)
+            mid = str(m.get("id"))
+            mname = m.get("name") or mid
+            if machine_row_excluded(mname, mid):
+                continue
+            tag = vendon_location_owner_tag(m)
             if tag:
                 tags_from_machines.append(tag)
             machines.append(
                 {
-                    "id": str(m.get("id")),
-                    "name": (m.get("name") or str(m.get("id"))),
+                    "id": mid,
+                    "name": mname,
                     "vendon_location_owner": tag,
                 }
             )

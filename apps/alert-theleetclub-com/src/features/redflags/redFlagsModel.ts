@@ -1,6 +1,6 @@
 import type { RedAlertCompareMode, RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
 
-/** Substrings matched on machineName (legacy client parity). */
+/** Substrings matched on machine name or id (parity with monitoring-app-v2 + API exclusion). */
 const EXCLUDED_NAME_MARKERS = ['869951037923178', '869951037920851'];
 
 /** Optional: operator names that use DC cleaning schedule filtering (legacy window globals). */
@@ -65,7 +65,6 @@ function deriveLastTxIsoFromSnapshot(row: RedAlertRow, generatedAt?: string | nu
   return new Date(g - n * 60000).toISOString();
 }
 
-/** Match legacy row fallbacks; optional `generatedAt` estimates ISO from minutes when API omitted timestamps (stale cache). */
 export function pickLastTransactionTs(row: RedAlertRow, generatedAt?: string | null): string | null {
   const d = pickDirectLastTransactionTs(row);
   if (d) return d;
@@ -134,7 +133,6 @@ function tokensFromCleaningOperator(co: string | null | undefined): string[] {
   return out;
 }
 
-/** Match legacy + API: static first-name list plus names embedded in cleaningOperator (schedule contact). */
 export function operatorOnDcSchedule(row: RedAlertRow): boolean {
   const s = getOperatorDisplay(row)
     .toLowerCase()
@@ -294,7 +292,6 @@ export type FreqSplit = {
   top: string;
   bottom: string;
   bottomClass: 'up' | 'down' | 'flat';
-  /** When bottomClass is up: stronger red for larger positive Δ%. */
   upBand?: 1 | 2 | 3 | 4;
   title: string;
 };
@@ -330,7 +327,7 @@ export function freqSplit(row: RedAlertRow, mode: RedAlertCompareMode = 'week'):
     top = ht != null ? `${ht}/d` : '—/d';
     pv = row.happenedPctVsYesterdaySameElapsed;
     tip =
-      'Kuwait today so far (calendar day): combined A+B+C. % compares to the same elapsed period on yesterday’s calendar day.';
+      "Kuwait today so far (calendar day): combined A+B+C. % compares to the same elapsed period on yesterday's calendar day.";
   } else {
     let hw: number | null | undefined =
       row.happensWeek != null ? row.happensWeek : fq.totalCriteriaHitsThisWeek;
