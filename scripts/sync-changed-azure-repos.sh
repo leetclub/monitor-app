@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Run sync-to-azure-dev.sh for every mapped product folder that has commits
-# not yet in origin/main (merge-base..HEAD). Run before `git push origin`.
+# not yet in origin/dev (merge-base..HEAD). Run before `git push origin dev`.
 #
 # Usage (repo root): bash scripts/sync-changed-azure-repos.sh
-# Optional: AZURE_SYNC_UPSTREAM=origin/main (default)
+# Optional: AZURE_SYNC_UPSTREAM=origin/dev (default; pipelines use Azure branch dev)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-UPSTREAM="${AZURE_SYNC_UPSTREAM:-origin/main}"
+UPSTREAM="${AZURE_SYNC_UPSTREAM:-origin/dev}"
 if ! git rev-parse -q --verify "$UPSTREAM" >/dev/null 2>&1; then
-  echo "Ref $UPSTREAM not found. Try: git fetch origin" >&2
+  echo "Ref $UPSTREAM not found. Create/push branch dev on origin or: git fetch origin dev && git branch -u origin/dev dev" >&2
   exit 1
 fi
 

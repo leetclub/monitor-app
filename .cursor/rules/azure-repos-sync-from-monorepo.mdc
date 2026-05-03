@@ -9,7 +9,7 @@ Source of truth for CI is **Azure Repos `dev`**, not only local files or GitHub.
 
 ## Preferred: one command for all changed products
 
-From repo root, **after `git commit` and before `git push origin`**:
+From repo root, **after `git commit` and before `git push origin dev`** (integration branch is **`dev`**, not **`main`**):
 
 ```bash
 cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app   # or your WSL path to repo root
@@ -17,7 +17,7 @@ cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app   # or your WSL path t
 bash scripts/sync-changed-azure-repos.sh
 ```
 
-That script runs **`sync-to-azure-dev.sh`** once per product folder (**alert**, **monitoring-app-v2**, **people-analytics-sync**) that appears in commits since **`merge-base(origin/main, HEAD)`**. **Always use this** when more than one product path may have changed, so you never push only one ADO repo.
+That script runs **`sync-to-azure-dev.sh`** once per product folder (**alert**, **monitoring-app-v2**, **people-analytics-sync**) that appears in commits since **`merge-base(origin/dev, HEAD)`** (default; set **`AZURE_SYNC_UPSTREAM`** only if the monorepo uses a different upstream). **Always use this** when more than one product path may have changed, so you never push only one ADO repo.
 
 ## Manual: single repo
 

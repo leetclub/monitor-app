@@ -11,7 +11,7 @@ When this session touches infrastructure, CI/CD, secrets, or deployment-related 
 
 1. **Deploy rule:** When production-facing code or images change, follow **`deploy-gas-and-people-api.mdc`** (and **`scope-v1-v2-and-deploy.mdc`**) — build, `docker push`, `kubectl rollout` + mandatory verification, **`clasp push`** only when `monitoring-app-v1/` changed. Skip only if the user explicitly said **skip deploy**.
 
-2. **Azure Repos (`dev`):** Whenever **`monitoring-app-v2/`**, **`apps/alert-theleetclub-com/`**, or **`people-analytics-sync/`** changes (pipelines, app code, k8s), run **`scripts/sync-changed-azure-repos.sh`** after commit and **before** **`git push origin`** so **every** changed product repo is mirrored — see **`azure-repos-sync-from-monorepo.mdc`**. Do not stop at local edits and do not sync only one folder if others changed in the same batch.
+2. **Azure Repos (`dev`):** Whenever **`monitoring-app-v2/`**, **`apps/alert-theleetclub-com/`**, or **`people-analytics-sync/`** changes (pipelines, app code, k8s), run **`scripts/sync-changed-azure-repos.sh`** after commit and **before** **`git push origin dev`** so **every** changed product repo is mirrored — see **`azure-repos-sync-from-monorepo.mdc`**. Routine updates use **`dev`**, not **`main`**. Do not stop at local edits and do not sync only one folder if others changed in the same batch.
 
 3. **Docker Hub variable group (optional):** If **`azure.txt`** token / **`ado_sync_dockerhub_var_group.py`** changed and you still use Library secrets for Docker, run `python3 scripts/ado_sync_dockerhub_var_group.py`.
 

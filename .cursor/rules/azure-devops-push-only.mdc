@@ -1,11 +1,11 @@
 ---
-description: After commits — sync every changed ADO product (script), then git push origin; mirror via sync-to-azure-dev.sh, not subtree by default.
+description: After commits on dev — sync every changed ADO product, then git push origin dev (not main); Azure mirrors stay on branch dev.
 alwaysApply: true
 ---
 
 # Azure DevOps — pipelines on Azure Repos `dev`
 
-Pipelines are wired to **Azure Repos**, not GitHub `origin`. Still: **`git push origin` is mandatory** for this monorepo so GitHub stays current; Azure sync is **additional** for CI.
+Pipelines are wired to **Azure Repos**, not GitHub `origin`. Integration branch is **`dev`** (not **`main`**): **`git push origin dev`** is mandatory so **`origin/dev`** stays current; Azure product mirrors are **additional** (they also target Azure branch **`dev`**).
 
 | Folder in this monorepo | Azure DevOps repo |
 |-------------------------|-------------------|
@@ -17,7 +17,7 @@ Pipelines are wired to **Azure Repos**, not GitHub `origin`. Still: **`git push 
 
 After commits that should go to GitHub and Azure:
 
-1. **`git status` / `git add` / `git commit`** in this monorepo (clear message).
+1. **`git status` / `git add` / `git commit`** on branch **`dev`** (or merge into **`dev`** before pushing — do **not** treat **`main`** as the default publish branch unless the user explicitly asked for **`main`**).
 
 2. **Mirror every product repo that has new commits** (not just one folder). From repo root in **WSL**:
 
@@ -25,11 +25,11 @@ After commits that should go to GitHub and Azure:
    bash scripts/sync-changed-azure-repos.sh
    ```
 
-   This compares **`merge-base(origin/main, HEAD)..HEAD`** and runs **`sync-to-azure-dev.sh`** for **each** of **alert**, **monitoring-app-v2**, and **people-analytics-sync** whose paths appear in that diff. **Do not** sync only alert when people-api or v2 also changed in the same batch.
+   This compares **`merge-base(origin/dev, HEAD)..HEAD`** (override with **`AZURE_SYNC_UPSTREAM`** only if the repo truly uses another ref) and runs **`sync-to-azure-dev.sh`** for **each** of **alert**, **monitoring-app-v2**, and **people-analytics-sync** whose paths appear in that diff. **Do not** sync only alert when people-api or v2 also changed in the same batch.
 
-   Run **`before`** **`git push origin`** so unpushed commits are still visible to the script. Details: **`azure-repos-sync-from-monorepo.mdc`**.
+   Run **`before`** **`git push origin dev`** so unpushed commits are still visible to the script. Details: **`azure-repos-sync-from-monorepo.mdc`**.
 
-3. **`git push origin`** (usually **`main`**) — **WSL bash** if Windows breaks `git`.
+3. **Push GitHub branch `dev`**, not **`main`**: **`git push origin dev`** when your checked-out branch is **`dev`**; if you are temporarily on another branch but the work belongs on **`dev`**, use **`git push origin HEAD:dev`**. Never default to **`git push origin main`** for routine code updates.
 
 4. **Manual / recovery:** To force one tree without relying on commit detection:
 
@@ -39,11 +39,11 @@ After commits that should go to GitHub and Azure:
    bash scripts/sync-to-azure-dev.sh people-analytics-sync people-analytics-sync
    ```
 
-   Use if **`sync-changed-azure-repos.sh`** skipped a path you still need (e.g. you already pushed and the diff vs `origin/main` is empty).
+   Use if **`sync-changed-azure-repos.sh`** skipped a path you still need (e.g. you already pushed and the diff vs **`origin/dev`** is empty).
 
-5. **Pipelines:** `dev` is what **`azure-pipelines.yml`** triggers on in each Azure repo — **not** `main` unless you changed pipelines.
+5. **Pipelines:** Azure **`dev`** is what **`azure-pipelines.yml`** triggers on in each Azure repo — **not** **`main`**.
 
-6. **Do not treat `git push origin` alone as “Azure / CI done”.** Conversely, **do not** skip **`git push origin`** after a successful Azure sync.
+6. **Do not treat `git push origin dev` alone as “Azure / CI done”.** Conversely, **do not** skip **`git push origin dev`** after a successful Azure sync.
 
 7. **Fallback (slow):** If **`sync-to-azure-dev.sh`** cannot be used, **`bash scripts/push-to-azure-repos.sh`** (`git subtree push`) is a last resort.
 
