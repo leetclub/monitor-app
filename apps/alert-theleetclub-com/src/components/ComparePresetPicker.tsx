@@ -46,17 +46,30 @@ function todayLocal() {
   return d;
 }
 
+/** Default: Today vs Yesterday (calendar day, local) — used by Red Flags & Overall. */
+export function createDefaultCompareSelection(): CompareSelection {
+  const t0 = todayLocal();
+  const t1 = addDays(t0, 1);
+  const y0 = addDays(t0, -1);
+  const y1 = t0;
+  return {
+    preset: 'today_vs_yesterday',
+    a: { start: yyyyMmDd(t0), end: yyyyMmDd(t1) },
+    b: { start: yyyyMmDd(y0), end: yyyyMmDd(y1) },
+  };
+}
+
 export function ComparePresetPicker(props: {
   value: CompareSelection;
   onChange: (next: CompareSelection) => void;
 }) {
   const labels: Record<ComparePresetId, string> = useMemo(
     () => ({
-      today_vs_yesterday: 'Today vs Yesterday (default)',
-      today_vs_same_day_last_week: 'Today vs Same Day Last Week',
-      wtd_vs_last_week: 'WTD vs Last Week',
-      mtd_vs_mtd: 'Month-to-date vs Month-to-date',
-      custom_vs_custom: 'Custom period vs Custom period',
+      today_vs_yesterday: 'Today VS Yesterday (default view)',
+      today_vs_same_day_last_week: 'Today VS Same Day Last Week',
+      wtd_vs_last_week: 'WTD VS Last Week',
+      mtd_vs_mtd: 'Month to date VS Month to date',
+      custom_vs_custom: 'Custom period VS Custom period',
     }),
     [],
   );

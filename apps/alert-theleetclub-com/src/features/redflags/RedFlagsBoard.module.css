@@ -282,6 +282,26 @@
   color: var(--muted);
 }
 
+.compareBar {
+  margin: 0 1rem 0.35rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.compareBar :global(.comparePickerRow) label {
+  color: rgba(226, 232, 240, 0.92);
+  font-size: 0.78rem;
+}
+
+.compareBarHint {
+  margin: 0 1rem 0.65rem;
+  font-size: 0.72rem;
+  color: rgba(148, 163, 184, 0.95);
+  line-height: 1.45;
+}
+
 .body {
   padding: 0 1rem 1.1rem;
 }

@@ -13,9 +13,9 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/` | Entry | Redirect to **Home**. |
 | `/login` | Login | Google sign-in. |
 | `/home` | Home | Cards: **Red Flags** → **Overall** → **Admin** (if role allows). |
-| `/red-flags` | Red Flags | Failing machines; reasons; compare strip for KPI work. |
-| `/overall` | Overall | Fleet list; compare strip. |
-| `/admin` | Admin | **Machines** (profiles, location owner / Vendon readout), **Who can use Alert**, **My access**, **Advanced**. |
+| `/red-flags` | Red Flags | Monitor **Red Alert**–style table: only machines with **active violations**; five **timespan presets** (incl. Today VS Yesterday default); ~1 min refresh. |
+| `/overall` | Overall | **All** machines + snapshot columns; same timespan presets; **KPI** cells for workbook metrics when wired; ~1 min refresh. |
+| `/admin` | Admin | User-entered data **not on Vendon** (schedules, cleaning, access). **Machines** (profiles, Vendon readout), **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
 
@@ -64,6 +64,6 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-05-02 | **Five per-screen figure SVGs** in `figures/` (PDF no longer clips one tall image); wireframes match **Operations** tagline, **Choose a workspace** home, vertical Admin + Machines (location owner / Vendon); composite `visual-prototype.svg` stacks all panels. |
+| 2026-05-02 | **Timespan presets** (Today VS Yesterday default, +4) on Red Flags & Overall; Admin = data not on Vendon; five **figure SVGs** + PDF; Red Flags = Monitor Red Alert style. |
 | 2026-05-01 | **Who can use Alert** steps; Machines vs workbook Admin; PO doc + PDF raster. |
 | 2026-04-30 | Home hub; team access in Admin. |

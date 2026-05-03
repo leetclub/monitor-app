@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
+import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
+import {
+  comparePresetToRedAlertMode,
+  freqHeadingForComparePreset,
+  initialCompareSelection,
+  persistCompareSelection,
+} from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
-import type { RedAlertCompareMode, RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
+import type { RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
 import {
   baselineReasonMap,
   buildDetailPayload,
   filterSnapshotRows,
-  freqColumnHeading,
   freqSplit,
   getMachineIdRaw,
   getOperatorDisplay,
@@ -26,41 +32,6 @@ type Snapshot = {
   rows?: RedAlertRow[];
   error?: string;
 };
-
-const CMP_KEY = 'leetAlertRedFlagsCompareMode';
-
-function readCompareMode(): RedAlertCompareMode {
-  try {
-    const raw = sessionStorage.getItem(CMP_KEY);
-    if (raw === 'lw') return 'sameWeekdayLw';
-    if (raw === 'yesterday') return 'yesterday';
-    return 'week';
-  } catch {
-    return 'week';
-  }
-}
-
-function persistCompareMode(mode: RedAlertCompareMode): void {
-  try {
-    const v = mode === 'sameWeekdayLw' ? 'lw' : mode === 'yesterday' ? 'yesterday' : 'week';
-    sessionStorage.setItem(CMP_KEY, v);
-  } catch {
-    /* ignore */
-  }
-}
-
-function compareSummary(mode: RedAlertCompareMode): string {
-  switch (mode) {
-    case 'week':
-      return 'WTD vs last week';
-    case 'sameWeekdayLw':
-      return 'Today vs same weekday last week';
-    case 'yesterday':
-      return 'Today vs yesterday';
-    default:
-      return 'WTD vs last week';
-  }
-}
 
 function parseTimestampMs(raw: string): number {
   const s = String(raw).trim();
@@ -171,7 +142,13 @@ function DetailModal({ payload, onClose }: { payload: RedAlertDetailPayload; onC
 }
 
 export function RedFlagsPage() {
-  const [compareMode, setCompareMode] = useState<RedAlertCompareMode>(() => readCompareMode());
+  const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
+  const compareMode = useMemo(() => comparePresetToRedAlertMode(compare.preset), [compare.preset]);
+  const setComparePersist = useCallback((next: CompareSelection) => {
+    setCompare(next);
+    persistCompareSelection(next);
+  }, []);
+
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [ranked, setRanked] = useState<RankedRedAlertRow[]>([]);
   const [detail, setDetail] = useState<RedAlertDetailPayload | null>(null);
@@ -243,7 +220,10 @@ export function RedFlagsPage() {
     [compareMode, snapTime],
   );
 
-  const freqHeading = useMemo(() => freqColumnHeading(compareMode), [compareMode]);
+  const freqHeading = useMemo(
+    () => freqHeadingForComparePreset(compare.preset, compareMode),
+    [compare.preset, compareMode],
+  );
 
   const emptyClear = q.isSuccess && ranked.length === 0;
 
@@ -254,8 +234,8 @@ export function RedFlagsPage() {
           <div className={styles.titleBlock}>
             <h1 className={styles.title}>Red Flags</h1>
             <p className={styles.sub}>
-              Same live snapshot and ranking as Monitor Red Alert: stale tx, OFF, vend failures (A+B+C frequency).{' '}
-              Excludes test machines by IMEI substring.
+              Monitor &quot;Red Alert&quot; renamed: only machines with active condition violations (same cached snapshot).
+              Work schedules and cleaning rules come from Admin. Lists refresh ~1 min. Excludes test IMEIs.
             </p>
           </div>
           <div className={styles.topRight}>
@@ -280,6 +260,15 @@ export function RedFlagsPage() {
         <p className={styles.meta}>
           {generatedAt ? <>Snapshot: {generatedAt}</> : null}
           <span className={`${styles.syncHint} ${q.isFetching && ranked.length ? styles.syncHintOn : ''}`}> · Updating…</span>
+        </p>
+
+        <div className={styles.compareBar}>
+          <ComparePresetPicker value={compare} onChange={setComparePersist} />
+        </div>
+        <p className={styles.compareBarHint}>
+          Timespan presets match Overall (shared with this browser session). The trend column maps each preset to the Red
+          Alert snapshot: Today VS Yesterday, Same weekday last week, or WTD — Kuwait calendar. Month-to-date and custom
+          ranges stay selected for workbook KPI columns as the API adds period comparisons.
         </p>
 
         <div className={styles.tickerRow}>
@@ -312,53 +301,6 @@ export function RedFlagsPage() {
               )}
             </div>
           </div>
-          <details className={styles.compareDetailsTicker}>
-            <summary className={styles.compareSummary}>
-              <span className={styles.compareSummaryLabel}>Baseline</span>
-              <span className={styles.compareSummaryValue}>{compareSummary(compareMode)}</span>
-            </summary>
-            <div
-              className={styles.comparePanel}
-              role="presentation"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <div className={styles.compareRow} role="group" aria-label="Trend baseline">
-                <button
-                  type="button"
-                  className={`${styles.btn} ${styles.btnCompare} ${compareMode === 'week' ? styles.btnCompareActive : ''}`}
-                  onClick={() => {
-                    setCompareMode('week');
-                    persistCompareMode('week');
-                  }}
-                >
-                  WTD
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.btn} ${styles.btnCompare} ${compareMode === 'sameWeekdayLw' ? styles.btnCompareActive : ''}`}
-                  onClick={() => {
-                    setCompareMode('sameWeekdayLw');
-                    persistCompareMode('sameWeekdayLw');
-                  }}
-                  title="Same weekday last week (same elapsed window)"
-                >
-                  −1w day
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.btn} ${styles.btnCompare} ${compareMode === 'yesterday' ? styles.btnCompareActive : ''}`}
-                  onClick={() => {
-                    setCompareMode('yesterday');
-                    persistCompareMode('yesterday');
-                  }}
-                >
-                  Yesterday
-                </button>
-              </div>
-              <p className={styles.compareHintTicker}>Kuwait day modes: midnight→now. Weekly % uses prorated last week.</p>
-            </div>
-          </details>
         </div>
 
         {q.isError ? (

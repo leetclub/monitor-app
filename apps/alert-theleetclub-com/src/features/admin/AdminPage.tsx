@@ -116,9 +116,12 @@ export function AdminPage() {
         <div className="adminAppHeaderMain">
           <p className="adminAppEyebrow">Settings</p>
           <h1 className="adminAppTitle">Admin</h1>
-          <p className="adminAppTagline">Machines, team access, and your permissions — one place.</p>
+          <p className="adminAppTagline">
+            Enter what Vendon does not provide: work schedules, cleaning windows, operators, and access rules. Vending names
+            and tags still come from Vendon; Admin layers operational setup on top.
+          </p>
         </div>
-        <HelpTip text="Machines: vending setup. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional substring rules." />
+        <HelpTip text="Machines: profiles & schedules. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional legacy substring rules." />
       </header>
 
       <div className="adminAppGrid">
