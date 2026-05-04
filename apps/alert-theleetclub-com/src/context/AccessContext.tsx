@@ -17,6 +17,8 @@ interface AccessContextValue {
   /** Tab ids you are allowed to use (after server rules + app-side aliases). */
   allowedTabs: string[];
   fullAccess: boolean;
+  /** Domains allowed for org user list (from server; same as session user domain unless env list). */
+  allowedEmailDomains: string[];
   allowedSet: Set<string> | null;
   isLoading: boolean;
   error: Error | null;
@@ -53,10 +55,16 @@ export function AccessProvider({
     [allowedSet],
   );
 
+  const allowedEmailDomains = useMemo(
+    () => (Array.isArray(query.data?.allowedEmailDomains) ? query.data!.allowedEmailDomains! : []),
+    [query.data?.allowedEmailDomains],
+  );
+
   const value: AccessContextValue = {
     email: query.data?.email ?? userEmail,
     allowedTabs,
     fullAccess,
+    allowedEmailDomains,
     allowedSet,
     isLoading: !!userEmail ? query.isLoading : false,
     error: query.error as Error | null,

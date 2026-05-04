@@ -7,6 +7,21 @@ import {
 } from '@/lib/dashboardRulesApi';
 import { TeamAccessEditor } from '@/features/admin/TeamAccessEditor';
 import { HelpTip } from '@/components/HelpTip';
+import { useAccess } from '@/context/AccessContext';
+
+function domainFromEmail(addr: string): string | null {
+  const s = addr.trim().toLowerCase();
+  const i = s.lastIndexOf('@');
+  if (i <= 0 || i === s.length - 1) return null;
+  return s.slice(i + 1);
+}
+
+function emailMatchesOrgDomains(addr: string, domains: string[]): boolean {
+  const d = domainFromEmail(addr);
+  if (!d) return false;
+  if (!domains.length) return true;
+  return domains.includes(d);
+}
 
 function uniqStrings(xs: string[]): string[] {
   const out: string[] = [];
@@ -68,6 +83,7 @@ function alertManageFromTabs(tabs: string[]): boolean {
 
 export function AlertPeopleManager() {
   const qc = useQueryClient();
+  const { allowedEmailDomains: accessDomains } = useAccess();
   const [rules, setRules] = useState<DashboardAccessRules>({ defaultTabs: [], users: {} });
   const [newEmail, setNewEmail] = useState('');
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -76,6 +92,12 @@ export function AlertPeopleManager() {
     queryKey: ['dashboard-access', 'rules'],
     queryFn: fetchDashboardAccessRules,
   });
+
+  const allowedEmailDomains = useMemo(() => {
+    const fromRules = rulesQ.data?.allowedEmailDomains;
+    if (Array.isArray(fromRules) && fromRules.length > 0) return fromRules;
+    return accessDomains;
+  }, [rulesQ.data?.allowedEmailDomains, accessDomains]);
 
   useEffect(() => {
     if (!rulesQ.data) return;
@@ -144,6 +166,12 @@ export function AlertPeopleManager() {
       setSaveErr('Enter a valid email.');
       return;
     }
+    if (allowedEmailDomains.length > 0 && !emailMatchesOrgDomains(email, allowedEmailDomains)) {
+      setSaveErr(
+        `Use an address on your Google Workspace domain: @${allowedEmailDomains.join(', @')}.`,
+      );
+      return;
+    }
     if (rules.users[email]) {
       setSaveErr('That email is already in the list.');
       return;
@@ -165,6 +193,16 @@ export function AlertPeopleManager() {
 
   const applySave = () => {
     const normalized = normalizeRules(rules);
+    if (allowedEmailDomains.length > 0) {
+      for (const u of Object.keys(normalized.users)) {
+        if (!emailMatchesOrgDomains(u, allowedEmailDomains)) {
+          setSaveErr(
+            `Save blocked: "${u}" is not on an allowed domain (@${allowedEmailDomains.join(', @')}).`,
+          );
+          return;
+        }
+      }
+    }
     saveMut.mutate(normalized);
   };
 
@@ -250,6 +288,13 @@ export function AlertPeopleManager() {
             <HelpTip text="Per-email Leet Alert flags. “Full Monitor” means * — use the link under that email to switch to Alert-only and edit the checkboxes." />
           </div>
         </div>
+
+        {allowedEmailDomains.length > 0 ? (
+          <p className="muted adminQuietLine" style={{ marginBottom: 10, fontSize: '0.85rem' }}>
+            Only addresses at{' '}
+            <strong>@{allowedEmailDomains.join(', @')}</strong> can be added (same organization as Google sign-in).
+          </p>
+        ) : null}
 
         <div className="adminAddRow">
           <label className="adminAddEmail">

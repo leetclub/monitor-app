@@ -4,6 +4,7 @@ Secured with header X-Dashboard-Access-Secret matching env DASHBOARD_ACCESS_API_
 Called from Google Apps Script (UrlFetchApp) — email is supplied by GAS from Session.getActiveUser().
 """
 import os
+import re
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,6 +32,50 @@ def _load_super_admin_emails() -> frozenset:
 
 
 SUPER_ADMIN_EMAILS: frozenset = _load_super_admin_emails()
+
+
+def _parse_allowed_email_domains_from_env() -> List[str]:
+    """
+    Optional multi-domain Workspace allowlist (same semantics as Monitor v2 ACCESS_ALLOWED_DOMAIN).
+    Env: ACCESS_ALLOWED_EMAIL_DOMAINS or DASHBOARD_ACCESS_EMAIL_DOMAINS — comma or semicolon separated.
+    """
+    raw = (
+        os.environ.get("ACCESS_ALLOWED_EMAIL_DOMAINS")
+        or os.environ.get("DASHBOARD_ACCESS_EMAIL_DOMAINS")
+        or ""
+    ).strip()
+    if not raw:
+        return []
+    out: List[str] = []
+    for part in re.split(r"[;,]\s*", raw):
+        p = part.strip().lower().lstrip("@")
+        if p:
+            out.append(p)
+    return out
+
+
+def allowed_email_domains_for_editor(editor_email: str) -> List[str]:
+    """Domains allowed when editing dashboard access via session (org + optional env list)."""
+    from_env = _parse_allowed_email_domains_from_env()
+    if from_env:
+        return from_env
+    em = str(editor_email or "").strip().lower()
+    at = em.rfind("@")
+    if at > 0:
+        d = em[at + 1 :].strip()
+        if d:
+            return [d]
+    return []
+
+
+def _email_domain_allowed(addr: str, allowed_domains: List[str]) -> bool:
+    if not allowed_domains:
+        return True
+    a = str(addr).strip().lower()
+    if "@" not in a:
+        return False
+    dom = a.rsplit("@", 1)[-1]
+    return dom in allowed_domains
 
 
 def get_dashboard_session():
@@ -293,6 +338,7 @@ def register_dashboard_access_routes(app) -> None:
                     'email': email,
                     'allowedTabs': allowed,
                     'fullAccess': full,
+                    'allowedEmailDomains': allowed_email_domains_for_editor(email),
                 }
             )
         except Exception as ex:
@@ -306,14 +352,19 @@ def register_dashboard_access_routes(app) -> None:
 
         Who may read/write:
         - super_admin (DASHBOARD_SUPER_ADMIN_EMAILS), or
-        - any user granted the `admin` tab (Monitor product admins).
+        - any user granted the `admin` tab (Monitor product admins), or
+        - any user granted `leetAlertAdmin` (Leet Alert app Admin — access rules subset).
         """
         if request.method == 'OPTIONS':
             return '', 204
         email, allowed, matched_by = resolve_session_allowed_tabs()
         if not email:
             return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-        is_privileged = matched_by == 'super_admin' or 'admin' in allowed
+        is_privileged = (
+            matched_by == 'super_admin'
+            or 'admin' in allowed
+            or 'leetAlertAdmin' in allowed
+        )
         if not is_privileged:
             return jsonify({'ok': False, 'error': 'Forbidden'}), 403
 
@@ -328,6 +379,7 @@ def register_dashboard_access_routes(app) -> None:
                     'allTabIds': ALL_DASHBOARD_TAB_IDS,
                     'fromSheetActive': False,
                     'source': 'database',
+                    'allowedEmailDomains': allowed_email_domains_for_editor(email),
                 })
 
             body = request.get_json(silent=True) or {}
@@ -337,6 +389,25 @@ def register_dashboard_access_routes(app) -> None:
                 return jsonify({'success': False, 'error': 'defaultTabs must be an array'}), 400
             if not isinstance(users_in, dict):
                 return jsonify({'success': False, 'error': 'users must be an object'}), 400
+
+            allowed_domains = allowed_email_domains_for_editor(email)
+            for em, tabs in users_in.items():
+                key = str(em).strip().lower()
+                if not key or key in ('default', '_default') or key in SUPER_ADMIN_EMAILS:
+                    continue
+                if not isinstance(tabs, list):
+                    continue
+                if not _email_domain_allowed(key, allowed_domains):
+                    doms = ", ".join(allowed_domains) if allowed_domains else "(none configured)"
+                    return jsonify(
+                        {
+                            'success': False,
+                            'error': (
+                                f'Email "{key}" must be on an allowed Google Workspace domain '
+                                f'({doms}). Set ACCESS_ALLOWED_EMAIL_DOMAINS for multiple domains.'
+                            ),
+                        }
+                    ), 400
 
             session.query(DashboardAccessUser).delete(synchronize_session=False)
 

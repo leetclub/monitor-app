@@ -70,6 +70,15 @@ def vendon_location_owner_tag(m: Dict[str, Any]) -> Optional[str]:
     machine_tag = vendon_machine_tag_explicit(m)
     if machine_tag:
         return machine_tag
+    # Prefer structured tags (and tag-shaped fields) before the generic top-level ``location`` string,
+    # which is often a coarse site name rather than the machine / asset tag operators expect.
+    tag = _tags_location_candidate(m.get("tags"))
+    if tag:
+        return tag
+    for key in ("tag", "tags_display", "location_tag"):
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
     loc = m.get("location")
     if isinstance(loc, str) and loc.strip():
         return loc.strip()
@@ -97,14 +106,6 @@ def vendon_location_owner_tag(m: Dict[str, Any]) -> Optional[str]:
     grp = m.get("group")
     if isinstance(grp, dict):
         v = grp.get("name") or grp.get("title")
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    tag = _tags_location_candidate(m.get("tags"))
-    if tag:
-        return tag
-    # Some integrations stash labels on the machine record.
-    for key in ("tag", "tags_display", "location_tag"):
-        v = m.get(key)
         if isinstance(v, str) and v.strip():
             return v.strip()
     return None

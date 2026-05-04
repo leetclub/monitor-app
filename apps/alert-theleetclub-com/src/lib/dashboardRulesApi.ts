@@ -7,6 +7,7 @@ export type DashboardAccessRules = {
 
 export type DashboardRulesResponse = DashboardAccessRules & {
   allTabIds: string[];
+  allowedEmailDomains?: string[];
 };
 
 export async function fetchDashboardAccessRules(): Promise<DashboardRulesResponse> {
@@ -15,11 +16,15 @@ export async function fetchDashboardAccessRules(): Promise<DashboardRulesRespons
     defaultTabs?: string[];
     users?: Record<string, string[]>;
     allTabIds?: string[];
+    allowedEmailDomains?: string[];
   }>('/api/me/dashboard-access/rules');
   return {
     defaultTabs: data.defaultTabs ?? [],
     users: data.users ?? {},
     allTabIds: Array.isArray(data.allTabIds) ? data.allTabIds : [],
+    allowedEmailDomains: Array.isArray(data.allowedEmailDomains)
+      ? data.allowedEmailDomains.map((d) => String(d).toLowerCase().trim().replace(/^@/, ''))
+      : [],
   };
 }
 

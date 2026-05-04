@@ -4,6 +4,8 @@ export interface DashboardAccessResolve {
   email?: string;
   allowedTabs: string[];
   fullAccess?: boolean;
+  /** Google Workspace–style allowlist; empty = no client-side domain gate (see server). */
+  allowedEmailDomains?: string[];
 }
 
 /** Grant Leet Alert read if user has Alert tab or classic Red Alert tab (Monitor parity). */
@@ -28,6 +30,9 @@ export async function fetchDashboardAccess(): Promise<DashboardAccessResolve> {
   return {
     ...data,
     allowedTabs: expandAllowedTabsWithAliases(data.allowedTabs ?? []),
+    allowedEmailDomains: Array.isArray(data.allowedEmailDomains)
+      ? data.allowedEmailDomains.map((d) => String(d).toLowerCase().trim().replace(/^@/, ''))
+      : undefined,
   };
 }
 
