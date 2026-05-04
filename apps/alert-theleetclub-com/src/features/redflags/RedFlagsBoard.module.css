@@ -356,6 +356,23 @@
   text-shadow: 0 0 18px rgba(248, 113, 113, 0.28);
 }
 
+.thNarrow {
+  max-width: 6.5rem;
+  white-space: normal;
+}
+
+.alertTypeCell {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(226, 232, 240, 0.95);
+  max-width: 14rem;
+}
+
+.wireDash {
+  color: rgba(148, 163, 184, 0.65);
+  font-weight: 600;
+}
+
 .tr {
   cursor: pointer;
   transition:

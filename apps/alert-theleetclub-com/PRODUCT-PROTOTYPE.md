@@ -13,7 +13,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/` | Entry | Redirect to **Home**. |
 | `/login` | Login | Google sign-in. |
 | `/home` | Home | Cards: **Red Flags** → **Overall** → **Admin** (if role allows). |
-| `/red-flags` | Red Flags | **Red Alert** snapshot + triage styling; column titles follow workbook **Red Flags** sheet (`docs/alert-workbook-red-flags-tab.md`); adds **Location** vs Monitor; five **timespan presets**; ~1 min refresh. |
+| `/red-flags` | Red Flags | **Red Alert** snapshot; columns match `alert.theleetclub.com.xlsx` **Red Flags** row 1 (see `docs/alert-workbook-red-flags-tab.md`); trailing columns **—** until API wires workbook metrics; five **timespan presets**; ~1 min refresh. |
 | `/overall` | Overall | **All** machines + snapshot columns; same timespan presets; **KPI** cells for workbook metrics when wired; ~1 min refresh. |
 | `/admin` | Admin | User-entered data **not on Vendon** (schedules, cleaning, access). **Machines** (profiles, Vendon readout), **Who can use Alert**, **My access**, **Advanced**. |
 
@@ -64,8 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-05-04 | **Red Flags** workbook mapping doc; column labels from `redFlagsWorkbookColumns.ts`; machine cell = Monitor-style **last** reason + **Last tx** lines; intro copy clarifies sheet vs Red Alert. |
-| 2026-05-04 | Admin **Machines**: Location owner driven by **Vendon machine tag** first; Technician/QA JSON help (`[]` empty); time zone + priority copy (priority from cleaning-schedule sync); GET profiles return **priority**. |
+| 2026-05-04 | **Red Flags** = **xlsx** column order (through **Tech Visit**); `alert.theleetclub.com.xlsx` in repo; `redFlagsWorkbookColumns.ts`; placeholders for columns not in snapshot; machine / alert split; **Admin** tag/priority (other row). |
 | 2026-05-02 | **Timespan presets** (Today VS Yesterday default, +4) on Red Flags & Overall; Admin = data not on Vendon; five **figure SVGs** + PDF; Red Flags = Monitor Red Alert style. |
 | 2026-05-01 | **Who can use Alert** steps; Machines vs workbook Admin; PO doc + PDF raster. |
 | 2026-04-30 | Home hub; team access in Admin. |

@@ -297,10 +297,12 @@ export function RedFlagsPage() {
           <div className={styles.titleBlock}>
             <h1 className={styles.title}>Red Flags</h1>
             <p className={styles.sub}>
-              Same Red Alert snapshot as Monitor, styled for triage. Column titles match the workbook{' '}
-              <strong>Red Flags</strong> sheet (
-              <code className={styles.inlineCode}>docs/alert-workbook-red-flags-tab.md</code>
-              ). Not a pixel-perfect clone — this board adds <strong>Location</strong>. ~1 min refresh. Test IMEIs excluded.
+              Same Red Alert snapshot as Monitor. Table columns match{' '}
+              <code className={styles.inlineCode}>alert.theleetclub.com.xlsx</code> sheet{' '}
+              <strong>Red Flags</strong> (see{' '}
+              <code className={styles.inlineCode}>docs/alert-workbook-red-flags-tab.md</code>). Columns after{' '}
+              <strong>GO CHECK</strong> are placeholders until the snapshot API adds those metrics. ~1 min refresh. Test IMEIs
+              excluded.
             </p>
           </div>
           <div className={styles.topRight}>
@@ -381,12 +383,12 @@ export function RedFlagsPage() {
                 <thead>
                   <tr>
                     <th className={styles.th}>
-                      {RED_FLAGS_COLUMNS.machine.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.machine.sub}</span>
+                      {RED_FLAGS_COLUMNS.vendingMachine.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.vendingMachine.sub}</span>
                     </th>
                     <th className={styles.th}>
-                      {RED_FLAGS_COLUMNS.location.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.location.sub}</span>
+                      {RED_FLAGS_COLUMNS.alertType.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.alertType.sub}</span>
                     </th>
                     <th className={styles.th}>
                       {RED_FLAGS_COLUMNS.operator.title}
@@ -396,9 +398,34 @@ export function RedFlagsPage() {
                       {freqHeading.title}
                       <span className={styles.thSub}>{freqHeading.sub}</span>
                     </th>
-                    <th className={styles.th}>{RED_FLAGS_COLUMNS.goCheck.title}</th>
-                    <th className={styles.th}>{RED_FLAGS_COLUMNS.details.title}</th>
-                    <th className={styles.th}>{RED_FLAGS_COLUMNS.pfa.title}</th>
+                    <th className={styles.th}>
+                      {RED_FLAGS_COLUMNS.goCheck.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.goCheck.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.sendCredit.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.sendCredit.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.vendsResolved.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.vendsResolved.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.testCredits.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.testCredits.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.lastCleaning.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.lastCleaning.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.qaVisit.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.qaVisit.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.techVisit.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.techVisit.sub}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -411,15 +438,21 @@ export function RedFlagsPage() {
                     const hwN = rowHappensForSort(row, compareMode);
                     const hot = hwN >= 10;
                     const rk = r === 0 ? 1 : Math.max(0, 0.58 - (r - 1) * 0.055);
-                    const pfaRaw = row.pfaExcludeCleaning;
                     let goUrl = row.goCheckUrl || null;
                     if (!goUrl && row.strikeOperatorEmail) {
                       const emGo = String(row.strikeOperatorEmail).trim();
                       if (emGo.includes('@')) {
-                        goUrl = `mailto:${emGo}?subject=${encodeURIComponent(`Red Flags — Go check: ${row.machineName || machId}`)}`;
+                        goUrl = `mailto:${emGo}?subject=${encodeURIComponent(`Red Flags — GO CHECK: ${row.machineName || machId}`)}`;
                       }
                     }
-                    const loc = row.machineLocation != null && String(row.machineLocation).trim() ? String(row.machineLocation).trim() : '—';
+                    const alertTypeText =
+                      row.reasons && row.reasons.length
+                        ? String(row.reasons[row.reasons.length - 1] ?? '')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+                        : '—';
+                    const alertTypeShow =
+                      alertTypeText.length > 140 ? `${alertTypeText.slice(0, 140)}…` : alertTypeText;
 
                     return (
                       <tr
@@ -445,18 +478,13 @@ export function RedFlagsPage() {
                           )}
                           <div className={styles.machineName}>{row.machineName || machId}</div>
                           <div className={styles.machineId}>#{machId}</div>
-                          {row.reasons && row.reasons.length ? (
-                            <div className={styles.lastReason} title={String(row.reasons[row.reasons.length - 1] ?? '')}>
-                              {String(row.reasons[row.reasons.length - 1] ?? '')
-                                .replace(/\s+/g, ' ')
-                                .trim()
-                                .slice(0, 90)}
-                              {String(row.reasons[row.reasons.length - 1] ?? '').trim().length > 90 ? '…' : ''}
-                            </div>
-                          ) : null}
                           <LastTxLines row={row} snapshotGeneratedAt={snapTime ?? null} />
                         </td>
-                        <td className={styles.td}>{loc}</td>
+                        <td className={styles.td}>
+                          <div className={styles.alertTypeCell} title={row.reasons?.length ? row.reasons.join(' · ') : ''}>
+                            {alertTypeShow}
+                          </div>
+                        </td>
                         <td className={styles.td}>{getOperatorDisplay(row)}</td>
                         <td className={styles.td}>
                           <div className={styles.freq} title={fq.title}>
@@ -499,18 +527,30 @@ export function RedFlagsPage() {
                               {...(goUrl.toLowerCase().startsWith('mailto:') ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              Go check
+                              GO CHECK
                             </a>
                           ) : (
                             '—'
                           )}
                         </td>
-                        <td className={styles.td}>
-                          <button type="button" className={styles.btn} onClick={(e) => (e.stopPropagation(), openDetail(d))}>
-                            Open
-                          </button>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.sendCredit.placeholderNote}>
+                          <span className={styles.wireDash}>—</span>
                         </td>
-                        <td className={styles.td}>{pfaRaw === true ? 'Yes' : pfaRaw === false ? 'No' : '—'}</td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.vendsResolved.placeholderNote}>
+                          <span className={styles.wireDash}>—</span>
+                        </td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.testCredits.placeholderNote}>
+                          <span className={styles.wireDash}>—</span>
+                        </td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.lastCleaning.placeholderNote}>
+                          <span className={styles.wireDash}>—</span>
+                        </td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.qaVisit.placeholderNote}>
+                          <span className={styles.wireDash}>—</span>
+                        </td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.techVisit.placeholderNote}>
+                          <span className={styles.wireDash}>—</span>
+                        </td>
                       </tr>
                     );
                   })}

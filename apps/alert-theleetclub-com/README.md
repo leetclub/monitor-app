@@ -12,7 +12,7 @@ This directory is reserved for the **alert** app/service deployed under `alert.t
 
 - **`PRODUCT-PROTOTYPE.md`** — stakeholder-readable overview (routes, permissions, roadmap gaps, changelog). The app UI does **not** show “prototype”; that context lives here only. Update when UX or copy changes materially (see `.cursor/rules/leet-alert-prototype-doc.mdc`).
 - **Always:** `.cursor/rules/leet-alert-docs-with-app-changes.mdc` — any change under this app should update **markdown + `docs/product-prototype/visual-prototype.svg` + PDF** in the same effort.
-- **Workbook alignment:** `docs/alert-workbook-admin-tab.md` maps **alert.theleetclub.com.xlsx** sheet **Admin** to the **Machines** tab; `docs/alert-workbook-red-flags-tab.md` maps sheet **Red Flags** to the **Red Flags** screen columns.
+- **Workbook:** `alert.theleetclub.com.xlsx` in this folder (Admin / Overall / Red Flags sheets). **`docs/alert-workbook-admin-tab.md`** maps **Admin** → **Machines** tab; **`docs/alert-workbook-red-flags-tab.md`** maps **Red Flags** → **`/red-flags`** columns.
 - **`PRODUCT-PROTOTYPE.pdf`** — generated from the Markdown + embedded **`docs/product-prototype/visual-prototype.svg`**. Regenerate after doc or diagram edits:
 
   ```bash

@@ -1,30 +1,34 @@
 # Workbook reference — `Red Flags` sheet (`alert.theleetclub.com.xlsx`)
 
-Source: product workbook **`Red Flags`** sheet — typically row **3** = column titles, row **4** = field notes/types (same pattern as `alert-workbook-admin-tab.md`).
+Source file (committed): `apps/alert-theleetclub-com/alert.theleetclub.com.xlsx`  
+Sheets: **Admin**, **Overall**, **Red Flags**.
 
-**The `.xlsx` is not stored in git.** When the workbook changes, paste the header row into the table below and open a PR that updates this doc plus `src/features/redflags/redFlagsWorkbookColumns.ts` so visible titles stay aligned.
+Regenerate header preview:
 
-## Design intent
+```bash
+python3 scripts/read_xlsx_headers.py
+```
 
-- **Look & feel:** Borrow Monitor **Red Alert** board patterns (density, chips, frequency graphic, row ranking) — **not** a pixel-perfect clone.
-- **Columns:** Driven by this **Red Flags** sheet — the app table maps workbook columns to snapshot/API fields below.
+## Red Flags — row 1 (column titles)
 
-## Column mapping (implementation)
+Exact extraction from the workbook (column **A** = **Aspect** labels in the sheet; data columns start at **Vending Machine**):
 
-| Workbook column (Red Flags sheet) | App column ( `/red-flags` ) | Data source |
-|-----------------------------------|-----------------------------|-------------|
-| **Machine** (vending machine / identity) | **Machine** | `machineName`, `machineId`, New/Updated/P2 chips, **last** alert line (`reasons`), **Last tx** / **Last OFF** lines (same block as Monitor Red Alert) |
-| **Location** / site / owner | **Location** | `machineLocation` from snapshot (Vendon / site string on Red Alert row) |
-| **Operator** (live + cleaning) | **Operator** | `operator` + `cleaningOperator` via `getOperatorDisplay()` |
-| **Frequency** / WTD / trend (sheet name varies) | Dynamic heading (Compare preset) | `freqSplit()` — WTD, Today vs SW LW, or Today vs Yesterday |
-| **Go check** | **Go check** | `goCheckUrl` or mailto from `strikeOperatorEmail` |
-| **Details** | **Details** | Opens modal (full reasons + timestamps) |
-| **PFA** | **PFA** | `pfaExcludeCleaning` |
+| # | Column (workbook) | In the app (`/red-flags`) | Data source today |
+|---|-------------------|---------------------------|-------------------|
+| 1 | **Vending Machine** | **Vending Machine** | Machine name, ID, New/Updated/P2 chips, **Last tx** / **Last OFF** lines (Red Alert snapshot) |
+| 2 | **Alert Type** | **Alert Type** | Primary alert copy from `reasons[]` (same family as Red Alert) |
+| 3 | **Operator** | **Operator** | Live ops + cleaning (`getOperatorDisplay`) |
+| 4 | **Frequency** | **Frequency** (subtitle follows compare preset) | `freqSplit()` / WTD vs baseline |
+| 5 | **GO CHECK** | **GO CHECK** | `goCheckUrl` or mailto from strike operator |
+| 6 | **Send Credit** | **Send Credit** | **—** (workbook thresholds — extend snapshot API) |
+| 7 | **Vends Resolved** | **Vends Resolved** | **—** (workbook timing logic — extend snapshot API) |
+| 8 | **Test Credits** | **Test Credits** | **—** (extend snapshot API) |
+| 9 | **Last Cleaning** | **Last Cleaning** | **—** (Admin / live dashboard join — planned) |
+| 10 | **QA Visit** | **QA Visit** | **—** (Workflow API — planned) |
+| 11 | **Tech Visit** | **Tech Visit** | **—** (Workflow API — planned) |
 
-### API / snapshot
+Row click opens the **detail** dialog (full reasons, timestamps). The workbook does not name a **Details** column; we keep the modal for parity with operations.
 
-Rows come from **`GET /api/alert/red-flags/snapshot`** (cached Red Alert payload). Shape: TypeScript **`RedAlertRow`** in `src/features/redflags/redAlertTypes.ts` — same family as Monitor v2 Red Alert.
+### Row 2 notes (workbook)
 
-### When the Excel headers differ
-
-Rename strings only in **`redFlagsWorkbookColumns.ts`** (and this table). If a **new** workbook column needs data we do not expose yet, track it in the changelog and extend **people-api** snapshot rows first.
+Workbook describes Send Credit / Vends Resolved / Test Credits color rules and QA/Tech visit windows — implementation belongs in **people-api** snapshot rows when those metrics are ready.
