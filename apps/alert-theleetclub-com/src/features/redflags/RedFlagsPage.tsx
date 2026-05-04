@@ -17,11 +17,15 @@ import {
   freqSplit,
   getMachineIdRaw,
   getOperatorDisplay,
+  isLastTransactionEstimated,
+  pickLastEventTs,
+  pickLastTransactionTs,
   rankRows,
   reasonKey,
   rowHappensForSort,
   type RankedRedAlertRow,
 } from './redFlagsModel';
+import { RED_FLAGS_COLUMNS } from './redFlagsWorkbookColumns';
 import styles from './RedFlagsBoard.module.css';
 
 type Snapshot = {
@@ -66,6 +70,65 @@ function formatKuwaitTs(iso: string): string {
     }
   }
   return iso || '—';
+}
+
+/** Kuwait wall time with seconds (parity with Monitor Red Alert board). */
+function formatRedAlertExactDateTime(iso: string): string {
+  const ms = parseTimestampMs(iso);
+  if (!Number.isNaN(ms)) {
+    try {
+      return (
+        new Date(ms).toLocaleString('en-GB', {
+          timeZone: 'Asia/Kuwait',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }) + ' KWT'
+      );
+    } catch {
+      return iso;
+    }
+  }
+  return iso || '—';
+}
+
+function LastTxLines({
+  row,
+  snapshotGeneratedAt,
+}: {
+  row: RedAlertRow;
+  snapshotGeneratedAt?: string | null;
+}) {
+  const txRaw = pickLastTransactionTs(row, snapshotGeneratedAt);
+  const evRaw = pickLastEventTs(row);
+  const estimated = isLastTransactionEstimated(row, snapshotGeneratedAt);
+  const hasTx = !!(txRaw != null && String(txRaw).trim());
+  const hasEv = !!(evRaw != null && String(evRaw).trim());
+  const evDistinct = hasEv && (!hasTx || String(evRaw).trim() !== String(txRaw).trim());
+  const minOnly = row.minutesSinceLastTransaction ?? row.minutes_since_last_transaction;
+  const minStr = minOnly != null ? String(minOnly).trim() : '';
+  return (
+    <>
+      {hasTx ? (
+        <div className={styles.lastTx}>
+          Last tx: {formatRedAlertExactDateTime(String(txRaw))}
+          {estimated ? <span className={styles.lastTxEst}> (est.)</span> : null}
+        </div>
+      ) : minStr !== '' ? (
+        <div className={styles.lastTx}>
+          Last tx: {minStr} min since sale <span className={styles.lastTxEst}>(no ISO)</span>
+        </div>
+      ) : null}
+      {evDistinct ? (
+        <div className={styles.lastTx}>Last OFF event: {formatRedAlertExactDateTime(String(evRaw))}</div>
+      ) : null}
+      {!hasTx && minStr === '' && !evDistinct ? <div className={styles.lastTx}>Last tx: —</div> : null}
+    </>
+  );
 }
 
 function DetailModal({ payload, onClose }: { payload: RedAlertDetailPayload; onClose: () => void }) {
@@ -234,8 +297,10 @@ export function RedFlagsPage() {
           <div className={styles.titleBlock}>
             <h1 className={styles.title}>Red Flags</h1>
             <p className={styles.sub}>
-              Monitor &quot;Red Alert&quot; renamed: only machines with active condition violations (same cached snapshot).
-              Work schedules and cleaning rules come from Admin. Lists refresh ~1 min. Excludes test IMEIs.
+              Same Red Alert snapshot as Monitor, styled for triage. Column titles match the workbook{' '}
+              <strong>Red Flags</strong> sheet (
+              <code className={styles.inlineCode}>docs/alert-workbook-red-flags-tab.md</code>
+              ). Not a pixel-perfect clone — this board adds <strong>Location</strong>. ~1 min refresh. Test IMEIs excluded.
             </p>
           </div>
           <div className={styles.topRight}>
@@ -316,24 +381,24 @@ export function RedFlagsPage() {
                 <thead>
                   <tr>
                     <th className={styles.th}>
-                      Machine
-                      <span className={styles.thSub}>Name · ID · flags</span>
+                      {RED_FLAGS_COLUMNS.machine.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.machine.sub}</span>
                     </th>
                     <th className={styles.th}>
-                      Location
-                      <span className={styles.thSub}>Vendon / site</span>
+                      {RED_FLAGS_COLUMNS.location.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.location.sub}</span>
                     </th>
                     <th className={styles.th}>
-                      Operator
-                      <span className={styles.thSub}>Live ops · cleaning</span>
+                      {RED_FLAGS_COLUMNS.operator.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.operator.sub}</span>
                     </th>
                     <th className={`${styles.th} ${styles.thFreq}`}>
                       {freqHeading.title}
                       <span className={styles.thSub}>{freqHeading.sub}</span>
                     </th>
-                    <th className={styles.th}>Go check</th>
-                    <th className={styles.th}>Details</th>
-                    <th className={styles.th}>PFA</th>
+                    <th className={styles.th}>{RED_FLAGS_COLUMNS.goCheck.title}</th>
+                    <th className={styles.th}>{RED_FLAGS_COLUMNS.details.title}</th>
+                    <th className={styles.th}>{RED_FLAGS_COLUMNS.pfa.title}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -380,11 +445,16 @@ export function RedFlagsPage() {
                           )}
                           <div className={styles.machineName}>{row.machineName || machId}</div>
                           <div className={styles.machineId}>#{machId}</div>
-                          {(row.reasons || []).slice(0, 1).map((reason, idx) => (
-                            <div key={idx} className={styles.lastReason}>
-                              {reason}
+                          {row.reasons && row.reasons.length ? (
+                            <div className={styles.lastReason} title={String(row.reasons[row.reasons.length - 1] ?? '')}>
+                              {String(row.reasons[row.reasons.length - 1] ?? '')
+                                .replace(/\s+/g, ' ')
+                                .trim()
+                                .slice(0, 90)}
+                              {String(row.reasons[row.reasons.length - 1] ?? '').trim().length > 90 ? '…' : ''}
                             </div>
-                          ))}
+                          ) : null}
+                          <LastTxLines row={row} snapshotGeneratedAt={snapTime ?? null} />
                         </td>
                         <td className={styles.td}>{loc}</td>
                         <td className={styles.td}>{getOperatorDisplay(row)}</td>

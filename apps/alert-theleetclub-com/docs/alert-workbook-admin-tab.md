@@ -14,4 +14,4 @@ Regenerate or diff when the xlsx changes; keep the **Machine profile** form in t
 | Technician | **Technician** — JSON schedule until visual editor | Visit days + hours; Workflow API |
 | QA officer | **QA officer** — JSON schedule until visual editor | Visit days + hours; Workflow API |
 
-Overall and Red Flags sheets describe **downstream** columns (fleet KPIs, alert columns); those screens consume Admin machine data where noted above.
+Overall and Red Flags sheets describe **downstream** columns (fleet KPIs, alert columns); those screens consume Admin machine data where noted above. **Red Flags** table mapping: `docs/alert-workbook-red-flags-tab.md`.

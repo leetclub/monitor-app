@@ -149,8 +149,8 @@ export function AdminPage() {
             <summary title="Repository paths for PDF and workbook mapping">Documentation map</summary>
             <p className="adminSideDocsBody muted">
               Routes &amp; permissions: <code className="adminInlineCode">PRODUCT-PROTOTYPE.md</code> /{' '}
-              <code className="adminInlineCode">PRODUCT-PROTOTYPE.pdf</code>. Column mapping:{' '}
-              <code className="adminInlineCode">docs/alert-workbook-admin-tab.md</code>.
+              <code className="adminInlineCode">PRODUCT-PROTOTYPE.pdf</code>.               Workbook: <code className="adminInlineCode">docs/alert-workbook-admin-tab.md</code>,{' '}
+              <code className="adminInlineCode">docs/alert-workbook-red-flags-tab.md</code>.
             </p>
           </details>
         </nav>
