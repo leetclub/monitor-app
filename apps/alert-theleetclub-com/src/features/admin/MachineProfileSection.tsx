@@ -38,6 +38,8 @@ type ProfileRow = {
   technician_schedule: unknown[];
   qa_schedule: unknown[];
   timezone: string;
+  /** From linked Red Alert cleaning schedule row (higher = wins on overlap) */
+  priority?: number;
   updated_at?: string | null;
 };
 
@@ -86,9 +88,12 @@ export function MachineProfileSection() {
   const selectedMachine = useMemo(() => machines.find((m) => m.id === machineId), [machines, machineId]);
   const vendonLocationTag = (selectedMachine?.vendon_location_owner ?? '').trim();
 
-  const loadProfileIntoForm = useCallback((p: ProfileRow) => {
+  const loadProfileIntoForm = useCallback(
+    (p: ProfileRow) => {
     setMachineId(p.machine_id);
-    setLocationOwner(p.location_owner ?? '');
+    const m = machines.find((x) => x.id === p.machine_id);
+    const vendonTag = (m?.vendon_location_owner ?? '').trim();
+    setLocationOwner(vendonTag || (p.location_owner ?? ''));
     setLocationHours(p.location_hours ?? '');
     const od = normalizeOperatingDays(p.operating_days);
     setOpPreset(od.preset === 'custom' ? 'custom' : od.preset);
@@ -107,8 +112,11 @@ export function MachineProfileSection() {
     setTechnicianJson(JSON.stringify(p.technician_schedule ?? [], null, 2));
     setQaJson(JSON.stringify(p.qa_schedule ?? [], null, 2));
     setTimezone(p.timezone || 'Asia/Kuwait');
+    setPriority(typeof p.priority === 'number' && !Number.isNaN(p.priority) ? p.priority : 10);
     setFormErr(null);
-  }, []);
+  },
+  [machines],
+);
 
   const clearForm = useCallback(() => {
     setMachineId('');
@@ -169,7 +177,7 @@ export function MachineProfileSection() {
       return apiJson('/api/alert/admin/machine-profiles', {
         machine_id: machineId,
         machine_name: machineName || null,
-        location_owner: locationOwner.trim() || null,
+        location_owner: (vendonLocationTag || locationOwner).trim() || null,
         location_hours: locationHours || null,
         operating_days,
         cleaning_windows: cleaningWindows.filter((w) => w.start && w.end),
@@ -218,8 +226,8 @@ export function MachineProfileSection() {
             <strong>Vending machine</strong> — Vendon list (dropdown).
           </li>
           <li>
-            <strong>Location owner</strong> — prefilled from Vendon when available; pick from the list or type; overrides if
-            Vendon is wrong.
+            <strong>Location owner</strong> — the <strong>machine tag from Vendon</strong> when the API exposes it
+            (location/site names are secondary). Save uses the Vendon tag if present; otherwise your text.
           </li>
           <li>
             <strong>Location hours</strong> — 9 / 12 / 16 / 24 hrs.
@@ -334,7 +342,10 @@ export function MachineProfileSection() {
                 ))}
               </select>
             </label>
-            <label style={{ flex: '1 1 200px' }} title="From Vendon when possible; type or pick from list">
+            <label
+              style={{ flex: '1 1 200px' }}
+              title="Machine tag from Vendon when available; used for grouping (Overall / options list)"
+            >
               Location owner
               <input
                 name="location_owner"
@@ -537,15 +548,20 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="Visit schedules from Workflow APIs. JSON until visual editor; use [] if not set up.">
+          <summary title="Visit schedules (Workflow APIs). JSON until we ship a visual editor.">
             Technician &amp; QA (JSON)
           </summary>
+          <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
+            <code>[]</code> means no schedule stored yet. Both fields must be valid JSON arrays. Fix invalid JSON before Save
+            (e.g. do not use <code>!!!</code>).
+          </p>
           <label style={{ width: '100%', alignItems: 'flex-start' }}>
             Technician (responsible + visits)
             <textarea
               rows={4}
               value={technicianJson}
               onChange={(e) => setTechnicianJson(e.target.value)}
+              placeholder="[]"
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
             />
           </label>
@@ -555,19 +571,31 @@ export function MachineProfileSection() {
               rows={4}
               value={qaJson}
               onChange={(e) => setQaJson(e.target.value)}
+              placeholder="[]"
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
             />
           </label>
         </details>
 
         <details className="adminDetails">
-          <summary title="Timezone for schedules; higher priority wins when rules overlap.">Time zone &amp; priority</summary>
+          <summary
+            title={
+              'IANA time zone for cleaning / operator windows. Priority is stored on the Red Alert cleaning rule for this machine name; higher number wins when multiple rules could match.'
+            }
+          >
+            Time zone &amp; priority
+          </summary>
+          <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
+            <strong>Time zone</strong> — saved on this machine profile and used with cleaning windows (default{' '}
+            <code>Asia/Kuwait</code>). <strong>Priority</strong> — same value synced to the DC cleaning schedule row for this
+            machine name; higher priority wins if rules overlap.
+          </p>
           <div className="row" style={{ marginTop: 8 }}>
-            <label title="Usually Asia/Kuwait">
+            <label title="IANA name, e.g. Asia/Kuwait — used when interpreting time windows">
               Time zone
               <input value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{ width: 160 }} />
             </label>
-            <label title="Higher wins when rules overlap">
+            <label title="Higher wins when Red Alert cleaning rules overlap for this machine">
               Priority
               <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} style={{ width: 88 }} />
             </label>

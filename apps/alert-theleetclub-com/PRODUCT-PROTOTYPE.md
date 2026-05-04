@@ -64,6 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-05-04 | Admin **Machines**: Location owner driven by **Vendon machine tag** first; Technician/QA JSON help (`[]` empty); time zone + priority copy (priority from cleaning-schedule sync); GET profiles return **priority**. |
 | 2026-05-02 | **Timespan presets** (Today VS Yesterday default, +4) on Red Flags & Overall; Admin = data not on Vendon; five **figure SVGs** + PDF; Red Flags = Monitor Red Alert style. |
 | 2026-05-01 | **Who can use Alert** steps; Machines vs workbook Admin; PO doc + PDF raster. |
 | 2026-04-30 | Home hub; team access in Admin. |

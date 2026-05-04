@@ -6,7 +6,7 @@ Regenerate or diff when the xlsx changes; keep the **Machine profile** form in t
 | Column (workbook) | In the app (Machines tab) | Notes from workbook |
 |-------------------|----------------------------|---------------------|
 | Vending machine | **Vending machine** — `<select>` from synced Vendon list | Machine identity |
-| Location owner | **Location owner** — text (e.g. MOH, O2) | Tag for location / grouping |
+| Location owner | **Location owner** — **Vendon machine tag** when present (see `vendon_machine_tag_explicit` → `vendon_location_owner_tag` in API); else site/location fallback | Tag for location / grouping |
 | Location hours | **Location hours** — 9 / 12 / 16 / 24 hrs | Drives Overall “Operating hours” context |
 | Operating days | **Operating days** — All week / Weekends off / Custom weekdays | |
 | Cleaning schedule | **Cleaning schedule** — start/end time windows | Green/yellow/red logic on monitors uses this |

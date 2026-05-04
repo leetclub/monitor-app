@@ -339,6 +339,16 @@ def register_alert_routes(app) -> None:
                 ).all()
                 out: List[Dict[str, Any]] = []
                 for r in rows:
+                    pat = (r.machine_name or r.machine_id or "").strip()
+                    priority_out = 10
+                    if pat:
+                        sched = (
+                            db.query(MachineCleaningSchedule)
+                            .filter(MachineCleaningSchedule.name_pattern == pat)
+                            .first()
+                        )
+                        if sched is not None:
+                            priority_out = int(sched.priority or 0)
                     out.append(
                         {
                             "machine_id": r.machine_id,
@@ -351,6 +361,7 @@ def register_alert_routes(app) -> None:
                             "technician_schedule": r.technician_schedule,
                             "qa_schedule": r.qa_schedule,
                             "timezone": r.timezone,
+                            "priority": priority_out,
                             "updated_by": r.updated_by,
                             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                         }

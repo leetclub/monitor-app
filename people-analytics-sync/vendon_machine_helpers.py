@@ -42,10 +42,34 @@ def _tags_location_candidate(tags: Any) -> Optional[str]:
     return candidates[0]
 
 
+def vendon_machine_tag_explicit(m: Dict[str, Any]) -> Optional[str]:
+    """Machine-level tag from Vendon (preferred over site/location names for Location owner)."""
+    if not isinstance(m, dict):
+        return None
+    for key in ("machine_tag", "machineTag", "asset_tag", "assetTag", "unit_tag", "unitTag"):
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    tags = m.get("tags")
+    if isinstance(tags, list):
+        for t in tags:
+            if isinstance(t, dict):
+                name = str(t.get("name") or t.get("key") or t.get("type") or "").lower()
+                val = t.get("value") or t.get("label") or t.get("title")
+                if not isinstance(val, str) or not val.strip():
+                    continue
+                if any(x in name for x in ("machine", "asset", "device", "unit", "vend", "imei")):
+                    return val.strip()
+    return None
+
+
 def vendon_location_owner_tag(m: Dict[str, Any]) -> Optional[str]:
     """Best-effort location / site tag from a Vendon ``/machine`` row (schema varies by tenant)."""
     if not isinstance(m, dict):
         return None
+    machine_tag = vendon_machine_tag_explicit(m)
+    if machine_tag:
+        return machine_tag
     loc = m.get("location")
     if isinstance(loc, str) and loc.strip():
         return loc.strip()
