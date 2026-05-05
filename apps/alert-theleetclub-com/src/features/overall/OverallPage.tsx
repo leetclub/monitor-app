@@ -108,10 +108,8 @@ export function OverallPage() {
         <div className="pageHeroMain">
           <h1 className="pageTitle">Overall</h1>
           <p className="pageSubtitle">
-            Workbook-aligned fleet view. Column order matches{' '}
-            <code className="adminInlineCode">alert.theleetclub.com.xlsx</code> sheet <strong>Overall</strong>. Cells show
-            live values where the API already provides them, and <span className="muted">—</span> where the workbook
-            requires additional integrations (Vendon aggregates / Workflow APIs).
+            Fleet overview: operating context, machines, operators, and Red Alert snapshot fields where available. Empty cells
+            (<span className="muted">—</span>) mean that metric is not connected yet.
           </p>
         </div>
         <div className="pageHeroAside">
@@ -126,8 +124,7 @@ export function OverallPage() {
         <div className="surfaceSectionLabel">Timespan comparison</div>
         <ComparePresetPicker value={compare} onChange={setComparePersist} />
         <p className="surfaceHint">
-          Selected: <strong>{presetLabels[compare.preset]}</strong>. Range A/B drive workbook KPI columns when those
-          metrics are connected. Snapshot columns below show current Red Alert cache when the machine is flagged.
+          Selected: <strong>{presetLabels[compare.preset]}</strong>. Period A/B apply when comparison metrics are available.
         </p>
       </section>
 
@@ -184,7 +181,7 @@ export function OverallPage() {
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
                 const minsOk = mins != null && typeof mins === 'number' && !Number.isNaN(mins);
                 const prof = profileByMachineId.get(m.id);
-                const locOwner = String(prof?.location_owner ?? m.vendon_location_owner ?? '').trim();
+                const locOwner = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
                 const locHours = String(prof?.location_hours ?? '').trim();
                 const operating =
                   (locHours ? `${locHours} hrs` : '—') + (locOwner ? ` · ${locOwner}` : '');
@@ -234,9 +231,7 @@ export function OverallPage() {
           </table>
         </div>
         <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
-          Workbook mapping: <code className="adminInlineCode">docs/alert-workbook-overall-tab.md</code>. The API endpoint
-          <code className="adminInlineCode">/api/alert/overall/admin-profiles</code> provides Admin-derived values for
-          Operating Hours / Operator; remaining workbook columns are pending integrations.
+          Operating hours combine site hours from Admin with the machine tag from Vendon when available.
         </p>
       </section>
     </div>

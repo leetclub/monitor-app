@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
-import { useCallback, useMemo, useState } from 'react';
+import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } from 'react';
 import { HelpTip } from '@/components/HelpTip';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -17,9 +17,11 @@ export type OperatingDays =
 type MachineRow = {
   id: string;
   name: string;
-  /** Location/site tag from Vendon machine payload when present */
+  /** Machine / fleet tag from Vendon (API field name kept for compatibility) */
   vendon_location_owner?: string | null;
 };
+
+type VisitContactRow = { name: string; note: string };
 
 type MachinesApiResponse = {
   machines: MachineRow[];
@@ -58,6 +60,90 @@ function normalizeOperatingDays(raw: unknown): OperatingDays {
   return { preset: 'all_week' };
 }
 
+function emptyVisitRow(): VisitContactRow {
+  return { name: '', note: '' };
+}
+
+/** Load saved schedule array (objects or legacy shapes) into editable rows. */
+function scheduleRowsFromUnknown(raw: unknown): VisitContactRow[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [emptyVisitRow()];
+  const out: VisitContactRow[] = [];
+  for (const item of raw) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const o = item as Record<string, unknown>;
+      const name = String(o.name ?? o.person ?? o.technician ?? o.officer ?? '').trim();
+      const note = String(o.note ?? o.visits ?? o.schedule ?? o.details ?? '').trim();
+      if (name || note) out.push({ name, note });
+    }
+  }
+  return out.length ? out : [emptyVisitRow()];
+}
+
+function unknownArrayFromVisitRows(rows: VisitContactRow[]): unknown[] {
+  return rows
+    .map((r) => ({ name: r.name.trim(), note: r.note.trim() }))
+    .filter((r) => r.name || r.note);
+}
+
+function VisitScheduleRows(props: {
+  title: string;
+  rows: VisitContactRow[];
+  setRows: Dispatch<SetStateAction<VisitContactRow[]>>;
+}) {
+  const { title, rows, setRows } = props;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
+        {title}
+      </div>
+      {rows.map((row, idx) => (
+        <div key={idx} className="row" style={{ marginBottom: 8, alignItems: 'flex-end' }}>
+          <label style={{ flex: '1 1 140px' }}>
+            Name
+            <input
+              value={row.name}
+              onChange={(e) => {
+                const next = [...rows];
+                next[idx] = { ...next[idx], name: e.target.value };
+                setRows(next);
+              }}
+              autoComplete="off"
+            />
+          </label>
+          <label style={{ flex: '2 1 220px' }}>
+            Visits / notes
+            <input
+              value={row.note}
+              placeholder="e.g. Tue AM"
+              onChange={(e) => {
+                const next = [...rows];
+                next[idx] = { ...next[idx], note: e.target.value };
+                setRows(next);
+              }}
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            className="danger"
+            onClick={() => {
+              setRows((prev) => {
+                const cut = prev.filter((_, i) => i !== idx);
+                return cut.length ? cut : [emptyVisitRow()];
+              });
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button type="button" className="primary" onClick={() => setRows((p) => [...p, emptyVisitRow()])}>
+        Add row
+      </button>
+    </div>
+  );
+}
+
 export function MachineProfileSection() {
   const qc = useQueryClient();
   const machinesQ = useQuery({
@@ -76,8 +162,8 @@ export function MachineProfileSection() {
   const [customDays, setCustomDays] = useState<number[]>([]);
   const [cleaningWindows, setCleaningWindows] = useState<TimeWindow[]>([{ start: '14:00', end: '15:00' }]);
   const [operators, setOperators] = useState<OperatorBlock[]>([emptyOperator()]);
-  const [technicianJson, setTechnicianJson] = useState('[]');
-  const [qaJson, setQaJson] = useState('[]');
+  const [technicianRows, setTechnicianRows] = useState<VisitContactRow[]>([emptyVisitRow()]);
+  const [qaRows, setQaRows] = useState<VisitContactRow[]>([emptyVisitRow()]);
   const [timezone, setTimezone] = useState('Asia/Kuwait');
   const [priority, setPriority] = useState(10);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -110,8 +196,8 @@ export function MachineProfileSection() {
           }))
         : [emptyOperator()],
     );
-    setTechnicianJson(JSON.stringify(p.technician_schedule ?? [], null, 2));
-    setQaJson(JSON.stringify(p.qa_schedule ?? [], null, 2));
+    setTechnicianRows(scheduleRowsFromUnknown(p.technician_schedule));
+    setQaRows(scheduleRowsFromUnknown(p.qa_schedule));
     setTimezone(p.timezone || 'Asia/Kuwait');
     setPriority(typeof p.priority === 'number' && !Number.isNaN(p.priority) ? p.priority : 10);
     setFormErr(null);
@@ -127,14 +213,14 @@ export function MachineProfileSection() {
     setCustomDays([]);
     setCleaningWindows([{ start: '14:00', end: '15:00' }]);
     setOperators([emptyOperator()]);
-    setTechnicianJson('[]');
-    setQaJson('[]');
+    setTechnicianRows([emptyVisitRow()]);
+    setQaRows([emptyVisitRow()]);
     setTimezone('Asia/Kuwait');
     setPriority(10);
     setFormErr(null);
   }, []);
 
-  /** New machine with no saved profile — seed Location owner from Vendon. */
+  /** New machine with no saved profile — seed machine tag from live machine list. */
   const seedNewMachine = useCallback(
     (id: string, machineList: MachineRow[]) => {
       const m = machineList.find((x) => x.id === id);
@@ -145,8 +231,8 @@ export function MachineProfileSection() {
       setCustomDays([]);
       setCleaningWindows([{ start: '14:00', end: '15:00' }]);
       setOperators([emptyOperator()]);
-      setTechnicianJson('[]');
-      setQaJson('[]');
+      setTechnicianRows([emptyVisitRow()]);
+      setQaRows([emptyVisitRow()]);
       setTimezone('Asia/Kuwait');
       setPriority(10);
       setFormErr(null);
@@ -159,20 +245,8 @@ export function MachineProfileSection() {
       if (!machineId.trim()) {
         throw new Error('Choose a machine first.');
       }
-      let tech: unknown[] = [];
-      let qa: unknown[] = [];
-      try {
-        tech = JSON.parse(technicianJson || '[]') as unknown[];
-        if (!Array.isArray(tech)) throw new Error('Technician must be a JSON array');
-      } catch (e) {
-        throw new Error(`Technician JSON: ${(e as Error).message}`);
-      }
-      try {
-        qa = JSON.parse(qaJson || '[]') as unknown[];
-        if (!Array.isArray(qa)) throw new Error('QA must be a JSON array');
-      } catch (e) {
-        throw new Error(`QA JSON: ${(e as Error).message}`);
-      }
+      const tech = unknownArrayFromVisitRows(technicianRows);
+      const qa = unknownArrayFromVisitRows(qaRows);
       const operating_days: OperatingDays =
         opPreset === 'custom' ? { preset: 'custom', days: customDays } : { preset: opPreset };
       return apiJson('/api/alert/admin/machine-profiles', {
@@ -218,31 +292,6 @@ export function MachineProfileSection() {
 
   return (
     <>
-      <details className="adminFold">
-        <summary title="Maps alert.theleetclub.com.xlsx Admin sheet. Full mapping in repo: docs/alert-workbook-admin-tab.md">
-          Workbook column guide
-        </summary>
-        <ul className="adminSpecList muted adminFoldBody">
-          <li>
-            <strong>Vending machine</strong> — Vendon list (dropdown).
-          </li>
-          <li>
-            <strong>Location owner</strong> — the <strong>machine tag from Vendon</strong> when the API exposes it
-            (location/site names are secondary). Save uses the Vendon tag if present; otherwise your text.
-          </li>
-          <li>
-            <strong>Location hours</strong> — 9 / 12 / 16 / 24 hrs.
-          </li>
-          <li>
-            <strong>Operating days</strong> — week / weekends off / custom days.
-          </li>
-          <li>
-            <strong>Cleaning / operators / tech / QA</strong> — see sections below. Technician &amp; QA are stored as lists in the
-            database (same idea as operators, but no structured editor yet — see that section).
-          </li>
-        </ul>
-      </details>
-
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">Saved profiles</h2>
@@ -255,7 +304,7 @@ export function MachineProfileSection() {
             <thead>
               <tr>
                 <th>Machine</th>
-                <th>Owner tag</th>
+                <th>Machine tag</th>
                 <th>Open hours</th>
                 <th>Updated</th>
                 <th />
@@ -265,7 +314,13 @@ export function MachineProfileSection() {
               {rows.map((r) => (
                 <tr key={r.machine_id}>
                   <td>{r.machine_name || r.machine_id}</td>
-                  <td>{r.location_owner || '—'}</td>
+                  <td>
+                    {(() => {
+                      const vm = machines.find((x) => x.id === r.machine_id);
+                      const t = (vm?.vendon_location_owner ?? '').trim();
+                      return t || r.location_owner || '—';
+                    })()}
+                  </td>
                   <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
                   <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
@@ -314,10 +369,10 @@ export function MachineProfileSection() {
         <div className="adminGroup">
           <div className="adminGroupLabel adminGroupLabelRow">
             Core
-            <HelpTip text="Workbook Admin columns: machine, owner, hours preset, operating days." />
+            <HelpTip text="Machine, tag, open-hours preset, operating days." />
           </div>
           <div className="row" style={{ alignItems: 'flex-end' }}>
-            <label style={{ flex: '2 1 200px' }} title="From Vendon">
+            <label style={{ flex: '2 1 200px' }} title="Machines from the catalog">
               Vending machine
               <select
                 value={machineId}
@@ -346,9 +401,9 @@ export function MachineProfileSection() {
             </label>
             <label
               style={{ flex: '1 1 200px' }}
-              title="Machine tag from Vendon when available; used for grouping (Overall / options list)"
+              title="Fleet tag from Vendon when available; used for grouping and filters"
             >
-              Location owner
+              Machine tag
               <input
                 name="location_owner"
                 list="alert-location-owner-options"
@@ -378,12 +433,11 @@ export function MachineProfileSection() {
 
           {machineId && vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
-              Vendon machine tag: <strong>{vendonLocationTag}</strong> (used as Location owner).
+              Tag from device feed: <strong>{vendonLocationTag}</strong>
             </p>
           ) : machineId && !vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
-              No fleet/machine tag was parsed from Vendon for this device. The field shows your saved value — edit or clear
-              it if it still looks like a site name from before.
+              No tag in the live feed for this device — enter one below or keep your saved value.
             </p>
           ) : null}
 
@@ -391,7 +445,7 @@ export function MachineProfileSection() {
             <span className="adminGroupLabel" style={{ marginRight: 10, display: 'inline', textTransform: 'none', letterSpacing: 'normal' }}>
               Operating days
             </span>
-            <HelpTip text="Workbook: All week, Weekends off, or pick individual days." />
+            <HelpTip text="All week, weekends off, or pick individual days." />
             <label style={{ display: 'inline-flex', marginRight: 12, marginLeft: 8 }}>
               <input type="radio" name="od" checked={opPreset === 'all_week'} onChange={() => setOpPreset('all_week')} />{' '}
               All week
@@ -552,54 +606,23 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="Technician and QA visit data — stored as JSON arrays in Postgres until a dedicated schedule editor ships.">
-            Technician &amp; QA schedules
+          <summary title="Optional contacts and visit notes for technician and QA.">
+            Technician &amp; QA visits
           </summary>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            These fields are not random: the API/database store technician and QA data as{' '}
-            <strong>JSON arrays</strong> (same columns as the workbook <strong>Admin</strong> sheet). There is no visit-calendar
-            UI here yet, so you edit that list as text. Use{' '}
-            <code>[]</code> when nothing is scheduled yet. On Save, the app parses this text as JSON — it must be a valid array
-            (example: <code>{'[{"name":"Ali","note":"Tue AM"}]'}</code>), not arbitrary text like <code>!!!</code>.
+            Add one row per person. Empty rows are not saved.
           </p>
-          <label style={{ width: '100%', alignItems: 'flex-start' }}>
-            Technician (responsible person + visits)
-            <textarea
-              rows={5}
-              value={technicianJson}
-              onChange={(e) => setTechnicianJson(e.target.value)}
-              placeholder='[]'
-              spellCheck={false}
-              autoComplete="off"
-              style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-            />
-          </label>
-          <label style={{ width: '100%', alignItems: 'flex-start', marginTop: 10 }}>
-            QA officer (visits)
-            <textarea
-              rows={5}
-              value={qaJson}
-              onChange={(e) => setQaJson(e.target.value)}
-              placeholder='[]'
-              spellCheck={false}
-              autoComplete="off"
-              style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-            />
-          </label>
+          <VisitScheduleRows title="Technician" rows={technicianRows} setRows={setTechnicianRows} />
+          <VisitScheduleRows title="QA" rows={qaRows} setRows={setQaRows} />
         </details>
 
         <details className="adminDetails">
-          <summary
-            title={
-              'IANA time zone for cleaning / operator windows. Priority is stored on the Red Alert cleaning rule for this machine name; higher number wins when multiple rules could match.'
-            }
-          >
+          <summary title="IANA time zone for cleaning and operator windows; priority resolves overlapping cleaning rules.">
             Time zone &amp; priority
           </summary>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            <strong>Time zone</strong> — saved on this machine profile and used with cleaning windows (default{' '}
-            <code>Asia/Kuwait</code>). <strong>Priority</strong> — same value synced to the DC cleaning schedule row for this
-            machine name; higher priority wins if rules overlap.
+            <strong>Time zone</strong> applies when interpreting cleaning and operator windows (default <code>Asia/Kuwait</code>).{' '}
+            <strong>Priority</strong> resolves overlaps on automated cleaning rules for this machine — higher wins.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <label title="IANA name, e.g. Asia/Kuwait — used when interpreting time windows">
