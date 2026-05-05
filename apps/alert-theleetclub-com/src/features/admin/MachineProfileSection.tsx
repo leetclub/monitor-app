@@ -378,6 +378,11 @@ export function MachineProfileSection() {
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
               Vendon machine tag: <strong>{vendonLocationTag}</strong> (used as Location owner).
             </p>
+          ) : machineId && !vendonLocationTag ? (
+            <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
+              No fleet/machine tag was parsed from Vendon for this device. The field shows your saved value — edit or clear
+              it if it still looks like a site name from before.
+            </p>
           ) : null}
 
           <div style={{ marginTop: 12 }} className="adminInlineDayPick">

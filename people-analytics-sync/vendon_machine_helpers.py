@@ -11,6 +11,31 @@ from typing import Any, Dict, List, Optional
 # Legacy parity with monitoring-app-v2 ``EXCLUDED_NAME_MARKERS`` (substring on name or id).
 EXCLUDED_MACHINE_MARKERS: tuple[str, ...] = ("869951037923178", "869951037920851")
 
+def _acceptable_alert_admin_tag_value(s: str) -> bool:
+    """
+    Admin \"Location owner\" must never show Vendon site/address strings.
+    Accept short operator codes (O2, MOH) and reject sentence-like location names.
+    """
+    x = (s or "").strip()
+    if not x or len(x) > 24:
+        return False
+    if any(ch in x for ch in ",;\n\r"):
+        return False
+    words = x.split()
+    # Machine/fleet codes are virtually never multi-word site descriptions.
+    if len(words) > 1:
+        return False
+    # Long ALL-CAPS place names (e.g. SALMIYA, KUWAIT) are not machine tags.
+    if len(words) == 1 and x.isalpha() and x.upper() == x and len(x) > 5:
+        return False
+    if _looks_like_machine_owner_tag(x):
+        return True
+    # Single-token fleet codes (MOH, KDD, O2 uses digit so not all-alpha-long)
+    if len(words) == 1 and len(x) <= 16 and x.upper() == x and x.replace("-", "").replace("_", "").isalnum():
+        return len(x) >= 2
+    return False
+
+
 def _looks_like_machine_owner_tag(s: str) -> bool:
     """
     Heuristic for operator-facing machine tags like: O2, MOH, KU, KDD, etc.
@@ -117,6 +142,164 @@ def vendon_machine_tag_explicit(m: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+_SKIP_DEEP_SUBTREES = frozenset(
+    {
+        "location",
+        "site",
+        "customer",
+        "address",
+        "shipping_address",
+        "gps",
+        "coordinates",
+        "contact",
+        "notes",
+        "description",
+    }
+)
+
+_MACHINE_TAG_KEY_HINTS = (
+    "machine_tag",
+    "machinetag",
+    "asset_tag",
+    "assettag",
+    "unit_tag",
+    "unittag",
+    "machinetagname",
+    "machine_tags",
+)
+
+
+def _deep_find_admin_machine_tags(m: Dict[str, Any]) -> Optional[str]:
+    """Walk nested Vendon JSON for keys that denote machine/fleet codes (skip location/site subtrees)."""
+    found: List[str] = []
+
+    def walk(obj: Any, depth: int) -> None:
+        if depth <= 0 or obj is None:
+            return
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                kl = str(k).lower()
+                if kl in _SKIP_DEEP_SUBTREES or kl.endswith("_address"):
+                    continue
+                if any(h in kl for h in _MACHINE_TAG_KEY_HINTS):
+                    if isinstance(v, str) and _acceptable_alert_admin_tag_value(v.strip()):
+                        found.append(v.strip())
+                    elif isinstance(v, dict):
+                        for kk in ("value", "name", "label", "title", "text", "code"):
+                            vv = v.get(kk)
+                            if isinstance(vv, str) and _acceptable_alert_admin_tag_value(vv.strip()):
+                                found.append(vv.strip())
+                walk(v, depth - 1)
+        elif isinstance(obj, list):
+            for item in obj[:80]:
+                walk(item, depth - 1)
+
+    walk(m, 4)
+    return found[0] if found else None
+
+
+def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
+    """
+    Strict machine/fleet tag for Alert Admin only.
+    Does **not** return ``tags_display``, ``location``, or unvalidated ``tag`` strings (often site names).
+    """
+    if not isinstance(m, dict):
+        return None
+    trusted_keys = (
+        "machine_tag",
+        "machineTag",
+        "asset_tag",
+        "assetTag",
+        "unit_tag",
+        "unitTag",
+    )
+    for key in trusted_keys:
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            vs = v.strip()
+            if _acceptable_alert_admin_tag_value(vs):
+                return vs
+    mid = m.get("machineTagId")
+    if isinstance(mid, str) and mid.strip():
+        vs = mid.strip()
+        if not vs.isdigit() and _acceptable_alert_admin_tag_value(vs):
+            return vs
+    for key in ("tag",):
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            vs = v.strip()
+            if _acceptable_alert_admin_tag_value(vs):
+                return vs
+    for key in ("tags_display", "location_tag"):
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            vs = v.strip()
+            if _acceptable_alert_admin_tag_value(vs):
+                return vs
+    tags = m.get("tags")
+    if isinstance(tags, dict):
+        for _k, t in tags.items():
+            if isinstance(t, str) and t.strip() and _acceptable_alert_admin_tag_value(t.strip()):
+                return t.strip()
+            if isinstance(t, dict):
+                name = str(t.get("name") or t.get("key") or t.get("type") or "").lower()
+                val = t.get("value") or t.get("label") or t.get("title")
+                if not isinstance(val, str) or not val.strip():
+                    continue
+                vs = val.strip()
+                if not _acceptable_alert_admin_tag_value(vs):
+                    continue
+                if any(
+                    x in name
+                    for x in (
+                        "machine",
+                        "asset",
+                        "device",
+                        "unit",
+                        "vend",
+                        "imei",
+                        "group",
+                        "fleet",
+                        "brand",
+                        "operator",
+                    )
+                ):
+                    return vs
+                if _looks_like_machine_owner_tag(vs):
+                    return vs
+    if isinstance(tags, list):
+        for t in tags:
+            if isinstance(t, str) and t.strip() and _acceptable_alert_admin_tag_value(t.strip()):
+                return t.strip()
+            if isinstance(t, dict):
+                name = str(t.get("name") or t.get("key") or t.get("type") or "").lower()
+                val = t.get("value") or t.get("label") or t.get("title")
+                if not isinstance(val, str) or not val.strip():
+                    continue
+                vs = val.strip()
+                if not _acceptable_alert_admin_tag_value(vs):
+                    continue
+                if any(
+                    x in name
+                    for x in (
+                        "machine",
+                        "asset",
+                        "device",
+                        "unit",
+                        "vend",
+                        "imei",
+                        "group",
+                        "fleet",
+                        "brand",
+                        "operator",
+                    )
+                ):
+                    return vs
+                if _looks_like_machine_owner_tag(vs):
+                    return vs
+    return None
+
+
 def _short_fleet_or_operator_label(s: str) -> Optional[str]:
     """Short labels used as fleet / operator grouping (e.g. O2, MOH), not full addresses."""
     x = (s or "").strip()
@@ -159,6 +342,41 @@ def vendon_fleet_group_tag(m: Dict[str, Any]) -> Optional[str]:
         if isinstance(val, list):
             for item in val:
                 t = _label_from_group_like(item)
+                if t:
+                    return t
+    return None
+
+
+def _label_from_group_like_admin(obj: Any) -> Optional[str]:
+    """Fleet/group label only if it passes Admin tag validation (not city/branch names)."""
+    if not isinstance(obj, dict):
+        return None
+    for key in ("name", "title", "label", "tag", "code", "short_name"):
+        v = obj.get(key)
+        if isinstance(v, str) and v.strip():
+            vs = v.strip()
+            if _acceptable_alert_admin_tag_value(vs):
+                return vs
+    return None
+
+
+def vendon_fleet_group_tag_admin(m: Dict[str, Any]) -> Optional[str]:
+    """
+    Same as fleet/group discovery as ``vendon_fleet_group_tag`` but:
+    - Never reads generic ``labels`` / ``categories`` (often geographic).
+    - Validates values with ``_acceptable_alert_admin_tag_value``.
+    """
+    if not isinstance(m, dict):
+        return None
+    for key in ("group", "machine_group", "fleet", "brand", "operator_group"):
+        t = _label_from_group_like_admin(m.get(key))
+        if t:
+            return t
+    for key in ("groups", "machine_groups"):
+        val = m.get(key)
+        if isinstance(val, list):
+            for item in val:
+                t = _label_from_group_like_admin(item)
                 if t:
                     return t
     return None
@@ -224,9 +442,13 @@ def _tags_scan_for_machine_owner(tags: Any) -> Optional[str]:
                     consider(v, nm)
 
     if prioritized:
-        return prioritized[0]
+        for p in prioritized:
+            if _acceptable_alert_admin_tag_value(p):
+                return p
     if fallback_short:
-        return min(fallback_short, key=len)
+        for f in sorted(fallback_short, key=len):
+            if _acceptable_alert_admin_tag_value(f):
+                return f
     return None
 
 
@@ -240,13 +462,20 @@ def _tag_from_machine_name_owner_hint(name: Any) -> Optional[str]:
     m = re.match(r"^\s*\[([A-Za-z0-9]{1,10})\]\s*", s)
     if m:
         cand = m.group(1).strip()
+        up = cand.upper()
+        if _acceptable_alert_admin_tag_value(up):
+            return up
         if _looks_like_machine_owner_tag(cand):
             return cand
         if 2 <= len(cand) <= 10 and cand.isalnum():
-            return cand.upper()
+            up = cand.upper()
+            if _acceptable_alert_admin_tag_value(up):
+                return up
     m = re.match(r"^\s*([A-Z0-9]{2,10})\s*[-–—:|]\s*", s)
     if m:
         cand = m.group(1).strip()
+        if _acceptable_alert_admin_tag_value(cand):
+            return cand
         if _looks_like_machine_owner_tag(cand):
             return cand
     return None
@@ -255,14 +484,17 @@ def _tag_from_machine_name_owner_hint(name: Any) -> Optional[str]:
 def vendon_machine_tag_for_alert_admin(m: Dict[str, Any]) -> Optional[str]:
     """
     Machine/fleet tag for Alert Admin \"Location owner\" — never falls back to customer/site address strings.
-    Order: explicit fields → Vendon group/fleet → machine-oriented tag rows → name prefix heuristic.
+    Order: explicit fields → deep key scan → fleet/group (validated) → machine-oriented tag rows → name prefix heuristic.
     """
     if not isinstance(m, dict):
         return None
-    t = vendon_machine_tag_explicit(m)
+    t = vendon_machine_tag_explicit_admin(m)
     if t:
         return t
-    t = vendon_fleet_group_tag(m)
+    t = _deep_find_admin_machine_tags(m)
+    if t:
+        return t
+    t = vendon_fleet_group_tag_admin(m)
     if t:
         return t
     t = _tags_scan_for_machine_owner(m.get("tags"))
