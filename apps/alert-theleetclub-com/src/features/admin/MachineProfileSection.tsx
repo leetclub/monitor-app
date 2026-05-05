@@ -237,7 +237,8 @@ export function MachineProfileSection() {
             <strong>Operating days</strong> — week / weekends off / custom days.
           </li>
           <li>
-            <strong>Cleaning / operators / tech / QA</strong> — see sections below; tech &amp; QA JSON until UI editor.
+            <strong>Cleaning / operators / tech / QA</strong> — see sections below. Technician &amp; QA are stored as lists in the
+            database (same idea as operators, but no structured editor yet — see that section).
           </li>
         </ul>
       </details>
@@ -551,30 +552,37 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="Visit schedules (Workflow APIs). JSON until we ship a visual editor.">
-            Technician &amp; QA (JSON)
+          <summary title="Technician and QA visit data — stored as JSON arrays in Postgres until a dedicated schedule editor ships.">
+            Technician &amp; QA schedules
           </summary>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            <code>[]</code> means no schedule stored yet. Both fields must be valid JSON arrays. Fix invalid JSON before Save
-            (e.g. do not use <code>!!!</code>).
+            These fields are not random: the API/database store technician and QA data as{' '}
+            <strong>JSON arrays</strong> (same columns as the workbook <strong>Admin</strong> sheet). There is no visit-calendar
+            UI here yet, so you edit that list as text. Use{' '}
+            <code>[]</code> when nothing is scheduled yet. On Save, the app parses this text as JSON — it must be a valid array
+            (example: <code>{'[{"name":"Ali","note":"Tue AM"}]'}</code>), not arbitrary text like <code>!!!</code>.
           </p>
           <label style={{ width: '100%', alignItems: 'flex-start' }}>
-            Technician (responsible + visits)
+            Technician (responsible person + visits)
             <textarea
-              rows={4}
+              rows={5}
               value={technicianJson}
               onChange={(e) => setTechnicianJson(e.target.value)}
-              placeholder="[]"
+              placeholder='[]'
+              spellCheck={false}
+              autoComplete="off"
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
             />
           </label>
           <label style={{ width: '100%', alignItems: 'flex-start', marginTop: 10 }}>
             QA officer (visits)
             <textarea
-              rows={4}
+              rows={5}
               value={qaJson}
               onChange={(e) => setQaJson(e.target.value)}
-              placeholder="[]"
+              placeholder='[]'
+              spellCheck={false}
+              autoComplete="off"
               style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
             />
           </label>

@@ -11,7 +11,7 @@ Regenerate or diff when the xlsx changes; keep the **Machine profile** form in t
 | Operating days | **Operating days** — All week / Weekends off / Custom weekdays | |
 | Cleaning schedule | **Cleaning schedule** — start/end time windows | Green/yellow/red logic on monitors uses this |
 | Operator hours | **Operator hours** — named people + time ranges | Multiple operators allowed |
-| Technician | **Technician** — JSON schedule until visual editor | Visit days + hours; Workflow API |
-| QA officer | **QA officer** — JSON schedule until visual editor | Visit days + hours; Workflow API |
+| Technician | **Technician** — textarea → JSON array (Postgres JSONB); interim until a schedule UI ships | Visit / responsibility rows stored as structured list; not “JSON” as product choice — storage shape |
+| QA officer | **QA officer** — same as Technician | Same |
 
 Overall and Red Flags sheets describe **downstream** columns (fleet KPIs, alert columns); those screens consume Admin machine data where noted above. **Red Flags** table mapping: `docs/alert-workbook-red-flags-tab.md`.
