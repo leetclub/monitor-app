@@ -36,11 +36,17 @@ def _cors_origins() -> List[str]:
     env = (os.environ.get('ENV') or os.environ.get('FLASK_ENV') or '').lower()
     if env == 'production':
         logger.warning(
-            'CORS_ALLOWED_ORIGINS is unset in production; browser clients on another origin will be blocked'
+            'CORS_ALLOWED_ORIGINS unset — using defaults for *.theleetclub.com + GAS (*.googleusercontent.com) + localhost'
         )
-        return []
-    # Local dev fallback only (not used when ENV=production)
-    return ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://script.googleusercontent.com']
+    # Default browser clients + GAS (override with CORS_ALLOWED_ORIGINS for strict allowlist).
+    return [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        r'https://.*\.theleetclub\.com',
+        r'https://.*\.googleusercontent\.com',
+        'https://script.googleusercontent.com',
+        'https://script.google.com',
+    ]
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -61,7 +67,8 @@ if _is_prod:
 if _is_prod:
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    # Browser SPA on another origin (alert.theleetclub.com) -> people-api needs cross-site cookies.
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(
     hours=int(os.environ.get('SESSION_LIFETIME_HOURS', '12'))

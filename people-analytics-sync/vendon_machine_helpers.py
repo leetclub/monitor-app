@@ -46,7 +46,19 @@ def vendon_machine_tag_explicit(m: Dict[str, Any]) -> Optional[str]:
     """Machine-level tag from Vendon (preferred over site/location names for Location owner)."""
     if not isinstance(m, dict):
         return None
-    for key in ("machine_tag", "machineTag", "asset_tag", "assetTag", "unit_tag", "unitTag"):
+    for key in (
+        "machine_tag",
+        "machineTag",
+        "asset_tag",
+        "assetTag",
+        "unit_tag",
+        "unitTag",
+        # Common vendor integrations:
+        "tag",
+        "tags_display",
+        "location_tag",
+        "machineTagId",
+    ):
         v = m.get(key)
         if isinstance(v, str) and v.strip():
             return v.strip()

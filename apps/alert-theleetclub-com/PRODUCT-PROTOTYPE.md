@@ -14,7 +14,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/login` | Login | Google sign-in. |
 | `/home` | Home | Cards: **Red Flags** → **Overall** → **Admin** (if role allows). |
 | `/red-flags` | Red Flags | **Red Alert** snapshot; columns match `alert.theleetclub.com.xlsx` **Red Flags** row 1 (see `docs/alert-workbook-red-flags-tab.md`); trailing columns **—** until API wires workbook metrics; five **timespan presets**; ~1 min refresh. |
-| `/overall` | Overall | **All** machines + snapshot columns; same timespan presets; **KPI** cells for workbook metrics when wired; ~1 min refresh. |
+| `/overall` | Overall | Workbook **Overall** sheet columns (see `docs/alert-workbook-overall-tab.md`); Admin-derived Operating Hours + Operator + snapshot Last Transaction; other workbook metrics show **—** until API wiring; ~1 min refresh. |
 | `/admin` | Admin | User-entered data **not on Vendon** (schedules, cleaning, access). **Machines** (profiles, Vendon readout), **Who can use Alert**, **My access**, **Advanced**. |
 
 ---

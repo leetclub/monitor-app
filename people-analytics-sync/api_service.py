@@ -62,6 +62,8 @@ def _cors_origins() -> List[str]:
     defaults = [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        # Production SPAs (Alert + Monitor v2) — cookie-auth requires explicit origin allowlist.
+        r'https://.*\.theleetclub\.com',
         r'https://.*\.googleusercontent\.com',
         'https://script.googleusercontent.com',
         'https://script.google.com',
@@ -85,7 +87,9 @@ if _is_prod:
 if _is_prod:
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    # Browser SPA on another origin (alert.theleetclub.com) -> people-api needs cross-site cookies.
+    # Must be Secure + SameSite=None or browsers won't send the session cookie.
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(
     hours=int(os.environ.get('SESSION_LIFETIME_HOURS', '12'))

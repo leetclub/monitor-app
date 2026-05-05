@@ -8,6 +8,7 @@ import {
 import { apiGet } from '@/lib/api';
 import { safeText } from '@/lib/safeText';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
+import { OVERALL_COLUMNS } from './overallWorkbookColumns';
 
 type Machine = { id: string; name: string; vendon_location_owner?: string | null };
 type MachinesResponse = { machines: Machine[] };
@@ -17,6 +18,17 @@ type Snapshot = {
   cacheGeneratedAt?: string | null;
   rows?: RedAlertRow[];
 };
+
+type AdminProfileRow = {
+  machine_id: string;
+  location_owner?: string | null;
+  location_hours?: string | null;
+  operator_name?: string | null;
+  timezone?: string | null;
+  updated_at?: string | null;
+};
+
+type AdminProfilesResponse = { rows: AdminProfileRow[] };
 
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
@@ -37,6 +49,12 @@ export function OverallPage() {
     refetchInterval: 60_000,
   });
 
+  const profilesQ = useQuery({
+    queryKey: ['alert-overall-admin-profiles'],
+    queryFn: () => apiGet<AdminProfilesResponse>('/api/alert/overall/admin-profiles'),
+    refetchInterval: 60_000,
+  });
+
   const machines = useMemo(() => {
     const raw = machinesQ.data?.machines;
     if (!Array.isArray(raw)) return [];
@@ -49,6 +67,17 @@ export function OverallPage() {
           : null,
     }));
   }, [machinesQ.data]);
+
+  const profileByMachineId = useMemo(() => {
+    const m = new Map<string, AdminProfileRow>();
+    const rows = profilesQ.data?.rows;
+    if (!Array.isArray(rows)) return m;
+    for (const r of rows) {
+      const id = String(r.machine_id ?? '').trim();
+      if (id) m.set(id, r);
+    }
+    return m;
+  }, [profilesQ.data]);
 
   const snapshotByMachineId = useMemo(() => {
     const m = new Map<string, RedAlertRow>();
@@ -79,8 +108,10 @@ export function OverallPage() {
         <div className="pageHeroMain">
           <h1 className="pageTitle">Overall</h1>
           <p className="pageSubtitle">
-            All machines in scope (Vendon fleet). Red Flags shows only machines that currently violate conditions; this
-            table lists everyone. Schedules and rules not on Vendon are maintained in Admin. Both tabs refresh ~1 min.
+            Workbook-aligned fleet view. Column order matches{' '}
+            <code className="adminInlineCode">alert.theleetclub.com.xlsx</code> sheet <strong>Overall</strong>. Cells show
+            live values where the API already provides them, and <span className="muted">—</span> where the workbook
+            requires additional integrations (Vendon aggregates / Workflow APIs).
           </p>
         </div>
         <div className="pageHeroAside">
@@ -118,41 +149,75 @@ export function OverallPage() {
           <table>
             <thead>
               <tr>
-                <th>Machine</th>
-                <th>Machine ID</th>
-                <th>Location / site tag</th>
-                <th>On Red Flags now</th>
-                <th>WTD hits (A+B+C)</th>
-                <th>Min since last tx</th>
-                <th>KPI (range A)</th>
-                <th>KPI (range B)</th>
+                <th>{OVERALL_COLUMNS.operatingHours.title}</th>
+                <th>{OVERALL_COLUMNS.vendingMachine.title}</th>
+                <th>{OVERALL_COLUMNS.operator.title}</th>
+                <th title={OVERALL_COLUMNS.attendance.note}>{OVERALL_COLUMNS.attendance.title}</th>
+                <th title={OVERALL_COLUMNS.lastCleaned.note}>{OVERALL_COLUMNS.lastCleaned.title}</th>
+                <th title={OVERALL_COLUMNS.lastVendFailed.note}>{OVERALL_COLUMNS.lastVendFailed.title}</th>
+                <th>{OVERALL_COLUMNS.lastTransaction.title}</th>
+                <th title={OVERALL_COLUMNS.salesTrend.note}>{OVERALL_COLUMNS.salesTrend.title}</th>
+                <th title={OVERALL_COLUMNS.targetAchieved.note}>{OVERALL_COLUMNS.targetAchieved.title}</th>
+                <th title={OVERALL_COLUMNS.peakHours.note}>{OVERALL_COLUMNS.peakHours.title}</th>
+                <th title={OVERALL_COLUMNS.promotion.note}>{OVERALL_COLUMNS.promotion.title}</th>
+                <th title={OVERALL_COLUMNS.highestProduct.note}>{OVERALL_COLUMNS.highestProduct.title}</th>
+                <th title={OVERALL_COLUMNS.lowestProduct.note}>{OVERALL_COLUMNS.lowestProduct.title}</th>
+                <th title={OVERALL_COLUMNS.peopleCount.note}>{OVERALL_COLUMNS.peopleCount.title}</th>
+                <th title={OVERALL_COLUMNS.customerCalls.note}>{OVERALL_COLUMNS.customerCalls.title}</th>
+                <th title={OVERALL_COLUMNS.mostIssue.note}>{OVERALL_COLUMNS.mostIssue.title}</th>
+                <th title={OVERALL_COLUMNS.lastQaCheck.note}>{OVERALL_COLUMNS.lastQaCheck.title}</th>
+                <th title={OVERALL_COLUMNS.lastTechCheck.note}>{OVERALL_COLUMNS.lastTechCheck.title}</th>
+                <th title={OVERALL_COLUMNS.wastagePct.note}>{OVERALL_COLUMNS.wastagePct.title}</th>
+                <th title={OVERALL_COLUMNS.promotionRuns.note}>{OVERALL_COLUMNS.promotionRuns.title}</th>
               </tr>
             </thead>
             <tbody>
               {machinesQ.isLoading ? (
                 <tr>
-                  <td colSpan={8} className="muted">
+                  <td colSpan={20} className="muted">
                     Loading…
                   </td>
                 </tr>
               ) : null}
               {machines.map((m) => {
                 const snap = snapshotByMachineId.get(m.id);
-                const flagged = !!snap;
-                const wtd =
-                  snap?.happensWeek ??
-                  snap?.frequency?.totalCriteriaHitsThisWeek ??
-                  snap?.frequency?.totalCriteriaHits7d;
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
                 const minsOk = mins != null && typeof mins === 'number' && !Number.isNaN(mins);
+                const prof = profileByMachineId.get(m.id);
+                const locOwner = String(prof?.location_owner ?? m.vendon_location_owner ?? '').trim();
+                const locHours = String(prof?.location_hours ?? '').trim();
+                const operating =
+                  (locHours ? `${locHours} hrs` : '—') + (locOwner ? ` · ${locOwner}` : '');
+                const operator =
+                  String(prof?.operator_name ?? '').trim() ||
+                  String(snap?.operator ?? snap?.operatorName ?? snap?.redAlertOperator ?? '').trim() ||
+                  '—';
+                const tx = snap?.lastTransactionAtUtc ?? snap?.last_transaction_at_utc ?? null;
                 return (
                   <tr key={m.id}>
-                    <td>{m.name}</td>
-                    <td className="muted">{m.id}</td>
-                    <td>{m.vendon_location_owner || '—'}</td>
-                    <td>{flagged ? 'Yes' : 'No'}</td>
-                    <td>{wtd != null && !Number.isNaN(Number(wtd)) ? String(wtd) : '—'}</td>
-                    <td>{minsOk ? String(mins) : '—'}</td>
+                    <td>{operating}</td>
+                    <td>
+                      {m.name}
+                      <div className="muted" style={{ fontSize: '0.78rem' }}>
+                        #{m.id}
+                      </div>
+                    </td>
+                    <td>{operator}</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td>{tx ? String(tx) : minsOk ? `${String(mins)} min` : '—'}</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
+                    <td className="muted">—</td>
                     <td className="muted">—</td>
                     <td className="muted">—</td>
                   </tr>
@@ -160,7 +225,7 @@ export function OverallPage() {
               })}
               {machines.length === 0 && !machinesQ.isLoading ? (
                 <tr>
-                  <td colSpan={8} className="muted">
+                  <td colSpan={20} className="muted">
                     No machines returned.
                   </td>
                 </tr>
@@ -169,9 +234,9 @@ export function OverallPage() {
           </table>
         </div>
         <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
-          Detailed KPI columns from your workbook/XLS will populate against ranges A &amp; B after those metrics are
-          wired. Attach the specification file in-repo (e.g. under <code className="adminInlineCode">docs/</code>) for
-          column-for-column parity.
+          Workbook mapping: <code className="adminInlineCode">docs/alert-workbook-overall-tab.md</code>. The API endpoint
+          <code className="adminInlineCode">/api/alert/overall/admin-profiles</code> provides Admin-derived values for
+          Operating Hours / Operator; remaining workbook columns are pending integrations.
         </p>
       </section>
     </div>

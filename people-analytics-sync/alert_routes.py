@@ -446,6 +446,45 @@ def register_alert_routes(app) -> None:
         finally:
             db.close()
 
+    @app.route("/api/alert/overall/admin-profiles", methods=["GET", "OPTIONS"])
+    def alert_overall_admin_profiles():
+        """
+        Read-only subset of Admin machine profiles for the Overall sheet.
+        Requires only Alert read access (leetAlert or redAlert).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        db = _dash_session()
+        try:
+            rows = db.query(AlertMachineProfile).all()
+            out: List[Dict[str, Any]] = []
+            for r in rows:
+                op0 = None
+                if isinstance(r.operator_hours, list) and r.operator_hours:
+                    first = r.operator_hours[0]
+                    if isinstance(first, dict):
+                        op0 = (first.get("name") or "").strip() or None
+                out.append(
+                    {
+                        "machine_id": r.machine_id,
+                        "location_owner": r.location_owner,
+                        "location_hours": r.location_hours,
+                        "operator_name": op0,
+                        "timezone": r.timezone,
+                        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                    }
+                )
+            return jsonify({"rows": out})
+        except Exception as ex:
+            logger.exception("alert overall admin profiles")
+            return jsonify({"error": "failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
     @app.route("/api/alert/admin/machine-profiles/<path:machine_id>", methods=["DELETE", "OPTIONS"])
     def alert_admin_machine_profile_delete(machine_id: str):
         if request.method == "OPTIONS":
