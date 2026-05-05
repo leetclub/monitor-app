@@ -93,7 +93,8 @@ export function MachineProfileSection() {
     setMachineId(p.machine_id);
     const m = machines.find((x) => x.id === p.machine_id);
     const vendonTag = (m?.vendon_location_owner ?? '').trim();
-    setLocationOwner(vendonTag || (p.location_owner ?? ''));
+    // Do not prefill from DB `location_owner` — it is often a legacy site name. Only show Vendon machine tag (or user-typed value after edit).
+    setLocationOwner(vendonTag);
     setLocationHours(p.location_hours ?? '');
     const od = normalizeOperatingDays(p.operating_days);
     setOpPreset(od.preset === 'custom' ? 'custom' : od.preset);

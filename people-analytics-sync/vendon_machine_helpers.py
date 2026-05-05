@@ -166,6 +166,9 @@ _MACHINE_TAG_KEY_HINTS = (
     "unittag",
     "machinetagname",
     "machine_tags",
+    "prose",
+    "callincode",
+    "call_in_code",
 )
 
 
@@ -205,6 +208,15 @@ def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
     """
     if not isinstance(m, dict):
         return None
+    # Vendon Cloud often exposes a short machine code as ``prose`` (≤15 chars) or ``callInCode`` — not the location name.
+    for key in ("prose", "callInCode", "call_in_code"):
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            vs = v.strip()
+            if len(vs) <= 15 and len(vs.split()) <= 1:
+                cand = vs.upper()
+                if _acceptable_alert_admin_tag_value(cand):
+                    return cand
     trusted_keys = (
         "machine_tag",
         "machineTag",
@@ -452,6 +464,27 @@ def _tags_scan_for_machine_owner(tags: Any) -> Optional[str]:
     return None
 
 
+def _tag_from_machine_name_segments(name: Any) -> Optional[str]:
+    """
+    Split machine ``name`` on common separators (pipe, slash, dash).
+    Location text is often after ``|`` / ``/``; fleet code may be first or last segment (``O2 | Mall``, ``Mall | O2``).
+    """
+    if not isinstance(name, str):
+        return None
+    s = name.strip()
+    if not s:
+        return None
+    parts = re.split(r"\s*\|\s*|\s*/\s*|\s+[–—]\s*|\s+\-\s+", s)
+    candidates = [p.strip() for p in parts if p.strip()]
+    for c in candidates:
+        if _acceptable_alert_admin_tag_value(c):
+            return c
+    for c in candidates:
+        if _looks_like_machine_owner_tag(c):
+            return c
+    return None
+
+
 def _tag_from_machine_name_owner_hint(name: Any) -> Optional[str]:
     """Last resort: leading fleet code in naming conventions like ``[O2] Site …`` or ``O2 - Snack``."""
     if not isinstance(name, str):
@@ -498,6 +531,9 @@ def vendon_machine_tag_for_alert_admin(m: Dict[str, Any]) -> Optional[str]:
     if t:
         return t
     t = _tags_scan_for_machine_owner(m.get("tags"))
+    if t:
+        return t
+    t = _tag_from_machine_name_segments(m.get("name"))
     if t:
         return t
     return _tag_from_machine_name_owner_hint(m.get("name"))

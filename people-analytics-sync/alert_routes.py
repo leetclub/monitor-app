@@ -139,26 +139,6 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
         return None, str(ex)
 
 
-def _vendon_location_endpoint_names() -> List[str]:
-    """Optional ``/location`` list — empty if the endpoint is missing or errors."""
-    data, err = _vendon_get("/location", None)
-    if err or not isinstance(data, dict):
-        return []
-    rows = data.get("result")
-    if not isinstance(rows, list):
-        return []
-    out: List[str] = []
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        for key in ("name", "title", "label"):
-            v = r.get(key)
-            if isinstance(v, str) and v.strip():
-                out.append(v.strip())
-                break
-    return out
-
-
 def register_alert_routes(app) -> None:
     @app.route("/api/alert/machines", methods=["GET", "OPTIONS"])
     def alert_machines():
@@ -192,8 +172,8 @@ def register_alert_routes(app) -> None:
                 }
             )
         machines.sort(key=lambda x: (x.get("name") or "").lower())
-        extra_loc = _vendon_location_endpoint_names()
-        options = sorted(set(tags_from_machines + extra_loc), key=lambda s: s.lower())
+        # Do not merge ``/location`` endpoint names — those are site/branch titles, not machine/fleet tags (confuses Admin datalist).
+        options = sorted(set(tags_from_machines), key=lambda s: s.lower())
         return jsonify({"machines": machines, "location_owner_options": options})
 
     @app.route("/api/alert/red-flags/snapshot", methods=["GET", "OPTIONS"])
