@@ -17,7 +17,7 @@ from dashboard_access_models import (
     create_dashboard_engine_and_session,
 )
 from dashboard_access_routes import resolve_session_allowed_tabs
-from vendon_machine_helpers import machine_row_excluded, vendon_location_owner_tag
+from vendon_machine_helpers import machine_row_excluded, vendon_machine_tag_for_alert_admin
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,7 @@ def register_alert_routes(app) -> None:
             mname = m.get("name") or mid
             if machine_row_excluded(mname, mid):
                 continue
-            tag = vendon_location_owner_tag(m)
+            tag = vendon_machine_tag_for_alert_admin(m)
             if tag:
                 tags_from_machines.append(tag)
             machines.append(
