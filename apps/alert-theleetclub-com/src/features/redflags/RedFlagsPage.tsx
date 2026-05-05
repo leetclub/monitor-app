@@ -297,12 +297,9 @@ export function RedFlagsPage() {
           <div className={styles.titleBlock}>
             <h1 className={styles.title}>Red Flags</h1>
             <p className={styles.sub}>
-              Same Red Alert snapshot as Monitor. Table columns match{' '}
-              <code className={styles.inlineCode}>alert.theleetclub.com.xlsx</code> sheet{' '}
-              <strong>Red Flags</strong> (see{' '}
-              <code className={styles.inlineCode}>docs/alert-workbook-red-flags-tab.md</code>). Columns after{' '}
-              <strong>GO CHECK</strong> are placeholders until the snapshot API adds those metrics. ~1 min refresh. Test IMEIs
-              excluded.
+              Live Red Alert snapshot aligned with Monitor. Columns follow the operational checklist through{' '}
+              <strong>GO CHECK</strong>; additional metrics appear when the feed includes them. Refreshes about once a minute.
+              Test devices are excluded.
             </p>
           </div>
           <div className={styles.topRight}>

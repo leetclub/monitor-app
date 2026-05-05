@@ -117,8 +117,8 @@ export function AdminPage() {
           <p className="adminAppEyebrow">Settings</p>
           <h1 className="adminAppTitle">Admin</h1>
           <p className="adminAppTagline">
-            Enter what Vendon does not provide: work schedules, cleaning windows, operators, and access rules. Vending names
-            and tags still come from Vendon; Admin layers operational setup on top.
+            Configure schedules, cleaning windows, operators, and access. Device names and fleet tags come from your vending
+            data feed; this area adds operational setup on top.
           </p>
         </div>
         <HelpTip text="Machines: profiles & schedules. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional legacy substring rules." />
@@ -130,7 +130,7 @@ export function AdminPage() {
           {navBtn(
             'machines',
             'Machines',
-            'Per-machine profiles — matches workbook Admin columns.',
+            'Per-machine profiles: cleaning windows, operators, tags, and related settings.',
           )}
           {navBtn(
             'people',
@@ -144,15 +144,6 @@ export function AdminPage() {
             'Advanced',
             'Legacy substring rules — prefer Machines for normal setup.',
           )}
-
-          <details className="adminSideDocsFold">
-            <summary title="Repository paths for PDF and workbook mapping">Documentation map</summary>
-            <p className="adminSideDocsBody muted">
-              Routes &amp; permissions: <code className="adminInlineCode">PRODUCT-PROTOTYPE.md</code> /{' '}
-              <code className="adminInlineCode">PRODUCT-PROTOTYPE.pdf</code>.               Workbook: <code className="adminInlineCode">docs/alert-workbook-admin-tab.md</code>,{' '}
-              <code className="adminInlineCode">docs/alert-workbook-red-flags-tab.md</code>.
-            </p>
-          </details>
         </nav>
 
         <main className="adminAppMain" id="admin-main-panel" tabIndex={-1}>
@@ -292,7 +283,7 @@ export function AdminPage() {
                 {schedulesQ.isError ? (
                   <div className="muted">{(schedulesQ.error as Error).message}</div>
                 ) : null}
-                <div className="tableWrap">
+                <div className="tableWrap tableWrapBounded">
                   <table>
                     <thead>
                       <tr>

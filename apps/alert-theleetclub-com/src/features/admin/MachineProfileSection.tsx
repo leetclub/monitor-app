@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
 import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } from 'react';
 import { HelpTip } from '@/components/HelpTip';
+import { fleetTagSourceDescription } from '@/lib/fleetTagSourceHint';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -19,6 +20,8 @@ type MachineRow = {
   name: string;
   /** Machine / fleet tag from Vendon (API field name kept for compatibility) */
   vendon_location_owner?: string | null;
+  /** How `vendon_location_owner` was derived (server slug; see `fleetTagSourceDescription`) */
+  vendon_tag_source?: string | null;
 };
 
 type VisitContactRow = { name: string; note: string };
@@ -173,6 +176,10 @@ export function MachineProfileSection() {
   const machineName = useMemo(() => machines.find((m) => m.id === machineId)?.name ?? '', [machines, machineId]);
   const selectedMachine = useMemo(() => machines.find((m) => m.id === machineId), [machines, machineId]);
   const vendonLocationTag = (selectedMachine?.vendon_location_owner ?? '').trim();
+  const vendonTagSourceHint = useMemo(
+    () => fleetTagSourceDescription(selectedMachine?.vendon_tag_source ?? undefined),
+    [selectedMachine?.vendon_tag_source],
+  );
 
   const loadProfileIntoForm = useCallback(
     (p: ProfileRow) => {
@@ -295,12 +302,12 @@ export function MachineProfileSection() {
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">Saved profiles</h2>
-          <HelpTip text="Edit loads the form below. Remove deletes saved profile data for that machine." />
+          <HelpTip text="Long lists scroll inside this card. Hover a machine tag for how it was derived from the feed. Edit loads the form below; Remove deletes saved data for that machine." />
         </div>
         {profilesQ.isLoading ? <div className="muted">Loading…</div> : null}
         {profilesQ.isError ? <div className="muted">{(profilesQ.error as Error).message}</div> : null}
-        <div className="tableWrap">
-          <table>
+        <div className="tableWrap tableWrapBounded">
+          <table className="adminSavedProfilesTable">
             <thead>
               <tr>
                 <th>Machine</th>
@@ -311,37 +318,42 @@ export function MachineProfileSection() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.machine_id}>
-                  <td>{r.machine_name || r.machine_id}</td>
-                  <td>
-                    {(() => {
-                      const vm = machines.find((x) => x.id === r.machine_id);
-                      const t = (vm?.vendon_location_owner ?? '').trim();
-                      return t || r.location_owner || '—';
-                    })()}
-                  </td>
-                  <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
-                  <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button type="button" className="primary" onClick={() => loadProfileIntoForm(r)}>
-                      Edit
-                    </button>{' '}
-                    <button
-                      type="button"
-                      className="danger"
-                      disabled={delMut.isPending}
-                      onClick={() => {
-                        if (confirm(`Remove saved profile for ${r.machine_name || r.machine_id}?`)) {
-                          delMut.mutate(r.machine_id);
-                        }
-                      }}
+              {rows.map((r) => {
+                const vm = machines.find((x) => x.id === r.machine_id);
+                const feedTag = (vm?.vendon_location_owner ?? '').trim();
+                const displayTag = feedTag || r.location_owner || '—';
+                const tagHint = fleetTagSourceDescription(vm?.vendon_tag_source ?? undefined);
+                return (
+                  <tr key={r.machine_id}>
+                    <td className="tableCellWrap">{r.machine_name || r.machine_id}</td>
+                    <td
+                      className="tableCellWrap"
+                      title={tagHint ? `${displayTag}. ${tagHint}` : displayTag}
                     >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      {displayTag}
+                    </td>
+                    <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
+                    <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button type="button" className="primary" onClick={() => loadProfileIntoForm(r)}>
+                        Edit
+                      </button>{' '}
+                      <button
+                        type="button"
+                        className="danger"
+                        disabled={delMut.isPending}
+                        onClick={() => {
+                          if (confirm(`Remove saved profile for ${r.machine_name || r.machine_id}?`)) {
+                            delMut.mutate(r.machine_id);
+                          }
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {rows.length === 0 && !profilesQ.isLoading ? (
                 <tr>
                   <td colSpan={5} className="muted">
@@ -399,10 +411,7 @@ export function MachineProfileSection() {
                 ))}
               </select>
             </label>
-            <label
-              style={{ flex: '1 1 200px' }}
-              title="Fleet tag from Vendon when available; used for grouping and filters"
-            >
+            <label style={{ flex: '1 1 200px' }} title="Fleet tag from the live device feed when present; used for grouping">
               Machine tag
               <input
                 name="location_owner"
@@ -434,6 +443,12 @@ export function MachineProfileSection() {
           {machineId && vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
               Tag from device feed: <strong>{vendonLocationTag}</strong>
+              {vendonTagSourceHint ? (
+                <>
+                  {' '}
+                  <span style={{ opacity: 0.92 }}>({vendonTagSourceHint})</span>
+                </>
+              ) : null}
             </p>
           ) : machineId && !vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>

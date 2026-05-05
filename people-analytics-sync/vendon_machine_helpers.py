@@ -6,7 +6,7 @@ Vendon payloads vary by tenant — we merge structured fields with ``tags`` (whe
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # Legacy parity with monitoring-app-v2 ``EXCLUDED_NAME_MARKERS`` (substring on name or id).
 EXCLUDED_MACHINE_MARKERS: tuple[str, ...] = ("869951037923178", "869951037920851")
@@ -201,22 +201,30 @@ def _deep_find_admin_machine_tags(m: Dict[str, Any]) -> Optional[str]:
     return found[0] if found else None
 
 
-def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
+def _vendon_machine_tag_explicit_admin_detail(m: Dict[str, Any]) -> Tuple[Optional[str], str]:
     """
-    Strict machine/fleet tag for Alert Admin only.
+    Strict machine/fleet tag for Alert Admin only (with provenance slug for UI).
     Does **not** return ``tags_display``, ``location``, or unvalidated ``tag`` strings (often site names).
     """
     if not isinstance(m, dict):
-        return None
+        return None, "none"
     # Vendon Cloud often exposes a short machine code as ``prose`` (≤15 chars) or ``callInCode`` — not the location name.
-    for key in ("prose", "callInCode", "call_in_code"):
+    for key in ("prose",):
         v = m.get(key)
         if isinstance(v, str) and v.strip():
             vs = v.strip()
             if len(vs) <= 15 and len(vs.split()) <= 1:
                 cand = vs.upper()
                 if _acceptable_alert_admin_tag_value(cand):
-                    return cand
+                    return cand, "device_short_field"
+    for key in ("callInCode", "call_in_code"):
+        v = m.get(key)
+        if isinstance(v, str) and v.strip():
+            vs = v.strip()
+            if len(vs) <= 15 and len(vs.split()) <= 1:
+                cand = vs.upper()
+                if _acceptable_alert_admin_tag_value(cand):
+                    return cand, "call_in_code"
     trusted_keys = (
         "machine_tag",
         "machineTag",
@@ -230,29 +238,29 @@ def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
         if isinstance(v, str) and v.strip():
             vs = v.strip()
             if _acceptable_alert_admin_tag_value(vs):
-                return vs
+                return vs, "asset_field"
     mid = m.get("machineTagId")
     if isinstance(mid, str) and mid.strip():
         vs = mid.strip()
         if not vs.isdigit() and _acceptable_alert_admin_tag_value(vs):
-            return vs
+            return vs, "machine_tag_id"
     for key in ("tag",):
         v = m.get(key)
         if isinstance(v, str) and v.strip():
             vs = v.strip()
             if _acceptable_alert_admin_tag_value(vs):
-                return vs
+                return vs, "top_level_tag"
     for key in ("tags_display", "location_tag"):
         v = m.get(key)
         if isinstance(v, str) and v.strip():
             vs = v.strip()
             if _acceptable_alert_admin_tag_value(vs):
-                return vs
+                return vs, "display_tag"
     tags = m.get("tags")
     if isinstance(tags, dict):
         for _k, t in tags.items():
             if isinstance(t, str) and t.strip() and _acceptable_alert_admin_tag_value(t.strip()):
-                return t.strip()
+                return t.strip(), "structured_tags"
             if isinstance(t, dict):
                 name = str(t.get("name") or t.get("key") or t.get("type") or "").lower()
                 val = t.get("value") or t.get("label") or t.get("title")
@@ -276,13 +284,13 @@ def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
                         "operator",
                     )
                 ):
-                    return vs
+                    return vs, "structured_tags"
                 if _looks_like_machine_owner_tag(vs):
-                    return vs
+                    return vs, "structured_tags"
     if isinstance(tags, list):
         for t in tags:
             if isinstance(t, str) and t.strip() and _acceptable_alert_admin_tag_value(t.strip()):
-                return t.strip()
+                return t.strip(), "structured_tags"
             if isinstance(t, dict):
                 name = str(t.get("name") or t.get("key") or t.get("type") or "").lower()
                 val = t.get("value") or t.get("label") or t.get("title")
@@ -306,10 +314,15 @@ def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
                         "operator",
                     )
                 ):
-                    return vs
+                    return vs, "structured_tags"
                 if _looks_like_machine_owner_tag(vs):
-                    return vs
-    return None
+                    return vs, "structured_tags"
+    return None, "none"
+
+
+def vendon_machine_tag_explicit_admin(m: Dict[str, Any]) -> Optional[str]:
+    """Strict machine/fleet tag for Alert Admin only."""
+    return _vendon_machine_tag_explicit_admin_detail(m)[0]
 
 
 def _short_fleet_or_operator_label(s: str) -> Optional[str]:
@@ -514,29 +527,40 @@ def _tag_from_machine_name_owner_hint(name: Any) -> Optional[str]:
     return None
 
 
+def vendon_machine_tag_for_alert_admin_detail(m: Dict[str, Any]) -> Tuple[Optional[str], str]:
+    """
+    Machine/fleet tag for Alert Admin plus a short ``source`` slug for operator-facing UI (how the tag was derived).
+    Never falls back to customer/site address strings.
+    """
+    if not isinstance(m, dict):
+        return None, "none"
+    t, _src = _vendon_machine_tag_explicit_admin_detail(m)
+    if t:
+        return t, _src
+    t = _deep_find_admin_machine_tags(m)
+    if t:
+        return t, "nested_field"
+    t = vendon_fleet_group_tag_admin(m)
+    if t:
+        return t, "fleet_group"
+    t = _tags_scan_for_machine_owner(m.get("tags"))
+    if t:
+        return t, "platform_tags"
+    t = _tag_from_machine_name_segments(m.get("name"))
+    if t:
+        return t, "machine_name"
+    t = _tag_from_machine_name_owner_hint(m.get("name"))
+    if t:
+        return t, "machine_name_prefix"
+    return None, "none"
+
+
 def vendon_machine_tag_for_alert_admin(m: Dict[str, Any]) -> Optional[str]:
     """
     Machine/fleet tag for Alert Admin \"Location owner\" — never falls back to customer/site address strings.
     Order: explicit fields → deep key scan → fleet/group (validated) → machine-oriented tag rows → name prefix heuristic.
     """
-    if not isinstance(m, dict):
-        return None
-    t = vendon_machine_tag_explicit_admin(m)
-    if t:
-        return t
-    t = _deep_find_admin_machine_tags(m)
-    if t:
-        return t
-    t = vendon_fleet_group_tag_admin(m)
-    if t:
-        return t
-    t = _tags_scan_for_machine_owner(m.get("tags"))
-    if t:
-        return t
-    t = _tag_from_machine_name_segments(m.get("name"))
-    if t:
-        return t
-    return _tag_from_machine_name_owner_hint(m.get("name"))
+    return vendon_machine_tag_for_alert_admin_detail(m)[0]
 
 
 def vendon_location_owner_tag(m: Dict[str, Any]) -> Optional[str]:

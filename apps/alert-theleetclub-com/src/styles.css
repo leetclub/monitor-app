@@ -499,6 +499,24 @@ button.danger {
   border-radius: 12px;
 }
 
+/* Scroll long admin lists instead of stretching the page (sticky thead still works inside). */
+.tableWrapBounded {
+  max-height: min(52vh, 26rem);
+  -webkit-overflow-scrolling: touch;
+}
+
+.adminSavedProfilesTable td.tableCellWrap {
+  white-space: normal;
+  max-width: min(22vw, 14rem);
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .adminSavedProfilesTable td.tableCellWrap {
+    max-width: none;
+  }
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -1058,30 +1076,6 @@ th {
   min-width: 0;
 }
 
-.adminSideDocsFold {
-  margin: 12px 4px 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border-soft);
-}
-
-.adminSideDocsFold summary {
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--muted);
-  list-style: none;
-}
-
-.adminSideDocsFold summary::-webkit-details-marker {
-  display: none;
-}
-
-.adminSideDocsBody {
-  margin: 8px 0 0;
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
 .adminAppMain {
   min-width: 0;
   outline: none;
@@ -1127,11 +1121,6 @@ th {
     border-bottom: 3px solid var(--accent);
     border-color: rgba(34, 197, 94, 0.35);
     border-bottom-color: var(--accent);
-  }
-
-  .adminSideDocsFold {
-    width: 100%;
-    margin-top: 8px;
   }
 
   .adminAppHeader .helpTip {
