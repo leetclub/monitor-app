@@ -350,10 +350,11 @@ export function MachineProfileSection() {
               <input
                 name="location_owner"
                 list="alert-location-owner-options"
-                value={locationOwner}
-                onChange={(e) => setLocationOwner(e.target.value)}
+                value={vendonLocationTag || locationOwner}
+                onChange={(e) => (vendonLocationTag ? null : setLocationOwner(e.target.value))}
                 placeholder={vendonLocationTag ? vendonLocationTag : 'e.g. MOH'}
                 autoComplete="off"
+                readOnly={!!vendonLocationTag}
               />
               <datalist id="alert-location-owner-options">
                 {ownerOptions.map((o) => (
@@ -373,13 +374,9 @@ export function MachineProfileSection() {
             </label>
           </div>
 
-          {machineId && vendonLocationTag && locationOwner.trim() !== vendonLocationTag ? (
+          {machineId && vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
-              Vendon associates this machine with <strong>{vendonLocationTag}</strong>.{' '}
-              <button type="button" className="btnLink" onClick={() => setLocationOwner(vendonLocationTag)}>
-                Use Vendon tag
-              </button>{' '}
-              if the value above should match.
+              Vendon machine tag: <strong>{vendonLocationTag}</strong> (used as Location owner).
             </p>
           ) : null}
 

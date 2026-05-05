@@ -10,6 +10,23 @@ from typing import Any, Dict, List, Optional
 # Legacy parity with monitoring-app-v2 ``EXCLUDED_NAME_MARKERS`` (substring on name or id).
 EXCLUDED_MACHINE_MARKERS: tuple[str, ...] = ("869951037923178", "869951037920851")
 
+def _looks_like_machine_owner_tag(s: str) -> bool:
+    """
+    Heuristic for operator-facing machine tags like: O2, MOH, KU, KDD, etc.
+    Avoids long site names/addresses.
+    """
+    x = (s or "").strip()
+    if not x:
+        return False
+    if len(x) > 10:
+        return False
+    # mostly uppercase letters/digits, allow '_' '-' and spaces
+    good = sum(1 for c in x if (c.isupper() or c.isdigit()))
+    bad = sum(1 for c in x if (c.islower()))
+    if bad > 0:
+        return False
+    return good >= max(2, len(x.replace(" ", "")) // 2)
+
 
 def machine_row_excluded(name: object, machine_id: object) -> bool:
     blob = f"{name or ''} {machine_id or ''}"
@@ -65,11 +82,17 @@ def vendon_machine_tag_explicit(m: Dict[str, Any]) -> Optional[str]:
     tags = m.get("tags")
     if isinstance(tags, list):
         for t in tags:
+            if isinstance(t, str) and t.strip():
+                # Some tenants store the machine tag as a plain string in the tag list.
+                if _looks_like_machine_owner_tag(t.strip()):
+                    return t.strip()
             if isinstance(t, dict):
                 name = str(t.get("name") or t.get("key") or t.get("type") or "").lower()
                 val = t.get("value") or t.get("label") or t.get("title")
                 if not isinstance(val, str) or not val.strip():
                     continue
+                if _looks_like_machine_owner_tag(val.strip()):
+                    return val.strip()
                 if any(x in name for x in ("machine", "asset", "device", "unit", "vend", "imei")):
                     return val.strip()
     return None
