@@ -204,23 +204,87 @@ export function OverallPage() {
                       ) : null}
                     </td>
                     <td>{operator}</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.attendance.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastCleaned.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastVendFailed.note}>
+                        ?
+                      </span>
+                    </td>
                     <td>{tx ? String(tx) : minsOk ? `${String(mins)} min` : '—'}</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
-                    <td className="muted">—</td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.salesTrend.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.targetAchieved.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.peakHours.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.promotion.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.highestProduct.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lowestProduct.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.peopleCount.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.customerCalls.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.mostIssue.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastQaCheck.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastTechCheck.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.wastagePct.note}>
+                        ?
+                      </span>
+                    </td>
+                    <td className="muted">
+                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.promotionRuns.note}>
+                        ?
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
@@ -235,7 +299,8 @@ export function OverallPage() {
           </table>
         </div>
         <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
-          Operating hours come from Admin. Fleet tags come from the live device feed when available.
+          Operating hours come from Admin. Fleet tags come from the live device feed when available.{' '}
+          <strong>?</strong> means that metric is not connected yet — hover for detail.
         </p>
       </section>
     </div>

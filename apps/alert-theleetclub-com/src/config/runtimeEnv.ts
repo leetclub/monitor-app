@@ -12,6 +12,13 @@ export interface AlertRuntimeEnv {
    * Set via container env MONITOR_APP_URL or Vite `VITE_MONITOR_APP_URL`.
    */
   MONITOR_APP_URL?: string;
+  /** Slack workspace ID (starts with T). Used for Call AM / Call OP deep links. */
+  SLACK_TEAM_ID?: string;
+  /** Slack member IDs for area managers (start with U). */
+  SLACK_AM_AHMED_USER_ID?: string;
+  SLACK_AM_SUHAIB_USER_ID?: string;
+  /** Optional JSON object: operator email (lowercase) → Slack user id. Example: {"op@co.com":"U123"} */
+  SLACK_OP_EMAIL_MAP_JSON?: string;
   /** Optional local dev: bypass login. */
   VITE_DEV_USER_EMAIL?: string;
 }
@@ -32,6 +39,10 @@ function fromVite(): AlertRuntimeEnv {
     ALERT_API_URL: import.meta.env.VITE_ALERT_API_URL,
     GOOGLE_CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID,
     MONITOR_APP_URL: import.meta.env.VITE_MONITOR_APP_URL,
+    SLACK_TEAM_ID: import.meta.env.VITE_SLACK_TEAM_ID,
+    SLACK_AM_AHMED_USER_ID: import.meta.env.VITE_SLACK_AM_AHMED_USER_ID,
+    SLACK_AM_SUHAIB_USER_ID: import.meta.env.VITE_SLACK_AM_SUHAIB_USER_ID,
+    SLACK_OP_EMAIL_MAP_JSON: import.meta.env.VITE_SLACK_OP_EMAIL_MAP_JSON,
     VITE_DEV_USER_EMAIL: import.meta.env.VITE_DEV_USER_EMAIL,
   };
 }

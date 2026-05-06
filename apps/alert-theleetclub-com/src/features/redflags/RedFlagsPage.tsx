@@ -9,6 +9,9 @@ import {
   persistCompareSelection,
 } from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
+import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
+import { parseEmailToSlackUserMap, slackUserDmUrl } from '@/lib/slackLinks';
+import { resolveAreaManagerFromMachineName } from '@/data/operatorAreaPlan';
 import type { RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
 import {
   baselineReasonMap,
@@ -303,6 +306,16 @@ export function RedFlagsPage() {
 
   const emptyClear = q.isSuccess && ranked.length === 0;
 
+  const slackCfg = (() => {
+    const e = getAlertRuntimeEnv();
+    return {
+      team: (e.SLACK_TEAM_ID || '').trim(),
+      amAhmed: (e.SLACK_AM_AHMED_USER_ID || '').trim(),
+      amSuhaib: (e.SLACK_AM_SUHAIB_USER_ID || '').trim(),
+      opMap: parseEmailToSlackUserMap(e.SLACK_OP_EMAIL_MAP_JSON),
+    };
+  })();
+
   return (
     <div className={styles.root}>
       <div className={styles.board}>
@@ -343,9 +356,8 @@ export function RedFlagsPage() {
           <ComparePresetPicker value={compare} onChange={setComparePersist} />
         </div>
         <p className={styles.compareBarHint}>
-          Timespan presets match Overall (shared with this browser session). The trend column maps each preset to the Red
-          Alert snapshot: Today VS Yesterday, Same weekday last week, or WTD — Kuwait calendar. Month-to-date and custom
-          ranges stay selected for workbook KPI columns as the API adds period comparisons.
+          Timespan presets match Overall (shared with this browser session). Frequency uses the Red Alert snapshot for the
+          selected comparison (Kuwait calendar).
         </p>
 
         <div className={styles.tickerRow}>
@@ -435,6 +447,14 @@ export function RedFlagsPage() {
                     <th className={`${styles.th} ${styles.thNarrow}`}>
                       {RED_FLAGS_COLUMNS.techVisit.title}
                       <span className={styles.thSub}>{RED_FLAGS_COLUMNS.techVisit.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.callOp.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.callOp.sub}</span>
+                    </th>
+                    <th className={`${styles.th} ${styles.thNarrow}`}>
+                      {RED_FLAGS_COLUMNS.callAm.title}
+                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.callAm.sub}</span>
                     </th>
                   </tr>
                 </thead>
@@ -574,7 +594,7 @@ export function RedFlagsPage() {
                           )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.vendsResolved.placeholderNote}>
-                          <span className={styles.wireDash}>—</span>
+                          <span className="fleetCellMissing">?</span>
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.testCredits.placeholderNote}>
                           {machId && creditsByMachineId[machId]?.dispense_tests != null ? (
@@ -584,13 +604,77 @@ export function RedFlagsPage() {
                           )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.lastCleaning.placeholderNote}>
-                          <span className={styles.wireDash}>—</span>
+                          <span className="fleetCellMissing">?</span>
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.qaVisit.placeholderNote}>
-                          <span className={styles.wireDash}>—</span>
+                          <span className="fleetCellMissing">?</span>
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.techVisit.placeholderNote}>
-                          <span className={styles.wireDash}>—</span>
+                          <span className="fleetCellMissing">?</span>
+                        </td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.callOp.placeholderNote}>
+                          {(() => {
+                            const em = String(row.strikeOperatorEmail || '')
+                              .trim()
+                              .toLowerCase();
+                            const uid = em ? slackCfg.opMap[em] : '';
+                            if (slackCfg.team && uid) {
+                              return (
+                                <a
+                                  href={slackUserDmUrl(slackCfg.team, uid)}
+                                  className={styles.linkGo}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Slack
+                                </a>
+                              );
+                            }
+                            if (em.includes('@')) {
+                              return (
+                                <a
+                                  href={`mailto:${em}?subject=${encodeURIComponent(`Red Flags — ${row.machineName || machId}`)}`}
+                                  className={styles.linkGo}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Email
+                                </a>
+                              );
+                            }
+                            return <span className={styles.wireDash}>—</span>;
+                          })()}
+                        </td>
+                        <td className={styles.td} title={RED_FLAGS_COLUMNS.callAm.placeholderNote}>
+                          {(() => {
+                            const amKey = resolveAreaManagerFromMachineName(String(row.machineName || ''));
+                            const uid =
+                              amKey === 'ahmed'
+                                ? slackCfg.amAhmed
+                                : amKey === 'suhaib'
+                                  ? slackCfg.amSuhaib
+                                  : '';
+                            if (slackCfg.team && uid) {
+                              return (
+                                <a
+                                  href={slackUserDmUrl(slackCfg.team, uid)}
+                                  className={styles.linkGo}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {amKey === 'ahmed' ? 'Ahmed' : 'Suhaib'}
+                                </a>
+                              );
+                            }
+                            if (amKey) {
+                              return (
+                                <span
+                                  className={styles.tMuted}
+                                  title="Configure SLACK_TEAM_ID and SLACK_AM_AHMED_USER_ID / SLACK_AM_SUHAIB_USER_ID on the deployment."
+                                >
+                                  {amKey === 'ahmed' ? 'Ahmed' : 'Suhaib'}
+                                </span>
+                              );
+                            }
+                            return <span className={styles.wireDash}>—</span>;
+                          })()}
                         </td>
                       </tr>
                     );

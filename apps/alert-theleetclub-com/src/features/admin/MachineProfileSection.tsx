@@ -299,6 +299,11 @@ export function MachineProfileSection() {
 
   return (
     <>
+      <p className="muted" style={{ margin: '0 0 14px', fontSize: '0.9rem' }}>
+        <strong>{machines.length}</strong> machines in catalog · <strong>{rows.length}</strong> saved profiles — use the form to
+        add real Admin data for review.
+      </p>
+
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">{machineId ? `Edit: ${machineName || machineId}` : 'Machine profile'}</h2>

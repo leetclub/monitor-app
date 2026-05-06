@@ -11,6 +11,8 @@ export const RED_FLAGS_XLSX_ORDER = [
   'lastCleaning',
   'qaVisit',
   'techVisit',
+  'callOp',
+  'callAm',
 ] as const;
 
 export type RedFlagsColumnKey = (typeof RED_FLAGS_XLSX_ORDER)[number];
@@ -29,7 +31,7 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   operator: {
     title: 'Operator',
-    sub: 'From Admin tab',
+    sub: 'Snapshot',
   },
   frequency: {
     title: 'Frequency',
@@ -46,8 +48,8 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   vendsResolved: {
     title: 'Vends Resolved',
-    sub: 'Snapshot TBD',
-    placeholderNote: 'Workbook: vend fail vs remote credit timing — not wired on this board yet.',
+    sub: '—',
+    placeholderNote: 'Not connected yet.',
   },
   testCredits: {
     title: 'Dispense Tests',
@@ -56,17 +58,27 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   lastCleaning: {
     title: 'Last Cleaning',
-    sub: 'Snapshot TBD',
-    placeholderNote: 'Workbook: last cleaning vs schedule — join live dashboard / Admin in a future API.',
+    sub: '—',
+    placeholderNote: 'Not connected yet.',
   },
   qaVisit: {
     title: 'QA Visit',
-    sub: 'Snapshot TBD',
-    placeholderNote: 'Workbook: QA visit vs permitted window — Workflow API (planned).',
+    sub: '—',
+    placeholderNote: 'Not connected yet.',
   },
   techVisit: {
     title: 'Tech Visit',
-    sub: 'Snapshot TBD',
-    placeholderNote: 'Workbook: technician visit vs permitted window — Workflow API (planned).',
+    sub: '—',
+    placeholderNote: 'Not connected yet.',
+  },
+  callOp: {
+    title: 'Call OP',
+    sub: 'Slack',
+    placeholderNote: 'Opens Slack DM with the operator when email→Slack user id is configured.',
+  },
+  callAm: {
+    title: 'Call AM',
+    sub: 'Slack',
+    placeholderNote: 'Opens Slack DM with Ahmed or Suhaib from the AM Plan location match + Slack user ids.',
   },
 };

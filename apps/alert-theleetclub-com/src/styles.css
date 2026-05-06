@@ -553,6 +553,17 @@ th {
   color: var(--muted);
 }
 
+/** Overall / fleet table: metric not available yet */
+.fleetCellMissing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  font-weight: 800;
+  color: var(--muted);
+  cursor: help;
+}
+
 .loginShell {
   min-height: 100vh;
   display: flex;
