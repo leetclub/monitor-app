@@ -1205,6 +1205,15 @@ def _compute_remote_credits_logs_single_machine(date_str: str, machine_id: str, 
     _ = machine_name  # names come from machines list inside classic path
     return _compute_remote_credits_logs_classic(date_str, date_str, machine_id)
 
+
+def compute_remote_credits_logs_classic(start_date: str, end_date: str, machine_id_filter: str) -> Dict[str, Any]:
+    """
+    Public wrapper for remote credits classification (Custom Refunds / Drink Tests / Reason Unidentified).
+
+    Used by Monitor (remoteCredits tab) and Leet Alert (Dispense Tests / Credits Sent columns).
+    """
+    return _compute_remote_credits_logs_classic(start_date, end_date, machine_id_filter)
+
 def _ensure_revenue_table(db) -> None:
     db.execute(text("""
       CREATE TABLE IF NOT EXISTS vendon_daily_machine_revenue_cache (

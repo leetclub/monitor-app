@@ -1,7 +1,4 @@
-/**
- * Column titles from **alert.theleetclub.com.xlsx** → sheet **Red Flags** → row 1 (after **Aspect**).
- * Source file lives beside this package; re-run `scripts/read_xlsx_headers.py` after workbook edits.
- */
+/** Red Flags board columns (operator-facing). */
 export const RED_FLAGS_XLSX_ORDER = [
   'vendingMachine',
   'alertType',
@@ -43,9 +40,9 @@ export const RED_FLAGS_COLUMNS: Record<
     sub: 'Email / Workflow',
   },
   sendCredit: {
-    title: 'Send Credit',
-    sub: 'Snapshot TBD',
-    placeholderNote: 'Workbook: remote-credit counts vs thresholds — not in Red Alert row JSON yet.',
+    title: 'Credits Sent',
+    sub: 'Today',
+    placeholderNote: 'Count of remote credits (today, Kuwait).',
   },
   vendsResolved: {
     title: 'Vends Resolved',
@@ -53,9 +50,9 @@ export const RED_FLAGS_COLUMNS: Record<
     placeholderNote: 'Workbook: vend fail vs remote credit timing — not wired on this board yet.',
   },
   testCredits: {
-    title: 'Test Credits',
-    sub: 'Snapshot TBD',
-    placeholderNote: 'Workbook: test remote credit count — not wired yet.',
+    title: 'Dispense Tests',
+    sub: 'Today',
+    placeholderNote: 'Count of QA dispense tests (today, Kuwait): credits within 30 minutes of first WEB cashless vend of the day (same criteria as Monitor).',
   },
   lastCleaning: {
     title: 'Last Cleaning',

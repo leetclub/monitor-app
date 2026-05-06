@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -18,6 +19,7 @@ from dashboard_access_models import (
 )
 from dashboard_access_routes import resolve_session_allowed_tabs
 from vendon_machine_helpers import machine_row_excluded, vendon_machine_tag_for_alert_admin_detail
+from vendon_proxy_routes import compute_remote_credits_logs_classic
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +216,39 @@ def register_alert_routes(app) -> None:
             return jsonify(payload)
         finally:
             db.close()
+
+    @app.route("/api/alert/remote-credits/today-totals", methods=["GET", "OPTIONS"])
+    def alert_remote_credits_today_totals():
+        """
+        Lightweight summary for Alert boards:
+        - credits_sent: total remote credits for the Kuwait calendar day
+        - dispense_tests: Drink Tests count (same criteria as Monitor refund tests)
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        try:
+            kuwait_today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Kuwait")).date().isoformat()
+            out = compute_remote_credits_logs_classic(kuwait_today, kuwait_today, "")
+            totals = out.get("totals") if isinstance(out, dict) else None
+            totals = totals if isinstance(totals, list) else []
+            by_machine: Dict[str, Any] = {}
+            for t in totals:
+                if not isinstance(t, dict):
+                    continue
+                mid = str(t.get("machine_id") or "").strip()
+                if not mid:
+                    continue
+                by_machine[mid] = {
+                    "credits_sent": int(t.get("count") or 0),
+                    "dispense_tests": int(t.get("drink_tests_count") or 0),
+                }
+            return jsonify({"date": kuwait_today, "byMachineId": by_machine})
+        except Exception as ex:
+            logger.exception("alert_remote_credits_today_totals")
+            return jsonify({"date": None, "byMachineId": {}, "error": str(ex)}), 200
 
     @app.route("/api/alert/admin/cleaning-schedules", methods=["GET", "POST", "OPTIONS"])
     def alert_admin_cleaning_schedules():

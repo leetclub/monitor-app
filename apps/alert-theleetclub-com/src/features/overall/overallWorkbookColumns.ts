@@ -1,8 +1,7 @@
 /**
- * Column titles from **alert.theleetclub.com.xlsx** → sheet **Overall** → row 1 (after **Aspect**).
+ * Overall table columns (operator-facing).
  *
- * Many columns are not wired yet (Workbook says “from Vendon / API / Workflow”); those render `—`
- * until people-api exposes the needed fields.
+ * Some metrics are not wired yet; those render `—` until backend data is available.
  */
 export const OVERALL_XLSX_ORDER = [
   'operatingHours',
@@ -33,22 +32,22 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   operatingHours: { title: 'Operating Hours' },
   vendingMachine: { title: 'Vending Machine' },
   operator: { title: 'Operator' },
-  attendance: { title: 'Attendance', note: 'Workbook: from Admin tab (shift clock-in) — API pending.' },
-  lastCleaned: { title: 'Last Cleaned', note: 'Workbook: from Monitor, compared to cleaning schedule — API pending.' },
-  lastVendFailed: { title: 'Last Vend Failed', note: 'Workbook: from Vendon — API pending.' },
+  attendance: { title: 'Attendance', note: 'Shift clock-in (not connected yet).' },
+  lastCleaned: { title: 'Last Cleaned', note: 'Cleaning vs schedule (not connected yet).' },
+  lastVendFailed: { title: 'Last Vend Failed', note: 'Vend failure timestamp (not connected yet).' },
   lastTransaction: { title: 'Last Transaction' },
-  salesTrend: { title: 'Sales Trend', note: 'Workbook: Today vs Yesterday cups + % — API pending.' },
-  targetAchieved: { title: 'Target Achieved', note: 'Workbook: target % — API pending.' },
-  peakHours: { title: 'Peak Hours', note: 'Workbook: peak sales hours — API pending.' },
-  promotion: { title: 'Promotion', note: 'Workbook: promoted product/sales — API pending.' },
-  highestProduct: { title: 'Highest Product', note: 'Workbook: from Vendon — API pending.' },
-  lowestProduct: { title: 'Lowest Product', note: 'Workbook: from Vendon — API pending.' },
-  peopleCount: { title: 'People Count', note: 'Workbook: vs yesterday % — API pending.' },
-  customerCalls: { title: 'Customer Calls', note: 'Workbook: API — pending.' },
-  mostIssue: { title: 'Most Issue', note: 'Workbook: API — pending.' },
-  lastQaCheck: { title: 'Last QA Check', note: 'Workbook: Workflow API — pending.' },
-  lastTechCheck: { title: 'Last Tech. Check', note: 'Workbook: Workflow API — pending.' },
-  wastagePct: { title: 'Wastage %', note: 'Workbook: Workflow API — pending.' },
-  promotionRuns: { title: 'Promotion Runs', note: 'Workbook: Workflow API — pending.' },
+  salesTrend: { title: 'Sales Trend', note: 'Today vs yesterday (not connected yet).' },
+  targetAchieved: { title: 'Target Achieved', note: 'Target % (not connected yet).' },
+  peakHours: { title: 'Peak Hours', note: 'Peak sales hours (not connected yet).' },
+  promotion: { title: 'Promotion', note: 'Promoted product / sales (not connected yet).' },
+  highestProduct: { title: 'Highest Product', note: 'Top product (not connected yet).' },
+  lowestProduct: { title: 'Lowest Product', note: 'Lowest product (not connected yet).' },
+  peopleCount: { title: 'People Count', note: 'Footfall (not connected yet).' },
+  customerCalls: { title: 'Customer Calls', note: 'Customer calls (not connected yet).' },
+  mostIssue: { title: 'Most Issue', note: 'Most common issue (not connected yet).' },
+  lastQaCheck: { title: 'Last QA Check', note: 'QA visit (not connected yet).' },
+  lastTechCheck: { title: 'Last Tech. Check', note: 'Technician visit (not connected yet).' },
+  wastagePct: { title: 'Wastage %', note: 'Wastage % (not connected yet).' },
+  promotionRuns: { title: 'Promotion Runs', note: 'Promotion runs (not connected yet).' },
 };
 

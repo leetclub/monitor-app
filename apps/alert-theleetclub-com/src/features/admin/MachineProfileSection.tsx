@@ -301,73 +301,6 @@ export function MachineProfileSection() {
     <>
       <div className="adminCard">
         <div className="adminCardHeadRow">
-          <h2 className="adminCardTitle">Saved profiles</h2>
-          <HelpTip text="Long lists scroll inside this card. Hover a machine tag for how it was derived from the feed. Edit loads the form below; Remove deletes saved data for that machine." />
-        </div>
-        {profilesQ.isLoading ? <div className="muted">Loading…</div> : null}
-        {profilesQ.isError ? <div className="muted">{(profilesQ.error as Error).message}</div> : null}
-        <div className="tableWrap tableWrapBounded">
-          <table className="adminSavedProfilesTable">
-            <thead>
-              <tr>
-                <th>Machine</th>
-                <th>Machine tag</th>
-                <th>Open hours</th>
-                <th>Updated</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const vm = machines.find((x) => x.id === r.machine_id);
-                const feedTag = (vm?.vendon_location_owner ?? '').trim();
-                const displayTag = feedTag || r.location_owner || '—';
-                const tagHint = fleetTagSourceDescription(vm?.vendon_tag_source ?? undefined);
-                return (
-                  <tr key={r.machine_id}>
-                    <td className="tableCellWrap">{r.machine_name || r.machine_id}</td>
-                    <td
-                      className="tableCellWrap"
-                      title={tagHint ? `${displayTag}. ${tagHint}` : displayTag}
-                    >
-                      {displayTag}
-                    </td>
-                    <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
-                    <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button type="button" className="primary" onClick={() => loadProfileIntoForm(r)}>
-                        Edit
-                      </button>{' '}
-                      <button
-                        type="button"
-                        className="danger"
-                        disabled={delMut.isPending}
-                        onClick={() => {
-                          if (confirm(`Remove saved profile for ${r.machine_name || r.machine_id}?`)) {
-                            delMut.mutate(r.machine_id);
-                          }
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {rows.length === 0 && !profilesQ.isLoading ? (
-                <tr>
-                  <td colSpan={5} className="muted">
-                    No machines saved yet — use the form below.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="adminCard">
-        <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">{machineId ? `Edit: ${machineName || machineId}` : 'Machine profile'}</h2>
           <HelpTip text="Required: vending machine + at least one cleaning window. Operators, technician, and QA are optional." />
         </div>
@@ -673,6 +606,70 @@ export function MachineProfileSection() {
               Select a machine
             </span>
           ) : null}
+        </div>
+      </div>
+
+      <div className="adminCard">
+        <div className="adminCardHeadRow">
+          <h2 className="adminCardTitle">Saved profiles</h2>
+          <HelpTip text="Long lists scroll inside this card. Hover a machine tag for how it was derived from the feed. Edit loads the form above; Remove deletes saved data for that machine." />
+        </div>
+        {profilesQ.isLoading ? <div className="muted">Loading…</div> : null}
+        {profilesQ.isError ? <div className="muted">{(profilesQ.error as Error).message}</div> : null}
+        <div className="tableWrap tableWrapBounded">
+          <table className="adminSavedProfilesTable">
+            <thead>
+              <tr>
+                <th>Machine</th>
+                <th>Machine tag</th>
+                <th>Open hours</th>
+                <th>Updated</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const vm = machines.find((x) => x.id === r.machine_id);
+                const feedTag = (vm?.vendon_location_owner ?? '').trim();
+                const displayTag = feedTag || r.location_owner || '—';
+                const tagHint = fleetTagSourceDescription(vm?.vendon_tag_source ?? undefined);
+                return (
+                  <tr key={r.machine_id}>
+                    <td className="tableCellWrap">{r.machine_name || r.machine_id}</td>
+                    <td className="tableCellWrap" title={tagHint ? `${displayTag}. ${tagHint}` : displayTag}>
+                      {displayTag}
+                    </td>
+                    <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
+                    <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button type="button" className="primary" onClick={() => loadProfileIntoForm(r)}>
+                        Edit
+                      </button>{' '}
+                      <button
+                        type="button"
+                        className="danger"
+                        disabled={delMut.isPending}
+                        onClick={() => {
+                          if (confirm(`Remove saved profile for ${r.machine_name || r.machine_id}?`)) {
+                            delMut.mutate(r.machine_id);
+                          }
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && !profilesQ.isLoading ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    No machines saved yet — use the form above.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </div>
 

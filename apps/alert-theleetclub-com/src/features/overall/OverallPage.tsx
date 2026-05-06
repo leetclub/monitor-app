@@ -181,10 +181,9 @@ export function OverallPage() {
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
                 const minsOk = mins != null && typeof mins === 'number' && !Number.isNaN(mins);
                 const prof = profileByMachineId.get(m.id);
-                const locOwner = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
                 const locHours = String(prof?.location_hours ?? '').trim();
-                const operating =
-                  (locHours ? `${locHours} hrs` : '—') + (locOwner ? ` · ${locOwner}` : '');
+                const operating = locHours ? `${locHours} hrs` : '—';
+                const machTag = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
                 const operator =
                   String(prof?.operator_name ?? '').trim() ||
                   String(snap?.operator ?? snap?.operatorName ?? snap?.redAlertOperator ?? '').trim() ||
@@ -198,6 +197,11 @@ export function OverallPage() {
                       <div className="muted" style={{ fontSize: '0.78rem' }}>
                         #{m.id}
                       </div>
+                      {machTag ? (
+                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                          Tag: {machTag}
+                        </div>
+                      ) : null}
                     </td>
                     <td>{operator}</td>
                     <td className="muted">—</td>
@@ -231,7 +235,7 @@ export function OverallPage() {
           </table>
         </div>
         <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
-          Operating hours combine site hours from Admin with the machine tag from Vendon when available.
+          Operating hours come from Admin. Fleet tags come from the live device feed when available.
         </p>
       </section>
     </div>

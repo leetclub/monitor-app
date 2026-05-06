@@ -37,6 +37,12 @@ type Snapshot = {
   error?: string;
 };
 
+type RemoteCreditsTodayTotals = {
+  date?: string | null;
+  byMachineId?: Record<string, { credits_sent?: number; dispense_tests?: number }>;
+  error?: string;
+};
+
 function parseTimestampMs(raw: string): number {
   const s = String(raw).trim();
   if (!s) return NaN;
@@ -230,7 +236,14 @@ export function RedFlagsPage() {
     refetchInterval: 60_000,
   });
 
+  const creditsQ = useQuery({
+    queryKey: ['alert-remote-credits-today-totals'],
+    queryFn: () => apiGet<RemoteCreditsTodayTotals>('/api/alert/remote-credits/today-totals'),
+    refetchInterval: 5 * 60_000,
+  });
+
   const snapTime = q.data?.generatedAt || q.data?.cacheGeneratedAt || null;
+  const creditsByMachineId = creditsQ.data?.byMachineId ?? {};
 
   useLayoutEffect(() => {
     if (!q.data) return;
@@ -430,6 +443,38 @@ export function RedFlagsPage() {
                     const row = d.row;
                     const machId = String(getMachineIdRaw(row) || '');
                     const fq = freqSplit(row, compareMode);
+                    const todayHitsRaw = row.happensToday != null ? row.happensToday : row.frequency?.totalCriteriaHitsToday;
+                    const todayHits = todayHitsRaw != null ? Number(todayHitsRaw) : NaN;
+                    const scoreText =
+                      compareMode === 'week'
+                        ? fq.top
+                        : !Number.isNaN(todayHits)
+                          ? `${todayHits}/d`
+                          : fq.top;
+                    const trendText = fq.bottom;
+                    const trendIsGood = fq.bottomClass === 'down';
+                    const scoreIsGood = (() => {
+                      const n =
+                        compareMode === 'week'
+                          ? row.happensWeek != null
+                            ? row.happensWeek
+                            : row.frequency?.totalCriteriaHitsThisWeek
+                          : todayHitsRaw;
+                      const nn = n != null ? Number(n) : NaN;
+                      return !Number.isNaN(nn) ? nn <= 0 : false;
+                    })();
+                    const gapText = (() => {
+                      const n =
+                        compareMode === 'week'
+                          ? row.happensWeek != null
+                            ? row.happensWeek
+                            : row.frequency?.totalCriteriaHitsThisWeek
+                          : todayHitsRaw;
+                      const nn = n != null ? Number(n) : NaN;
+                      if (Number.isNaN(nn)) return '—';
+                      if (nn <= 0) return '0';
+                      return `-${nn}`;
+                    })();
                     const pri = row.alertPriorityTier != null ? Number(row.alertPriorityTier) : 1;
                     const p2 = pri === 2 || !!row.duringScheduledCleaningNow;
                     const hwN = rowHappensForSort(row, compareMode);
@@ -484,36 +529,27 @@ export function RedFlagsPage() {
                         </td>
                         <td className={styles.td}>{getOperatorDisplay(row)}</td>
                         <td className={styles.td}>
-                          <div className={styles.freq} title={fq.title}>
-                            <svg className={styles.freqSvg} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-                              <line
-                                x1="0"
-                                y1="100"
-                                x2="100"
-                                y2="0"
-                                stroke="rgba(148,163,184,0.55)"
-                                strokeWidth="1.25"
-                                vectorEffect="non-scaling-stroke"
-                              />
-                            </svg>
-                            <span className={styles.freqTop}>{fq.top}</span>
-                            <span
-                              className={`${styles.freqBot} ${
-                                fq.bottomClass === 'up'
-                                  ? fq.upBand === 4
-                                    ? styles.freqUp4
-                                    : fq.upBand === 3
-                                      ? styles.freqUp3
-                                      : fq.upBand === 2
-                                        ? styles.freqUp2
-                                        : styles.freqUp1
-                                  : fq.bottomClass === 'down'
-                                    ? styles.freqDown
-                                    : styles.freqFlat
+                          <div className={styles.freq3} title={fq.title}>
+                            <div className={`${styles.freqBox} ${scoreIsGood ? styles.freqGood : styles.freqBad}`}>
+                              <div className={styles.freqBoxTop}>Score</div>
+                              <div className={styles.freqBoxVal}>{scoreText}</div>
+                            </div>
+                            <div
+                              className={`${styles.freqBox} ${
+                                trendText.includes('—') ? styles.freqNeutral : trendIsGood ? styles.freqGood : styles.freqBad
                               }`}
                             >
-                              {fq.bottom}
-                            </span>
+                              <div className={styles.freqBoxTop}>Trend</div>
+                              <div className={styles.freqBoxVal}>{trendText}</div>
+                            </div>
+                            <div
+                              className={`${styles.freqBox} ${
+                                gapText === '0' ? styles.freqGood : gapText === '—' ? styles.freqNeutral : styles.freqBad
+                              }`}
+                            >
+                              <div className={styles.freqBoxTop}>Gap</div>
+                              <div className={styles.freqBoxVal}>{gapText}</div>
+                            </div>
                           </div>
                         </td>
                         <td className={styles.td}>
@@ -531,13 +567,21 @@ export function RedFlagsPage() {
                           )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.sendCredit.placeholderNote}>
-                          <span className={styles.wireDash}>—</span>
+                          {machId && creditsByMachineId[machId]?.credits_sent != null ? (
+                            <span>{String(creditsByMachineId[machId]?.credits_sent ?? 0)}</span>
+                          ) : (
+                            <span className={styles.wireDash}>—</span>
+                          )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.vendsResolved.placeholderNote}>
                           <span className={styles.wireDash}>—</span>
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.testCredits.placeholderNote}>
-                          <span className={styles.wireDash}>—</span>
+                          {machId && creditsByMachineId[machId]?.dispense_tests != null ? (
+                            <span>{String(creditsByMachineId[machId]?.dispense_tests ?? 0)}</span>
+                          ) : (
+                            <span className={styles.wireDash}>—</span>
+                          )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.lastCleaning.placeholderNote}>
                           <span className={styles.wireDash}>—</span>
