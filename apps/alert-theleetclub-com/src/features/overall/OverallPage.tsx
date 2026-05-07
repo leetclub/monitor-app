@@ -6,6 +6,7 @@ import {
   persistCompareSelection,
 } from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
+import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { safeText } from '@/lib/safeText';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
 import { OVERALL_COLUMNS } from './overallWorkbookColumns';
@@ -29,6 +30,28 @@ type AdminProfileRow = {
 };
 
 type AdminProfilesResponse = { rows: AdminProfileRow[] };
+
+function snapshotMostIssue(snap: RedAlertRow | undefined): string {
+  const reasons = snap?.reasons;
+  if (!reasons?.length) return '';
+  const t = String(reasons[reasons.length - 1] ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return '';
+  return t.length > 120 ? `${t.slice(0, 120)}…` : t;
+}
+
+/** Compact dispense-fail counts when we do not have a single “last fail” timestamp in the snapshot row. */
+function snapshotVendFailSummary(snap: RedAlertRow | undefined): string {
+  const fq = snap?.frequency;
+  if (!fq) return '';
+  const td = fq.dispenseFailsToday;
+  const wtd = fq.dispenseFailsThisWeek;
+  const parts: string[] = [];
+  if (td != null && Number(td) > 0) parts.push(`${td} today`);
+  if (wtd != null && Number(wtd) > 0) parts.push(`${wtd} WTD`);
+  return parts.join(' · ');
+}
 
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
@@ -124,6 +147,8 @@ export function OverallPage() {
     return m;
   }, [snapQ.data]);
 
+  const snapshotMachineCount = snapshotByMachineId.size;
+
   const presetLabels = useMemo(
     () =>
       ({
@@ -142,8 +167,9 @@ export function OverallPage() {
         <div className="pageHeroMain">
           <h1 className="pageTitle">Overall</h1>
           <p className="pageSubtitle">
-            Fleet overview: operating context, machines, operators, and Red Alert snapshot fields where available. Empty cells
-            (<span className="muted">—</span>) mean that metric is not connected yet.
+            Fleet overview: <strong>Operating hours</strong> come from Alert Admin (machine profile → Location hours). Metrics
+            such as last transaction, cleaning, reasons, and vend-fail counts come from the <strong>Red Alert snapshot</strong>{' '}
+            when that machine is on Red Flags. Other columns stay empty until those APIs are wired.
           </p>
         </div>
         <div className="pageHeroAside">
@@ -199,6 +225,15 @@ export function OverallPage() {
         </section>
       ) : null}
 
+      {fleetMachines.length > 0 && snapshotMachineCount < fleetMachines.length ? (
+        <section className="surfaceCard surfaceCardSpaced">
+          <p className="surfaceHint" style={{ margin: 0 }}>
+            Snapshot-backed columns fill only for machines in the current Red Flags list ({snapshotMachineCount} of{' '}
+            {fleetMachines.length} rows here). Machines that are not flagged still show name/tag and Admin profile fields.
+          </p>
+        </section>
+      ) : null}
+
       <section className="surfaceCard">
         <div className="surfaceCardHead">
           <h2 className="surfaceCardTitle">Fleet table</h2>
@@ -209,7 +244,12 @@ export function OverallPage() {
           <table>
             <thead>
               <tr>
-                <th>{OVERALL_COLUMNS.operatingHours.title}</th>
+                <th title={OVERALL_COLUMNS.operatingHours.note}>
+                  {OVERALL_COLUMNS.operatingHours.title}
+                  <span className="muted" style={{ display: 'block', fontSize: '0.72rem', fontWeight: 500, marginTop: 2 }}>
+                    Admin · Location hours
+                  </span>
+                </th>
                 <th>{OVERALL_COLUMNS.vendingMachine.title}</th>
                 <th>{OVERALL_COLUMNS.operator.title}</th>
                 <th title={OVERALL_COLUMNS.attendance.note}>{OVERALL_COLUMNS.attendance.title}</th>
@@ -246,15 +286,27 @@ export function OverallPage() {
                 const prof = profileByMachineId.get(m.id);
                 const locHours = String(prof?.location_hours ?? '').trim();
                 const operating = locHours ? `${locHours} hrs` : '—';
+                const lastCleanedIso = snap?.lastCleaningAt != null ? String(snap.lastCleaningAt).trim() : '';
+                const vendFailSummary = snapshotVendFailSummary(snap);
+                const mostIssue = snapshotMostIssue(snap);
                 const machTag = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
                 const operator =
                   String(prof?.operator_name ?? '').trim() ||
                   String(snap?.operator ?? snap?.operatorName ?? snap?.redAlertOperator ?? '').trim() ||
                   '—';
-                const tx = snap?.lastTransactionAtUtc ?? snap?.last_transaction_at_utc ?? null;
+                const txRaw =
+                  snap?.lastTransactionAtUtc ??
+                  snap?.last_transaction_at_utc ??
+                  snap?.lastSaleAtUtc ??
+                  snap?.last_sale_at_utc ??
+                  snap?.lastTransactionAt ??
+                  snap?.last_transaction_at ??
+                  null;
                 return (
                   <tr key={m.id}>
-                    <td>{operating}</td>
+                    <td title={locHours ? 'Alert Admin → machine profile → Location hours' : 'Set Location hours in Alert Admin'}>
+                      {operating}
+                    </td>
                     <td>
                       {m.name}
                       <div className="muted" style={{ fontSize: '0.78rem' }}>
@@ -272,17 +324,19 @@ export function OverallPage() {
                         ?
                       </span>
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastCleaned.note}>
-                        ?
-                      </span>
+                    <td title={OVERALL_COLUMNS.lastCleaned.note}>
+                      {lastCleanedIso ? formatKuwaitDateTime(lastCleanedIso) : <span className="muted">—</span>}
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastVendFailed.note}>
-                        ?
-                      </span>
+                    <td title={OVERALL_COLUMNS.lastVendFailed.note}>
+                      {vendFailSummary ? vendFailSummary : <span className="muted">—</span>}
                     </td>
-                    <td>{tx ? String(tx) : minsOk ? `${String(mins)} min` : '—'}</td>
+                    <td title={txRaw ? undefined : minsOk ? 'Minutes since last sale (snapshot)' : undefined}>
+                      {txRaw
+                        ? formatKuwaitDateTime(String(txRaw))
+                        : minsOk
+                          ? `${String(mins)} min since sale`
+                          : '—'}
+                    </td>
                     <td className="muted">
                       <span className="fleetCellMissing" title={OVERALL_COLUMNS.salesTrend.note}>
                         ?
@@ -323,10 +377,12 @@ export function OverallPage() {
                         ?
                       </span>
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.mostIssue.note}>
-                        ?
-                      </span>
+                    <td title={OVERALL_COLUMNS.mostIssue.note}>
+                      {mostIssue ? (
+                        <span style={{ fontSize: '0.88rem' }}>{mostIssue}</span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td className="muted">
                       <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastQaCheck.note}>
@@ -365,8 +421,9 @@ export function OverallPage() {
           </table>
         </div>
         <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
-          Operating hours come from Admin. Fleet tags come from the live device feed when available.{' '}
-          <strong>?</strong> means that metric is not connected yet — hover for detail.
+          Operating hours use the Alert Admin machine profile <strong>Location hours</strong> field. Fleet tags prefer the live
+          Vendon feed; snapshot metrics (tx, cleaning, reasons, vend fails) apply only when the machine is in the Red Flags
+          snapshot. <strong>?</strong> = not wired yet — hover column headers for detail.
         </p>
       </section>
     </div>
