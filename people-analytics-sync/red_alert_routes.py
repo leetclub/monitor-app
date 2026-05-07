@@ -695,11 +695,65 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             logger.exception("attendance_snapshot_cache read failed")
             return {}
 
-    kuwait_today = now.astimezone(ZoneInfo("Asia/Kuwait")).date().isoformat()
-    kuwait_yesterday = (now.astimezone(ZoneInfo("Asia/Kuwait")).date() - timedelta(days=1)).isoformat()
-    daily_cleaning_end_iso_by_machine = _read_attendance_daily_cleaning_cache(kuwait_today)
-    if not daily_cleaning_end_iso_by_machine:
-        daily_cleaning_end_iso_by_machine = _read_attendance_daily_cleaning_cache(kuwait_yesterday)
+    def _read_attendance_daily_cleaning_cache_multi(days: List[str]) -> Dict[str, str]:
+        """
+        Merge multiple attendance_snapshot_cache days and keep the newest cleaning_end per machine.
+        Intended for Red Alert: we care most about yesterday and earlier (already warmed by cron).
+        """
+        if not days:
+            return {}
+        try:
+            keys = [attendance_cache_key(d, d, "") for d in days if d]
+            keys = [k for k in keys if k]
+            if not keys:
+                return {}
+            payloads: List[Dict[str, Any]] = []
+            with attendance_get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT payload FROM attendance_snapshot_cache WHERE cache_key = ANY(%s)",
+                        (keys,),
+                    )
+                    for row in cur.fetchall() or []:
+                        if row and isinstance(row[0], dict):
+                            payloads.append(row[0])
+            best_end: Dict[str, int] = {}
+            for payload in payloads:
+                cleaning = payload.get("cleaning")
+                cleaning = cleaning if isinstance(cleaning, list) else []
+                for rec in cleaning:
+                    if not isinstance(rec, dict):
+                        continue
+                    mid = str(rec.get("machine_id") or "").strip()
+                    if not mid:
+                        continue
+                    end = rec.get("cleaning_end")
+                    try:
+                        end_i = int(end) if end is not None else 0
+                    except Exception:
+                        end_i = 0
+                    if end_i <= 0:
+                        continue
+                    prev = best_end.get(mid) or 0
+                    if end_i > prev:
+                        best_end[mid] = end_i
+            out: Dict[str, str] = {}
+            for mid, end_i in best_end.items():
+                out[mid] = (
+                    datetime.fromtimestamp(int(end_i), tz=timezone.utc)
+                    .replace(microsecond=0)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
+            return out
+        except Exception:
+            logger.exception("attendance_snapshot_cache multi read failed")
+            return {}
+
+    # Kuwait days: prefer yesterday and earlier. We do NOT depend on today's cleaning being present.
+    kuwait_today_date = now.astimezone(ZoneInfo("Asia/Kuwait")).date()
+    days_back = [(kuwait_today_date - timedelta(days=i)).isoformat() for i in range(1, 8)]  # yesterday .. 7 days ago
+    daily_cleaning_end_iso_by_machine = _read_attendance_daily_cleaning_cache_multi(days_back)
 
     mdata, m_err = _vendon_get("/machine", None)
     if m_err:
