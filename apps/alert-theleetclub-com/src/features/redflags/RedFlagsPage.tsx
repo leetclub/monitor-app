@@ -17,7 +17,7 @@ import {
   baselineReasonMap,
   buildDetailPayload,
   filterSnapshotRows,
-  freqTriple,
+  freqSplit,
   getMachineIdRaw,
   getOperatorDisplay,
   isLastTransactionEstimated,
@@ -26,7 +26,6 @@ import {
   rankRows,
   reasonKey,
   rowHappensForSort,
-  type FreqTripleMini,
   type RankedRedAlertRow,
 } from './redFlagsModel';
 import { RED_FLAGS_COLUMNS } from './redFlagsWorkbookColumns';
@@ -104,23 +103,6 @@ function formatRedAlertExactDateTime(iso: string): string {
     }
   }
   return iso || '—';
-}
-
-function freqMiniTrendCls(m: FreqTripleMini): string {
-  if (m.trendTone === 'up') {
-    switch (m.trendUpBand) {
-      case 2:
-        return styles.freqTrendUp2;
-      case 3:
-        return styles.freqTrendUp3;
-      case 4:
-        return styles.freqTrendUp4;
-      default:
-        return styles.freqTrendUp1;
-    }
-  }
-  if (m.trendTone === 'down') return styles.freqTrendDown;
-  return styles.freqTrendFlat;
 }
 
 function LastTxLines({
@@ -480,7 +462,41 @@ export function RedFlagsPage() {
                   {ranked.map((d, r) => {
                     const row = d.row;
                     const machId = String(getMachineIdRaw(row) || '');
-                    const triple = freqTriple(row, compareMode);
+                    const fq = freqSplit(row, compareMode);
+                    const todayHitsRaw = row.happensToday != null ? row.happensToday : row.frequency?.totalCriteriaHitsToday;
+                    const todayHits = todayHitsRaw != null ? Number(todayHitsRaw) : NaN;
+                    const scoreText =
+                      compareMode === 'week'
+                        ? fq.top
+                        : !Number.isNaN(todayHits)
+                          ? `${todayHits}/d`
+                          : fq.top;
+                    const trendText = fq.bottom;
+                    const trendIsGood = fq.bottomClass === 'down';
+                    const trendNeutral = fq.bottomClass === 'flat';
+                    const hitsForScore =
+                      compareMode === 'week'
+                        ? row.happensWeek != null
+                          ? row.happensWeek
+                          : row.frequency?.totalCriteriaHitsThisWeek
+                        : todayHitsRaw;
+                    const hitsN = hitsForScore != null ? Number(hitsForScore) : NaN;
+                    const scoreKnown = !Number.isNaN(hitsN);
+                    const scoreGood = scoreKnown && hitsN <= 0;
+                    const gapText = (() => {
+                      const n =
+                        compareMode === 'week'
+                          ? row.happensWeek != null
+                            ? row.happensWeek
+                            : row.frequency?.totalCriteriaHitsThisWeek
+                          : todayHitsRaw;
+                      const nn = n != null ? Number(n) : NaN;
+                      if (Number.isNaN(nn)) return '—';
+                      if (nn <= 0) return '0';
+                      return `-${nn}`;
+                    })();
+                    const gapNeutral = gapText === '—';
+                    const gapGood = gapText === '0';
                     const pri = row.alertPriorityTier != null ? Number(row.alertPriorityTier) : 1;
                     const p2 = pri === 2 || !!row.duringScheduledCleaningNow;
                     const hwN = rowHappensForSort(row, compareMode);
@@ -535,37 +551,31 @@ export function RedFlagsPage() {
                         </td>
                         <td className={styles.td}>{getOperatorDisplay(row)}</td>
                         <td className={`${styles.td} ${styles.tdFreqTriple}`}>
-                          <div
-                            className={styles.freqTriple}
-                            title={triple.tooltip}
-                            aria-label={triple.tooltip}
-                          >
-                            {[triple.stale, triple.off, triple.vend].map((fm) => (
-                              <div key={fm.key} className={styles.freqMini} title={triple.tooltip}>
-                                <span className={styles.freqMiniBadge}>{fm.label}</span>
-                                <div className={styles.freqMiniCount} aria-hidden>
-                                  <span className={styles.freqMiniNow}>{fm.nowFmt}</span>
-                                  {fm.baseKnown && fm.baseFmt != null ? (
-                                    <>
-                                      <span className={styles.freqMiniVs}>/</span>
-                                      <span className={styles.freqMiniCmp}>{fm.baseFmt}</span>
-                                    </>
-                                  ) : null}
-                                </div>
-                                <span
-                                  className={`${styles.freqMiniTrend} ${freqMiniTrendCls(fm)}`}
-                                  style={
-                                    fm.trendUseAlphaVar
-                                      ? ({
-                                          '--ra-trend-alpha': String(Math.min(1, fm.trendAlpha)),
-                                        } as CSSProperties)
-                                      : undefined
-                                  }
-                                >
-                                  {fm.trendText}
-                                </span>
-                              </div>
-                            ))}
+                          <div className={styles.freq3} title={fq.title}>
+                            <div
+                              className={`${styles.freqBox} ${
+                                !scoreKnown ? styles.freqNeutral : scoreGood ? styles.freqGood : styles.freqBad
+                              }`}
+                            >
+                              <div className={styles.freqBoxTop}>Score</div>
+                              <div className={styles.freqBoxVal}>{scoreText}</div>
+                            </div>
+                            <div
+                              className={`${styles.freqBox} ${
+                                trendNeutral ? styles.freqNeutral : trendIsGood ? styles.freqGood : styles.freqBad
+                              }`}
+                            >
+                              <div className={styles.freqBoxTop}>Trend</div>
+                              <div className={styles.freqBoxVal}>{trendText}</div>
+                            </div>
+                            <div
+                              className={`${styles.freqBox} ${
+                                gapNeutral ? styles.freqNeutral : gapGood ? styles.freqGood : styles.freqBad
+                              }`}
+                            >
+                              <div className={styles.freqBoxTop}>Gap</div>
+                              <div className={styles.freqBoxVal}>{gapText}</div>
+                            </div>
                           </div>
                         </td>
                         <td className={styles.td}>

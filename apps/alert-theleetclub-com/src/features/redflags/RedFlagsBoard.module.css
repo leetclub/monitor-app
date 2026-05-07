@@ -360,8 +360,8 @@
 .thFreq {
   color: #fecaca;
   text-shadow: 0 0 18px rgba(248, 113, 113, 0.28);
-  /* Reserve horizontal space so STALE/OFF/VEND mini-cards stay readable */
-  min-width: 13.75rem;
+  /* Score · Trend · Gap — three mini boxes */
+  min-width: 11rem;
   box-sizing: border-box;
 }
 
@@ -634,34 +634,33 @@
   color: #94a3b8;
 }
 
-/* Frequency column — Monitor v1 `#redAlertPortal .red-alert-freq-triple` / `-freq-mini`; tighter than v1 Defaults for a better fit */
+/* Today / Trend — three boxes: Score · Trend % · Gap (green = good, red = bad per Red Alert rules) */
 
 .tdFreqTriple {
   padding: 2px 4px !important;
   vertical-align: middle !important;
-  /* Width-fit: give the triple room (table scroll handles overflow); do not squash with max-width */
-  min-width: 13.75rem;
+  min-width: 11rem;
   max-width: none;
   box-sizing: border-box;
 }
 
-.freqTriple {
+.freq3 {
   display: grid;
-  grid-template-columns: repeat(3, minmax(4rem, 1fr));
-  gap: 3px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
   width: 100%;
   min-width: 0;
   align-items: stretch;
 }
 
-.freqMini {
+.freqBox {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: flex-start;
-  gap: 1px;
-  min-height: 43px;
-  padding: 2px 4px;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 4px 5px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.32);
   background: linear-gradient(165deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%);
@@ -672,113 +671,61 @@
   min-width: 0;
 }
 
-.freqMiniBadge {
-  align-self: flex-start;
-  max-width: 100%;
-  font-size: clamp(7px, 1.05vw + 5px, 9px);
-  line-height: 1.08;
+.freqBoxTop {
+  font-size: 6px;
+  line-height: 1.1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
   color: #94a3b8;
   white-space: normal;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
-.freqMiniCount {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0;
+.freqBoxVal {
   font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
-  font-size: clamp(9px, 0.95vw + 7px, 11px);
+  font-size: clamp(8px, 0.85vw + 6px, 11px);
   font-weight: 800;
-  line-height: 1.12;
-  color: #f8fafc;
+  line-height: 1.15;
+  text-align: center;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  flex: 1 1 auto;
-  min-height: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   min-width: 0;
 }
 
-.freqMiniNow {
-  color: #f8fafc;
-  font-weight: 800;
+.freqGood {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
 }
 
-.freqMiniVs {
-  color: #64748b;
-  font-weight: 600;
-  font-size: 0.78em;
-  padding: 0 1px;
+.freqBad {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
 }
 
-.freqMiniCmp {
-  color: #94a3b8;
-  font-weight: 700;
-}
-
-.freqMiniTrend {
-  margin-top: auto;
-  padding-top: 1px;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
-  font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
-  font-size: clamp(8px, 0.9vw + 6px, 9px);
-  font-weight: 700;
-  line-height: 1.15;
-  color: #e2e8f0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.freqTrendFlat {
-  color: #cbd5e1 !important;
-}
-
-.freqTrendDown {
-  color: rgba(187, 247, 208, var(--ra-trend-alpha, 0.95)) !important;
-  border-top-color: rgba(74, 222, 128, 0.22) !important;
-}
-
-.freqTrendUp1 {
-  color: #fca5a5 !important;
-  border-top-color: rgba(248, 113, 113, 0.38) !important;
-}
-.freqTrendUp2 {
-  color: #f87171 !important;
-  border-top-color: rgba(239, 68, 68, 0.42) !important;
-}
-.freqTrendUp3 {
-  color: #ef4444 !important;
-  border-top-color: rgba(220, 38, 38, 0.48) !important;
-}
-.freqTrendUp4 {
-  color: #dc2626 !important;
-  border-top-color: rgba(185, 28, 28, 0.52) !important;
+.freqNeutral {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
 }
 
 @media (max-width: 720px) {
   .thFreq {
-    min-width: 11.5rem;
+    min-width: 9.5rem;
   }
   .tdFreqTriple {
-    min-width: 11.5rem;
+    min-width: 9.5rem;
   }
-  .freqTriple {
-    grid-template-columns: repeat(3, minmax(3.35rem, 1fr));
+  .freq3 {
     gap: 3px;
   }
-  .freqMini {
+  .freqBox {
     min-height: 40px;
-    padding: 2px 3px;
+    padding: 3px 4px;
   }
 }
 

@@ -300,21 +300,21 @@ export function freqColumnHeading(mode: RedAlertCompareMode): { title: string; s
   switch (mode) {
     case 'week':
       return {
-        title: 'Frequency',
-        sub: 'Each case: WTD vs last week (top), trend % vs baseline (bottom)',
+        title: 'Today / Trend',
+        sub: 'Score · trend % · gap to green (WTD vs baseline)',
       };
     case 'sameWeekdayLw':
       return {
-        title: 'Frequency',
-        sub: 'Each case: today vs same weekday LW (top), trend % (bottom)',
+        title: 'Today / Trend',
+        sub: 'Score · trend % · gap to green (today vs same weekday last week)',
       };
     case 'yesterday':
       return {
-        title: 'Frequency',
-        sub: 'Each case: today vs yesterday same elapsed (top), trend % (bottom)',
+        title: 'Today / Trend',
+        sub: 'Score · trend % · gap to green (today vs yesterday same elapsed)',
       };
     default:
-      return { title: 'Frequency', sub: 'Per-case counts and trend % (Monitor parity)' };
+      return { title: 'Today / Trend', sub: 'Score · trend % · gap to green' };
   }
 }
 
@@ -384,157 +384,6 @@ export function freqSplit(row: RedAlertRow, mode: RedAlertCompareMode = 'week'):
     return `${arrow}${Math.round(mag)}%`;
   })();
   return { top, bottom: bot, bottomClass, upBand, title: tip };
-}
-
-/** One Frequency mini-card — parity with `#redAlertPortal .red-alert-freq-mini` in Monitor v1. */
-export type FreqTripleMini = {
-  key: 'stale' | 'off' | 'vend';
-  label: string;
-  ariaName: string;
-  nowFmt: string;
-  baseFmt: string | null;
-  baseKnown: boolean;
-  trendText: string;
-  trendTone: 'up' | 'down' | 'flat';
-  trendUpBand?: 1 | 2 | 3 | 4;
-  trendAlpha: number;
-  trendUseAlphaVar: boolean;
-};
-
-export type FreqTriplePayload = {
-  stale: FreqTripleMini;
-  off: FreqTripleMini;
-  vend: FreqTripleMini;
-  tooltip: string;
-};
-
-function pickFreqScalar(primary: unknown, fallback: unknown): unknown {
-  if (primary != null && primary !== '') return primary;
-  return fallback;
-}
-
-function fmtFreqJs(v: unknown): string {
-  if (v == null || v === '') return '—';
-  const n = Number(v);
-  if (Number.isNaN(n)) return '—';
-  return String(Math.round(n));
-}
-
-function pctDeltaPerCase(thisVal: unknown, baseVal: unknown): number | null {
-  const a = Number(thisVal);
-  const b = Number(baseVal);
-  if (Number.isNaN(a) || Number.isNaN(b)) return null;
-  if (b === 0) return a === 0 ? 0 : null;
-  return ((a - b) / b) * 100;
-}
-
-type TrendFmtMini = {
-  text: string;
-  tone: 'up' | 'down' | 'flat';
-  upBand?: 1 | 2 | 3 | 4;
-  alpha: number;
-  useAlphaVar: boolean;
-};
-
-/** Same arrows / saturation rules as `_redAlertFreqDiagonalHtml` `trendFmt` in Monitor v1. */
-function fmtTrendMiniPct(pct: number | null): TrendFmtMini {
-  if (pct == null || Number.isNaN(Number(pct))) {
-    return { text: '—', tone: 'flat', alpha: 0.92, useAlphaVar: true };
-  }
-  const n = Number(pct);
-  const arrow = n > 0 ? '↑' : n < 0 ? '↓' : '→';
-  const text = `${arrow} ${Math.round(Math.abs(n))}%`;
-  if (n > 0) {
-    const mag = Math.abs(n);
-    const upBand =
-      mag >= 50 ? 4 : mag >= 25 ? 3 : mag >= 10 ? 2 : 1;
-    return { text, tone: 'up', upBand, alpha: 1, useAlphaVar: false };
-  }
-  let alpha = 0.28 + 0.72 * Math.pow(Math.min(Math.abs(n), 200) / 200, 0.55);
-  if (Math.abs(n) < 3) alpha *= 0.72;
-  const tone = n < 0 ? 'down' : 'flat';
-  return { text, tone, alpha: Math.min(1, alpha), useAlphaVar: true };
-}
-
-function miniCaseRow(
-  key: FreqTripleMini['key'],
-  label: string,
-  ariaName: string,
-  thisVal: unknown,
-  baseVal: unknown,
-): FreqTripleMini {
-  let baseKnown =
-    !(baseVal == null || baseVal === '') &&
-    !(typeof baseVal === 'number' && Number.isNaN(baseVal));
-  const nowFmt = fmtFreqJs(thisVal);
-  const baseFmtRaw = fmtFreqJs(baseVal);
-  if (baseFmtRaw === '—') baseKnown = false;
-  const pct = pctDeltaPerCase(thisVal, baseVal);
-  const tf = fmtTrendMiniPct(pct);
-  return {
-    key,
-    label,
-    ariaName,
-    nowFmt,
-    baseFmt: baseKnown ? baseFmtRaw : null,
-    baseKnown,
-    trendText: tf.text,
-    trendTone: tf.tone,
-    trendUpBand: tf.upBand,
-    trendAlpha: tf.alpha,
-    trendUseAlphaVar: tf.useAlphaVar,
-  };
-}
-
-/** STALE · OFF · VEND FAIL triple (counts + baseline + trend %) — mirrors Monitor v1 Red Alert Frequency column. */
-export function freqTriple(row: RedAlertRow, mode: RedAlertCompareMode = 'week'): FreqTriplePayload {
-  const fq = row.frequency || {};
-  let staleThis: unknown;
-  let staleLast: unknown;
-  let offThis: unknown;
-  let offLast: unknown;
-  let vendThis: unknown;
-  let vendLast: unknown;
-
-  if (mode === 'sameWeekdayLw') {
-    staleThis = pickFreqScalar(fq.staleSaleEpisodesToday, fq.staleSaleEpisodes7d);
-    staleLast = pickFreqScalar(fq.staleSaleEpisodesSameDayLastWeek, fq.staleSaleEpisodesPrior7d);
-    offThis = pickFreqScalar(fq.offEpisodesToday, fq.offEvents7d);
-    offLast = pickFreqScalar(fq.offEpisodesSameDayLastWeek, fq.offEventsPrior7d);
-    vendThis = pickFreqScalar(fq.dispenseFailsToday, fq.dispenseFails7d);
-    vendLast = pickFreqScalar(fq.dispenseFailsSameDayLastWeek, fq.dispenseFailsPrior7d);
-  } else if (mode === 'yesterday') {
-    staleThis = pickFreqScalar(fq.staleSaleEpisodesToday, fq.staleSaleEpisodes7d);
-    staleLast = pickFreqScalar(fq.staleSaleEpisodesYesterdaySameElapsed, fq.staleSaleEpisodesPrior7d);
-    offThis = pickFreqScalar(fq.offEpisodesToday, fq.offEvents7d);
-    offLast = pickFreqScalar(fq.offEpisodesYesterdaySameElapsed, fq.offEventsPrior7d);
-    vendThis = pickFreqScalar(fq.dispenseFailsToday, fq.dispenseFails7d);
-    vendLast = pickFreqScalar(fq.dispenseFailsYesterdaySameElapsed, fq.dispenseFailsPrior7d);
-  } else {
-    staleThis = pickFreqScalar(fq.staleSaleEpisodesThisWeek, fq.staleSaleEpisodes7d);
-    staleLast = pickFreqScalar(fq.staleSaleEpisodesLastWeek, fq.staleSaleEpisodesPrior7d);
-    offThis = pickFreqScalar(fq.offEpisodesThisWeek, fq.offEvents7d);
-    offLast = pickFreqScalar(fq.offEpisodesLastWeek, fq.offEventsPrior7d);
-    vendThis = pickFreqScalar(fq.dispenseFailsThisWeek, fq.dispenseFails7d);
-    vendLast = pickFreqScalar(fq.dispenseFailsLastWeek, fq.dispenseFailsPrior7d);
-  }
-
-  const stale = miniCaseRow('stale', 'STALE', 'Stale-sale episodes', staleThis, staleLast);
-  const off = miniCaseRow('off', 'OFF', 'Machine OFF episodes', offThis, offLast);
-  const vend = miniCaseRow('vend', 'VEND FAIL', 'Vend / dispense failures', vendThis, vendLast);
-
-  const combined = freqSplit(row, mode);
-  const pctLine = (m: FreqTripleMini): string =>
-    `${m.label}: ${m.nowFmt}/${m.baseKnown && m.baseFmt != null ? m.baseFmt : '—'} · ${m.trendText}`;
-  const tooltip = [
-    combined.title,
-    pctLine(stale),
-    pctLine(off),
-    pctLine(vend),
-    'Row sort uses combined trend from the snapshot; click for full detail.',
-  ].join('\n');
-
-  return { stale, off, vend, tooltip };
 }
 
 export function baselineReasonMap(rows: RedAlertRow[]): Record<string, string> {
