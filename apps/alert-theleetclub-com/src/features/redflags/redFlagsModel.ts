@@ -362,11 +362,17 @@ export function freqSplit(row: RedAlertRow, mode: RedAlertCompareMode = 'week'):
     }
   }
   const bot = (() => {
-    if (Number.isNaN(pctNum)) return `${arrow} —`;
+    if (Number.isNaN(pctNum)) return `${arrow}—`;
     const mag = Math.abs(pctNum);
-    // Keep the trend compact so it fits inside the 3-box cell.
-    if (mag >= 1000) return `${arrow} ${(mag / 1000).toFixed(mag >= 10_000 ? 0 : 1)}k%`;
-    return `${arrow} ${Math.round(mag)}%`;
+    // Keep the trend compact so it fits inside the 3-box cell (no ellipsis).
+    // Target output length <= ~6 chars after the arrow.
+    if (mag >= 1000) {
+      const k = mag / 1000;
+      const s = k >= 10 ? k.toFixed(0) : k.toFixed(1); // 9.9k max precision; 10k no decimal
+      const cleaned = s.endsWith(".0") ? s.slice(0, -2) : s;
+      return `${arrow}${cleaned}k%`;
+    }
+    return `${arrow}${Math.round(mag)}%`;
   })();
   return { top, bottom: bot, bottomClass, upBand, title: tip };
 }
