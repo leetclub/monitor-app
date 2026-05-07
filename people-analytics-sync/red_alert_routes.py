@@ -38,6 +38,7 @@ from dashboard_access_models import (
 from dashboard_access_routes import ALL_DASHBOARD_TAB_IDS, SUPER_ADMIN_EMAILS, _check_secret
 from vendon_constants import EVENT_NAME_MAPPING, EXCLUDED_EVENT_NAMES
 from vendon_machine_helpers import machine_location_for_red_alert, machine_row_excluded
+from db_pool import cache_key as attendance_cache_key, get_conn as attendance_get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -640,6 +641,66 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
     ts_48h = to_ts - 48 * 3600
     this_ws, this_we, last_ws, last_we = _kuwait_sunday_week_bounds(now)
 
+    def _read_attendance_daily_cleaning_cache(day_iso: str) -> Dict[str, str]:
+        """
+        Read attendance_snapshot_cache for a single Kuwait day and return machine_id -> ISO timestamp (UTC, Z) for the
+        latest daily cleaning end time.
+
+        This mirrors the "Attendance & Cleaning" derived daily cleaning logic (Vendon power event patterns) that operators
+        rely on, without re-running the heavy aggregation inside the Red Alert refresh loop.
+        """
+        try:
+            ck = attendance_cache_key(day_iso, day_iso, "")
+            with attendance_get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT payload FROM attendance_snapshot_cache WHERE cache_key = %s",
+                        (ck,),
+                    )
+                    row = cur.fetchone()
+            if not row:
+                return {}
+            payload = row[0]
+            if not isinstance(payload, dict):
+                return {}
+            cleaning = payload.get("cleaning")
+            cleaning = cleaning if isinstance(cleaning, list) else []
+            best_end: Dict[str, int] = {}
+            for rec in cleaning:
+                if not isinstance(rec, dict):
+                    continue
+                mid = str(rec.get("machine_id") or "").strip()
+                if not mid:
+                    continue
+                end = rec.get("cleaning_end")
+                try:
+                    end_i = int(end) if end is not None else 0
+                except Exception:
+                    end_i = 0
+                if end_i <= 0:
+                    continue
+                prev = best_end.get(mid) or 0
+                if end_i > prev:
+                    best_end[mid] = end_i
+            out: Dict[str, str] = {}
+            for mid, end_i in best_end.items():
+                out[mid] = (
+                    datetime.fromtimestamp(int(end_i), tz=timezone.utc)
+                    .replace(microsecond=0)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                )
+            return out
+        except Exception:
+            logger.exception("attendance_snapshot_cache read failed")
+            return {}
+
+    kuwait_today = now.astimezone(ZoneInfo("Asia/Kuwait")).date().isoformat()
+    kuwait_yesterday = (now.astimezone(ZoneInfo("Asia/Kuwait")).date() - timedelta(days=1)).isoformat()
+    daily_cleaning_end_iso_by_machine = _read_attendance_daily_cleaning_cache(kuwait_today)
+    if not daily_cleaning_end_iso_by_machine:
+        daily_cleaning_end_iso_by_machine = _read_attendance_daily_cleaning_cache(kuwait_yesterday)
+
     mdata, m_err = _vendon_get("/machine", None)
     if m_err:
         return {"error": m_err, "rows": []}
@@ -935,6 +996,10 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
         body = quote("Please check machine " + (m.get("name") or mid) + " (" + mid + "). Reasons: " + "; ".join(reasons))
         action_url = ("mailto:" + mail + "?subject=" + subj + "&body=" + body) if mail else ""
 
+        last_clean_iso = daily_cleaning_end_iso_by_machine.get(mid) or (
+            cfg.last_cleaning_at.isoformat() if cfg and cfg.last_cleaning_at else None
+        )
+
         rows_out.append(
             {
                 "machineId": mid,
@@ -943,8 +1008,8 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
                 "operator": op_name,
                 "cleaningOperator": cleaning_op or None,
                 "operatorEmail": mail or None,
-                # Same source as Live Dashboard "last clean": live_machine_config.last_cleaning_at (manual seed/edit for now).
-                "lastCleaningAt": cfg.last_cleaning_at.isoformat() if cfg and cfg.last_cleaning_at else None,
+                # Prefer Vendon-derived Attendance & Cleaning daily cleaning end time; fall back to manual Live Dashboard config.
+                "lastCleaningAt": last_clean_iso,
                 "lastTransactionAtUtc": last_tx_at_utc,
                 "lastOffEventAtUtc": last_off_at_utc,
                 "minutesSinceLastTransaction": round(sale_age_min, 1) if sale_age_min is not None else None,
