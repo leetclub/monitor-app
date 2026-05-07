@@ -361,7 +361,13 @@ export function freqSplit(row: RedAlertRow, mode: RedAlertCompareMode = 'week'):
       bottomClass = 'down';
     }
   }
-  const bot = !Number.isNaN(pctNum) ? `${arrow} ${Math.round(Math.abs(pctNum))}%` : `${arrow} —`;
+  const bot = (() => {
+    if (Number.isNaN(pctNum)) return `${arrow} —`;
+    const mag = Math.abs(pctNum);
+    // Keep the trend compact so it fits inside the 3-box cell.
+    if (mag >= 1000) return `${arrow} ${(mag / 1000).toFixed(mag >= 10_000 ? 0 : 1)}k%`;
+    return `${arrow} ${Math.round(mag)}%`;
+  })();
   return { top, bottom: bot, bottomClass, upBand, title: tip };
 }
 
