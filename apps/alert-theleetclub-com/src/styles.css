@@ -38,6 +38,12 @@ a {
   min-height: 100vh;
 }
 
+.appShell,
+.sideNav,
+.mainColumn {
+  min-width: 0;
+}
+
 .mainColumn {
   flex: 1;
   display: flex;
@@ -115,6 +121,42 @@ a {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Mobile/tablet: collapse sidebar into a top nav row (no JS needed). */
+@media (max-width: 900px) {
+  .appShell {
+    flex-direction: column;
+  }
+
+  .sideNav {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 14px var(--space-page) 12px;
+  }
+
+  .sideNavTagline,
+  .sideNavFoot {
+    display: none;
+  }
+
+  .navList {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding-bottom: 2px;
+    scrollbar-color: rgba(124, 182, 255, 0.35) transparent;
+  }
+
+  .navLink {
+    padding: 9px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
 }
 
 .navLink {
@@ -268,12 +310,22 @@ a {
 }
 
 .pageShell {
-  max-width: 1120px;
+  max-width: 1320px;
   margin: 0 auto;
 }
 
 .pageShellWide {
-  max-width: 1240px;
+  max-width: 1480px;
+}
+
+@media (min-width: 1536px) {
+  .pageShell {
+    max-width: 1440px;
+  }
+
+  .pageShellWide {
+    max-width: 1680px;
+  }
 }
 
 .pageHero {
@@ -505,6 +557,12 @@ button.danger {
   -webkit-overflow-scrolling: touch;
 }
 
+@media (max-width: 720px) {
+  .tableWrapBounded {
+    max-height: min(56vh, 22rem);
+  }
+}
+
 .adminSavedProfilesTable td.tableCellWrap {
   white-space: normal;
   max-width: min(22vw, 14rem);
@@ -532,9 +590,44 @@ td {
   white-space: nowrap;
 }
 
+/* Responsive tables: prefer wrapping + tighter padding on small screens. */
+@media (max-width: 900px) {
+  th,
+  td {
+    padding: 10px 10px;
+  }
+}
+
+@media (max-width: 720px) {
+  th,
+  td {
+    padding: 9px 9px;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  table {
+    font-size: 12px;
+  }
+}
+
 .tableWrapLoose th,
 .tableWrapLoose td {
   padding: 12px 14px;
+}
+
+@media (max-width: 900px) {
+  .tableWrapLoose th,
+  .tableWrapLoose td {
+    padding: 10px 10px;
+  }
+}
+
+@media (max-width: 720px) {
+  .tableWrapLoose th,
+  .tableWrapLoose td {
+    padding: 9px 9px;
+  }
 }
 
 th {
