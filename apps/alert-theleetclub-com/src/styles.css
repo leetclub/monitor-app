@@ -305,15 +305,18 @@ a {
   padding: var(--space-page);
   padding-top: 20px;
   background: radial-gradient(ellipse 120% 80% at 50% -30%, rgba(59, 130, 246, 0.06), transparent), var(--bg);
+  min-width: 0;
 }
 
 .pageShell {
   max-width: 1320px;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .pageShellWide {
   max-width: 1480px;
+  min-width: 0;
 }
 
 @media (min-width: 1536px) {
@@ -574,6 +577,7 @@ button.danger {
 
 table {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -584,10 +588,13 @@ td {
   padding: 11px 12px;
   text-align: left;
   vertical-align: top;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
-/* Responsive tables: prefer wrapping + tighter padding on small screens. */
+/* Responsive tables: tighter padding on small screens. */
 @media (max-width: 900px) {
   th,
   td {
@@ -599,13 +606,18 @@ td {
   th,
   td {
     padding: 9px 9px;
-    white-space: normal;
-    word-break: break-word;
   }
 
   table {
     font-size: 12px;
   }
+}
+
+/* Optional: keep a single metric/code cell on one line when needed */
+.tableCellNoWrap {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .tableWrapLoose th,

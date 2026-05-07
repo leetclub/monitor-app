@@ -64,6 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-05-07 | **Tables — text overflow:** Removed global `nowrap` on desktop table cells; **`overflow-wrap` / `word-break`** on all `th`/`td` so long machine names, emails, and alert text wrap inside cells instead of spilling past the table. Red Flags frequency mini-cards allow trend/ratio lines to wrap when narrow. Optional utility **`.tableCellNoWrap`** for rare single-line metrics. |
 | 2026-05-07 | **Responsive UI:** Sidebar collapses to a **top horizontal nav** on mobile/tablet; page containers widened on desktop (`pageShell` / `pageShellWide`). Tables now wrap on small screens (less forced horizontal scroll), with tighter cell padding + fonts under 900px/720px. |
 | 2026-05-07 | **Red Flags — Frequency column:** Wider column reserved on the table (**~14rem** min) so three mini-cards keep **readable type** (clamp up to v1 ~11px counts / 9px trends); **card height** restored (~46px). Badges can wrap to two lines (**VEND FAIL**). |
 | 2026-05-07 | **Red Flags — Frequency column:** Restored **Monitor v1** layout — three compact mini-cards (**STALE** · **OFF** · **VEND FAIL**): baseline count on top (e.g. `8/13`), **trend %** under an inner divider (↑ red / ↓ green / flat grey). Header title **Frequency** + per-mode subtitle. Cells sized tighter than legacy defaults for fit. |

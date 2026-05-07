@@ -322,8 +322,10 @@
 
 .table {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 0.78rem;
+  table-layout: auto;
 }
 
 .th {
@@ -339,6 +341,10 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border-bottom: 1px solid rgba(248, 113, 113, 0.25);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .thSub {
@@ -368,7 +374,9 @@
   font-size: 0.735rem;
   line-height: 1.3;
   color: rgba(226, 232, 240, 0.95);
-  max-width: 14rem;
+  max-width: min(14rem, 100%);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .wireDash {
@@ -446,6 +454,10 @@
 .td {
   padding: 0.4rem 0.5rem;
   vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .machineName {
@@ -679,7 +691,7 @@
 
 .freqMiniCount {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: center;
   gap: 0;
@@ -721,7 +733,8 @@
   font-weight: 700;
   line-height: 1.15;
   color: #e2e8f0;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
