@@ -943,6 +943,8 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
                 "operator": op_name,
                 "cleaningOperator": cleaning_op or None,
                 "operatorEmail": mail or None,
+                # Same source as Live Dashboard "last clean": live_machine_config.last_cleaning_at (manual seed/edit for now).
+                "lastCleaningAt": cfg.last_cleaning_at.isoformat() if cfg and cfg.last_cleaning_at else None,
                 "lastTransactionAtUtc": last_tx_at_utc,
                 "lastOffEventAtUtc": last_off_at_utc,
                 "minutesSinceLastTransaction": round(sale_age_min, 1) if sale_age_min is not None else None,

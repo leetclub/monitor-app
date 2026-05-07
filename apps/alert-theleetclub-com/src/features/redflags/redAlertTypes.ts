@@ -68,6 +68,8 @@ export type RedAlertRow = {
   lastOffEventAtUtc?: string | null;
   last_off_event_at?: string | null;
   last_off_event_at_utc?: string | null;
+  /** Last cleaning timestamp (from Live Dashboard config when set). */
+  lastCleaningAt?: string | null;
   lastEventAtUtc?: string | null;
   last_event_at_utc?: string | null;
   last_red_alert_event_at?: string | null;

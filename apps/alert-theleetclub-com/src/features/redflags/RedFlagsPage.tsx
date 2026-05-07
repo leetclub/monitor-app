@@ -604,7 +604,11 @@ export function RedFlagsPage() {
                           )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.lastCleaning.placeholderNote}>
-                          <span className="fleetCellMissing">?</span>
+                          {row.lastCleaningAt ? (
+                            <span>{formatKuwaitTs(row.lastCleaningAt)}</span>
+                          ) : (
+                            <span className="fleetCellMissing">?</span>
+                          )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.qaVisit.placeholderNote}>
                           <span className="fleetCellMissing">?</span>
