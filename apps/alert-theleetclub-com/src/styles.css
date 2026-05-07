@@ -85,7 +85,7 @@ a {
 
 .contentMain {
   flex: 1;
-  overflow: auto;
+  overflow: visible;
 }
 
 .sideNav {
@@ -143,12 +143,10 @@ a {
 
   .navList {
     flex-direction: row;
-    flex-wrap: nowrap;
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
+    overflow: visible;
     gap: 8px;
     padding-bottom: 2px;
-    scrollbar-color: rgba(124, 182, 255, 0.35) transparent;
   }
 
   .navLink {
@@ -546,20 +544,19 @@ button.danger {
 }
 
 .tableWrap {
-  overflow: auto;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
 
 /* Scroll long admin lists instead of stretching the page (sticky thead still works inside). */
 .tableWrapBounded {
-  max-height: min(52vh, 26rem);
-  -webkit-overflow-scrolling: touch;
+  max-height: none;
 }
 
 @media (max-width: 720px) {
   .tableWrapBounded {
-    max-height: min(56vh, 22rem);
+    max-height: none;
   }
 }
 

@@ -314,11 +314,10 @@
 }
 
 .tableScroll {
-  overflow: auto;
-  max-height: min(58dvh, 640px);
+  overflow: visible;
+  max-height: none;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  scrollbar-color: rgba(248, 113, 113, 0.45) rgba(0, 0, 0, 0.2);
 }
 
 .table {
