@@ -521,7 +521,7 @@ export function freqTriple(row: RedAlertRow, mode: RedAlertCompareMode = 'week')
 
   const stale = miniCaseRow('stale', 'STALE', 'Stale-sale episodes', staleThis, staleLast);
   const off = miniCaseRow('off', 'OFF', 'Machine OFF episodes', offThis, offLast);
-  const vend = miniCaseRow('vend', 'VEND FAIL', 'Dispense / vend failures', vendThis, vendLast);
+  const vend = miniCaseRow('vend', 'VEND', 'Vend / dispense failures', vendThis, vendLast);
 
   const combined = freqSplit(row, mode);
   const pctLine = (m: FreqTripleMini): string =>
