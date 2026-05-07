@@ -68,6 +68,40 @@ export function OverallPage() {
     }));
   }, [machinesQ.data]);
 
+  /**
+   * Overall historically listed **all** machines from Vendon (`/api/alert/machines`). That call can return []
+   * when Vendon is misconfigured or errors — while Red Flags still has rows from the snapshot cache.
+   * Fall back to machine ids/names from the snapshot so the tab is not empty when Red Flags works.
+   */
+  const fleetMachines = useMemo((): {
+    id: string;
+    name: string;
+    vendon_location_owner: string | null;
+  }[] => {
+    if (machines.length > 0) return machines;
+    const rows = snapQ.data?.rows;
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const seen = new Set<string>();
+    const out: { id: string; name: string; vendon_location_owner: string | null }[] = [];
+    for (const r of rows) {
+      const id = String(r.machineId ?? r.machine_id ?? '').trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        name: safeText(r.machineName) || id,
+        vendon_location_owner: null,
+      });
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+  }, [machines, snapQ.data?.rows]);
+
+  const fleetFromSnapshotFallback = fleetMachines.length > 0 && machines.length === 0;
+
+  const loadingFleetTable =
+    fleetMachines.length === 0 && (machinesQ.isLoading || (machines.length === 0 && snapQ.isLoading));
+
   const profileByMachineId = useMemo(() => {
     const m = new Map<string, AdminProfileRow>();
     const rows = profilesQ.data?.rows;
@@ -114,8 +148,15 @@ export function OverallPage() {
         </div>
         <div className="pageHeroAside">
           <p className="pageMeta">Auto refresh ~1 min</p>
-          <button type="button" className="btnSolid" onClick={() => void machinesQ.refetch()} disabled={machinesQ.isFetching}>
-            {machinesQ.isFetching ? 'Refreshing…' : 'Refresh'}
+          <button
+            type="button"
+            className="btnSolid"
+            onClick={() => {
+              void Promise.all([machinesQ.refetch(), snapQ.refetch(), profilesQ.refetch()]);
+            }}
+            disabled={machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching}
+          >
+            {machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </header>
@@ -132,6 +173,28 @@ export function OverallPage() {
         <section className="surfaceCard surfaceCardSpaced surfaceCardWarn">
           <p className="surfaceHint" style={{ margin: 0 }}>
             {(machinesQ.error as Error).message}
+            {fleetFromSnapshotFallback
+              ? ' — Rows below use the Red Alert snapshot so you still see machines that appear on Red Flags.'
+              : ''}
+          </p>
+        </section>
+      ) : null}
+
+      {fleetFromSnapshotFallback ? (
+        <section className="surfaceCard surfaceCardSpaced">
+          <p className="surfaceHint" style={{ margin: 0 }}>
+            Fleet list is built from the <strong>Red Alert snapshot</strong> because the live Vendon machine list was empty
+            or unavailable. Tags may be missing until{' '}
+            <code style={{ fontSize: '0.88em' }}>GET /api/alert/machines</code> returns data.
+          </p>
+        </section>
+      ) : null}
+
+      {snapQ.isError ? (
+        <section className="surfaceCard surfaceCardSpaced surfaceCardWarn">
+          <p className="surfaceHint" style={{ margin: 0 }}>
+            Red Alert snapshot could not be loaded: {(snapQ.error as Error).message}. Last transaction / operator merge may
+            be incomplete.
           </p>
         </section>
       ) : null}
@@ -139,7 +202,7 @@ export function OverallPage() {
       <section className="surfaceCard">
         <div className="surfaceCardHead">
           <h2 className="surfaceCardTitle">Fleet table</h2>
-          <span className="surfaceBadge">{machines.length} machines</span>
+          <span className="surfaceBadge">{fleetMachines.length} machines</span>
         </div>
 
         <div className="tableWrap tableWrapLoose">
@@ -169,14 +232,14 @@ export function OverallPage() {
               </tr>
             </thead>
             <tbody>
-              {machinesQ.isLoading ? (
+              {loadingFleetTable ? (
                 <tr>
                   <td colSpan={20} className="muted">
                     Loading…
                   </td>
                 </tr>
               ) : null}
-              {machines.map((m) => {
+              {fleetMachines.map((m) => {
                 const snap = snapshotByMachineId.get(m.id);
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
                 const minsOk = mins != null && typeof mins === 'number' && !Number.isNaN(mins);
@@ -288,10 +351,13 @@ export function OverallPage() {
                   </tr>
                 );
               })}
-              {machines.length === 0 && !machinesQ.isLoading ? (
+              {fleetMachines.length === 0 && !loadingFleetTable ? (
                 <tr>
                   <td colSpan={20} className="muted">
-                    No machines returned.
+                    No machines returned. If Red Flags shows machines, check server{' '}
+                    <strong>VENDON_API_BASE</strong> / <strong>VENDON_API_KEY</strong> for{' '}
+                    <code style={{ fontSize: '0.88em' }}>/api/alert/machines</code> — the Overall tab needs either Vendon
+                    or a Red Alert snapshot.
                   </td>
                 </tr>
               ) : null}

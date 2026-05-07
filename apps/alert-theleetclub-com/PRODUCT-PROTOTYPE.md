@@ -64,6 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-05-07 | **Overall:** When **`GET /api/alert/machines`** (Vendon) returns **no rows**, the fleet table **falls back** to machine ids/names from the **Red Alert snapshot** so the tab matches Red Flags instead of looking empty. Banner + empty-state hint explain Vendon vs snapshot. **Refresh** reloads machines, snapshot, and admin profiles together. |
 | 2026-05-07 | **Red Flags — Today / Trend:** Three icon boxes — **Score** & **Gap** values use **green** at zero burden and **tiered red** by incident count; **Trend** uses Δ% with **tiered red** on bad uptrends. **Gap** shows **`↓0`** (at green) or **`↓N`** (must **drop** N incidents to reach green); **`—`** if unknown. Header subcopy **gap ↓ to green**. Tooltips spell out direction vs baseline. |
 | 2026-05-07 | **Tables — text overflow:** Removed global `nowrap` on desktop table cells; **`overflow-wrap` / `word-break`** on all `th`/`td` so long machine names, emails, and alert text wrap inside cells instead of spilling past the table. Red Flags frequency mini-cards allow trend/ratio lines to wrap when narrow. Optional utility **`.tableCellNoWrap`** for rare single-line metrics. |
 | 2026-05-07 | **Responsive UI:** Sidebar collapses to a **top horizontal nav** on mobile/tablet; page containers widened on desktop (`pageShell` / `pageShellWide`). Tables now wrap on small screens (less forced horizontal scroll), with tighter cell padding + fonts under 900px/720px. |
