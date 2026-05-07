@@ -39,13 +39,14 @@
     <text x="180" y="152" class="label" font-size="8px">Location</text>
     <text x="300" y="152" class="label" font-size="8px">Operator</text>
     <text x="420" y="152" class="label" font-size="8px">Min since tx</text>
-    <text x="520" y="152" class="label" font-size="8px">WTD</text>
+    <text x="500" y="152" class="label" font-size="8px">Frequency</text>
     <text x="600" y="152" class="label" font-size="8px">Reasons</text>
     <text x="20" y="182" class="hint" font-size="8px">Vend-A12</text>
     <text x="180" y="182" class="hint" font-size="8px">Farwaniya</text>
     <text x="300" y="182" class="hint" font-size="8px">Ahmed</text>
     <text x="420" y="182" class="hint" font-size="8px">142</text>
-    <text x="520" y="182" class="hint" font-size="8px">3</text>
+    <text x="492" y="174" class="hint" font-size="6px">Stale | Off | Vend</text>
+    <text x="492" y="184" class="hint" font-size="6px">count/ratio · trend%</text>
     <text x="600" y="176" class="hint" font-size="7px">Stale transaction</text>
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
     <text x="20" y="228" class="hint" font-size="8px">(more rows)</text>
