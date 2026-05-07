@@ -634,7 +634,7 @@
   color: #94a3b8;
 }
 
-/* Today / Trend — three boxes: Score · Trend % · Gap (green = good, red = bad per Red Alert rules) */
+/* Today / Trend — three icon boxes: Score · Trend % · Variance (green = good, red = bad per Red Alert rules) */
 
 .tdFreqTriple {
   padding: 2px 4px !important;
@@ -658,8 +658,8 @@
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 2px;
-  min-height: 44px;
+  gap: 3px;
+  min-height: 46px;
   padding: 4px 5px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.32);
@@ -671,6 +671,22 @@
   min-width: 0;
 }
 
+.freqBoxHead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 11px;
+}
+
+.freqGlyph {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.9;
+}
+
 .freqBoxTop {
   font-size: 6px;
   line-height: 1.1;
@@ -680,6 +696,13 @@
   color: #94a3b8;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.freqGood .freqBoxTop,
+.freqBad .freqBoxTop,
+.freqNeutral .freqBoxTop {
+  color: inherit;
+  opacity: 0.82;
 }
 
 .freqBoxVal {

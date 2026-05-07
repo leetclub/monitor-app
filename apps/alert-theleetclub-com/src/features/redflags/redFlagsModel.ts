@@ -301,20 +301,20 @@ export function freqColumnHeading(mode: RedAlertCompareMode): { title: string; s
     case 'week':
       return {
         title: 'Today / Trend',
-        sub: 'Score · trend % · gap to green (WTD vs baseline)',
+        sub: 'Score · trend % · variance to green (WTD vs baseline)',
       };
     case 'sameWeekdayLw':
       return {
         title: 'Today / Trend',
-        sub: 'Score · trend % · gap to green (today vs same weekday last week)',
+        sub: 'Score · trend % · variance to green (today vs same weekday last week)',
       };
     case 'yesterday':
       return {
         title: 'Today / Trend',
-        sub: 'Score · trend % · gap to green (today vs yesterday same elapsed)',
+        sub: 'Score · trend % · variance to green (today vs yesterday same elapsed)',
       };
     default:
-      return { title: 'Today / Trend', sub: 'Score · trend % · gap to green' };
+      return { title: 'Today / Trend', sub: 'Score · trend % · variance to green' };
   }
 }
 
@@ -371,17 +371,16 @@ export function freqSplit(row: RedAlertRow, mode: RedAlertCompareMode = 'week'):
     }
   }
   const bot = (() => {
-    if (Number.isNaN(pctNum)) return `${arrow}—`;
+    if (Number.isNaN(pctNum)) return `${arrow} —`;
     const mag = Math.abs(pctNum);
-    // Keep the trend compact so it fits inside the 3-box cell (no ellipsis).
-    // Target output length <= ~6 chars after the arrow.
+    // Readable spacing after arrow (↑ 38%); compact k-form for huge %.
     if (mag >= 1000) {
       const k = mag / 1000;
       const s = k >= 10 ? k.toFixed(0) : k.toFixed(1); // 9.9k max precision; 10k no decimal
       const cleaned = s.endsWith(".0") ? s.slice(0, -2) : s;
-      return `${arrow}${cleaned}k%`;
+      return `${arrow} ${cleaned}k%`;
     }
-    return `${arrow}${Math.round(mag)}%`;
+    return `${arrow} ${Math.round(mag)}%`;
   })();
   return { top, bottom: bot, bottomClass, upBand, title: tip };
 }

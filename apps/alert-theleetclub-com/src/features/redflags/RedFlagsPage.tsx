@@ -26,6 +26,7 @@ import {
   rankRows,
   reasonKey,
   rowHappensForSort,
+  type FreqSplit,
   type RankedRedAlertRow,
 } from './redFlagsModel';
 import { RED_FLAGS_COLUMNS } from './redFlagsWorkbookColumns';
@@ -103,6 +104,59 @@ function formatRedAlertExactDateTime(iso: string): string {
     }
   }
   return iso || '—';
+}
+
+function freqTrendValTone(fq: FreqSplit): string {
+  if (fq.bottomClass === 'down') return styles.freqDown;
+  if (fq.bottomClass === 'flat') return styles.freqFlat;
+  if (fq.bottomClass === 'up' && fq.upBand) {
+    switch (fq.upBand) {
+      case 1:
+        return styles.freqUp1;
+      case 2:
+        return styles.freqUp2;
+      case 3:
+        return styles.freqUp3;
+      case 4:
+        return styles.freqUp4;
+      default:
+        break;
+    }
+  }
+  return styles.freqUp2;
+}
+
+function FreqIconScore() {
+  return (
+    <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
+      <path fill="currentColor" d="M2 14h3V8H2v6zm4.5 0h3V5h-3v9zm4.5 0h3V2h-3v12z" opacity="0.92" />
+    </svg>
+  );
+}
+
+function FreqIconTrend() {
+  return (
+    <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2 12l4-4 3 3 5-7"
+        opacity="0.92"
+      />
+    </svg>
+  );
+}
+
+function FreqIconVariance() {
+  return (
+    <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
+      <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.25" opacity="0.88" />
+      <circle cx="8" cy="8" r="2" fill="currentColor" opacity="0.78" />
+    </svg>
+  );
 }
 
 function LastTxLines({
@@ -356,8 +410,8 @@ export function RedFlagsPage() {
           <ComparePresetPicker value={compare} onChange={setComparePersist} />
         </div>
         <p className={styles.compareBarHint}>
-          Timespan presets match Overall (shared with this browser session). Frequency uses the Red Alert snapshot for the
-          selected comparison (Kuwait calendar).
+          Timespan presets match Overall (shared with this browser session). Today / Trend uses the Red Alert snapshot for
+          the selected comparison (Kuwait calendar).
         </p>
 
         <div className={styles.tickerRow}>
@@ -497,6 +551,23 @@ export function RedFlagsPage() {
                     })();
                     const gapNeutral = gapText === '—';
                     const gapGood = gapText === '0';
+                    const varianceHits =
+                      compareMode === 'week'
+                        ? row.happensWeek ?? row.frequency?.totalCriteriaHitsThisWeek
+                        : todayHitsRaw;
+                    const varianceN = varianceHits != null ? Number(varianceHits) : NaN;
+                    const varianceTooltip = Number.isNaN(varianceN)
+                      ? 'Variance: incident count missing — distance to green unknown.'
+                      : varianceN <= 0
+                        ? 'Variance: at green (zero combined incidents for this period).'
+                        : `Variance: ${varianceN} incident${varianceN === 1 ? '' : 's'} above green — clear all to reach green.`;
+                    const freqColumnTooltip = [
+                      fq.title,
+                      '',
+                      `Score ${scoreText}: combined incident load for this timespan.`,
+                      `Trend ${trendText}: vs baseline (↓ better, ↑ worse for incidents).`,
+                      varianceTooltip,
+                    ].join('\n');
                     const pri = row.alertPriorityTier != null ? Number(row.alertPriorityTier) : 1;
                     const p2 = pri === 2 || !!row.duringScheduledCleaningNow;
                     const hwN = rowHappensForSort(row, compareMode);
@@ -551,13 +622,16 @@ export function RedFlagsPage() {
                         </td>
                         <td className={styles.td}>{getOperatorDisplay(row)}</td>
                         <td className={`${styles.td} ${styles.tdFreqTriple}`}>
-                          <div className={styles.freq3} title={fq.title}>
+                          <div className={styles.freq3} title={freqColumnTooltip}>
                             <div
                               className={`${styles.freqBox} ${
                                 !scoreKnown ? styles.freqNeutral : scoreGood ? styles.freqGood : styles.freqBad
                               }`}
                             >
-                              <div className={styles.freqBoxTop}>Score</div>
+                              <div className={styles.freqBoxHead}>
+                                <FreqIconScore />
+                                <span className={styles.freqBoxTop}>Score</span>
+                              </div>
                               <div className={styles.freqBoxVal}>{scoreText}</div>
                             </div>
                             <div
@@ -565,15 +639,21 @@ export function RedFlagsPage() {
                                 trendNeutral ? styles.freqNeutral : trendIsGood ? styles.freqGood : styles.freqBad
                               }`}
                             >
-                              <div className={styles.freqBoxTop}>Trend</div>
-                              <div className={styles.freqBoxVal}>{trendText}</div>
+                              <div className={styles.freqBoxHead}>
+                                <FreqIconTrend />
+                                <span className={styles.freqBoxTop}>Trend</span>
+                              </div>
+                              <div className={`${styles.freqBoxVal} ${freqTrendValTone(fq)}`}>{trendText}</div>
                             </div>
                             <div
                               className={`${styles.freqBox} ${
                                 gapNeutral ? styles.freqNeutral : gapGood ? styles.freqGood : styles.freqBad
                               }`}
                             >
-                              <div className={styles.freqBoxTop}>Gap</div>
+                              <div className={styles.freqBoxHead}>
+                                <FreqIconVariance />
+                                <span className={styles.freqBoxTop}>Variance</span>
+                              </div>
                               <div className={styles.freqBoxVal}>{gapText}</div>
                             </div>
                           </div>
