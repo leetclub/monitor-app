@@ -9,7 +9,13 @@ import { apiGet } from '@/lib/api';
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { safeText } from '@/lib/safeText';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
-import { OVERALL_COLUMNS } from './overallWorkbookColumns';
+import {
+  OVERALL_COLUMNS,
+  OVERALL_HEADER_SHORT,
+  OVERALL_XLSX_ORDER,
+  type OverallColumnKey,
+} from './overallWorkbookColumns';
+import styles from './OverallPage.module.css';
 
 type Machine = { id: string; name: string; vendon_location_owner?: string | null };
 type MachinesResponse = { machines: Machine[] };
@@ -42,6 +48,12 @@ function snapshotMostIssue(snap: RedAlertRow | undefined): string {
 }
 
 /** Compact dispense-fail counts when we do not have a single “last fail” timestamp in the snapshot row. */
+function headerTooltip(key: OverallColumnKey): string {
+  const c = OVERALL_COLUMNS[key];
+  if (c.note) return `${c.title} — ${c.note}`;
+  return c.title;
+}
+
 function snapshotVendFailSummary(snap: RedAlertRow | undefined): string {
   const fq = snap?.frequency;
   if (!fq) return '';
@@ -235,40 +247,19 @@ export function OverallPage() {
       ) : null}
 
       <section className="surfaceCard">
-        <div className="surfaceCardHead">
-          <h2 className="surfaceCardTitle">Fleet table</h2>
+        <div className={styles.fleetToolbar}>
           <span className="surfaceBadge">{fleetMachines.length} machines</span>
         </div>
 
-        <div className="tableWrap tableWrapLoose">
+        <div className={`tableWrap tableWrapLoose ${styles.fleetWrap}`}>
           <table>
             <thead>
               <tr>
-                <th title={OVERALL_COLUMNS.operatingHours.note}>
-                  {OVERALL_COLUMNS.operatingHours.title}
-                  <span className="muted" style={{ display: 'block', fontSize: '0.72rem', fontWeight: 500, marginTop: 2 }}>
-                    Admin · Location hours
-                  </span>
-                </th>
-                <th>{OVERALL_COLUMNS.vendingMachine.title}</th>
-                <th>{OVERALL_COLUMNS.operator.title}</th>
-                <th title={OVERALL_COLUMNS.attendance.note}>{OVERALL_COLUMNS.attendance.title}</th>
-                <th title={OVERALL_COLUMNS.lastCleaned.note}>{OVERALL_COLUMNS.lastCleaned.title}</th>
-                <th title={OVERALL_COLUMNS.lastVendFailed.note}>{OVERALL_COLUMNS.lastVendFailed.title}</th>
-                <th>{OVERALL_COLUMNS.lastTransaction.title}</th>
-                <th title={OVERALL_COLUMNS.salesTrend.note}>{OVERALL_COLUMNS.salesTrend.title}</th>
-                <th title={OVERALL_COLUMNS.targetAchieved.note}>{OVERALL_COLUMNS.targetAchieved.title}</th>
-                <th title={OVERALL_COLUMNS.peakHours.note}>{OVERALL_COLUMNS.peakHours.title}</th>
-                <th title={OVERALL_COLUMNS.promotion.note}>{OVERALL_COLUMNS.promotion.title}</th>
-                <th title={OVERALL_COLUMNS.highestProduct.note}>{OVERALL_COLUMNS.highestProduct.title}</th>
-                <th title={OVERALL_COLUMNS.lowestProduct.note}>{OVERALL_COLUMNS.lowestProduct.title}</th>
-                <th title={OVERALL_COLUMNS.peopleCount.note}>{OVERALL_COLUMNS.peopleCount.title}</th>
-                <th title={OVERALL_COLUMNS.customerCalls.note}>{OVERALL_COLUMNS.customerCalls.title}</th>
-                <th title={OVERALL_COLUMNS.mostIssue.note}>{OVERALL_COLUMNS.mostIssue.title}</th>
-                <th title={OVERALL_COLUMNS.lastQaCheck.note}>{OVERALL_COLUMNS.lastQaCheck.title}</th>
-                <th title={OVERALL_COLUMNS.lastTechCheck.note}>{OVERALL_COLUMNS.lastTechCheck.title}</th>
-                <th title={OVERALL_COLUMNS.wastagePct.note}>{OVERALL_COLUMNS.wastagePct.title}</th>
-                <th title={OVERALL_COLUMNS.promotionRuns.note}>{OVERALL_COLUMNS.promotionRuns.title}</th>
+                {OVERALL_XLSX_ORDER.map((key) => (
+                  <th key={key} title={headerTooltip(key)}>
+                    {OVERALL_HEADER_SHORT[key]}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>

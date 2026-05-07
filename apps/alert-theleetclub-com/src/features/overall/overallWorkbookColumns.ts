@@ -28,6 +28,30 @@ export const OVERALL_XLSX_ORDER = [
 
 export type OverallColumnKey = (typeof OVERALL_XLSX_ORDER)[number];
 
+/** Compact thead labels — full names stay in `title` tooltips. */
+export const OVERALL_HEADER_SHORT: Record<OverallColumnKey, string> = {
+  operatingHours: 'Hours',
+  vendingMachine: 'Machine',
+  operator: 'Operator',
+  attendance: 'Attend.',
+  lastCleaned: 'Cleaned',
+  lastVendFailed: 'Vend fail',
+  lastTransaction: 'Last tx',
+  salesTrend: 'Trend',
+  targetAchieved: 'Target',
+  peakHours: 'Peak',
+  promotion: 'Promo',
+  highestProduct: 'Top SKU',
+  lowestProduct: 'Low SKU',
+  peopleCount: 'Footfall',
+  customerCalls: 'Calls',
+  mostIssue: 'Issue',
+  lastQaCheck: 'QA',
+  lastTechCheck: 'Tech',
+  wastagePct: 'Waste %',
+  promotionRuns: 'Promos',
+};
+
 export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: string }> = {
   operatingHours: {
     title: 'Operating Hours',

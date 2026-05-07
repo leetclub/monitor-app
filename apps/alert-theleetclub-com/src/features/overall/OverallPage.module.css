@@ -1,0 +1,35 @@
+/* Overall fleet sheet — tighter headers so 20 columns fit without crowding. */
+
+.fleetToolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.fleetWrap :global(thead th) {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  padding: 7px 5px !important;
+  max-width: 5.5rem;
+  vertical-align: bottom;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.fleetWrap :global(tbody td) {
+  padding: 8px 5px !important;
+  font-size: 0.8rem;
+}
+
+@media (min-width: 1400px) {
+  .fleetWrap :global(thead th) {
+    font-size: 0.72rem;
+    padding: 8px 6px !important;
+    max-width: 6.5rem;
+  }
+}
