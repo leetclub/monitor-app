@@ -18,7 +18,12 @@ from dashboard_access_models import (
     create_dashboard_engine_and_session,
 )
 from dashboard_access_routes import resolve_session_allowed_tabs
-from vendon_machine_helpers import machine_row_excluded, vendon_machine_tag_for_alert_admin_detail
+from vendon_machine_helpers import (
+    machine_row_excluded,
+    vendon_fetch_machine_list,
+    vendon_json_api_error_message,
+    vendon_machine_tag_for_alert_admin_detail,
+)
 from vendon_proxy_routes import compute_remote_credits_logs_classic
 
 logger = logging.getLogger(__name__)
@@ -135,7 +140,12 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
         r = requests.get(url, headers=_vendon_headers(), timeout=120)
         if r.status_code != 200:
             return None, f"Vendon API error {r.status_code}: {r.text[:500]}"
-        return r.json(), None
+        data = r.json()
+        if isinstance(data, dict):
+            api_err = vendon_json_api_error_message(data)
+            if api_err:
+                return None, api_err
+        return data, None
     except Exception as ex:
         logger.exception("alert vendon_get")
         return None, str(ex)
@@ -149,11 +159,9 @@ def register_alert_routes(app) -> None:
         _, denied = _require_alert_read()
         if denied:
             return denied
-        data, err = _vendon_get("/machine", None)
+        rows, err = vendon_fetch_machine_list(_vendon_get)
         if err:
             return jsonify({"error": err, "machines": [], "location_owner_options": []}), 502
-        rows = data.get("result") if isinstance(data, dict) else None
-        rows = rows if isinstance(rows, list) else []
         tags_from_machines: List[str] = []
         machines: List[Dict[str, Any]] = []
         for m in rows:

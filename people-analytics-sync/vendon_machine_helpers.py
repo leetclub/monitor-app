@@ -5,8 +5,11 @@ Vendon payloads vary by tenant — we merge structured fields with ``tags`` (whe
 """
 from __future__ import annotations
 
+import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Legacy parity with monitoring-app-v2 ``EXCLUDED_NAME_MARKERS`` (substring on name or id).
 EXCLUDED_MACHINE_MARKERS: tuple[str, ...] = ("869951037923178", "869951037920851")
@@ -635,3 +638,97 @@ def machine_location_for_red_alert(m: Dict[str, Any]) -> str:
     if isinstance(raw, str):
         return raw.strip()
     return ""
+
+
+def vendon_json_api_error_message(data: Any) -> Optional[str]:
+    """
+    Vendon REST often returns HTTP 200 with ``{"code": 403, "message": "..."}``.
+    Treat any ``code`` != 200 as failure even when status code is 200.
+    """
+    if not isinstance(data, dict) or "code" not in data:
+        return None
+    raw_code = data.get("code")
+    try:
+        code = int(raw_code)
+    except (TypeError, ValueError):
+        return None
+    if code == 200:
+        return None
+    msg = data.get("message") or data.get("error") or data.get("detail") or ""
+    base = f"Vendon API code {code}"
+    if isinstance(msg, str) and msg.strip():
+        return f"{base}: {msg.strip()[:500]}"
+    return base
+
+
+def vendon_envelope_result_list(data: Any) -> List[Any]:
+    """Normalize ``result`` / common alternate keys to a list."""
+    if not isinstance(data, dict):
+        return []
+    rows = data.get("result")
+    if isinstance(rows, list):
+        return rows
+    for key in ("results", "machines", "data"):
+        alt = data.get(key)
+        if isinstance(alt, list):
+            return alt
+    return []
+
+
+def vendon_fetch_machine_list(
+    get_fn: Callable[[str, Optional[Dict[str, Any]]], Tuple[Any, Optional[str]]],
+) -> Tuple[List[Any], Optional[str]]:
+    """
+    GET ``/machine`` and optionally follow ``paging`` (offset/limit) until all rows are read.
+
+    ``get_fn(path, params)`` — same contract as ``alert_routes._vendon_get``: returns parsed JSON + optional error.
+    """
+    first, err = get_fn("/machine", None)
+    if err:
+        return [], err
+    if not isinstance(first, dict):
+        return [], "Vendon /machine returned unexpected JSON (expected object envelope)"
+
+    api_err = vendon_json_api_error_message(first)
+    if api_err:
+        return [], api_err
+
+    rows = vendon_envelope_result_list(first)
+    out: List[Any] = list(rows)
+
+    pg = first.get("paging")
+    if not isinstance(pg, dict):
+        return out, None
+
+    try:
+        total = int(pg.get("total"))
+    except (TypeError, ValueError):
+        return out, None
+
+    try:
+        page_limit = int(pg.get("limit") or len(rows) or 50)
+    except (TypeError, ValueError):
+        page_limit = 50
+    page_limit = max(1, min(page_limit, 500))
+
+    offset = len(out)
+    guard = 0
+    while offset < total and guard < 100:
+        guard += 1
+        page, err_p = get_fn("/machine", {"limit": str(page_limit), "offset": str(offset)})
+        if err_p:
+            logger.warning("vendon /machine paging stopped at offset %s: %s", offset, err_p)
+            break
+        if not isinstance(page, dict):
+            break
+        if vendon_json_api_error_message(page):
+            break
+        chunk = vendon_envelope_result_list(page)
+        if not chunk:
+            break
+        out.extend(chunk)
+        offset += len(chunk)
+        if len(chunk) < page_limit:
+            break
+
+    return out, None

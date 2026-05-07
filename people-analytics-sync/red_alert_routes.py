@@ -37,7 +37,12 @@ from dashboard_access_models import (
 )
 from dashboard_access_routes import ALL_DASHBOARD_TAB_IDS, SUPER_ADMIN_EMAILS, _check_secret
 from vendon_constants import EVENT_NAME_MAPPING, EXCLUDED_EVENT_NAMES
-from vendon_machine_helpers import machine_location_for_red_alert, machine_row_excluded
+from vendon_machine_helpers import (
+    machine_location_for_red_alert,
+    machine_row_excluded,
+    vendon_fetch_machine_list,
+    vendon_json_api_error_message,
+)
 from db_pool import cache_key as attendance_cache_key, get_conn as attendance_get_conn
 
 logger = logging.getLogger(__name__)
@@ -432,7 +437,12 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
         r = requests.get(url, headers=_vendon_headers(), timeout=120)
         if r.status_code != 200:
             return None, f"Vendon API error {r.status_code}: {r.text[:500]}"
-        return r.json(), None
+        data = r.json()
+        if isinstance(data, dict):
+            api_err = vendon_json_api_error_message(data)
+            if api_err:
+                return None, api_err
+        return data, None
     except Exception as ex:
         logger.exception("red_alert vendon_get")
         return None, str(ex)
@@ -755,11 +765,9 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
     days_back = [(kuwait_today_date - timedelta(days=i)).isoformat() for i in range(1, 8)]  # yesterday .. 7 days ago
     daily_cleaning_end_iso_by_machine = _read_attendance_daily_cleaning_cache_multi(days_back)
 
-    mdata, m_err = _vendon_get("/machine", None)
+    mrows, m_err = vendon_fetch_machine_list(_vendon_get)
     if m_err:
         return {"error": m_err, "rows": []}
-    mrows = mdata.get("result") if isinstance(mdata, dict) else None
-    mrows = mrows if isinstance(mrows, list) else []
     machine_list = []
     for m in mrows:
         if m.get("id") is None:

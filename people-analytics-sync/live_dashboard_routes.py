@@ -28,6 +28,7 @@ from dashboard_access_models import (
 )
 from dashboard_access_routes import ALL_DASHBOARD_TAB_IDS, SUPER_ADMIN_EMAILS, _check_secret
 from vendon_constants import EVENT_NAME_MAPPING, EXCLUDED_EVENT_NAMES
+from vendon_machine_helpers import vendon_fetch_machine_list, vendon_json_api_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,12 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
         r = requests.get(url, headers=_vendon_headers(), timeout=120)
         if r.status_code != 200:
             return None, f"Vendon API error {r.status_code}: {r.text[:500]}"
-        return r.json(), None
+        data = r.json()
+        if isinstance(data, dict):
+            api_err = vendon_json_api_error_message(data)
+            if api_err:
+                return None, api_err
+        return data, None
     except Exception as ex:
         logger.exception("live_dashboard vendon_get")
         return None, str(ex)
@@ -368,12 +374,14 @@ def _live_snapshot_payload(focus_date: Optional[date] = None) -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
     from_ts, to_ts = _vend_timestamps_for_window(now, focus_date)
 
-    machines_data, m_err = _vendon_get("/machine", None)
+    mrows, m_err = vendon_fetch_machine_list(_vendon_get)
     if m_err:
         return {"error": m_err, "machines": []}
-    mrows = machines_data.get("result") if isinstance(machines_data, dict) else None
-    mrows = mrows if isinstance(mrows, list) else []
-    machine_list = [{"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))} for m in mrows if m.get("id") is not None]
+    machine_list = [
+        {"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))}
+        for m in mrows
+        if isinstance(m, dict) and m.get("id") is not None
+    ]
 
     vends, v_err = _fetch_all_vends(from_ts, to_ts)
     if v_err:

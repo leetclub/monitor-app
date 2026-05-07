@@ -37,6 +37,7 @@ from dashboard_access_models import (
 )
 from dashboard_access_routes import ALL_DASHBOARD_TAB_IDS, SUPER_ADMIN_EMAILS, _check_secret
 from vendon_constants import EVENT_NAME_MAPPING, EXCLUDED_EVENT_NAMES
+from vendon_machine_helpers import vendon_fetch_machine_list, vendon_json_api_error_message
 from models import (
     RemoteCreditReason,
     VendonEventCache,
@@ -227,7 +228,15 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
         r = requests.get(url, headers=_vendon_headers(), timeout=120)
         if r.status_code != 200:
             return None, f"Vendon API error {r.status_code}: {r.text[:500]}"
-        return r.json(), None
+        try:
+            data = r.json()
+        except Exception:
+            return None, f"Vendon returned non-JSON: {r.text[:400]}"
+        if isinstance(data, dict):
+            api_err = vendon_json_api_error_message(data)
+            if api_err:
+                return None, api_err
+        return data, None
     except Exception as ex:
         logger.exception("vendon_get")
         return None, str(ex)
@@ -327,12 +336,13 @@ def fetch_and_process_events(
 
     # Machine id -> name
     machines_map: Dict[str, str] = {}
-    mdata, _ = _vendon_get("/machine", None)
-    if mdata and isinstance(mdata.get("result"), list):
-        for m in mdata["result"]:
-            mid = str(m.get("id", ""))
-            if mid:
-                machines_map[mid] = m.get("name") or mid
+    mrows_map, _ = vendon_fetch_machine_list(_vendon_get)
+    for m in mrows_map:
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("id", ""))
+        if mid:
+            machines_map[mid] = m.get("name") or mid
 
     filtered = [e for e in all_events if not _is_excluded_event(e)]
 
@@ -895,13 +905,13 @@ def _compute_remote_credits_logs_classic(start_date: str, end_date: str, machine
     except Exception as ex:
         return {"success": False, "error": f"Invalid date range: {ex}", "logs": [], "totals": []}
 
-    mdata, merr = _vendon_get("/machine", None)
-    if merr or not isinstance(mdata, dict):
-        return {"success": False, "error": merr or "machines_unavailable", "logs": [], "totals": []}
+    mrows_rc, merr = vendon_fetch_machine_list(_vendon_get)
+    if merr:
+        return {"success": False, "error": merr, "logs": [], "totals": []}
 
     all_machines: List[Dict[str, Any]] = []
-    for m in mdata.get("result") or []:
-        if m.get("id") is None:
+    for m in mrows_rc:
+        if not isinstance(m, dict) or m.get("id") is None:
             continue
         all_machines.append({"id": str(m.get("id")), "name": m.get("name") or f"Machine {m.get('id')}"})
 
@@ -1260,12 +1270,14 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
     from_ts, to_ts = _kuwait_day_bounds_utc(date_str)
 
     # Machines list for names
-    mdata, err = _vendon_get("/machine", None)
+    mrows, err = vendon_fetch_machine_list(_vendon_get)
     if err:
         return {"ok": False, "date": date_str, "error": err}
-    mrows = mdata.get("result") if isinstance(mdata, dict) else None
-    mrows = mrows if isinstance(mrows, list) else []
-    machines = [{"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))} for m in mrows if m.get("id") is not None]
+    machines = [
+        {"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))}
+        for m in mrows
+        if isinstance(m, dict) and m.get("id") is not None
+    ]
 
     db = _get_people_analytics_session()
     try:
@@ -1342,12 +1354,14 @@ def _refresh_remote_credits_preload_cache(date_str: str) -> Dict[str, Any]:
         return {"ok": False, "date": date_str, "error": f"Invalid date: {ex}"}
     from_ts, to_ts = _kuwait_day_bounds_utc(date_str)
 
-    mdata, err = _vendon_get("/machine", None)
+    mrows_pre, err = vendon_fetch_machine_list(_vendon_get)
     if err:
         return {"ok": False, "date": date_str, "error": err}
-    mrows = mdata.get("result") if isinstance(mdata, dict) else None
-    mrows = mrows if isinstance(mrows, list) else []
-    machines = [{"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))} for m in mrows if m.get("id") is not None]
+    machines = [
+        {"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))}
+        for m in mrows_pre
+        if isinstance(m, dict) and m.get("id") is not None
+    ]
 
     best = None
     for m in machines:
@@ -1552,12 +1566,14 @@ def register_vendon_proxy_routes(app) -> None:
         err_resp = _require_any_machine_dropdown_tab()
         if err_resp[1]:
             return err_resp[1]
-        data, err = _vendon_get("/machine", None)
+        rows, err = vendon_fetch_machine_list(_vendon_get)
         if err:
             return jsonify({"error": err}), 502
-        rows = data.get("result") if isinstance(data, dict) else None
-        rows = rows if isinstance(rows, list) else []
-        machines = [{"id": m.get("id"), "name": m.get("name")} for m in rows if m.get("id") is not None]
+        machines = []
+        for m in rows:
+            if not isinstance(m, dict) or m.get("id") is None:
+                continue
+            machines.append({"id": m.get("id"), "name": m.get("name")})
         machines.sort(key=lambda x: (x.get("name") or "").lower())
         return jsonify({"machines": machines})
 
