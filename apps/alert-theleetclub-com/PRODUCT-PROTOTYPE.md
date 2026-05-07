@@ -64,6 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-05-07 | **Red Flags — Frequency column:** Wider column reserved on the table (**~14rem** min) so three mini-cards keep **readable type** (clamp up to v1 ~11px counts / 9px trends); **card height** restored (~46px). Badges can wrap to two lines (**VEND FAIL**). |
 | 2026-05-07 | **Red Flags — Frequency column:** Restored **Monitor v1** layout — three compact mini-cards (**STALE** · **OFF** · **VEND FAIL**): baseline count on top (e.g. `8/13`), **trend %** under an inner divider (↑ red / ↓ green / flat grey). Header title **Frequency** + per-mode subtitle. Cells sized tighter than legacy defaults for fit. |
 | 2026-05-06 | **Red Flags:** **Call OP** / **Call AM** columns (Slack DM when `SLACK_*` ids configured; AM resolved from AM Plan location buckets; OP uses strike email → optional Slack user map, else mailto). Placeholder KPI columns show **?**. **Overall:** **?** + hover for disconnected metrics. **Admin:** catalog vs saved profile counts at top. |
 | 2026-05-06 | **Red Flags board:** “Send Credit” → **Credits Sent** + new **Dispense Tests** (same criteria as Monitor drink tests). Earlier experiment: Score / Trend / Gap triplet — **superseded** by per-case Frequency mini-cards aligned with Monitor v1. **Overall:** Operating Hours now shows **hours only** (tag displayed separately) and Admin “Saved profiles” moved below the editor. |
