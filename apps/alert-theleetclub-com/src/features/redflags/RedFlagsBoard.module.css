@@ -624,6 +624,7 @@
 }
 
 .freqBox {
+  position: relative;
   border-radius: 10px;
   padding: 0.35rem 0.45rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -631,6 +632,22 @@
   text-align: center;
   line-height: 1.15;
   min-width: 0;
+  overflow: hidden;
+}
+
+.freqBox::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 46%,
+      rgba(148, 163, 184, 0.5) 49%,
+      transparent 52%
+    );
 }
 
 .freqBoxTop {
@@ -639,6 +656,8 @@
   text-transform: uppercase;
   color: rgba(148, 163, 184, 0.95);
   margin-bottom: 0.18rem;
+  position: relative;
+  z-index: 1;
 }
 
 .freqBoxVal {
@@ -647,6 +666,8 @@
   line-height: 1.1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  position: relative;
+  z-index: 1;
 }
 
 @media (max-width: 1100px) {
