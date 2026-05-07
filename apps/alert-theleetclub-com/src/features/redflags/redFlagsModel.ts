@@ -301,20 +301,20 @@ export function freqColumnHeading(mode: RedAlertCompareMode): { title: string; s
     case 'week':
       return {
         title: 'Today / Trend',
-        sub: 'Score · trend % · variance to green (WTD vs baseline)',
+        sub: 'Score · trend % · gap ↓ to green (WTD vs baseline)',
       };
     case 'sameWeekdayLw':
       return {
         title: 'Today / Trend',
-        sub: 'Score · trend % · variance to green (today vs same weekday last week)',
+        sub: 'Score · trend % · gap ↓ to green (today vs same weekday last week)',
       };
     case 'yesterday':
       return {
         title: 'Today / Trend',
-        sub: 'Score · trend % · variance to green (today vs yesterday same elapsed)',
+        sub: 'Score · trend % · gap ↓ to green (today vs yesterday same elapsed)',
       };
     default:
-      return { title: 'Today / Trend', sub: 'Score · trend % · variance to green' };
+      return { title: 'Today / Trend', sub: 'Score · trend % · gap ↓ to green' };
   }
 }
 

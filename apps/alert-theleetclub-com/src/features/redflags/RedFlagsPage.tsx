@@ -126,6 +126,26 @@ function freqTrendValTone(fq: FreqSplit): string {
   return styles.freqUp2;
 }
 
+/** Incident burden vs green (0): higher count → worse → redder (same bands as legacy freq-up ramp). */
+function freqIncidentBurdenTone(n: number): string {
+  if (Number.isNaN(n)) return styles.freqFlat;
+  const mag = Math.max(0, n);
+  if (mag <= 0) return styles.freqDown;
+  const band = mag >= 10 ? 4 : mag >= 5 ? 3 : mag >= 2 ? 2 : 1;
+  switch (band) {
+    case 1:
+      return styles.freqUp1;
+    case 2:
+      return styles.freqUp2;
+    case 3:
+      return styles.freqUp3;
+    case 4:
+      return styles.freqUp4;
+    default:
+      return styles.freqUp2;
+  }
+}
+
 function FreqIconScore() {
   return (
     <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
@@ -537,34 +557,32 @@ export function RedFlagsPage() {
                     const hitsN = hitsForScore != null ? Number(hitsForScore) : NaN;
                     const scoreKnown = !Number.isNaN(hitsN);
                     const scoreGood = scoreKnown && hitsN <= 0;
-                    const gapText = (() => {
-                      const n =
-                        compareMode === 'week'
-                          ? row.happensWeek != null
-                            ? row.happensWeek
-                            : row.frequency?.totalCriteriaHitsThisWeek
-                          : todayHitsRaw;
-                      const nn = n != null ? Number(n) : NaN;
-                      if (Number.isNaN(nn)) return '—';
-                      if (nn <= 0) return '0';
-                      return `-${nn}`;
-                    })();
-                    const gapNeutral = gapText === '—';
-                    const gapGood = gapText === '0';
-                    const varianceHits =
+                    const gapRaw =
                       compareMode === 'week'
-                        ? row.happensWeek ?? row.frequency?.totalCriteriaHitsThisWeek
+                        ? row.happensWeek != null
+                          ? row.happensWeek
+                          : row.frequency?.totalCriteriaHitsThisWeek
                         : todayHitsRaw;
-                    const varianceN = varianceHits != null ? Number(varianceHits) : NaN;
-                    const varianceTooltip = Number.isNaN(varianceN)
-                      ? 'Variance: incident count missing — distance to green unknown.'
-                      : varianceN <= 0
-                        ? 'Variance: at green (zero combined incidents for this period).'
-                        : `Variance: ${varianceN} incident${varianceN === 1 ? '' : 's'} above green — clear all to reach green.`;
+                    const gapN =
+                      gapRaw == null
+                        ? NaN
+                        : (() => {
+                            const nn = Number(gapRaw);
+                            return Number.isNaN(nn) ? NaN : Math.max(0, nn);
+                          })();
+                    /** Green target = 0 combined incidents; ↓N = how far incidents must drop to get there. */
+                    const gapDisplay = Number.isNaN(gapN) ? '—' : gapN <= 0 ? '↓0' : `↓${gapN}`;
+                    const gapNeutral = Number.isNaN(gapN);
+                    const gapGood = !gapNeutral && gapN <= 0;
+                    const varianceTooltip = gapNeutral
+                      ? 'Gap to green unknown (missing incident count).'
+                      : gapN <= 0
+                        ? 'At green: zero combined incidents — no further reduction needed (↓0).'
+                        : `Not green yet: incidents must come down by ${gapN} (↓${gapN}) to reach green (0).`;
                     const freqColumnTooltip = [
                       fq.title,
                       '',
-                      `Score ${scoreText}: combined incident load for this timespan.`,
+                      `Score ${scoreText}: combined incident load for this timespan (0 = good).`,
                       `Trend ${trendText}: vs baseline (↓ better, ↑ worse for incidents).`,
                       varianceTooltip,
                     ].join('\n');
@@ -632,7 +650,13 @@ export function RedFlagsPage() {
                                 <FreqIconScore />
                                 <span className={styles.freqBoxTop}>Score</span>
                               </div>
-                              <div className={styles.freqBoxVal}>{scoreText}</div>
+                              <div
+                                className={`${styles.freqBoxVal} ${
+                                  scoreKnown ? freqIncidentBurdenTone(Math.max(0, hitsN)) : styles.freqFlat
+                                }`}
+                              >
+                                {scoreText}
+                              </div>
                             </div>
                             <div
                               className={`${styles.freqBox} ${
@@ -652,9 +676,13 @@ export function RedFlagsPage() {
                             >
                               <div className={styles.freqBoxHead}>
                                 <FreqIconVariance />
-                                <span className={styles.freqBoxTop}>Variance</span>
+                                <span className={styles.freqBoxTop}>Gap</span>
                               </div>
-                              <div className={styles.freqBoxVal}>{gapText}</div>
+                              <div
+                                className={`${styles.freqBoxVal} ${gapNeutral ? styles.freqFlat : freqIncidentBurdenTone(gapN)}`}
+                              >
+                                {gapDisplay}
+                              </div>
                             </div>
                           </div>
                         </td>

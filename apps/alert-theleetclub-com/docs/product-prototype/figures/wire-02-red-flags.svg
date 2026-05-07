@@ -40,13 +40,13 @@
     <text x="300" y="152" class="label" font-size="8px">Operator</text>
     <text x="420" y="152" class="label" font-size="8px">Min since tx</text>
     <text x="460" y="148" class="label" font-size="7px">Today / Trend</text>
-    <text x="460" y="158" class="hint" font-size="6px">Score · trend · variance</text>
+    <text x="460" y="158" class="hint" font-size="6px">Score · trend · gap ↓ to green</text>
     <text x="600" y="152" class="label" font-size="8px">Reasons</text>
     <text x="20" y="182" class="hint" font-size="8px">Vend-A12</text>
     <text x="180" y="182" class="hint" font-size="8px">Farwaniya</text>
     <text x="300" y="182" class="hint" font-size="8px">Ahmed</text>
     <text x="420" y="182" class="hint" font-size="8px">142</text>
-    <text x="452" y="176" class="hint" font-size="6px">[▂] Score · [↗] Trend · [◎] Var.</text>
+    <text x="452" y="176" class="hint" font-size="6px">[▂] Score · [↗] Trend · [◎] Gap ↓N</text>
     <text x="452" y="186" class="hint" font-size="6px">green/red per rule · ↑% bands</text>
     <text x="600" y="176" class="hint" font-size="7px">Stale transaction</text>
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
