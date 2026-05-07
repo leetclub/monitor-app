@@ -1,34 +1,42 @@
 # Workbook reference — `Red Flags` sheet (`alert.theleetclub.com.xlsx`)
 
-Source file (committed): `apps/alert-theleetclub-com/alert.theleetclub.com.xlsx`  
-Sheets: **Admin**, **Overall**, **Red Flags**.
+Source files:
 
-Regenerate header preview:
+- Committed: `apps/alert-theleetclub-com/alert.theleetclub.com.xlsx`
+- Verified against: `Downloads/alert.theleetclub.com.xlsx` (same structure).
+
+**Header row:** **row 5** (not row 1 — rows above are title / spacing).
+
+Re-extract headers:
 
 ```bash
-python3 scripts/read_xlsx_headers.py
+python3 scripts/inspect_alert_xlsx_headers.py apps/alert-theleetclub-com/alert.theleetclub.com.xlsx
 ```
 
-## Red Flags — row 1 (column titles)
+## Red Flags — row 5 (workbook vs app)
 
-Exact extraction from the workbook (column **A** = **Aspect** labels in the sheet; data columns start at **Vending Machine**):
+The workbook has **12** header cells from **Aspect** through **Tech Visit** (11 data columns after **Aspect**).
 
-| # | Column (workbook) | In the app (`/red-flags`) | Data source today |
-|---|-------------------|---------------------------|-------------------|
-| 1 | **Vending Machine** | **Vending Machine** | Machine name, ID, New/Updated/P2 chips, **Last tx** / **Last OFF** lines (Red Alert snapshot) |
-| 2 | **Alert Type** | **Alert Type** | Primary alert copy from `reasons[]` (same family as Red Alert) |
-| 3 | **Operator** | **Operator** | Live ops + cleaning (`getOperatorDisplay`) |
-| 4 | **Frequency** | **Frequency** (subtitle follows compare preset) | `freqSplit()` / WTD vs baseline |
-| 5 | **GO CHECK** | **GO CHECK** | `goCheckUrl` or mailto from strike operator |
-| 6 | **Send Credit** | **Send Credit** | **—** (workbook thresholds — extend snapshot API) |
-| 7 | **Vends Resolved** | **Vends Resolved** | **—** (workbook timing logic — extend snapshot API) |
-| 8 | **Test Credits** | **Test Credits** | **—** (extend snapshot API) |
-| 9 | **Last Cleaning** | **Last Cleaning** | **—** (Admin / live dashboard join — planned) |
-| 10 | **QA Visit** | **QA Visit** | **—** (Workflow API — planned) |
-| 11 | **Tech Visit** | **Tech Visit** | **—** (Workflow API — planned) |
+The live app adds **two** operator columns after **Tech Visit** (not in this xlsx file):
 
-Row click opens the **detail** dialog (full reasons, timestamps). The workbook does not name a **Details** column; we keep the modal for parity with operations.
+| Workbook # | Column (workbook) | In the app (`/red-flags`) | Data source today |
+|------------|-------------------|---------------------------|-------------------|
+| 1 | **Vending Machine** | Vending Machine | Name, ID, chips, last tx / OFF lines (snapshot) |
+| 2 | **Alert Type** | Alert Type | `reasons[]` summary |
+| 3 | **Operator** | Operator | `getOperatorDisplay` |
+| 4 | **Frequency** | Today / Trend (dynamic subtitle) | `freqSplit()` + compare preset |
+| 5 | **GO CHECK** | GO CHECK | `goCheckUrl` / mailto |
+| 6 | **Send Credit** | **Credits Sent** (renamed in UI) | Remote credits count (today, Kuwait) |
+| 7 | **Vends Resolved** | Vends Resolved | Placeholder **?** until API |
+| 8 | **Test Credits** | **Dispense Tests** (renamed in UI) | Drink-test count (today, Kuwait) |
+| 9 | **Last Cleaning** | Last Cleaning | Timestamp when snapshot provides it |
+| 10 | **QA Visit** | QA Visit | Placeholder **?** until wired |
+| 11 | **Tech Visit** | Tech Visit | Placeholder **?** until wired |
+| — | *(not in workbook)* | **Call OP** | Slack DM / mailto (app-only) |
+| — | *(not in workbook)* | **Call AM** | Slack DM (app-only) |
 
-### Row 2 notes (workbook)
+Row click opens the **detail** modal (no **Details** column in the workbook).
 
-Workbook describes Send Credit / Vends Resolved / Test Credits color rules and QA/Tech visit windows — implementation belongs in **people-api** snapshot rows when those metrics are ready.
+### Row 6+ notes (workbook)
+
+Workbook body rows describe Send Credit / Vends Resolved / Test Credits rules and QA/Tech windows — implementation continues in **people-api** snapshot + feeds when those metrics are ready.
