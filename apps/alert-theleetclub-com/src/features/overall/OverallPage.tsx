@@ -74,6 +74,8 @@ type VendonLastTransactionsResponse = {
   error?: string;
 };
 
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
 function snapshotMostIssue(snap: RedAlertRow | undefined): string {
   const reasons = snap?.reasons;
   if (!reasons?.length) return '';
@@ -112,6 +114,50 @@ function formatPct(pct: number): string {
 function formatKwd(x: number): string {
   if (!Number.isFinite(x)) return '—';
   return `${x.toFixed(2)} KWD`;
+}
+
+function fmtTimeRange(start: string, end: string): string {
+  const s = String(start || '').trim();
+  const e = String(end || '').trim();
+  if (!s && !e) return '';
+  if (s && e) return `${s}–${e}`;
+  return s || e;
+}
+
+function operatingDaysLabel(raw: unknown): string {
+  if (!raw || typeof raw !== 'object') return '';
+  const o = raw as Record<string, unknown>;
+  const preset = String(o.preset || '').trim();
+  if (preset === 'all_week') return 'All week';
+  if (preset === 'weekends_off') return 'Weekends off';
+  if (preset === 'custom' && Array.isArray(o.days)) {
+    const days = (o.days as unknown[])
+      .map((n) => Number(n))
+      .filter((n) => Number.isFinite(n) && n >= 0 && n <= 6)
+      .map((n) => DAY_LABELS[n] ?? String(n));
+    return days.length ? `Days: ${days.join(', ')}` : 'Days: custom';
+  }
+  return '';
+}
+
+function operatorHoursSummary(raw: unknown): string {
+  if (!Array.isArray(raw) || raw.length === 0) return '';
+  const first = raw[0];
+  if (!first || typeof first !== 'object' || Array.isArray(first)) return '';
+  const o = first as Record<string, unknown>;
+  const name = String(o.name || '').trim();
+  const wins = Array.isArray(o.windows) ? (o.windows as unknown[]) : [];
+  const parts: string[] = [];
+  for (const w of wins) {
+    if (!w || typeof w !== 'object' || Array.isArray(w)) continue;
+    const ww = w as Record<string, unknown>;
+    const seg = fmtTimeRange(String(ww.start || ''), String(ww.end || ''));
+    if (seg) parts.push(seg);
+  }
+  const t = parts.join(', ');
+  if (name && t) return `${name}: ${t}`;
+  if (name) return name;
+  return t;
 }
 
 export function OverallPage() {
@@ -386,6 +432,8 @@ export function OverallPage() {
                 if (prof?.priority != null) adminMetaHintParts.push(`Priority: ${String(prof.priority)}`);
                 if (prof?.operating_days != null) adminMetaHintParts.push(`Operating days configured`);
                 if (prof?.cleaning_windows != null) adminMetaHintParts.push(`Cleaning windows configured`);
+                const daysLabel = operatingDaysLabel(prof?.operating_days);
+                const opHours = operatorHoursSummary(prof?.operator_hours);
                 return (
                   <tr key={m.id}>
                     <td
@@ -396,6 +444,16 @@ export function OverallPage() {
                       }
                     >
                       {operating}
+                      {daysLabel ? (
+                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                          {daysLabel}
+                        </div>
+                      ) : null}
+                      {prof?.timezone ? (
+                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                          TZ: {String(prof.timezone)}
+                        </div>
+                      ) : null}
                     </td>
                     <td>
                       {m.name}
@@ -408,7 +466,14 @@ export function OverallPage() {
                         </div>
                       ) : null}
                     </td>
-                    <td>{operator}</td>
+                    <td>
+                      {operator}
+                      {opHours ? (
+                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                          {opHours}
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="muted">
                       <span className="fleetCellMissing" title={OVERALL_COLUMNS.attendance.note}>
                         ?
