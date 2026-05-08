@@ -201,10 +201,8 @@ function StaffVisitScheduleRows(props: {
   };
 
   return (
-    <div style={{ marginTop: 18 }}>
-      <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
-        {sectionTitle}
-      </div>
+    <div className="adminStaffVariant">
+      <h3 className="adminSubsectionTitle">{sectionTitle}</h3>
       {rows.map((row, idx) => (
         <div key={idx} className="adminStaffPersonBlock">
           <div className="adminFieldBlock">
@@ -651,16 +649,8 @@ export function MachineProfileSection() {
             Operator hours
           </summary>
           {operators.map((op, oi) => (
-            <div
-              key={oi}
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                padding: 10,
-                marginBottom: 10,
-              }}
-            >
-              <div className="adminFieldCell" style={{ marginBottom: 8 }}>
+            <div key={oi} className="adminOperatorCard">
+              <div className="adminFieldCell adminOperatorNameField">
                 <span className="adminFieldCaption">Name</span>
                 <input
                   value={op.name}
@@ -672,7 +662,7 @@ export function MachineProfileSection() {
                 />
               </div>
               {op.windows.map((w, wi) => (
-                <div key={wi} className="adminTimePairRow" style={{ marginTop: 8 }}>
+                <div key={wi} className="adminTimePairRow" style={{ marginTop: 4 }}>
                   <div className="adminFieldCell">
                     <span className="adminFieldCaption">From</span>
                     <input
@@ -714,21 +704,22 @@ export function MachineProfileSection() {
                   </button>
                 </div>
               ))}
-              <button
-                type="button"
-                className="primary"
-                style={{ marginTop: 6 }}
-                onClick={() => {
-                  const next = [...operators];
-                  next[oi] = { ...next[oi], windows: [...next[oi].windows, { start: '', end: '' }] };
-                  setOperators(next);
-                }}
-              >
-                Add shift segment
-              </button>
-              <button type="button" className="danger" style={{ marginTop: 6, marginLeft: 8 }} onClick={() => setOperators((prev) => prev.filter((_, i) => i !== oi))}>
-                Remove operator
-              </button>
+              <div className="adminButtonRow">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    const next = [...operators];
+                    next[oi] = { ...next[oi], windows: [...next[oi].windows, { start: '', end: '' }] };
+                    setOperators(next);
+                  }}
+                >
+                  Add shift segment
+                </button>
+                <button type="button" className="danger" onClick={() => setOperators((prev) => prev.filter((_, i) => i !== oi))}>
+                  Remove operator
+                </button>
+              </div>
             </div>
           ))}
           <button type="button" className="primary" onClick={() => setOperators((p) => [...p, emptyOperator()])}>

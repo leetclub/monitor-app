@@ -838,8 +838,8 @@ th {
 .adminDetails {
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: 14px 16px 16px;
+  margin-bottom: 12px;
   background: rgba(0, 0, 0, 0.15);
 }
 
@@ -848,6 +848,14 @@ th {
   font-weight: 600;
   font-size: 0.92rem;
   list-style: none;
+  padding: 2px 0 10px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid transparent;
+}
+
+.adminDetails[open] > summary {
+  border-bottom-color: var(--border);
+  margin-bottom: 12px;
 }
 
 .adminDetails summary::-webkit-details-marker {
@@ -895,11 +903,18 @@ label.adminFormLabel > textarea {
   min-width: 0;
 }
 
+/* Equal columns on wide screens; single column on narrow — avoids uneven auto-fit widths */
 .adminMachineCoreRow {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 14px 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   align-items: start;
+}
+
+@media (max-width: 840px) {
+  .adminMachineCoreRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 .adminTechQaIntro {
@@ -907,6 +922,51 @@ label.adminFormLabel > textarea {
   font-size: 0.82rem;
   line-height: 1.5;
   max-width: 52rem;
+}
+
+/* Technician / QA blocks — clear heading hierarchy (not cramped uppercase label + caption) */
+.adminSubsectionTitle {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+
+.adminStaffVariant {
+  margin-top: 4px;
+}
+
+.adminStaffVariant + .adminStaffVariant {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.adminStaffVariant .adminFieldCaption {
+  margin-bottom: 8px;
+}
+
+.adminOperatorCard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.adminOperatorNameField {
+  max-width: min(100%, 38rem);
+  margin-bottom: 10px;
+}
+
+.adminButtonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
 }
 
 /* Time zone + priority: two fields only (avoid empty third grid column). */
@@ -929,6 +989,7 @@ label.adminFormLabel > textarea {
   grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) min-content;
   gap: 10px 14px;
   align-items: end;
+  max-width: min(100%, 26rem);
 }
 
 @media (max-width: 520px) {
@@ -1011,6 +1072,7 @@ label.adminDayCheckbox {
   gap: 10px 14px;
   align-items: end;
   margin-bottom: 8px;
+  max-width: min(100%, 26rem);
 }
 
 @media (max-width: 520px) {
