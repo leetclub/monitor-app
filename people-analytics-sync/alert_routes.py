@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -26,7 +28,7 @@ from vendon_machine_helpers import (
     vendon_machine_tag_for_alert_admin_detail,
 )
 from vendon_proxy_routes import compute_remote_credits_logs_classic
-from models import VendonDailyMachineRevenueCache, create_engine_and_session
+from models import PeopleAnalyticsRecord, VendonDailyMachineRevenueCache, create_engine_and_session
 from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
@@ -286,6 +288,205 @@ def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], 
         return 0.0, None, {"totalWaste": total_waste, "totalSales": total_sales}
     pct = (float(total_waste) / float(denom)) * 100.0
     return pct, None, {"totalWaste": total_waste, "totalSales": total_sales}
+
+
+# ---------------------------------------------------------------------------
+# Overall — People Count (Monitor v1 / index.html ``peopleCameraToMachineMap``
+# resolution + Videoloft device list → DB ``people_analytics_records``, same dates as ``/api/people-analytics``).
+# ---------------------------------------------------------------------------
+
+_DEFAULT_ALERT_PEOPLE_CAMERA_MAP: Dict[str, Any] = {
+    "375535": {"cameraId": None, "cameraNames": ["Jaber Hospital - Gate 2"]},
+    "413319": {"cameraId": None, "cameraNames": ["Mubarak hospital", "Mubarak hospital bar"]},
+    "375498": {"cameraId": None, "cameraNames": ["Oxygen Riggai"]},
+    "385017": {"cameraId": None, "cameraNames": ["Jahra Parking", "Jahra Parking 2"]},
+}
+
+
+def _deep_merge_alert_people_maps(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    """Shallow-merge top-level keys; per-machine dicts merged so partial overrides keep defaults."""
+    out = dict(base)
+    for mid, oval in overlay.items():
+        mid_s = str(mid).strip()
+        if not mid_s:
+            continue
+        b = out.get(mid_s)
+        if isinstance(b, dict) and isinstance(oval, dict):
+            merged = dict(b)
+            merged.update(oval)
+            out[mid_s] = merged
+        else:
+            out[mid_s] = oval
+    return out
+
+
+def _load_alert_people_camera_map() -> Dict[str, Any]:
+    m: Dict[str, Any] = dict(_DEFAULT_ALERT_PEOPLE_CAMERA_MAP)
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "alert_people_camera_map.json")
+    try:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                m = _deep_merge_alert_people_maps(m, raw)
+    except Exception as ex:
+        logger.warning("alert_people_camera_map.json: %s", ex)
+    env_raw = (os.environ.get("ALERT_PEOPLE_CAMERA_MAP_JSON") or "").strip()
+    if env_raw:
+        try:
+            parsed = json.loads(env_raw)
+            if isinstance(parsed, dict):
+                m = _deep_merge_alert_people_maps(m, parsed)
+        except json.JSONDecodeError as ex:
+            logger.warning("ALERT_PEOPLE_CAMERA_MAP_JSON invalid: %s", ex)
+    return m
+
+
+_videoloft_camera_cache_at: float = 0.0
+_videoloft_camera_cache: List[Dict[str, Any]] = []
+
+_VIDEOLOFT_CAMERA_CACHE_SEC = float(os.environ.get("ALERT_VIDEOLOFT_CAMERA_CACHE_SEC", "86400"))
+
+
+def _get_videoloft_cameras_cached() -> List[Dict[str, Any]]:
+    """Optional Videoloft device list — same envelope as Monitor v1 / ``sync_service.VideoloftClient``."""
+    global _videoloft_camera_cache_at, _videoloft_camera_cache
+    now = time.time()
+    if _videoloft_camera_cache and (now - _videoloft_camera_cache_at) < _VIDEOLOFT_CAMERA_CACHE_SEC:
+        return list(_videoloft_camera_cache)
+    try:
+        from sync_service import VideoloftClient
+
+        cli = VideoloftClient()
+        if not cli.authenticate():
+            return list(_videoloft_camera_cache)
+        cams = cli.get_cameras()
+        _videoloft_camera_cache = cams or []
+        _videoloft_camera_cache_at = now
+        return list(_videoloft_camera_cache)
+    except ValueError:
+        logger.info("Videoloft credentials not configured; people footfall resolves from static map IDs only.")
+    except Exception as ex:
+        logger.warning("Videoloft camera list failed: %s", ex)
+    return list(_videoloft_camera_cache)
+
+
+def _normalize_fuzzy_fragment(s: str) -> str:
+    if not s:
+        return ""
+    return " ".join("".join(c.lower() if c.isalnum() else " " for c in str(s)).split())
+
+
+def _uidds_from_mapping_entry(cameras: List[Dict[str, Any]], mapping_val: Any) -> List[str]:
+    """
+    Mirrors index.html people tab: if ``cameraId`` is set, use only that uidd; else match
+    ``cameraNames`` fragments against Videoloft ``phonename`` / ``alias`` (substring).
+    """
+    out: List[str] = []
+    if not isinstance(mapping_val, dict) or not cameras:
+        return out
+    cid = mapping_val.get("cameraId")
+    if cid is not None and str(cid).strip():
+        return [str(cid).strip()]
+
+    names: List[str] = []
+    if isinstance(mapping_val.get("cameraNames"), list):
+        for n in mapping_val["cameraNames"]:
+            if n is None:
+                continue
+            frag = str(n).strip()
+            if frag:
+                names.append(frag)
+    legacy_cn = mapping_val.get("cameraName")
+    if legacy_cn is not None and str(legacy_cn).strip():
+        names.append(str(legacy_cn).strip())
+
+    for cam in cameras:
+        cid_s = cam.get("id")
+        if not cid_s:
+            continue
+        cname = str(cam.get("name") or "")
+        calias = str(cam.get("alias") or "")
+        for frag in names:
+            fl = frag.lower()
+            if fl and (fl in cname.lower() or fl in calias.lower()):
+                if str(cid_s) not in out:
+                    out.append(str(cid_s))
+                break
+    return list(dict.fromkeys(out))
+
+
+def _fuzzy_machine_name_uidds(machine_name: str, cameras: List[Dict[str, Any]]) -> List[str]:
+    """Opt-in substring-style match (monitoring-app fuzzy) — off unless ``ALERT_PEOPLE_FUZZY_MATCH=true``."""
+    flag = (os.environ.get("ALERT_PEOPLE_FUZZY_MATCH") or "").strip().lower()
+    if flag not in ("1", "true", "yes") or not machine_name.strip() or not cameras:
+        return []
+    mn = _normalize_fuzzy_fragment(machine_name)
+    if len(mn) < 6:
+        return []
+    picks: List[str] = []
+    for cam in cameras:
+        cid = cam.get("id")
+        nm = _normalize_fuzzy_fragment(str(cam.get("name") or ""))
+        if not cid or not nm:
+            continue
+        if mn in nm or nm in mn:
+            picks.append(str(cid))
+        else:
+            mw = mn.split()
+            nw = nm.split()
+            if len(mw) >= 2 and len(nw) >= 2 and mw[0] == nw[0] and mw[1] == nw[1]:
+                picks.append(str(cid))
+    return list(dict.fromkeys(picks))
+
+
+def _resolve_machine_people_uidds(
+    machine_id: str, machine_name: str, cmap: Dict[str, Any], cameras: List[Dict[str, Any]]
+) -> Tuple[List[str], str]:
+    raw = cmap.get(machine_id)
+    if isinstance(raw, dict):
+        uids = _uidds_from_mapping_entry(cameras, raw)
+        if uids:
+            return uids, "map"
+        cid_only = raw.get("cameraId")
+        if cid_only is not None and str(cid_only).strip():
+            return [str(cid_only).strip()], "map_explicit"
+        return [], "no_uidd_for_map"
+
+    uids_f = _fuzzy_machine_name_uidds(machine_name, cameras)
+    if uids_f:
+        return uids_f, "fuzzy"
+    return [], "no_mapping"
+
+
+def _local_calendar_day_bounds_utc_naive(day_iso: str, tz_name: str) -> Tuple[datetime, datetime]:
+    tz = ZoneInfo(tz_name)
+    start_local = datetime.strptime(day_iso, "%Y-%m-%d").replace(tzinfo=tz)
+    end_local = datetime.strptime(day_iso, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=0, tzinfo=tz)
+    return (
+        start_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None),
+        end_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None),
+    )
+
+
+def _sum_people_in_by_uidd_day(
+    pa_session, uidd_set: frozenset, day_iso: str, tz_name: str
+) -> Dict[str, int]:
+    """Per-uidd summed ``people_in`` for interval ``date`` in the given local calendar day (Monitor-style)."""
+    if not uidd_set:
+        return {}
+    start_naive_utc, end_naive_utc = _local_calendar_day_bounds_utc_naive(day_iso, tz_name)
+    uid_list = list(uidd_set)
+    rows = (
+        pa_session.query(PeopleAnalyticsRecord.uidd, func.sum(PeopleAnalyticsRecord.people_in))
+        .filter(PeopleAnalyticsRecord.interval_type == "date")
+        .filter(PeopleAnalyticsRecord.uidd.in_(uid_list))
+        .filter(PeopleAnalyticsRecord.first_timestamp >= start_naive_utc)
+        .filter(PeopleAnalyticsRecord.first_timestamp <= end_naive_utc)
+        .group_by(PeopleAnalyticsRecord.uidd)
+        .all()
+    )
+    return {str(r[0]): int(r[1] or 0) for r in rows}
 
 
 def register_alert_routes(app) -> None:
@@ -865,6 +1066,113 @@ def register_alert_routes(app) -> None:
                 by_machine[mid] = payload
 
         return jsonify({"date": date_str, "byMachineId": by_machine, "machinesProcessed": len(mids)})
+
+    @app.route("/api/alert/overall/people-footfall", methods=["GET", "OPTIONS"])
+    def alert_overall_people_footfall():
+        """
+        People Count (Monitor v1 / Videoloft): summed ``people_in`` from ``people_analytics_records``
+        for ``interval_type=date`` — same DB source as ``GET /api/people-analytics``.
+
+        Resolution order per Vendon machine id:
+          1. ``alert_routes.DEFAULT`` map + optional ``alert_people_camera_map.json`` + ``ALERT_PEOPLE_CAMERA_MAP_JSON``
+          2. Videoloft ``/devices`` list (cached; needs ``VIDEOLOFT_*`` like the sync worker) to resolve ``cameraNames``
+          3. Optional ``ALERT_PEOPLE_FUZZY_MATCH=true`` substring match by machine display name.
+
+        Dates: Kuwait **today vs yesterday** (vs-yesterday trend matches Overall sales trend semantics).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        tz_name = "Asia/Kuwait"
+        today_s = _kuwait_date_today_iso()
+        try:
+            d0 = datetime.strptime(today_s, "%Y-%m-%d").date()
+            yesterday_s = (d0 - timedelta(days=1)).isoformat()
+        except ValueError:
+            return jsonify({"error": "invalid server date"}), 500
+
+        rows, verr = vendon_fetch_machine_list(_vendon_get)
+        if verr:
+            return jsonify({"error": verr, "today": today_s, "yesterday": yesterday_s, "byMachineId": {}}), 502
+
+        mids_info: List[Tuple[str, str]] = []
+        for m in rows:
+            if m.get("id") is None:
+                continue
+            mid = str(m.get("id")).strip()
+            mname = m.get("name") or mid
+            if machine_row_excluded(str(mname), mid):
+                continue
+            mids_info.append((mid, str(mname)))
+
+        cmap = _load_alert_people_camera_map()
+        cameras = _get_videoloft_cameras_cached()
+
+        resolved: Dict[str, Tuple[List[str], str]] = {}
+        all_uidds: set = set()
+        for mid, mname in mids_info:
+            uids, src = _resolve_machine_people_uidds(mid, mname, cmap, cameras)
+            resolved[mid] = (uids, src)
+            for u in uids:
+                all_uidds.add(u)
+
+        pa = _pa_session()
+        try:
+            uf = frozenset(all_uidds)
+            by_today = _sum_people_in_by_uidd_day(pa, uf, today_s, tz_name)
+            by_yest = _sum_people_in_by_uidd_day(pa, uf, yesterday_s, tz_name)
+        finally:
+            pa.close()
+
+        out: Dict[str, Any] = {}
+        videoloft_ok = bool(cameras)
+        for mid, mname in mids_info:
+            uids, how = resolved.get(mid, ([], "no_mapping"))
+            mapped = bool(uids)
+            today_in = 0
+            yest_in = 0
+            per_cam_today = {u: by_today.get(u, 0) for u in uids}
+            per_cam_yest = {u: by_yest.get(u, 0) for u in uids}
+            for u in uids:
+                today_in += int(per_cam_today.get(u, 0) or 0)
+                yest_in += int(per_cam_yest.get(u, 0) or 0)
+            trend_pct = None
+            if mapped and yest_in > 0:
+                trend_pct = ((float(today_in) - float(yest_in)) / float(yest_in)) * 100.0
+            hint = ""
+            if not uids:
+                hint = (
+                    "no_camera_mapping"
+                    if how == "no_mapping"
+                    else (
+                        "map_needs_cameras_or_cameraId"
+                        if how == "no_uidd_for_map" and videoloft_ok
+                        else "map_needs_videoloft_or_cameraId"
+                    )
+                )
+            out[mid] = {
+                "mapped": mapped,
+                "todayIn": today_in if mapped else None,
+                "yesterdayIn": yest_in if mapped else None,
+                "trendPct": trend_pct if mapped else None,
+                "uidds": uids,
+                "resolve": how,
+                "hint": hint or None,
+            }
+
+        return jsonify(
+            {
+                "timezone": tz_name,
+                "today": today_s,
+                "yesterday": yesterday_s,
+                "videoloftDevicesLoaded": videoloft_ok,
+                "byMachineId": out,
+                "machinesProcessed": len(mids_info),
+            }
+        )
 
     @app.route("/api/alert/admin/machine-profiles/<path:machine_id>", methods=["DELETE", "OPTIONS"])
     def alert_admin_machine_profile_delete(machine_id: str):

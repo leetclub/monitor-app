@@ -75,7 +75,10 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   promotion: { title: 'Promotion', note: 'Promoted product / sales (not connected yet).' },
   highestProduct: { title: 'Highest Product', note: 'Top product (not connected yet).' },
   lowestProduct: { title: 'Lowest Product', note: 'Lowest product (not connected yet).' },
-  peopleCount: { title: 'People Count', note: 'Footfall (not connected yet).' },
+  peopleCount: {
+    title: 'People Count',
+    note: 'Videoloft footfall → people-api DB (people_in daily); same mapping as Monitor v1 peopleCameraToMachineMap.',
+  },
   customerCalls: { title: 'Customer Calls', note: 'Customer calls (not connected yet).' },
   mostIssue: {
     title: 'Most Issue',

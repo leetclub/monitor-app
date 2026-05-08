@@ -14,7 +14,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/login` | Login | Google sign-in. |
 | `/home` | Home | Cards: **Red Flags** → **Overall** → **Admin** (if role allows). |
 | `/red-flags` | Red Flags | **Red Alert** snapshot; columns match `alert.theleetclub.com.xlsx` **Red Flags** row 1 (see `docs/alert-workbook-red-flags-tab.md`); trailing columns **—** until API wires workbook metrics; five **timespan presets**; ~1 min refresh. |
-| `/overall` | Overall | Workbook **Overall** sheet columns (see `docs/alert-workbook-overall-tab.md`); Admin-derived Operating Hours + Operator + snapshot Last Transaction; other workbook metrics show **—** until API wiring; ~1 min refresh. |
+| `/overall` | Overall | Workbook **Overall** sheet columns (see `docs/alert-workbook-overall-tab.md`); Admin-derived Operating Hours + Operator; Vendon/cache sales + peak/SKUs; wastage (Monitor v1 formula); **Footfall** (`GET /api/alert/overall/people-footfall`) from people-analytics DB + same Videoloft↔machine map as Monitor; snapshot columns when the machine is on Red Flags; remaining columns **—** or **?** until wired; ~1 min refresh. |
 | `/admin` | Admin | User-entered data **not on Vendon** (schedules, cleaning, access). **Machines** (profiles, Vendon readout), **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
@@ -64,6 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-05-08 | **Overall — People Count / Footfall:** `GET /api/alert/overall/people-footfall` sums `people_in` (daily Videoloft buckets) from `people_analytics_records` for Kuwait **today vs yesterday**; resolves cameras with the same embedded map as Monitor v1 `peopleCameraToMachineMap`, optional `alert_people_camera_map.json` / `ALERT_PEOPLE_CAMERA_MAP_JSON`, cached Videoloft device list, optional `ALERT_PEOPLE_FUZZY_MATCH`. |
 | 2026-05-07 | **Overall:** No **Fleet table** subheading (count badge only). **Compact column headers** (short label + full title/note on hover), tighter spacing. **Admin · Location hours** + snapshot columns + Vendon fallback as before. |
 | 2026-05-07 | **Red Flags — Today / Trend:** Three icon boxes — **Score** & **Gap** values use **green** at zero burden and **tiered red** by incident count; **Trend** uses Δ% with **tiered red** on bad uptrends. **Gap** shows **`↓0`** (at green) or **`↓N`** (must **drop** N incidents to reach green); **`—`** if unknown. Header subcopy **gap ↓ to green**. Tooltips spell out direction vs baseline. |
 | 2026-05-07 | **Tables — text overflow:** Removed global `nowrap` on desktop table cells; **`overflow-wrap` / `word-break`** on all `th`/`td` so long machine names, emails, and alert text wrap inside cells instead of spilling past the table. Red Flags frequency mini-cards allow trend/ratio lines to wrap when narrow. Optional utility **`.tableCellNoWrap`** for rare single-line metrics. |

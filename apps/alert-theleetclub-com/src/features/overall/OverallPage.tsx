@@ -110,6 +110,25 @@ type WasteByMachineResponse = {
   machinesProcessed?: number;
 };
 
+type PeopleFootfallRow = {
+  mapped?: boolean;
+  todayIn?: number | null;
+  yesterdayIn?: number | null;
+  trendPct?: number | null;
+  uidds?: string[];
+  resolve?: string;
+  hint?: string | null;
+};
+
+type PeopleFootfallResponse = {
+  timezone: string;
+  today: string;
+  yesterday: string;
+  videoloftDevicesLoaded?: boolean;
+  byMachineId?: Record<string, PeopleFootfallRow>;
+  machinesProcessed?: number;
+};
+
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 function snapshotMostIssue(snap: RedAlertRow | undefined): string {
@@ -341,6 +360,14 @@ export function OverallPage() {
     refetchInterval: 15 * 60_000,
   });
 
+  /** Videoloft / people-api DB ``people_analytics_records`` ``people_in`` (date buckets), Kuwait today vs yesterday — Monitor v1 map + device list parity. */
+  const peopleFootfallQ = useQuery({
+    queryKey: ['alert-overall-people-footfall'],
+    queryFn: () => apiGet<PeopleFootfallResponse>('/api/alert/overall/people-footfall'),
+    staleTime: 5 * 60_000,
+    refetchInterval: 15 * 60_000,
+  });
+
   const machines = useMemo(() => {
     const raw = machinesQ.data?.machines;
     if (!Array.isArray(raw)) return [];
@@ -441,9 +468,10 @@ export function OverallPage() {
         <div className="pageHeroMain">
           <h1 className="pageTitle">Overall</h1>
           <p className="pageSubtitle">
-            Fleet overview: <strong>Operating hours</strong> come from Alert Admin (machine profile → Location hours). Metrics
-            such as last transaction, cleaning, reasons, and vend-fail counts come from the <strong>Red Alert snapshot</strong>{' '}
-            when that machine is on Red Flags. Other columns stay empty until those APIs are wired.
+            Fleet overview: <strong>Operating hours</strong> from Alert Admin machine profiles; <strong>Wastage</strong> mirrors
+            Monitor v1 motion + Vendon; <strong>People Count</strong> mirrors Monitor Videoloft mapping plus the same people-analytics DB
+            as the classic People tab; last transaction / cleaning / reasons / vend-fail counts prefer the{' '}
+            <strong>Red Alert snapshot</strong> when present. Columns without a workbook source still show <strong>—</strong>.
           </p>
         </div>
         <div className="pageHeroAside">
@@ -460,6 +488,7 @@ export function OverallPage() {
                 vendonLastTxQ.refetch(),
                 liveSnapQ.refetch(),
                 wasteByMachineQ.refetch(),
+                peopleFootfallQ.refetch(),
               ]);
             }}
             disabled={
@@ -469,7 +498,8 @@ export function OverallPage() {
               vendonSummaryQ.isFetching ||
               vendonLastTxQ.isFetching ||
               liveSnapQ.isFetching ||
-              wasteByMachineQ.isFetching
+              wasteByMachineQ.isFetching ||
+              peopleFootfallQ.isFetching
             }
           >
             {machinesQ.isFetching ||
@@ -478,7 +508,8 @@ export function OverallPage() {
             vendonSummaryQ.isFetching ||
             vendonLastTxQ.isFetching ||
             liveSnapQ.isFetching ||
-            wasteByMachineQ.isFetching
+            wasteByMachineQ.isFetching ||
+            peopleFootfallQ.isFetching
               ? 'Refreshing…'
               : 'Refresh'}
           </button>
@@ -611,6 +642,11 @@ export function OverallPage() {
                 const opHours = operatorHoursSummary(prof?.operator_hours);
                 const wasteEntry = wasteByMachineQ.data?.byMachineId?.[m.id];
                 const wastePct = wasteEntry?.wastePct;
+                const footfallEntry = peopleFootfallQ.data?.byMachineId?.[m.id];
+                const fcMapped = Boolean(footfallEntry?.mapped);
+                const fcToday = footfallEntry?.todayIn;
+                const fcYesterday = footfallEntry?.yesterdayIn;
+                const fcTrend = footfallEntry?.trendPct;
                 const qcIso = live?.lastQcVisitAt ? String(live.lastQcVisitAt).trim() : '';
                 return (
                   <tr key={m.id}>
@@ -762,8 +798,31 @@ export function OverallPage() {
                     <td title="Lowest product uses Vendon vends (cached) for the Kuwait day (by count).">
                       {lowProduct ? <span className="tableCellWrap">{lowProduct}</span> : <span className="muted">—</span>}
                     </td>
-                    <td className="muted" title={OVERALL_COLUMNS.peopleCount.note}>
-                      —
+                    <td
+                      title={
+                        fcMapped && typeof fcToday === 'number' && Number.isFinite(fcToday)
+                          ? `Monitor v1 Videoloft map → summed people_in (${peopleFootfallQ.data?.timezone ?? 'Asia/Kuwait'} calendar day; DB synced from Videoloft).`
+                          : footfallEntry?.hint === 'no_camera_mapping'
+                            ? `${OVERALL_COLUMNS.peopleCount.title}: add this machine to the same people-camera map as Monitor (ALERT_PEOPLE_CAMERA_MAP_JSON or alert_people_camera_map.json).`
+                            : `${OVERALL_COLUMNS.peopleCount.title} — ${OVERALL_COLUMNS.peopleCount.note ?? ''}`
+                      }
+                    >
+                      {fcMapped && typeof fcToday === 'number' && Number.isFinite(fcToday) ? (
+                        <>
+                          <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fcToday}</div>
+                          {typeof fcTrend === 'number' && Number.isFinite(fcTrend) ? (
+                            <div className="muted" style={{ fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums' }}>
+                              {formatPct(fcTrend)} vs yest.
+                            </div>
+                          ) : (
+                            <div className="muted" style={{ fontSize: '0.78rem' }}>
+                              {typeof fcYesterday === 'number' && fcYesterday === 0 ? 'no baseline yesterday' : '—'}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td className="muted" title={OVERALL_COLUMNS.customerCalls.note}>
                       —
@@ -822,7 +881,8 @@ export function OverallPage() {
         <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
           Operating hours use the Alert Admin machine profile <strong>Location hours</strong> field. Fleet tags prefer the live
           Vendon feed; snapshot metrics (tx, cleaning, reasons, vend fails) apply only when the machine is in the Red Flags
-          snapshot. <strong>?</strong> = not wired yet — hover column headers for detail.
+          snapshot. <strong>Footfall</strong> uses the same Videoloft→machine map as Monitor and the synced people-analytics DB.
+          <strong>?</strong> = not wired yet — hover column headers for detail.
         </p>
       </section>
     </div>
