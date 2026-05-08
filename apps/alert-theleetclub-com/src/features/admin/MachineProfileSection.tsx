@@ -385,8 +385,8 @@ export function MachineProfileSection() {
                 ))}
               </select>
             </label>
-            <label style={{ flex: '1 1 200px' }} title="Fleet tag from the live device feed when present; used for grouping">
-              Machine tag
+            <label style={{ flex: '1 1 200px' }} title="Location Owner (from the live device feed when present; used for grouping)">
+              Location Owner
               <input
                 name="location_owner"
                 list="alert-location-owner-options"
@@ -416,7 +416,7 @@ export function MachineProfileSection() {
 
           {machineId && vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
-              Tag from device feed: <strong>{vendonLocationTag}</strong>
+              Location Owner from device feed: <strong>{vendonLocationTag}</strong>
               {vendonTagSourceHint ? (
                 <>
                   {' '}
@@ -426,7 +426,7 @@ export function MachineProfileSection() {
             </p>
           ) : machineId && !vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
-              No tag in the live feed for this device — enter one below or keep your saved value.
+              No Location Owner in the live feed for this device — enter one below or keep your saved value.
             </p>
           ) : null}
 
@@ -662,7 +662,7 @@ export function MachineProfileSection() {
             <thead>
               <tr>
                 <th>Machine</th>
-                <th>Machine tag</th>
+                <th>Location Owner</th>
                 <th>Open hours</th>
                 <th>Updated</th>
                 <th />

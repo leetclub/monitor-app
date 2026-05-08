@@ -462,7 +462,7 @@ export function OverallPage() {
                       </div>
                       {machTag ? (
                         <div className="muted" style={{ fontSize: '0.78rem' }}>
-                          Tag: {machTag}
+                          Location Owner: {machTag}
                         </div>
                       ) : null}
                     </td>
