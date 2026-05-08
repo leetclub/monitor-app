@@ -74,6 +74,24 @@ type VendonLastTransactionsResponse = {
   error?: string;
 };
 
+type LiveDashboardMachine = {
+  machineId: string;
+  salesToday?: number | null;
+  salesYesterday?: number | null;
+  dailyTarget?: number | null;
+  shift?: {
+    expectedStart?: string | null;
+    timezone?: string | null;
+    graceMinutes?: number | null;
+    clockInAt?: number | null; // unix seconds
+    late?: boolean | null;
+  } | null;
+};
+
+type LiveDashboardSnapshotResponse = {
+  machines?: LiveDashboardMachine[];
+};
+
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 function snapshotMostIssue(snap: RedAlertRow | undefined): string {
@@ -160,6 +178,37 @@ function operatorHoursSummary(raw: unknown): string {
   return t;
 }
 
+function comparePct(a: number, b: number): number | null {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (b <= 0) return null;
+  return ((a - b) / b) * 100;
+}
+
+function attendanceLabelFromShift(
+  m: LiveDashboardMachine | undefined,
+): { label: string; color: 'g' | 'y' | 'o' | 'r' } | null {
+  const shift = m?.shift;
+  if (!shift) return null;
+  const exp = String(shift.expectedStart || '').trim();
+  if (!exp) return null;
+  const clockInAt = shift.clockInAt != null ? Number(shift.clockInAt) : null;
+  if (!clockInAt || !Number.isFinite(clockInAt) || clockInAt <= 0) {
+    return { label: 'Absent', color: 'r' };
+  }
+  const d = new Date(clockInAt * 1000);
+  const hh = d.getUTCHours();
+  const mm = d.getUTCMinutes();
+  const clockMin = hh * 60 + mm;
+  const mExp = exp.match(/^(\d{1,2}):(\d{2})$/);
+  if (!mExp) return null;
+  const expMin = Number(mExp[1]) * 60 + Number(mExp[2]);
+  const delta = clockMin - expMin;
+  if (delta < 10) return { label: 'On Time', color: 'g' };
+  if (delta <= 20) return { label: 'Late', color: 'y' };
+  if (delta <= 60) return { label: 'Tardy', color: 'o' };
+  return { label: 'Absent', color: 'r' };
+}
+
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const setComparePersist = useCallback((next: CompareSelection) => {
@@ -196,6 +245,12 @@ export function OverallPage() {
     queryKey: ['alert-overall-vendon-last-transactions'],
     queryFn: () => apiGet<VendonLastTransactionsResponse>('/api/alert/overall/last-transactions'),
     refetchInterval: 2 * 60_000,
+  });
+
+  const liveSnapQ = useQuery({
+    queryKey: ['live-dashboard-snapshot'],
+    queryFn: () => apiGet<LiveDashboardSnapshotResponse>('/api/live-dashboard/snapshot'),
+    refetchInterval: 60_000,
   });
 
   const machines = useMemo(() => {
@@ -267,6 +322,17 @@ export function OverallPage() {
     return m;
   }, [snapQ.data]);
 
+  const liveByMachineId = useMemo(() => {
+    const m = new Map<string, LiveDashboardMachine>();
+    const rows = liveSnapQ.data?.machines;
+    if (!Array.isArray(rows)) return m;
+    for (const r of rows) {
+      const id = String(r.machineId ?? '').trim();
+      if (id) m.set(id, r);
+    }
+    return m;
+  }, [liveSnapQ.data]);
+
   const snapshotMachineCount = snapshotByMachineId.size;
 
   const presetLabels = useMemo(
@@ -304,6 +370,7 @@ export function OverallPage() {
                 profilesQ.refetch(),
                 vendonSummaryQ.refetch(),
                 vendonLastTxQ.refetch(),
+                liveSnapQ.refetch(),
               ]);
             }}
             disabled={
@@ -311,10 +378,16 @@ export function OverallPage() {
               snapQ.isFetching ||
               profilesQ.isFetching ||
               vendonSummaryQ.isFetching ||
-              vendonLastTxQ.isFetching
+              vendonLastTxQ.isFetching ||
+              liveSnapQ.isFetching
             }
           >
-            {machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching || vendonSummaryQ.isFetching || vendonLastTxQ.isFetching
+            {machinesQ.isFetching ||
+            snapQ.isFetching ||
+            profilesQ.isFetching ||
+            vendonSummaryQ.isFetching ||
+            vendonLastTxQ.isFetching ||
+            liveSnapQ.isFetching
               ? 'Refreshing…'
               : 'Refresh'}
           </button>
@@ -394,6 +467,7 @@ export function OverallPage() {
               ) : null}
               {fleetMachines.map((m) => {
                 const snap = snapshotByMachineId.get(m.id);
+                const live = liveByMachineId.get(m.id);
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
                 const minsOk = mins != null && typeof mins === 'number' && !Number.isNaN(mins);
                 const prof = profileByMachineId.get(m.id);
@@ -428,6 +502,12 @@ export function OverallPage() {
                 const trendPct = vendon?.trendPct;
                 const aSales = vendon?.aSalesKwd;
                 const bSales = vendon?.bSalesKwd;
+                const liveSalesTrend = comparePct(Number(live?.salesToday ?? NaN), Number(live?.salesYesterday ?? NaN));
+                const liveTargetPct =
+                  live?.dailyTarget != null && Number(live.dailyTarget) > 0
+                    ? (Number(live?.salesToday ?? 0) / Number(live.dailyTarget)) * 100
+                    : null;
+                const att = attendanceLabelFromShift(live);
                 const adminMetaHintParts: string[] = [];
                 if (prof?.timezone) adminMetaHintParts.push(`TZ: ${String(prof.timezone)}`);
                 if (prof?.priority != null) adminMetaHintParts.push(`Priority: ${String(prof.priority)}`);
@@ -480,10 +560,25 @@ export function OverallPage() {
                         </div>
                       ) : null}
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.attendance.note}>
-                        ?
-                      </span>
+                    <td title={OVERALL_COLUMNS.attendance.note}>
+                      {att ? (
+                        <span
+                          className={
+                            att.color === 'g'
+                              ? 'pillSuccess'
+                              : att.color === 'y'
+                                ? 'pillWarn'
+                                : att.color === 'o'
+                                  ? 'pillWarn'
+                                  : 'pillDanger'
+                          }
+                          style={{ fontSize: '0.78rem' }}
+                        >
+                          {att.label}
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td title={OVERALL_COLUMNS.lastCleaned.note}>
                       {lastCleanedIso ? formatKuwaitDateTime(lastCleanedIso) : <span className="muted">—</span>}
@@ -521,12 +616,20 @@ export function OverallPage() {
                     >
                       {typeof trendPct === 'number' && Number.isFinite(trendPct) ? (
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPct(trendPct)}</span>
+                      ) : typeof liveSalesTrend === 'number' && Number.isFinite(liveSalesTrend) ? (
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPct(liveSalesTrend)}</span>
                       ) : (
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td className="muted" title={OVERALL_COLUMNS.targetAchieved.note}>
-                      —
+                    <td title={OVERALL_COLUMNS.targetAchieved.note}>
+                      {typeof liveTargetPct === 'number' && Number.isFinite(liveTargetPct) ? (
+                        <span className={liveTargetPct >= 100 ? 'pillSuccess' : 'pillDanger'} style={{ fontSize: '0.78rem' }}>
+                          {Math.round(liveTargetPct)}%
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td title="Peak hour uses Vendon vends (cached) bucketed by Kuwait local hour.">
                       {peakHourLabel ? <span>{peakHourLabel}</span> : <span className="muted">—</span>}
