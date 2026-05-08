@@ -48,6 +48,41 @@ type ProfileRow = {
   updated_at?: string | null;
 };
 
+function fmtTimeWindow(w: TimeWindow): string {
+  const s = String(w?.start ?? '').trim();
+  const e = String(w?.end ?? '').trim();
+  if (!s && !e) return '';
+  if (s && e) return `${s}–${e}`;
+  return s || e;
+}
+
+function operatingDaysLabel(raw: unknown): string {
+  const od = normalizeOperatingDays(raw);
+  if (od.preset === 'all_week') return 'All week';
+  if (od.preset === 'weekends_off') return 'Weekends off';
+  const days = (od.days || []).map((d) => DAY_LABELS[d] ?? String(d));
+  return days.length ? `Custom: ${days.join(', ')}` : 'Custom';
+}
+
+function nonEmptyString(x: unknown): string {
+  const s = String(x ?? '').trim();
+  return s;
+}
+
+function scheduleRowsFromSavedUnknown(raw: unknown): { name: string; note: string }[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const out: { name: string; note: string }[] = [];
+  for (const item of raw) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const o = item as Record<string, unknown>;
+      const name = nonEmptyString(o.name ?? o.person ?? o.technician ?? o.officer ?? '');
+      const note = nonEmptyString(o.note ?? o.visits ?? o.schedule ?? o.details ?? '');
+      if (name || note) out.push({ name, note });
+    }
+  }
+  return out;
+}
+
 function emptyOperator(): OperatorBlock {
   return { name: '', windows: [{ start: '09:00', end: '17:00' }] };
 }
@@ -693,41 +728,97 @@ export function MachineProfileSection() {
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
                                   Operating days
                                 </div>
-                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                                  {JSON.stringify(r.operating_days ?? null, null, 2)}
-                                </code>
+                                <div style={{ fontSize: 13 }}>{operatingDaysLabel(r.operating_days)}</div>
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
                                   Cleaning windows
                                 </div>
-                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                                  {JSON.stringify(r.cleaning_windows ?? null, null, 2)}
-                                </code>
+                                {Array.isArray(r.cleaning_windows) && r.cleaning_windows.length ? (
+                                  <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: 13, lineHeight: 1.5 }}>
+                                    {r.cleaning_windows
+                                      .map((w) => fmtTimeWindow(w))
+                                      .filter(Boolean)
+                                      .map((t, i) => (
+                                        <li key={i}>{t}</li>
+                                      ))}
+                                  </ul>
+                                ) : (
+                                  <div className="muted" style={{ fontSize: 13 }}>
+                                    —
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
                                   Operator hours
                                 </div>
-                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                                  {JSON.stringify(r.operator_hours ?? null, null, 2)}
-                                </code>
+                                {Array.isArray(r.operator_hours) && r.operator_hours.length ? (
+                                  <div style={{ display: 'grid', gap: 8 }}>
+                                    {r.operator_hours.map((op, i) => {
+                                      const name = nonEmptyString(op?.name) || `Operator ${i + 1}`;
+                                      const wins = Array.isArray(op?.windows) ? op.windows : [];
+                                      const label = wins
+                                        .map((w) => fmtTimeWindow(w))
+                                        .filter(Boolean)
+                                        .join(', ');
+                                      return (
+                                        <div key={i} style={{ fontSize: 13 }}>
+                                          <div style={{ fontWeight: 700 }}>{name}</div>
+                                          <div className="muted">{label || '—'}</div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="muted" style={{ fontSize: 13 }}>
+                                    —
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
                                   Technician schedule
                                 </div>
-                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                                  {JSON.stringify(r.technician_schedule ?? null, null, 2)}
-                                </code>
+                                {(() => {
+                                  const rows = scheduleRowsFromSavedUnknown(r.technician_schedule);
+                                  return rows.length ? (
+                                    <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: 13, lineHeight: 1.5 }}>
+                                      {rows.map((x, i) => (
+                                        <li key={i}>
+                                          <strong>{x.name || '—'}</strong>
+                                          {x.note ? <span className="muted"> — {x.note}</span> : null}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <div className="muted" style={{ fontSize: 13 }}>
+                                      —
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
                                   QA schedule
                                 </div>
-                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                                  {JSON.stringify(r.qa_schedule ?? null, null, 2)}
-                                </code>
+                                {(() => {
+                                  const rows = scheduleRowsFromSavedUnknown(r.qa_schedule);
+                                  return rows.length ? (
+                                    <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: 13, lineHeight: 1.5 }}>
+                                      {rows.map((x, i) => (
+                                        <li key={i}>
+                                          <strong>{x.name || '—'}</strong>
+                                          {x.note ? <span className="muted"> — {x.note}</span> : null}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <div className="muted" style={{ fontSize: 13 }}>
+                                      —
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>

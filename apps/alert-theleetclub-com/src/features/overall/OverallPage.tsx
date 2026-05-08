@@ -89,6 +89,11 @@ function formatPct(pct: number): string {
   return `${sign}${p}%`;
 }
 
+function formatKwd(x: number): string {
+  if (!Number.isFinite(x)) return '—';
+  return `${x.toFixed(2)} KWD`;
+}
+
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const setComparePersist = useCallback((next: CompareSelection) => {
@@ -329,6 +334,8 @@ export function OverallPage() {
                 const topProduct = vendon?.topProduct?.name || '';
                 const lowProduct = vendon?.lowProduct?.name || '';
                 const trendPct = vendon?.trendPct;
+                const aSales = vendon?.aSalesKwd;
+                const bSales = vendon?.bSalesKwd;
                 return (
                   <tr key={m.id}>
                     <td title={locHours ? 'Alert Admin → machine profile → Location hours' : 'Set Location hours in Alert Admin'}>
@@ -364,7 +371,13 @@ export function OverallPage() {
                           ? `${String(mins)} min since sale`
                           : '—'}
                     </td>
-                    <td title="Sales trend uses Vendon cached daily sales for the selected preset (Kuwait day).">
+                    <td
+                      title={
+                        aSales != null && bSales != null
+                          ? `Sales A: ${formatKwd(aSales)} · Sales B: ${formatKwd(bSales)}`
+                          : 'Sales trend uses Vendon cached daily sales for the selected preset (Kuwait day).'
+                      }
+                    >
                       {typeof trendPct === 'number' && Number.isFinite(trendPct) ? (
                         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPct(trendPct)}</span>
                       ) : (
