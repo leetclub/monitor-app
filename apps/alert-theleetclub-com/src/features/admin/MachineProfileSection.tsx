@@ -24,7 +24,7 @@ type MachineRow = {
   vendon_tag_source?: string | null;
 };
 
-/** One technician or QA officer; multiple rows allowed. `name` holds “Name of Tech · Responsible” in one line. */
+/** One technician or QA officer; multiple rows allowed. `name` is one string: name + what they are responsible for. */
 export type StaffVisitRow = {
   name: string;
   /** Weekday indices 0–6 (Sun–Sat) */
@@ -187,8 +187,7 @@ function StaffVisitScheduleRows(props: {
   setRows: Dispatch<SetStateAction<StaffVisitRow[]>>;
 }) {
   const { variant, rows, setRows } = props;
-  const combinedLabel =
-    variant === 'technician' ? 'Name of Tech · Responsible' : 'Name of QA · Responsible';
+  const nameFieldCaption = variant === 'technician' ? 'Name of Tech Responsible' : 'Name of QA Responsible';
   const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
 
   const toggleDay = (rowIdx: number, d: number) => {
@@ -207,37 +206,45 @@ function StaffVisitScheduleRows(props: {
         {sectionTitle}
       </div>
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0, marginBottom: 12, lineHeight: 1.45 }}>
-        One field for name and who they are responsible for. Pick visit weekdays and hours; use <strong>Add another person</strong>{' '}
-        for multiple staff.
+        {variant === 'technician'
+          ? 'Technician name and what they are responsible for go in one text field (a single string). Then choose visit days and hours.'
+          : 'QA officer name and what they are responsible for go in one text field (a single string). Then choose visit days and hours.'}{' '}
+        Use <strong>Add another person</strong> when more than one technician or QA officer applies.
       </p>
       {rows.map((row, idx) => (
         <div key={idx} className="adminStaffPersonBlock">
-          <div className="adminStaffPersonHeader">
-            <label className="adminFormLabel adminFormLabelStaffName">
-              {combinedLabel}
+          <div className="adminFieldBlock">
+            <span className="adminFieldCaption">{nameFieldCaption}</span>
+            <div className="adminStaffInputRow">
               <input
+                className="adminInputFluid"
                 value={row.name}
-                placeholder="e.g. Ali Ahmad — MOH North cluster"
+                placeholder={
+                  variant === 'technician'
+                    ? 'Ahmad Ali, responsible for MOH North'
+                    : 'Sara Khan, responsible for on-site QA'
+                }
                 onChange={(e) => {
                   const next = [...rows];
                   next[idx] = { ...next[idx], name: e.target.value };
                   setRows(next);
                 }}
                 autoComplete="off"
+                aria-label={nameFieldCaption}
               />
-            </label>
-            <button
-              type="button"
-              className="danger adminStaffRemoveBtn"
-              onClick={() => {
-                setRows((prev) => {
-                  const cut = prev.filter((_, i) => i !== idx);
-                  return cut.length ? cut : [emptyStaffVisitRow()];
-                });
-              }}
-            >
-              Remove person
-            </button>
+              <button
+                type="button"
+                className="danger adminStaffRemoveCompact"
+                onClick={() => {
+                  setRows((prev) => {
+                    const cut = prev.filter((_, i) => i !== idx);
+                    return cut.length ? cut : [emptyStaffVisitRow()];
+                  });
+                }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
           <div style={{ marginBottom: 10 }}>
             <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 8 }}>
@@ -739,11 +746,11 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="Technician and QA officer schedules: name, responsibility, visit days, and hours.">
+          <summary title="Each row: one text field for name + responsibility, visit days, visit hours.">
             Technician &amp; QA Officer
           </summary>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            Add one block per person. Choose visit weekdays and one or more start/end time slots. Empty people are not saved.
+            For each person, type <strong>name and responsibility together in one string</strong>, then set days and times. Empty rows are not saved.
           </p>
           <StaffVisitScheduleRows variant="technician" rows={technicianRows} setRows={setTechnicianRows} />
           <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} />
