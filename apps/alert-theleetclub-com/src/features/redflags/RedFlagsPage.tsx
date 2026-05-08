@@ -10,6 +10,7 @@ import {
 } from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
 import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
+import { cleaningWindowsFromAdmin, lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
 import { parseEmailToSlackUserMap, slackUserDmUrl } from '@/lib/slackLinks';
 import { resolveAreaManagerFromMachineName } from '@/data/operatorAreaPlan';
 import type { RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
@@ -43,9 +44,51 @@ type Snapshot = {
 
 type RemoteCreditsTodayTotals = {
   date?: string | null;
-  byMachineId?: Record<string, { credits_sent?: number; dispense_tests?: number }>;
+  byMachineId?: Record<
+    string,
+    {
+      credits_sent?: number;
+      dispense_tests?: number;
+      vends_resolved?: string;
+      cleaning_windows?: unknown;
+      timezone?: string;
+    }
+  >;
   error?: string;
 };
+
+function sendCreditToneClass(n: number): string {
+  if (!Number.isFinite(n)) return styles.metricUnknown;
+  if (n <= 5) return styles.metricGood;
+  if (n <= 10) return styles.metricWarn;
+  return styles.metricBad;
+}
+
+function testCreditsToneClass(n: number): string {
+  if (!Number.isFinite(n)) return styles.metricUnknown;
+  return n <= 6 ? styles.metricGood : styles.metricBad;
+}
+
+function vendsResolvedToneClass(status: string | undefined): string {
+  if (status === 'green') return styles.metricGood;
+  if (status === 'red') return styles.metricBad;
+  if (status === 'none') return styles.metricGood;
+  return styles.metricUnknown;
+}
+
+function vendsResolvedLabel(status: string | undefined): string {
+  if (status === 'green') return '≤5 min';
+  if (status === 'red') return '>5 min';
+  if (status === 'none') return 'No fail';
+  if (status === 'unknown') return '?';
+  return '?';
+}
+
+function cleaningToneClass(color: 'g' | 'y' | 'r'): string {
+  if (color === 'g') return styles.metricGood;
+  if (color === 'y') return styles.metricWarn;
+  return styles.metricBad;
+}
 
 function parseTimestampMs(raw: string): number {
   const s = String(raw).trim();
@@ -313,9 +356,24 @@ export function RedFlagsPage() {
     refetchInterval: 60_000,
   });
 
+  const creditsMachineIdsKey = useMemo(() => {
+    const rawRows = (q.data?.rows ?? []) as RedAlertRow[];
+    const rows = filterSnapshotRows(rawRows);
+    const ids = rows.map((r) => String(getMachineIdRaw(r) || '').trim()).filter(Boolean);
+    ids.sort();
+    return ids.join(',');
+  }, [q.data]);
+
   const creditsQ = useQuery({
-    queryKey: ['alert-remote-credits-today-totals'],
-    queryFn: () => apiGet<RemoteCreditsTodayTotals>('/api/alert/remote-credits/today-totals'),
+    queryKey: ['alert-remote-credits-today-totals', creditsMachineIdsKey],
+    queryFn: () => {
+      const base = '/api/alert/remote-credits/today-totals';
+      const url = creditsMachineIdsKey
+        ? `${base}?machines=${encodeURIComponent(creditsMachineIdsKey)}`
+        : base;
+      return apiGet<RemoteCreditsTodayTotals>(url);
+    },
+    enabled: q.isFetched,
     refetchInterval: 5 * 60_000,
   });
 
@@ -536,6 +594,15 @@ export function RedFlagsPage() {
                   {ranked.map((d, r) => {
                     const row = d.row;
                     const machId = String(getMachineIdRaw(row) || '');
+                    const cred = machId ? creditsByMachineId[machId] : undefined;
+                    const creditsSentN = cred?.credits_sent != null ? Number(cred.credits_sent) : NaN;
+                    const dispenseTestsN = cred?.dispense_tests != null ? Number(cred.dispense_tests) : NaN;
+                    const vendsResolved = cred?.vends_resolved;
+                    const cleanIso = row.lastCleaningAt != null ? String(row.lastCleaningAt).trim() : '';
+                    const cleanWins = cleaningWindowsFromAdmin(cred?.cleaning_windows);
+                    const cleanStatus = cleanIso
+                      ? lastCleanedStatus({ lastCleaningIso: cleanIso, cleaningWindows: cleanWins })
+                      : null;
                     const fq = freqSplit(row, compareMode);
                     const todayHitsRaw = row.happensToday != null ? row.happensToday : row.frequency?.totalCriteriaHitsToday;
                     const todayHits = todayHitsRaw != null ? Number(todayHitsRaw) : NaN;
@@ -701,27 +768,54 @@ export function RedFlagsPage() {
                           )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.sendCredit.placeholderNote}>
-                          {machId && creditsByMachineId[machId]?.credits_sent != null ? (
-                            <span>{String(creditsByMachineId[machId]?.credits_sent ?? 0)}</span>
+                          {machId && cred?.credits_sent != null ? (
+                            <span className={sendCreditToneClass(creditsSentN)}>{String(cred.credits_sent ?? 0)}</span>
                           ) : (
                             <span className={styles.wireDash}>—</span>
                           )}
                         </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.vendsResolved.placeholderNote}>
-                          <span className="fleetCellMissing">?</span>
+                        <td
+                          className={styles.td}
+                          title={
+                            vendsResolved === 'green'
+                              ? 'Last vend fail today: remote credit within 5 minutes'
+                              : vendsResolved === 'red'
+                                ? 'Last vend fail today: no remote credit within 5 minutes'
+                                : vendsResolved === 'none'
+                                  ? 'No failed vend recorded today (Kuwait calendar)'
+                                  : RED_FLAGS_COLUMNS.vendsResolved.placeholderNote
+                          }
+                        >
+                          {vendsResolved ? (
+                            <span className={vendsResolvedToneClass(vendsResolved)}>{vendsResolvedLabel(vendsResolved)}</span>
+                          ) : (
+                            <span className={styles.metricUnknown}>—</span>
+                          )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.testCredits.placeholderNote}>
-                          {machId && creditsByMachineId[machId]?.dispense_tests != null ? (
-                            <span>{String(creditsByMachineId[machId]?.dispense_tests ?? 0)}</span>
+                          {machId && cred?.dispense_tests != null ? (
+                            <span className={testCreditsToneClass(dispenseTestsN)}>{String(cred.dispense_tests ?? 0)}</span>
                           ) : (
                             <span className={styles.wireDash}>—</span>
                           )}
                         </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.lastCleaning.placeholderNote}>
-                          {row.lastCleaningAt ? (
-                            <span>{formatKuwaitTs(row.lastCleaningAt)}</span>
+                        <td
+                          className={styles.td}
+                          title={
+                            cleanStatus
+                              ? `${formatKuwaitTs(cleanIso)} · ${cleanStatus.label}`
+                              : RED_FLAGS_COLUMNS.lastCleaning.placeholderNote
+                          }
+                        >
+                          {!cleanIso ? (
+                            <span className={styles.metricBad}>—</span>
                           ) : (
-                            <span className="fleetCellMissing">?</span>
+                            <>
+                              <span className={cleaningToneClass(cleanStatus!.color)}>{formatKuwaitTs(cleanIso)}</span>
+                              <span className={`${styles.metricHint} ${cleaningToneClass(cleanStatus!.color)}`}>
+                                {cleanStatus!.label}
+                              </span>
+                            </>
                           )}
                         </td>
                         <td className={styles.td} title={RED_FLAGS_COLUMNS.qaVisit.placeholderNote}>

@@ -27,7 +27,7 @@ from vendon_machine_helpers import (
     vendon_json_api_error_message,
     vendon_machine_tag_for_alert_admin_detail,
 )
-from vendon_proxy_routes import compute_remote_credits_logs_classic
+from vendon_proxy_routes import compute_remote_credits_logs_classic, compute_vends_resolved_for_machine
 from models import PeopleAnalyticsRecord, VendonDailyMachineRevenueCache, create_engine_and_session
 from sqlalchemy import func
 
@@ -569,6 +569,8 @@ def register_alert_routes(app) -> None:
         Lightweight summary for Alert boards:
         - credits_sent: total remote credits for the Kuwait calendar day
         - dispense_tests: Drink Tests count (same criteria as Monitor refund tests)
+        - vends_resolved: last failed vend vs nearest remote credit within 5 minutes (when ``machines`` query provided)
+        - cleaning_windows / timezone: from Alert machine profile for Last Cleaning column styling
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -577,6 +579,11 @@ def register_alert_routes(app) -> None:
             return denied
         try:
             kuwait_today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Kuwait")).date().isoformat()
+            raw_ids = (request.args.get("machines") or "").strip()
+            requested_machines = [x.strip() for x in raw_ids.split(",") if x.strip()]
+            if len(requested_machines) > 400:
+                requested_machines = requested_machines[:400]
+
             out = compute_remote_credits_logs_classic(kuwait_today, kuwait_today, "")
             totals = out.get("totals") if isinstance(out, dict) else None
             totals = totals if isinstance(totals, list) else []
@@ -591,6 +598,46 @@ def register_alert_routes(app) -> None:
                     "credits_sent": int(t.get("count") or 0),
                     "dispense_tests": int(t.get("drink_tests_count") or 0),
                 }
+
+            ids_for_zeros = list(requested_machines) if requested_machines else []
+            for mid in ids_for_zeros:
+                if mid not in by_machine:
+                    by_machine[mid] = {"credits_sent": 0, "dispense_tests": 0}
+
+            resolve_ids = list(dict.fromkeys(requested_machines if requested_machines else list(by_machine.keys())))
+            if resolve_ids:
+                max_workers = min(12, max(1, len(resolve_ids)))
+
+                def _one(mid: str) -> Tuple[str, Dict[str, Any]]:
+                    try:
+                        return mid, compute_vends_resolved_for_machine(mid, kuwait_today)
+                    except Exception as ex:
+                        logger.warning("vends_resolved machine %s: %s", mid, ex)
+                        return mid, {"status": "unknown", "reason": str(ex)}
+
+                with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                    futs = [pool.submit(_one, mid) for mid in resolve_ids]
+                    for fut in as_completed(futs):
+                        mid, vr = fut.result()
+                        row = by_machine.setdefault(mid, {"credits_sent": 0, "dispense_tests": 0})
+                        row["vends_resolved"] = vr.get("status") if isinstance(vr, dict) else "unknown"
+
+            profile_ids = list(set(requested_machines) | set(by_machine.keys()))
+            if profile_ids:
+                db = _dash_session()
+                try:
+                    rows = db.query(AlertMachineProfile).filter(AlertMachineProfile.machine_id.in_(profile_ids)).all()
+                    for pr in rows:
+                        pid = str(pr.machine_id or "").strip()
+                        if not pid:
+                            continue
+                        slot = by_machine.setdefault(pid, {"credits_sent": 0, "dispense_tests": 0})
+                        slot["cleaning_windows"] = pr.cleaning_windows if pr.cleaning_windows is not None else []
+                        tz_s = (pr.timezone or "").strip() or "Asia/Kuwait"
+                        slot["timezone"] = tz_s
+                finally:
+                    db.close()
+
             return jsonify({"date": kuwait_today, "byMachineId": by_machine})
         except Exception as ex:
             logger.exception("alert_remote_credits_today_totals")

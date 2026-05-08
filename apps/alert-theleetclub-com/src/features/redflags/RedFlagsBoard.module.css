@@ -634,6 +634,35 @@
   color: #94a3b8;
 }
 
+/* Vendon checklist columns (Send credit / Vends resolved / Test credits / Last cleaning) */
+.metricGood {
+  color: #86efac;
+  font-weight: 700;
+}
+
+.metricWarn {
+  color: #fdba74;
+  font-weight: 700;
+}
+
+.metricBad {
+  color: #f87171;
+  font-weight: 700;
+}
+
+.metricUnknown {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.metricHint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
 /* Today / Trend — three icon boxes: Score · Trend % · Variance (green = good, red = bad per Red Alert rules) */
 
 .tdFreqTriple {

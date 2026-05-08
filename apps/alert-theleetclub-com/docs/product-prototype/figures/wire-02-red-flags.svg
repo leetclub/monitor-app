@@ -51,5 +51,6 @@
     <text x="600" y="176" class="hint" font-size="7px">Stale transaction</text>
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
     <text x="20" y="228" class="hint" font-size="8px">(more rows)</text>
+    <text x="20" y="246" class="tiny">Trailing workbook columns: Send credit / Vends resolved / Test credits / Last cleaning — green·orange·red tiers (Vendon + Admin cleaning windows).</text>
   </g>
 </svg>

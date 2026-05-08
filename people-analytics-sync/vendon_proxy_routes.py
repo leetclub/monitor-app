@@ -782,7 +782,12 @@ def _parse_remote_credit_record_python(record: Dict[str, Any], machine_id: str) 
     }
 
 
-def _fetch_remote_credits_setting_change_log(machine_id: str, from_ts: int, to_ts: int) -> List[Dict[str, Any]]:
+def _fetch_remote_credits_setting_change_log(
+    machine_id: str,
+    from_ts: int,
+    to_ts: int,
+    max_successful: Optional[int] = 10,
+) -> List[Dict[str, Any]]:
     auth = _basic_auth_header_vendon_cloud()
     if not auth:
         logger.warning("Refund Tests: VENDON_USERNAME/VENDON_PASSWORD not set — skipping settingChangeLog remote credits")
@@ -830,7 +835,7 @@ def _fetch_remote_credits_setting_change_log(machine_id: str, from_ts: int, to_t
             if parsed:
                 out.append(parsed)
 
-        if len(out) >= max_successful:
+        if max_successful is not None and len(out) >= max_successful:
             break
         if len(log_records) < limit:
             break
@@ -1223,6 +1228,82 @@ def compute_remote_credits_logs_classic(start_date: str, end_date: str, machine_
     Used by Monitor (remoteCredits tab) and Leet Alert (Dispense Tests / Credits Sent columns).
     """
     return _compute_remote_credits_logs_classic(start_date, end_date, machine_id_filter)
+
+
+VENDS_RESOLVED_WINDOW_MINUTES = 5.0
+
+
+def compute_vends_resolved_for_machine(machine_id: str, kuwait_day_iso: str) -> Dict[str, Any]:
+    """
+    Leet Alert Red Flags — **Vends resolved** column:
+    take the **last** failed dispense in the Kuwait calendar day, then the nearest **remote credit**
+    (Vendon device settingChangeLog, Vend successful). If min |credit_ts - fail_ts| <= 5 minutes → green;
+    if the last fail has no credit in that window (or no remote credits at all) → red; if there was no
+    failed dispense that day → none (no incident).
+    """
+    mid = str(machine_id or "").strip()
+    if not mid:
+        return {"status": "unknown", "reason": "missing_machine_id"}
+
+    if not _basic_auth_header_vendon_cloud():
+        return {"status": "unknown", "reason": "vendon_basic_auth_unconfigured"}
+
+    try:
+        from_ts, to_ts = _kuwait_range_bounds_utc(kuwait_day_iso, kuwait_day_iso)
+    except Exception as ex:
+        return {"status": "unknown", "reason": f"bad_date:{ex}"}
+
+    failed, ferr = _fetch_failed_dispense_events_single_machine(from_ts, to_ts, mid)
+    if ferr:
+        return {"status": "unknown", "reason": ferr}
+
+    if not failed:
+        return {
+            "status": "none",
+            "last_fail_ts": None,
+            "nearest_credit_delta_min": None,
+        }
+
+    last_ts = 0
+    for fd in failed:
+        fts = int(fd.get("timestamp") or 0)
+        if fts > 10**12:
+            fts = fts // 1000
+        if fts > last_ts:
+            last_ts = fts
+
+    credits = _fetch_remote_credits_setting_change_log(mid, from_ts, to_ts, max_successful=None)
+    if not credits:
+        return {
+            "status": "red",
+            "last_fail_ts": last_ts,
+            "nearest_credit_delta_min": None,
+        }
+
+    best: Optional[float] = None
+    for rc in credits:
+        rts = int(rc.get("timestamp") or 0)
+        if rts > 10**12:
+            rts = rts // 1000
+        if not rts:
+            continue
+        dmin = abs(rts - last_ts) / 60.0
+        if best is None or dmin < best:
+            best = dmin
+
+    if best is not None and best <= VENDS_RESOLVED_WINDOW_MINUTES:
+        return {
+            "status": "green",
+            "last_fail_ts": last_ts,
+            "nearest_credit_delta_min": best,
+        }
+
+    return {
+        "status": "red",
+        "last_fail_ts": last_ts,
+        "nearest_credit_delta_min": best,
+    }
+
 
 def _ensure_revenue_table(db) -> None:
     db.execute(text("""
