@@ -509,6 +509,12 @@ def register_alert_routes(app) -> None:
                         "location_hours": r.location_hours,
                         "operator_name": op0,
                         "timezone": r.timezone,
+                        "operating_days": r.operating_days,
+                        "cleaning_windows": r.cleaning_windows,
+                        "operator_hours": r.operator_hours,
+                        "technician_schedule": r.technician_schedule,
+                        "qa_schedule": r.qa_schedule,
+                        "priority": r.priority,
                         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                     }
                 )
@@ -518,6 +524,60 @@ def register_alert_routes(app) -> None:
             return jsonify({"error": "failed", "message": str(ex)}), 500
         finally:
             db.close()
+
+    @app.route("/api/alert/overall/last-transactions", methods=["GET", "OPTIONS"])
+    def alert_overall_last_transactions():
+        """
+        Vendon-backed last transaction per machine (last 24h window).
+        Used as a fallback for machines that are not present in the Red Alert snapshot.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        now = int(datetime.now(timezone.utc).timestamp())
+        day_ago = now - 24 * 60 * 60
+        params: Dict[str, Any] = {
+            "from_timestamp": day_ago,
+            "to_timestamp": now,
+            "limit": 1000,
+            "offset": 0,
+        }
+        data, err = _vendon_get("/stats/vends", params)
+        if err:
+            return jsonify({"error": err, "byMachineId": {}}), 502
+        raw = data.get("result") if isinstance(data, dict) else None
+        raw = raw if isinstance(raw, list) else []
+
+        latest: Dict[str, Dict[str, Any]] = {}
+        for trx in raw:
+            if not isinstance(trx, dict):
+                continue
+            mid_raw = trx.get("machine_id")
+            if mid_raw is None:
+                continue
+            mid = str(mid_raw).strip()
+            if not mid:
+                continue
+            ts_raw = trx.get("datetime") or trx.get("timestamp") or 0
+            try:
+                ts_i = int(ts_raw) if ts_raw is not None else 0
+            except Exception:
+                ts_i = 0
+            if ts_i <= 0:
+                continue
+            prev = latest.get(mid)
+            prev_ts = int(prev.get("timestamp") or 0) if isinstance(prev, dict) else 0
+            if prev is None or ts_i > prev_ts:
+                latest[mid] = {
+                    "timestamp": ts_i,
+                    "machine_name": trx.get("machine_name"),
+                    "product_name": trx.get("name") or trx.get("product_name"),
+                    "amount": trx.get("price") or 0,
+                }
+
+        return jsonify({"byMachineId": latest, "fromTimestamp": day_ago, "toTimestamp": now})
 
     @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
     def alert_overall_vendon_sales_summary():

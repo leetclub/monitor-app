@@ -32,6 +32,12 @@ type AdminProfileRow = {
   location_hours?: string | null;
   operator_name?: string | null;
   timezone?: string | null;
+  operating_days?: unknown;
+  cleaning_windows?: unknown;
+  operator_hours?: unknown;
+  technician_schedule?: unknown;
+  qa_schedule?: unknown;
+  priority?: number | null;
   updated_at?: string | null;
 };
 
@@ -52,6 +58,20 @@ type VendonSalesSummaryResponse = {
       lowProduct?: { name: string; count: number } | null;
     }
   >;
+};
+
+type VendonLastTransactionsResponse = {
+  byMachineId: Record<
+    string,
+    {
+      timestamp: number;
+      product_name?: string | null;
+      amount?: number | string | null;
+    }
+  >;
+  fromTimestamp?: number;
+  toTimestamp?: number;
+  error?: string;
 };
 
 function snapshotMostIssue(snap: RedAlertRow | undefined): string {
@@ -124,6 +144,12 @@ export function OverallPage() {
     queryFn: () =>
       apiGet<VendonSalesSummaryResponse>(`/api/alert/overall/vendon-sales-summary?preset=${encodeURIComponent(compare.preset)}`),
     refetchInterval: 5 * 60_000,
+  });
+
+  const vendonLastTxQ = useQuery({
+    queryKey: ['alert-overall-vendon-last-transactions'],
+    queryFn: () => apiGet<VendonLastTransactionsResponse>('/api/alert/overall/last-transactions'),
+    refetchInterval: 2 * 60_000,
   });
 
   const machines = useMemo(() => {
@@ -226,11 +252,25 @@ export function OverallPage() {
             type="button"
             className="btnSolid"
             onClick={() => {
-              void Promise.all([machinesQ.refetch(), snapQ.refetch(), profilesQ.refetch(), vendonSummaryQ.refetch()]);
+              void Promise.all([
+                machinesQ.refetch(),
+                snapQ.refetch(),
+                profilesQ.refetch(),
+                vendonSummaryQ.refetch(),
+                vendonLastTxQ.refetch(),
+              ]);
             }}
-            disabled={machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching || vendonSummaryQ.isFetching}
+            disabled={
+              machinesQ.isFetching ||
+              snapQ.isFetching ||
+              profilesQ.isFetching ||
+              vendonSummaryQ.isFetching ||
+              vendonLastTxQ.isFetching
+            }
           >
-            {machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching || vendonSummaryQ.isFetching ? 'Refreshing…' : 'Refresh'}
+            {machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching || vendonSummaryQ.isFetching || vendonLastTxQ.isFetching
+              ? 'Refreshing…'
+              : 'Refresh'}
           </button>
         </div>
       </header>
@@ -330,15 +370,31 @@ export function OverallPage() {
                   snap?.lastTransactionAt ??
                   snap?.last_transaction_at ??
                   null;
+                const vendonTx = vendonLastTxQ.data?.byMachineId?.[m.id];
+                const vendonTxIso =
+                  vendonTx?.timestamp != null && Number(vendonTx.timestamp) > 0
+                    ? new Date(Number(vendonTx.timestamp) * 1000).toISOString()
+                    : '';
                 const peakHourLabel = vendon?.peakHour?.label || '';
                 const topProduct = vendon?.topProduct?.name || '';
                 const lowProduct = vendon?.lowProduct?.name || '';
                 const trendPct = vendon?.trendPct;
                 const aSales = vendon?.aSalesKwd;
                 const bSales = vendon?.bSalesKwd;
+                const adminMetaHintParts: string[] = [];
+                if (prof?.timezone) adminMetaHintParts.push(`TZ: ${String(prof.timezone)}`);
+                if (prof?.priority != null) adminMetaHintParts.push(`Priority: ${String(prof.priority)}`);
+                if (prof?.operating_days != null) adminMetaHintParts.push(`Operating days configured`);
+                if (prof?.cleaning_windows != null) adminMetaHintParts.push(`Cleaning windows configured`);
                 return (
                   <tr key={m.id}>
-                    <td title={locHours ? 'Alert Admin → machine profile → Location hours' : 'Set Location hours in Alert Admin'}>
+                    <td
+                      title={
+                        locHours
+                          ? `Alert Admin → machine profile → Location hours${adminMetaHintParts.length ? ` · ${adminMetaHintParts.join(' · ')}` : ''}`
+                          : `Set Location hours in Alert Admin${adminMetaHintParts.length ? ` · ${adminMetaHintParts.join(' · ')}` : ''}`
+                      }
+                    >
                       {operating}
                     </td>
                     <td>
@@ -364,12 +420,26 @@ export function OverallPage() {
                     <td title={OVERALL_COLUMNS.lastVendFailed.note}>
                       {vendFailSummary ? vendFailSummary : <span className="muted">—</span>}
                     </td>
-                    <td title={txRaw ? undefined : minsOk ? 'Minutes since last sale (snapshot)' : undefined}>
-                      {txRaw
-                        ? formatKuwaitDateTime(String(txRaw))
-                        : minsOk
-                          ? `${String(mins)} min since sale`
-                          : '—'}
+                    <td
+                      title={
+                        txRaw
+                          ? 'Red Alert snapshot'
+                          : minsOk
+                            ? 'Minutes since last sale (snapshot)'
+                            : vendonTxIso
+                              ? 'Vendon last transaction (24h window)'
+                              : undefined
+                      }
+                    >
+                      {txRaw ? (
+                        formatKuwaitDateTime(String(txRaw))
+                      ) : minsOk ? (
+                        `${String(mins)} min since sale`
+                      ) : vendonTxIso ? (
+                        formatKuwaitDateTime(vendonTxIso)
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td
                       title={
