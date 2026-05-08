@@ -189,10 +189,6 @@ function StaffVisitScheduleRows(props: {
   const { variant, rows, setRows } = props;
   const nameFieldCaption = variant === 'technician' ? 'Name of Tech Responsible' : 'Name of QA Responsible';
   const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
-  const ph =
-    variant === 'technician'
-      ? 'Example: Ahmad Ali responsible for MOH North machines'
-      : 'Example: Sara Khan responsible for QA visits at this site';
 
   const toggleDay = (rowIdx: number, d: number) => {
     setRows((prev) => {
@@ -209,9 +205,6 @@ function StaffVisitScheduleRows(props: {
       <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
         {sectionTitle}
       </div>
-      <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0, marginBottom: 12, lineHeight: 1.45 }}>
-        Fill <strong>{nameFieldCaption}</strong> as <strong>one string</strong>, then visit days and hours. Multiple people: <strong>Add another person</strong>.
-      </p>
       {rows.map((row, idx) => (
         <div key={idx} className="adminStaffPersonBlock">
           <div className="adminFieldBlock">
@@ -220,7 +213,6 @@ function StaffVisitScheduleRows(props: {
               <input
                 className="adminInputFluid"
                 value={row.name}
-                placeholder={ph}
                 onChange={(e) => {
                   const next = [...rows];
                   next[idx] = { ...next[idx], name: e.target.value };
@@ -604,9 +596,9 @@ export function MachineProfileSection() {
             </label>
           </div>
           {opPreset === 'custom' ? (
-            <div className="row" style={{ marginTop: 8 }}>
+            <div className="adminVisitDayStrip" style={{ marginTop: 10 }}>
               {DAY_LABELS.map((lb, i) => (
-                <label key={lb}>
+                <label key={lb} className="adminDayCheckbox">
                   <input type="checkbox" checked={customDays.includes(i)} onChange={() => toggleDay(i)} /> {lb}
                 </label>
               ))}
@@ -745,11 +737,11 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="One text field per person: Name of Tech Responsible or Name of QA Responsible (single string), then days and hours.">
+          <summary title="Technician and QA: one text field per person, visit days, hours.">
             Technician &amp; QA Officer
           </summary>
-          <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            <strong>Name of Tech Responsible</strong> and <strong>Name of QA Responsible</strong> are each a <strong>single text field</strong> (name + responsibility in one string). Then choose visit days and start/end hours.
+          <p className="muted adminTechQaIntro">
+            Use <strong>Name of Tech Responsible</strong> and <strong>Name of QA Responsible</strong> as <strong>one line of text each</strong>. Then set visit days and hours. Add more rows if several people cover this machine.
           </p>
           <StaffVisitScheduleRows variant="technician" rows={technicianRows} setRows={setTechnicianRows} />
           <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} />

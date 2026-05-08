@@ -897,15 +897,16 @@ label.adminFormLabel > textarea {
 
 .adminMachineCoreRow {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 7.75rem);
-  gap: 14px 18px;
-  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 14px 16px;
+  align-items: start;
 }
 
-@media (max-width: 900px) {
-  .adminMachineCoreRow {
-    grid-template-columns: 1fr;
-  }
+.adminTechQaIntro {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  max-width: 52rem;
 }
 
 /* Time zone + priority: two fields only (avoid empty third grid column). */
@@ -925,7 +926,7 @@ label.adminFormLabel > textarea {
 
 .adminTimePairRow {
   display: grid;
-  grid-template-columns: minmax(0, 7.75rem) minmax(0, 7.75rem) auto;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) min-content;
   gap: 10px 14px;
   align-items: end;
 }
@@ -935,10 +936,10 @@ label.adminFormLabel > textarea {
     grid-template-columns: 1fr 1fr;
   }
 
-  .adminTimePairRow > button.danger,
-  .adminTimePairRow > button.primary {
+  .adminTimePairRow > button.danger {
     grid-column: 1 / -1;
     justify-self: start;
+    margin-top: 4px;
   }
 }
 
@@ -970,7 +971,7 @@ label.adminFormLabel > textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 12px;
-  align-items: center;
+  align-items: end;
   margin-bottom: 4px;
 }
 
@@ -982,7 +983,8 @@ label.adminFormLabel > textarea {
 .adminStaffInputRow .adminStaffRemoveCompact {
   flex: 0 0 auto;
   white-space: nowrap;
-  align-self: center;
+  align-self: end;
+  margin-bottom: 1px;
 }
 
 .adminVisitDayStrip {
@@ -1005,7 +1007,7 @@ label.adminDayCheckbox {
 
 .adminStaffHoursRow {
   display: grid;
-  grid-template-columns: minmax(0, 7.75rem) minmax(0, 7.75rem) auto;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) min-content;
   gap: 10px 14px;
   align-items: end;
   margin-bottom: 8px;
@@ -1019,6 +1021,7 @@ label.adminDayCheckbox {
   .adminStaffHoursRow > button.danger {
     grid-column: 1 / -1;
     justify-self: start;
+    margin-top: 4px;
   }
 }
 
@@ -1661,6 +1664,13 @@ label.adminDayCheckbox {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: 8px 14px;
+}
+
+.adminInlineDayPick label {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
 }
 
