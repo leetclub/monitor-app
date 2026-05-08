@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
-import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } from 'react';
+import { Fragment, type Dispatch, type SetStateAction, useCallback, useMemo, useState } from 'react';
 import { HelpTip } from '@/components/HelpTip';
 import { fleetTagSourceDescription } from '@/lib/fleetTagSourceHint';
 
@@ -24,7 +24,14 @@ type MachineRow = {
   vendon_tag_source?: string | null;
 };
 
-type VisitContactRow = { name: string; note: string };
+/** One technician or QA officer; multiple rows allowed. */
+export type StaffVisitRow = {
+  name: string;
+  responsible: string;
+  /** Weekday indices 0–6 (Sun–Sat) */
+  days: number[];
+  windows: TimeWindow[];
+};
 
 type MachinesApiResponse = {
   machines: MachineRow[];
@@ -69,15 +76,48 @@ function nonEmptyString(x: unknown): string {
   return s;
 }
 
-function scheduleRowsFromSavedUnknown(raw: unknown): { name: string; note: string }[] {
+function parseDaysArray(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((n) => Number(n)).filter((x) => Number.isFinite(x) && x >= 0 && x <= 6);
+}
+
+function parseWindowsFromObject(o: Record<string, unknown>): TimeWindow[] {
+  if (Array.isArray(o.windows)) {
+    const wins: TimeWindow[] = [];
+    for (const w of o.windows) {
+      if (w && typeof w === 'object' && !Array.isArray(w)) {
+        const ww = w as Record<string, unknown>;
+        wins.push({
+          start: String(ww.start ?? '').trim(),
+          end: String(ww.end ?? '').trim(),
+        });
+      }
+    }
+    return wins.filter((w) => w.start || w.end);
+  }
+  const s = String(o.start ?? '').trim();
+  const e = String(o.end ?? '').trim();
+  if (s || e) return [{ start: s, end: e }];
+  return [];
+}
+
+/** Parse saved JSON (new shape or legacy name+note) into staff rows for display. */
+function staffScheduleFromSavedUnknown(raw: unknown): StaffVisitRow[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
-  const out: { name: string; note: string }[] = [];
+  const out: StaffVisitRow[] = [];
   for (const item of raw) {
     if (item && typeof item === 'object' && !Array.isArray(item)) {
       const o = item as Record<string, unknown>;
       const name = nonEmptyString(o.name ?? o.person ?? o.technician ?? o.officer ?? '');
-      const note = nonEmptyString(o.note ?? o.visits ?? o.schedule ?? o.details ?? '');
-      if (name || note) out.push({ name, note });
+      const responsible = nonEmptyString(o.responsible ?? o.account ?? '');
+      const legacyNote = nonEmptyString(o.note ?? o.visits ?? o.schedule ?? o.details ?? '');
+      const days = parseDaysArray(o.days ?? o.visit_days ?? o.weekdays);
+      let windows = parseWindowsFromObject(o);
+      if (!windows.length) windows = [{ start: '', end: '' }];
+      const resp = responsible || legacyNote;
+      if (name || resp || days.length || windows.some((w) => w.start && w.end)) {
+        out.push({ name, responsible: resp, days, windows });
+      }
     }
   }
   return out;
@@ -98,85 +138,205 @@ function normalizeOperatingDays(raw: unknown): OperatingDays {
   return { preset: 'all_week' };
 }
 
-function emptyVisitRow(): VisitContactRow {
-  return { name: '', note: '' };
+function emptyStaffVisitRow(): StaffVisitRow {
+  return { name: '', responsible: '', days: [], windows: [{ start: '', end: '' }] };
 }
 
 /** Load saved schedule array (objects or legacy shapes) into editable rows. */
-function scheduleRowsFromUnknown(raw: unknown): VisitContactRow[] {
-  if (!Array.isArray(raw) || raw.length === 0) return [emptyVisitRow()];
-  const out: VisitContactRow[] = [];
-  for (const item of raw) {
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      const o = item as Record<string, unknown>;
-      const name = String(o.name ?? o.person ?? o.technician ?? o.officer ?? '').trim();
-      const note = String(o.note ?? o.visits ?? o.schedule ?? o.details ?? '').trim();
-      if (name || note) out.push({ name, note });
-    }
-  }
-  return out.length ? out : [emptyVisitRow()];
+function scheduleRowsFromUnknown(raw: unknown): StaffVisitRow[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [emptyStaffVisitRow()];
+  const parsed = staffScheduleFromSavedUnknown(raw);
+  return parsed.length ? parsed.map((r) => ({ ...r, windows: r.windows.length ? r.windows : [{ start: '', end: '' }] })) : [emptyStaffVisitRow()];
 }
 
-function unknownArrayFromVisitRows(rows: VisitContactRow[]): unknown[] {
+function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
   return rows
-    .map((r) => ({ name: r.name.trim(), note: r.note.trim() }))
-    .filter((r) => r.name || r.note);
+    .map((r) => {
+      const wins = r.windows.filter((w) => String(w.start ?? '').trim() && String(w.end ?? '').trim());
+      return {
+        name: r.name.trim(),
+        responsible: r.responsible.trim(),
+        days: [...r.days].sort((a, b) => a - b),
+        windows: wins.map((w) => ({
+          start: String(w.start ?? '').trim(),
+          end: String(w.end ?? '').trim(),
+        })),
+      };
+    })
+    .filter((r) => r.name || r.responsible || r.days.length || r.windows.length > 0);
 }
 
-function VisitScheduleRows(props: {
-  title: string;
-  rows: VisitContactRow[];
-  setRows: Dispatch<SetStateAction<VisitContactRow[]>>;
+function visitDaysLabel(days: number[]): string {
+  if (!days.length) return '—';
+  return days
+    .map((d) => DAY_LABELS[d] ?? String(d))
+    .filter(Boolean)
+    .join(', ');
+}
+
+function StaffVisitScheduleRows(props: {
+  variant: 'technician' | 'qa';
+  rows: StaffVisitRow[];
+  setRows: Dispatch<SetStateAction<StaffVisitRow[]>>;
 }) {
-  const { title, rows, setRows } = props;
+  const { variant, rows, setRows } = props;
+  const nameLabel = variant === 'technician' ? 'Name of Tech' : 'Name of QA';
+  const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
+
+  const toggleDay = (rowIdx: number, d: number) => {
+    setRows((prev) => {
+      const next = [...prev];
+      const row = next[rowIdx];
+      const days = row.days.includes(d) ? row.days.filter((x) => x !== d) : [...row.days, d].sort((a, b) => a - b);
+      next[rowIdx] = { ...row, days };
+      return next;
+    });
+  };
+
   return (
-    <div style={{ marginTop: 14 }}>
+    <div style={{ marginTop: 18 }}>
       <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
-        {title}
+        {sectionTitle}
       </div>
+      <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0, marginBottom: 10, lineHeight: 1.45 }}>
+        {variant === 'technician'
+          ? 'Technician: name, who they are responsible for, visit weekdays, and hours (add another person below if needed).'
+          : 'QA officer: name, who they are responsible for, visit weekdays, and hours (add another person below if needed).'}
+      </p>
       {rows.map((row, idx) => (
-        <div key={idx} className="row" style={{ marginBottom: 8, alignItems: 'flex-end' }}>
-          <label style={{ flex: '1 1 140px' }}>
-            Name
-            <input
-              value={row.name}
-              onChange={(e) => {
-                const next = [...rows];
-                next[idx] = { ...next[idx], name: e.target.value };
-                setRows(next);
+        <div
+          key={idx}
+          style={{
+            marginBottom: 16,
+            paddingBottom: 14,
+            borderBottom: idx < rows.length - 1 ? '1px solid var(--border)' : undefined,
+          }}
+        >
+          <div className="row" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
+            <label style={{ flex: '1 1 160px', minWidth: 140 }}>
+              {nameLabel}
+              <input
+                value={row.name}
+                onChange={(e) => {
+                  const next = [...rows];
+                  next[idx] = { ...next[idx], name: e.target.value };
+                  setRows(next);
+                }}
+                autoComplete="off"
+              />
+            </label>
+            <label style={{ flex: '2 1 200px', minWidth: 160 }}>
+              Responsible
+              <input
+                value={row.responsible}
+                placeholder="Account / area / role"
+                onChange={(e) => {
+                  const next = [...rows];
+                  next[idx] = { ...next[idx], responsible: e.target.value };
+                  setRows(next);
+                }}
+                autoComplete="off"
+              />
+            </label>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                setRows((prev) => {
+                  const cut = prev.filter((_, i) => i !== idx);
+                  return cut.length ? cut : [emptyStaffVisitRow()];
+                });
               }}
-              autoComplete="off"
-            />
-          </label>
-          <label style={{ flex: '2 1 220px' }}>
-            Visits / notes
-            <input
-              value={row.note}
-              placeholder="e.g. Tue AM"
-              onChange={(e) => {
-                const next = [...rows];
-                next[idx] = { ...next[idx], note: e.target.value };
-                setRows(next);
+            >
+              Remove person
+            </button>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>
+              Visit days
+            </div>
+            <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              {DAY_LABELS.map((lab, d) => (
+                <label key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.82rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={row.days.includes(d)}
+                    onChange={() => toggleDay(idx, d)}
+                  />
+                  {lab}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>
+              Visit hours (start and end)
+            </div>
+            {row.windows.map((w, wi) => (
+              <div key={wi} className="row" style={{ marginBottom: 6, alignItems: 'flex-end', flexWrap: 'wrap', gap: 8 }}>
+                <label style={{ width: 100 }}>
+                  Start
+                  <input
+                    type="time"
+                    value={w.start}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      const wins = [...next[idx].windows];
+                      wins[wi] = { ...wins[wi], start: e.target.value };
+                      next[idx] = { ...next[idx], windows: wins };
+                      setRows(next);
+                    }}
+                  />
+                </label>
+                <label style={{ width: 100 }}>
+                  End
+                  <input
+                    type="time"
+                    value={w.end}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      const wins = [...next[idx].windows];
+                      wins[wi] = { ...wins[wi], end: e.target.value };
+                      next[idx] = { ...next[idx], windows: wins };
+                      setRows(next);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setRows((prev) => {
+                      const next = [...prev];
+                      const wins = next[idx].windows.filter((_, i) => i !== wi);
+                      next[idx] = { ...next[idx], windows: wins.length ? wins : [{ start: '', end: '' }] };
+                      return next;
+                    });
+                  }}
+                >
+                  Remove slot
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="primary"
+              style={{ marginTop: 4 }}
+              onClick={() => {
+                setRows((prev) => {
+                  const next = [...prev];
+                  next[idx] = { ...next[idx], windows: [...next[idx].windows, { start: '', end: '' }] };
+                  return next;
+                });
               }}
-              autoComplete="off"
-            />
-          </label>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => {
-              setRows((prev) => {
-                const cut = prev.filter((_, i) => i !== idx);
-                return cut.length ? cut : [emptyVisitRow()];
-              });
-            }}
-          >
-            Remove
-          </button>
+            >
+              Add time slot
+            </button>
+          </div>
         </div>
       ))}
-      <button type="button" className="primary" onClick={() => setRows((p) => [...p, emptyVisitRow()])}>
-        Add row
+      <button type="button" className="primary" onClick={() => setRows((p) => [...p, emptyStaffVisitRow()])}>
+        Add another person
       </button>
     </div>
   );
@@ -200,8 +360,8 @@ export function MachineProfileSection() {
   const [customDays, setCustomDays] = useState<number[]>([]);
   const [cleaningWindows, setCleaningWindows] = useState<TimeWindow[]>([{ start: '14:00', end: '15:00' }]);
   const [operators, setOperators] = useState<OperatorBlock[]>([emptyOperator()]);
-  const [technicianRows, setTechnicianRows] = useState<VisitContactRow[]>([emptyVisitRow()]);
-  const [qaRows, setQaRows] = useState<VisitContactRow[]>([emptyVisitRow()]);
+  const [technicianRows, setTechnicianRows] = useState<StaffVisitRow[]>([emptyStaffVisitRow()]);
+  const [qaRows, setQaRows] = useState<StaffVisitRow[]>([emptyStaffVisitRow()]);
   const [timezone, setTimezone] = useState('Asia/Kuwait');
   const [priority, setPriority] = useState(10);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -255,8 +415,8 @@ export function MachineProfileSection() {
     setCustomDays([]);
     setCleaningWindows([{ start: '14:00', end: '15:00' }]);
     setOperators([emptyOperator()]);
-    setTechnicianRows([emptyVisitRow()]);
-    setQaRows([emptyVisitRow()]);
+    setTechnicianRows([emptyStaffVisitRow()]);
+    setQaRows([emptyStaffVisitRow()]);
     setTimezone('Asia/Kuwait');
     setPriority(10);
     setFormErr(null);
@@ -273,8 +433,8 @@ export function MachineProfileSection() {
       setCustomDays([]);
       setCleaningWindows([{ start: '14:00', end: '15:00' }]);
       setOperators([emptyOperator()]);
-      setTechnicianRows([emptyVisitRow()]);
-      setQaRows([emptyVisitRow()]);
+      setTechnicianRows([emptyStaffVisitRow()]);
+      setQaRows([emptyStaffVisitRow()]);
       setTimezone('Asia/Kuwait');
       setPriority(10);
       setFormErr(null);
@@ -287,8 +447,8 @@ export function MachineProfileSection() {
       if (!machineId.trim()) {
         throw new Error('Choose a machine first.');
       }
-      const tech = unknownArrayFromVisitRows(technicianRows);
-      const qa = unknownArrayFromVisitRows(qaRows);
+      const tech = unknownArrayFromStaffRows(technicianRows);
+      const qa = unknownArrayFromStaffRows(qaRows);
       const operating_days: OperatingDays =
         opPreset === 'custom' ? { preset: 'custom', days: customDays } : { preset: opPreset };
       return apiJson('/api/alert/admin/machine-profiles', {
@@ -343,7 +503,7 @@ export function MachineProfileSection() {
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">{machineId ? `Edit: ${machineName || machineId}` : 'Machine profile'}</h2>
-          <HelpTip text="Required: vending machine + at least one cleaning window. Operators, technician, and QA are optional." />
+          <HelpTip text="Required: vending machine + at least one cleaning window. Operators, technician, and QA officer schedules are optional." />
         </div>
 
         {formErr || saveMut.isError ? (
@@ -595,14 +755,14 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="Optional contacts and visit notes for technician and QA.">
-            Technician &amp; QA visits
+          <summary title="Technician and QA officer schedules: name, responsibility, visit days, and hours.">
+            Technician &amp; QA Officer
           </summary>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            Add one row per person. Empty rows are not saved.
+            Add one block per person. Choose visit weekdays and one or more start/end time slots. Empty people are not saved.
           </p>
-          <VisitScheduleRows title="Technician" rows={technicianRows} setRows={setTechnicianRows} />
-          <VisitScheduleRows title="QA" rows={qaRows} setRows={setQaRows} />
+          <StaffVisitScheduleRows variant="technician" rows={technicianRows} setRows={setTechnicianRows} />
+          <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} />
         </details>
 
         <details className="adminDetails">
@@ -676,8 +836,8 @@ export function MachineProfileSection() {
                 const tagHint = fleetTagSourceDescription(vm?.vendon_tag_source ?? undefined);
                 const expanded = expandedMachineId === r.machine_id;
                 return (
-                  <>
-                    <tr key={r.machine_id}>
+                  <Fragment key={r.machine_id}>
+                    <tr>
                       <td className="tableCellWrap">{r.machine_name || r.machine_id}</td>
                       <td className="tableCellWrap" title={tagHint ? `${displayTag}. ${tagHint}` : displayTag}>
                         {displayTag}
@@ -778,16 +938,33 @@ export function MachineProfileSection() {
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-                                  Technician schedule
+                                  Technician
                                 </div>
                                 {(() => {
-                                  const rows = scheduleRowsFromSavedUnknown(r.technician_schedule);
-                                  return rows.length ? (
+                                  const staffRows = staffScheduleFromSavedUnknown(r.technician_schedule);
+                                  return staffRows.length ? (
                                     <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: 13, lineHeight: 1.5 }}>
-                                      {rows.map((x, i) => (
+                                      {staffRows.map((x, i) => (
                                         <li key={i}>
                                           <strong>{x.name || '—'}</strong>
-                                          {x.note ? <span className="muted"> — {x.note}</span> : null}
+                                          {x.responsible ? (
+                                            <span className="muted">
+                                              {' '}
+                                              · Responsible: {x.responsible}
+                                            </span>
+                                          ) : null}
+                                          <div className="muted" style={{ marginTop: 2 }}>
+                                            Days: {visitDaysLabel(x.days)}
+                                          </div>
+                                          <div className="muted">
+                                            Hours:{' '}
+                                            {x.windows.filter((w) => w.start && w.end).length
+                                              ? x.windows
+                                                  .filter((w) => w.start && w.end)
+                                                  .map((w) => fmtTimeWindow(w))
+                                                  .join(' · ')
+                                              : '—'}
+                                          </div>
                                         </li>
                                       ))}
                                     </ul>
@@ -800,16 +977,33 @@ export function MachineProfileSection() {
                               </div>
                               <div>
                                 <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-                                  QA schedule
+                                  QA Officer
                                 </div>
                                 {(() => {
-                                  const rows = scheduleRowsFromSavedUnknown(r.qa_schedule);
-                                  return rows.length ? (
+                                  const staffRows = staffScheduleFromSavedUnknown(r.qa_schedule);
+                                  return staffRows.length ? (
                                     <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: 13, lineHeight: 1.5 }}>
-                                      {rows.map((x, i) => (
+                                      {staffRows.map((x, i) => (
                                         <li key={i}>
                                           <strong>{x.name || '—'}</strong>
-                                          {x.note ? <span className="muted"> — {x.note}</span> : null}
+                                          {x.responsible ? (
+                                            <span className="muted">
+                                              {' '}
+                                              · Responsible: {x.responsible}
+                                            </span>
+                                          ) : null}
+                                          <div className="muted" style={{ marginTop: 2 }}>
+                                            Days: {visitDaysLabel(x.days)}
+                                          </div>
+                                          <div className="muted">
+                                            Hours:{' '}
+                                            {x.windows.filter((w) => w.start && w.end).length
+                                              ? x.windows
+                                                  .filter((w) => w.start && w.end)
+                                                  .map((w) => fmtTimeWindow(w))
+                                                  .join(' · ')
+                                              : '—'}
+                                          </div>
                                         </li>
                                       ))}
                                     </ul>
@@ -836,7 +1030,7 @@ export function MachineProfileSection() {
                         </td>
                       </tr>
                     ) : null}
-                  </>
+                  </Fragment>
                 );
               })}
               {rows.length === 0 && !profilesQ.isLoading ? (

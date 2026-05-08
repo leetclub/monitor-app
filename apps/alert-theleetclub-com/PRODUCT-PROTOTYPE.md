@@ -64,6 +64,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-05-08 | **Admin — Machines:** Technician and QA Officer sections now use **Name of Tech / Name of QA**, **Responsible**, **visit days** (Sun–Sat), and **start/end hours** with multiple time slots and multiple people; saved JSON shape `{ name, responsible, days[], windows[] }` (legacy `note` still loads into Responsible). |
 | 2026-05-08 | **Overall — People Count / Footfall:** `GET /api/alert/overall/people-footfall` sums `people_in` (daily Videoloft buckets) from `people_analytics_records` for Kuwait **today vs yesterday**; resolves cameras with the same embedded map as Monitor v1 `peopleCameraToMachineMap`, optional `alert_people_camera_map.json` / `ALERT_PEOPLE_CAMERA_MAP_JSON`, cached Videoloft device list, optional `ALERT_PEOPLE_FUZZY_MATCH`. |
 | 2026-05-07 | **Overall:** No **Fleet table** subheading (count badge only). **Compact column headers** (short label + full title/note on hover), tighter spacing. **Admin · Location hours** + snapshot columns + Vendon fallback as before. |
 | 2026-05-07 | **Red Flags — Today / Trend:** Three icon boxes — **Score** & **Gap** values use **green** at zero burden and **tiered red** by incident count; **Trend** uses Δ% with **tiered red** on bad uptrends. **Gap** shows **`↓0`** (at green) or **`↓N`** (must **drop** N incidents to reach green); **`—`** if unknown. Header subcopy **gap ↓ to green**. Tooltips spell out direction vs baseline. |
