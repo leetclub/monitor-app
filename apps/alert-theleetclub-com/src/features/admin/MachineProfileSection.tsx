@@ -163,7 +163,7 @@ function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
         })),
       };
     })
-    .filter((r) => r.name || r.responsible || r.days.length || r.windows.length > 0);
+    .filter((r) => r.name || r.responsible || r.days.length > 0 || r.windows.length > 0);
 }
 
 function visitDaysLabel(days: number[]): string {
