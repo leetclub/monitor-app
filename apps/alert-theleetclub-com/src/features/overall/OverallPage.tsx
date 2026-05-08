@@ -399,11 +399,12 @@ export function OverallPage() {
                 const prof = profileByMachineId.get(m.id);
                 const vendon = vendonSummaryQ.data?.byMachineId?.[m.id];
                 const locHours = String(prof?.location_hours ?? '').trim();
+                const locationOwner = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
                 const operating = locHours ? `${locHours} hrs` : '—';
                 const lastCleanedIso = snap?.lastCleaningAt != null ? String(snap.lastCleaningAt).trim() : '';
                 const vendFailSummary = snapshotVendFailSummary(snap);
                 const mostIssue = snapshotMostIssue(snap);
-                const machTag = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
+                const machTag = locationOwner;
                 const operator =
                   String(prof?.operator_name ?? '').trim() ||
                   String(snap?.operator ?? snap?.operatorName ?? snap?.redAlertOperator ?? '').trim() ||
@@ -447,6 +448,11 @@ export function OverallPage() {
                       {daysLabel ? (
                         <div className="muted" style={{ fontSize: '0.78rem' }}>
                           {daysLabel}
+                        </div>
+                      ) : null}
+                      {locationOwner ? (
+                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                          Location Owner: {locationOwner}
                         </div>
                       ) : null}
                       {prof?.timezone ? (
