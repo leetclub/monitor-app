@@ -864,6 +864,118 @@ th {
   border-top: 1px solid var(--border);
 }
 
+/* Machine profile & admin forms: stack caption above control (global `label` is row flex and breaks multi-field rows). */
+label.adminFormLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+label.adminFormLabel > input,
+label.adminFormLabel > select,
+label.adminFormLabel > textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.adminMachineCoreRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.adminMachineCoreRow label.adminFormLabelMachine {
+  flex: 2 1 220px;
+  min-width: min(100%, 200px);
+}
+
+.adminMachineCoreRow label.adminFormLabelTag {
+  flex: 1 1 180px;
+  min-width: min(100%, 160px);
+}
+
+.adminMachineCoreRow label.adminFormLabelHours {
+  flex: 0 1 140px;
+  min-width: 112px;
+}
+
+.adminTimePairRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.adminTimePairRow label.adminFormLabelTime {
+  flex: 0 1 118px;
+  min-width: 104px;
+}
+
+.adminStaffPersonBlock {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminStaffPersonBlock:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.adminStaffPersonHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.adminStaffPersonHeader label.adminFormLabelStaffName {
+  flex: 1 1 260px;
+  min-width: min(100%, 220px);
+}
+
+.adminStaffRemoveBtn {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.adminVisitDayStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+label.adminDayCheckbox {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text);
+  min-width: 0;
+}
+
+.adminStaffHoursRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.adminDetails > p.muted:first-of-type {
+  margin-top: 0;
+}
+
 .pillDanger {
   display: inline-block;
   font-size: 12px;

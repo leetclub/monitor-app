@@ -24,10 +24,9 @@ type MachineRow = {
   vendon_tag_source?: string | null;
 };
 
-/** One technician or QA officer; multiple rows allowed. */
+/** One technician or QA officer; multiple rows allowed. `name` holds “Name of Tech · Responsible” in one line. */
 export type StaffVisitRow = {
   name: string;
-  responsible: string;
   /** Weekday indices 0–6 (Sun–Sat) */
   days: number[];
   windows: TimeWindow[];
@@ -101,22 +100,31 @@ function parseWindowsFromObject(o: Record<string, unknown>): TimeWindow[] {
   return [];
 }
 
-/** Parse saved JSON (new shape or legacy name+note) into staff rows for display. */
+/** Legacy split fields → single display line (same as current form). */
+function combinedStaffNameFromSaved(o: Record<string, unknown>): string {
+  const a = nonEmptyString(o.name ?? o.person ?? o.technician ?? o.officer ?? '');
+  const b = nonEmptyString(o.responsible ?? o.account ?? '');
+  const c = nonEmptyString(o.note ?? o.visits ?? o.schedule ?? o.details ?? '');
+  const parts: string[] = [];
+  for (const p of [a, b, c]) {
+    if (p && !parts.includes(p)) parts.push(p);
+  }
+  return parts.join(' — ');
+}
+
+/** Parse saved JSON (new shape or legacy name / responsible / note) into staff rows for display. */
 function staffScheduleFromSavedUnknown(raw: unknown): StaffVisitRow[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
   const out: StaffVisitRow[] = [];
   for (const item of raw) {
     if (item && typeof item === 'object' && !Array.isArray(item)) {
       const o = item as Record<string, unknown>;
-      const name = nonEmptyString(o.name ?? o.person ?? o.technician ?? o.officer ?? '');
-      const responsible = nonEmptyString(o.responsible ?? o.account ?? '');
-      const legacyNote = nonEmptyString(o.note ?? o.visits ?? o.schedule ?? o.details ?? '');
+      const name = combinedStaffNameFromSaved(o);
       const days = parseDaysArray(o.days ?? o.visit_days ?? o.weekdays);
       let windows = parseWindowsFromObject(o);
       if (!windows.length) windows = [{ start: '', end: '' }];
-      const resp = responsible || legacyNote;
-      if (name || resp || days.length || windows.some((w) => w.start && w.end)) {
-        out.push({ name, responsible: resp, days, windows });
+      if (name || days.length || windows.some((w) => w.start && w.end)) {
+        out.push({ name, days, windows });
       }
     }
   }
@@ -139,7 +147,7 @@ function normalizeOperatingDays(raw: unknown): OperatingDays {
 }
 
 function emptyStaffVisitRow(): StaffVisitRow {
-  return { name: '', responsible: '', days: [], windows: [{ start: '', end: '' }] };
+  return { name: '', days: [], windows: [{ start: '', end: '' }] };
 }
 
 /** Load saved schedule array (objects or legacy shapes) into editable rows. */
@@ -155,7 +163,6 @@ function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
       const wins = r.windows.filter((w) => String(w.start ?? '').trim() && String(w.end ?? '').trim());
       return {
         name: r.name.trim(),
-        responsible: r.responsible.trim(),
         days: [...r.days].sort((a, b) => a - b),
         windows: wins.map((w) => ({
           start: String(w.start ?? '').trim(),
@@ -163,7 +170,7 @@ function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
         })),
       };
     })
-    .filter((r) => r.name || r.responsible || r.days.length > 0 || r.windows.length > 0);
+    .filter((r) => r.name || r.days.length > 0 || r.windows.length > 0);
 }
 
 function visitDaysLabel(days: number[]): string {
@@ -180,7 +187,8 @@ function StaffVisitScheduleRows(props: {
   setRows: Dispatch<SetStateAction<StaffVisitRow[]>>;
 }) {
   const { variant, rows, setRows } = props;
-  const nameLabel = variant === 'technician' ? 'Name of Tech' : 'Name of QA';
+  const combinedLabel =
+    variant === 'technician' ? 'Name of Tech · Responsible' : 'Name of QA · Responsible';
   const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
 
   const toggleDay = (rowIdx: number, d: number) => {
@@ -198,25 +206,18 @@ function StaffVisitScheduleRows(props: {
       <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
         {sectionTitle}
       </div>
-      <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0, marginBottom: 10, lineHeight: 1.45 }}>
-        {variant === 'technician'
-          ? 'Technician: name, who they are responsible for, visit weekdays, and hours (add another person below if needed).'
-          : 'QA officer: name, who they are responsible for, visit weekdays, and hours (add another person below if needed).'}
+      <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0, marginBottom: 12, lineHeight: 1.45 }}>
+        One field for name and who they are responsible for. Pick visit weekdays and hours; use <strong>Add another person</strong>{' '}
+        for multiple staff.
       </p>
       {rows.map((row, idx) => (
-        <div
-          key={idx}
-          style={{
-            marginBottom: 16,
-            paddingBottom: 14,
-            borderBottom: idx < rows.length - 1 ? '1px solid var(--border)' : undefined,
-          }}
-        >
-          <div className="row" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
-            <label style={{ flex: '1 1 160px', minWidth: 140 }}>
-              {nameLabel}
+        <div key={idx} className="adminStaffPersonBlock">
+          <div className="adminStaffPersonHeader">
+            <label className="adminFormLabel adminFormLabelStaffName">
+              {combinedLabel}
               <input
                 value={row.name}
+                placeholder="e.g. Ali Ahmad — MOH North cluster"
                 onChange={(e) => {
                   const next = [...rows];
                   next[idx] = { ...next[idx], name: e.target.value };
@@ -225,22 +226,9 @@ function StaffVisitScheduleRows(props: {
                 autoComplete="off"
               />
             </label>
-            <label style={{ flex: '2 1 200px', minWidth: 160 }}>
-              Responsible
-              <input
-                value={row.responsible}
-                placeholder="Account / area / role"
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[idx] = { ...next[idx], responsible: e.target.value };
-                  setRows(next);
-                }}
-                autoComplete="off"
-              />
-            </label>
             <button
               type="button"
-              className="danger"
+              className="danger adminStaffRemoveBtn"
               onClick={() => {
                 setRows((prev) => {
                   const cut = prev.filter((_, i) => i !== idx);
@@ -251,30 +239,26 @@ function StaffVisitScheduleRows(props: {
               Remove person
             </button>
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>
+          <div style={{ marginBottom: 10 }}>
+            <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 8 }}>
               Visit days
             </div>
-            <div className="row" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <div className="adminVisitDayStrip">
               {DAY_LABELS.map((lab, d) => (
-                <label key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.82rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={row.days.includes(d)}
-                    onChange={() => toggleDay(idx, d)}
-                  />
+                <label key={d} className="adminDayCheckbox">
+                  <input type="checkbox" checked={row.days.includes(d)} onChange={() => toggleDay(idx, d)} />
                   {lab}
                 </label>
               ))}
             </div>
           </div>
           <div>
-            <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 6 }}>
+            <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 8 }}>
               Visit hours (start and end)
             </div>
             {row.windows.map((w, wi) => (
-              <div key={wi} className="row" style={{ marginBottom: 6, alignItems: 'flex-end', flexWrap: 'wrap', gap: 8 }}>
-                <label style={{ width: 100 }}>
+              <div key={wi} className="adminStaffHoursRow">
+                <label className="adminFormLabel adminFormLabelTime">
                   Start
                   <input
                     type="time"
@@ -288,7 +272,7 @@ function StaffVisitScheduleRows(props: {
                     }}
                   />
                 </label>
-                <label style={{ width: 100 }}>
+                <label className="adminFormLabel adminFormLabelTime">
                   End
                   <input
                     type="time"
@@ -321,7 +305,7 @@ function StaffVisitScheduleRows(props: {
             <button
               type="button"
               className="primary"
-              style={{ marginTop: 4 }}
+              style={{ marginTop: 6 }}
               onClick={() => {
                 setRows((prev) => {
                   const next = [...prev];
@@ -335,7 +319,7 @@ function StaffVisitScheduleRows(props: {
           </div>
         </div>
       ))}
-      <button type="button" className="primary" onClick={() => setRows((p) => [...p, emptyStaffVisitRow()])}>
+      <button type="button" className="primary" style={{ marginTop: 8 }} onClick={() => setRows((p) => [...p, emptyStaffVisitRow()])}>
         Add another person
       </button>
     </div>
@@ -517,8 +501,8 @@ export function MachineProfileSection() {
             Core
             <HelpTip text="Machine, tag, open-hours preset, operating days." />
           </div>
-          <div className="row" style={{ alignItems: 'flex-end' }}>
-            <label style={{ flex: '2 1 200px' }} title="Machines from the catalog">
+          <div className="adminMachineCoreRow">
+            <label className="adminFormLabel adminFormLabelMachine" title="Machines from the catalog">
               Vending machine
               <select
                 value={machineId}
@@ -545,7 +529,7 @@ export function MachineProfileSection() {
                 ))}
               </select>
             </label>
-            <label style={{ flex: '1 1 200px' }} title="Location Owner (from the live device feed when present; used for grouping)">
+            <label className="adminFormLabel adminFormLabelTag" title="Location Owner (from the live device feed when present; used for grouping)">
               Location Owner
               <input
                 name="location_owner"
@@ -562,7 +546,7 @@ export function MachineProfileSection() {
                 ))}
               </datalist>
             </label>
-            <label style={{ flex: '0 0 140px' }} title="Site open duration (Overall ‘Operating hours’ source)">
+            <label className="adminFormLabel adminFormLabelHours" title="Site open duration (Overall ‘Operating hours’ source)">
               Location hours
               <select value={locationHours} onChange={(e) => setLocationHours(e.target.value)}>
                 <option value="">Select…</option>
@@ -629,8 +613,8 @@ export function MachineProfileSection() {
             Cleaning schedule
           </summary>
           {cleaningWindows.map((w, idx) => (
-            <div key={idx} className="row" style={{ marginBottom: 6 }}>
-              <label>
+            <div key={idx} className="adminTimePairRow" style={{ marginBottom: 8 }}>
+              <label className="adminFormLabel adminFormLabelTime">
                 From
                 <input
                   type="time"
@@ -642,7 +626,7 @@ export function MachineProfileSection() {
                   }}
                 />
               </label>
-              <label>
+              <label className="adminFormLabel adminFormLabelTime">
                 To
                 <input
                   type="time"
@@ -678,7 +662,7 @@ export function MachineProfileSection() {
                 marginBottom: 10,
               }}
             >
-              <label style={{ width: '100%' }}>
+              <label className="adminFormLabel" style={{ width: '100%' }}>
                 Name
                 <input
                   value={op.name}
@@ -690,8 +674,8 @@ export function MachineProfileSection() {
                 />
               </label>
               {op.windows.map((w, wi) => (
-                <div key={wi} className="row" style={{ marginTop: 6 }}>
-                  <label>
+                <div key={wi} className="adminTimePairRow" style={{ marginTop: 8 }}>
+                  <label className="adminFormLabel adminFormLabelTime">
                     From
                     <input
                       type="time"
@@ -705,7 +689,7 @@ export function MachineProfileSection() {
                       }}
                     />
                   </label>
-                  <label>
+                  <label className="adminFormLabel adminFormLabelTime">
                     To
                     <input
                       type="time"
@@ -773,14 +757,14 @@ export function MachineProfileSection() {
             <strong>Time zone</strong> applies when interpreting cleaning and operator windows (default <code>Asia/Kuwait</code>).{' '}
             <strong>Priority</strong> resolves overlaps on automated cleaning rules for this machine — higher wins.
           </p>
-          <div className="row" style={{ marginTop: 8 }}>
-            <label title="IANA name, e.g. Asia/Kuwait — used when interpreting time windows">
+          <div className="adminMachineCoreRow" style={{ marginTop: 8 }}>
+            <label className="adminFormLabel adminFormLabelTag" title="IANA name, e.g. Asia/Kuwait — used when interpreting time windows">
               Time zone
-              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{ width: 160 }} />
+              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
             </label>
-            <label title="Higher wins when Red Alert cleaning rules overlap for this machine">
+            <label className="adminFormLabel adminFormLabelHours" title="Higher wins when Red Alert cleaning rules overlap for this machine">
               Priority
-              <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} style={{ width: 88 }} />
+              <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
             </label>
           </div>
         </details>
@@ -947,12 +931,6 @@ export function MachineProfileSection() {
                                       {staffRows.map((x, i) => (
                                         <li key={i}>
                                           <strong>{x.name || '—'}</strong>
-                                          {x.responsible ? (
-                                            <span className="muted">
-                                              {' '}
-                                              · Responsible: {x.responsible}
-                                            </span>
-                                          ) : null}
                                           <div className="muted" style={{ marginTop: 2 }}>
                                             Days: {visitDaysLabel(x.days)}
                                           </div>
@@ -986,12 +964,6 @@ export function MachineProfileSection() {
                                       {staffRows.map((x, i) => (
                                         <li key={i}>
                                           <strong>{x.name || '—'}</strong>
-                                          {x.responsible ? (
-                                            <span className="muted">
-                                              {' '}
-                                              · Responsible: {x.responsible}
-                                            </span>
-                                          ) : null}
                                           <div className="muted" style={{ marginTop: 2 }}>
                                             Days: {visitDaysLabel(x.days)}
                                           </div>
