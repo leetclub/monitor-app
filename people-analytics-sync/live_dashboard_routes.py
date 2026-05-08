@@ -593,7 +593,7 @@ def register_live_dashboard_routes(app) -> None:
     def live_dashboard_snapshot():
         if request.method == "OPTIONS":
             return "", 204
-        err = _require_any_tab(["liveDashboard", "overall"])
+        err = _require_any_tab(["liveDashboard", "overall", "leetAlert", "redAlert"])
         if err[1]:
             return err[1]
         focus_date = _parse_snapshot_focus_date(request.args.get("focusDate"))

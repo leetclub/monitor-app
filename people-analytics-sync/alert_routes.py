@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,6 +33,12 @@ logger = logging.getLogger(__name__)
 
 VENDON_API_BASE = (os.environ.get("VENDON_API_BASE") or "").strip().rstrip("/")
 VENDON_API_KEY = (os.environ.get("VENDON_API_KEY") or "").strip()
+
+# monitoring-app-v1 waste-tab.js: motion area-overrides + Vendon /stats/vends (same formula).
+MOTION_AREA_OVERRIDES_URL = (
+    os.environ.get("MOTION_AREA_OVERRIDES_URL") or "https://motion.theleetclub.com/api/area-overrides"
+).strip().rstrip("/")
+MOTION_AREA_OVERRIDES_API_KEY = (os.environ.get("MOTION_AREA_OVERRIDES_API_KEY") or "").strip()
 
 _dash_session_factory = None
 _pa_session_factory = None
@@ -159,6 +166,126 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
     except Exception as ex:
         logger.exception("alert vendon_get")
         return None, str(ex)
+
+
+def _kuwait_date_today_iso() -> str:
+    return datetime.now(ZoneInfo("Asia/Kuwait")).date().isoformat()
+
+
+def _kuwait_day_bounds_utc(date_str: str) -> Tuple[int, int]:
+    tz = ZoneInfo("Asia/Kuwait")
+    d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=tz)
+    start_loc = d.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_loc = d.replace(hour=23, minute=59, second=59, microsecond=0)
+    return int(start_loc.astimezone(timezone.utc).timestamp()), int(end_loc.astimezone(timezone.utc).timestamp())
+
+
+def _fetch_motion_area_overrides(machine_id: str, date_str: str) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    """Same upstream as monitoring-app-v1/waste-tab.js area-overrides."""
+    if not MOTION_AREA_OVERRIDES_API_KEY:
+        return None, "MOTION_AREA_OVERRIDES_API_KEY not configured"
+    url = f"{MOTION_AREA_OVERRIDES_URL}?{urlencode({'date': date_str, 'machine_id': machine_id})}"
+    try:
+        r = requests.get(
+            url,
+            headers={
+                "Accept": "application/json",
+                "X-API-KEY": MOTION_AREA_OVERRIDES_API_KEY,
+            },
+            timeout=45,
+        )
+        if r.status_code != 200:
+            return None, f"motion HTTP {r.status_code}: {r.text[:300]}"
+        data = r.json()
+        if not isinstance(data, dict):
+            return None, "motion: non-object JSON"
+        inner = data.get("data")
+        if inner is None:
+            inner = []
+        if not isinstance(inner, list):
+            return None, "motion: data not a list"
+        return inner, None
+    except Exception as ex:
+        logger.exception("motion area_overrides")
+        return None, str(ex)
+
+
+def _fetch_vends_machine_day(machine_id: str, from_ts: int, to_ts: int) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    out: List[Dict[str, Any]] = []
+    off = 0
+    page_limit = 500
+    while len(out) < 25000:
+        params: Dict[str, Any] = {
+            "from_timestamp": from_ts,
+            "to_timestamp": to_ts,
+            "limit": page_limit,
+            "offset": off,
+            "machine_id": machine_id,
+        }
+        data, err = _vendon_get("/stats/vends", params)
+        if err:
+            return [], err
+        chunk = data.get("result") if isinstance(data, dict) else None
+        chunk = chunk if isinstance(chunk, list) else []
+        out.extend(chunk)
+        if len(chunk) < page_limit:
+            break
+        off += page_limit
+    return out[:25000], None
+
+
+def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], Optional[str], Dict[str, Any]]:
+    """
+    Port of monitoring-app-v1 calculateWaste / location aggregate (wastePercent formula).
+    wastePercent = totalWaste / (totalSales + totalWaste) * 100 when denominator > 0.
+    """
+    overrides, oerr = _fetch_motion_area_overrides(machine_id, date_str)
+    if oerr:
+        return None, oerr, {}
+    if not overrides:
+        return None, None, {"note": "no_refill_data"}
+
+    from_ts, to_ts = _kuwait_day_bounds_utc(date_str)
+    vends, verr = _fetch_vends_machine_day(machine_id, from_ts, to_ts)
+    if verr:
+        return None, verr, {}
+
+    sales_by_stock: Dict[str, int] = {}
+    for sale in vends:
+        if not isinstance(sale, dict):
+            continue
+        sid = sale.get("stock_id")
+        if sid is None:
+            continue
+        k = str(sid)
+        sales_by_stock[k] = sales_by_stock.get(k, 0) + 1
+
+    total_waste = 0
+    total_sales = 0
+    for ov in overrides:
+        if not isinstance(ov, dict):
+            continue
+        sid = ov.get("stock_id")
+        if sid is None:
+            continue
+        k = str(sid)
+        try:
+            orig = int(ov.get("original_quantity") or 0)
+            upd = int(ov.get("updated_quantity") or 0)
+        except (TypeError, ValueError):
+            orig, upd = 0, 0
+        refill_added = upd - orig
+        total_available = orig + refill_added
+        sales = sales_by_stock.get(k, 0)
+        waste = total_available - sales
+        total_waste += waste
+        total_sales += sales
+
+    denom = total_sales + total_waste
+    if denom <= 0:
+        return 0.0, None, {"totalWaste": total_waste, "totalSales": total_sales}
+    pct = (float(total_waste) / float(denom)) * 100.0
+    return pct, None, {"totalWaste": total_waste, "totalSales": total_sales}
 
 
 def register_alert_routes(app) -> None:
@@ -669,6 +796,75 @@ def register_alert_routes(app) -> None:
             return jsonify({"error": "failed", "message": str(ex)}), 500
         finally:
             db.close()
+
+    @app.route("/api/alert/overall/waste-by-machine", methods=["GET", "OPTIONS"])
+    def alert_overall_waste_by_machine():
+        """
+        Waste % per machine — same computation as monitoring-app-v1 waste-tab.js
+        (motion area-overrides + Vendon vends for the Kuwait calendar day).
+
+        Requires env MOTION_AREA_OVERRIDES_API_KEY (and optional MOTION_AREA_OVERRIDES_URL).
+
+        Query: date=YYYY-MM-DD (default Kuwait today), maxWorkers=8
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        date_str = (request.args.get("date") or "").strip() or _kuwait_date_today_iso()
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "invalid_date"}), 400
+
+        max_workers_raw = request.args.get("maxWorkers") or "8"
+        try:
+            max_workers = max(1, min(int(max_workers_raw), 24))
+        except ValueError:
+            max_workers = 8
+
+        rows, err = vendon_fetch_machine_list(_vendon_get)
+        if err:
+            return jsonify({"error": err, "date": date_str, "byMachineId": {}}), 502
+
+        mids: List[str] = []
+        for m in rows:
+            if m.get("id") is None:
+                continue
+            mid = str(m.get("id")).strip()
+            mname = m.get("name") or mid
+            if machine_row_excluded(str(mname), mid):
+                continue
+            mids.append(mid)
+
+        if not MOTION_AREA_OVERRIDES_API_KEY:
+            return jsonify(
+                {
+                    "date": date_str,
+                    "byMachineId": {},
+                    "skipped": True,
+                    "reason": "MOTION_AREA_OVERRIDES_API_KEY not configured (same source as Monitor v1 waste tab)",
+                }
+            )
+
+        by_machine: Dict[str, Any] = {}
+
+        def job(mid: str) -> Tuple[str, Dict[str, Any]]:
+            try:
+                pct, e, meta = _waste_metrics_v1(mid, date_str)
+                return mid, {"wastePct": pct, "error": e, **meta}
+            except Exception as ex:
+                return mid, {"wastePct": None, "error": str(ex)}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futs = {ex.submit(job, mid): mid for mid in mids}
+            for fut in as_completed(futs):
+                mid, payload = fut.result()
+                by_machine[mid] = payload
+
+        return jsonify({"date": date_str, "byMachineId": by_machine, "machinesProcessed": len(mids)})
 
     @app.route("/api/alert/admin/machine-profiles/<path:machine_id>", methods=["DELETE", "OPTIONS"])
     def alert_admin_machine_profile_delete(machine_id: str):

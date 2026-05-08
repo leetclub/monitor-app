@@ -80,6 +80,7 @@ type LiveDashboardMachine = {
   salesYesterday?: number | null;
   dailyTarget?: number | null;
   lastCleaningAt?: string | null;
+  lastQcVisitAt?: string | null;
   shift?: {
     expectedStart?: string | null;
     timezone?: string | null;
@@ -91,6 +92,22 @@ type LiveDashboardMachine = {
 
 type LiveDashboardSnapshotResponse = {
   machines?: LiveDashboardMachine[];
+};
+
+type WasteByMachineRow = {
+  wastePct?: number | null;
+  error?: string | null;
+  totalWaste?: number;
+  totalSales?: number;
+  note?: string;
+};
+
+type WasteByMachineResponse = {
+  date: string;
+  byMachineId?: Record<string, WasteByMachineRow>;
+  skipped?: boolean;
+  reason?: string;
+  machinesProcessed?: number;
 };
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -316,6 +333,14 @@ export function OverallPage() {
     refetchInterval: 60_000,
   });
 
+  /** Same computation as Monitor v1 waste-tab.js (motion area-overrides + Vendon vends). Kuwait calendar day default. */
+  const wasteByMachineQ = useQuery({
+    queryKey: ['alert-overall-waste-by-machine'],
+    queryFn: () => apiGet<WasteByMachineResponse>('/api/alert/overall/waste-by-machine'),
+    staleTime: 10 * 60_000,
+    refetchInterval: 15 * 60_000,
+  });
+
   const machines = useMemo(() => {
     const raw = machinesQ.data?.machines;
     if (!Array.isArray(raw)) return [];
@@ -434,6 +459,7 @@ export function OverallPage() {
                 vendonSummaryQ.refetch(),
                 vendonLastTxQ.refetch(),
                 liveSnapQ.refetch(),
+                wasteByMachineQ.refetch(),
               ]);
             }}
             disabled={
@@ -442,7 +468,8 @@ export function OverallPage() {
               profilesQ.isFetching ||
               vendonSummaryQ.isFetching ||
               vendonLastTxQ.isFetching ||
-              liveSnapQ.isFetching
+              liveSnapQ.isFetching ||
+              wasteByMachineQ.isFetching
             }
           >
             {machinesQ.isFetching ||
@@ -450,7 +477,8 @@ export function OverallPage() {
             profilesQ.isFetching ||
             vendonSummaryQ.isFetching ||
             vendonLastTxQ.isFetching ||
-            liveSnapQ.isFetching
+            liveSnapQ.isFetching ||
+            wasteByMachineQ.isFetching
               ? 'Refreshing…'
               : 'Refresh'}
           </button>
@@ -581,6 +609,9 @@ export function OverallPage() {
                 if (prof?.cleaning_windows != null) adminMetaHintParts.push(`Cleaning windows configured`);
                 const daysLabel = operatingDaysLabel(prof?.operating_days);
                 const opHours = operatorHoursSummary(prof?.operator_hours);
+                const wasteEntry = wasteByMachineQ.data?.byMachineId?.[m.id];
+                const wastePct = wasteEntry?.wastePct;
+                const qcIso = live?.lastQcVisitAt ? String(live.lastQcVisitAt).trim() : '';
                 return (
                   <tr key={m.id}>
                     <td
@@ -744,20 +775,28 @@ export function OverallPage() {
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastQaCheck.note}>
-                        ?
-                      </span>
+                    <td title={`${OVERALL_COLUMNS.lastQaCheck.title} — Live Dashboard config / Monitor parity (QC visit timestamp)`}>
+                      {qcIso ? formatKuwaitDateTime(qcIso) : <span className="muted">—</span>}
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lastTechCheck.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.lastTechCheck.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.wastagePct.note}>
-                        ?
-                      </span>
+                    <td
+                      title={
+                        wasteEntry?.error
+                          ? `${OVERALL_COLUMNS.wastagePct.title}: ${wasteEntry.error}`
+                          : `${OVERALL_COLUMNS.wastagePct.title} — Kuwait ${wasteByMachineQ.data?.date ?? ''} — same formula as Monitor v1 waste tab (motion overrides + Vendon vends).`
+                      }
+                    >
+                      {typeof wastePct === 'number' && Number.isFinite(wastePct) ? (
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{wastePct.toFixed(1)}%</span>
+                      ) : wasteByMachineQ.data?.skipped ? (
+                        <span className="muted" title={wasteByMachineQ.data?.reason}>
+                          —
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td className="muted">
                       <span className="fleetCellMissing" title={OVERALL_COLUMNS.promotionRuns.note}>
