@@ -65,6 +65,28 @@ function snapshotVendFailSummary(snap: RedAlertRow | undefined): string {
   return parts.join(' · ');
 }
 
+function formatPct(pct: number): string {
+  const p = Math.round(pct);
+  if (!Number.isFinite(p)) return '—';
+  const sign = p > 0 ? '+' : '';
+  return `${sign}${p}%`;
+}
+
+function snapshotTrendForCompare(compare: CompareSelection, snap: RedAlertRow | undefined): string {
+  const pct =
+    compare.preset === 'today_vs_yesterday'
+      ? snap?.happenedPctVsYesterdaySameElapsed
+      : compare.preset === 'today_vs_same_day_last_week'
+        ? snap?.happenedPctVsSameDayLastWeek
+        : compare.preset === 'wtd_vs_last_week'
+          ? snap?.happenedPctVsPriorWeek
+          : null;
+  if (pct == null) return '—';
+  const n = typeof pct === 'number' ? pct : Number(pct);
+  if (!Number.isFinite(n)) return '—';
+  return formatPct(n);
+}
+
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const setComparePersist = useCallback((next: CompareSelection) => {
@@ -328,45 +350,33 @@ export function OverallPage() {
                           ? `${String(mins)} min since sale`
                           : '—'}
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.salesTrend.note}>
-                        ?
-                      </span>
+                    <td title="Trend uses the Red Alert snapshot compare percent (not sales).">
+                      {snapshotTrendForCompare(compare, snap) !== '—' ? (
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{snapshotTrendForCompare(compare, snap)}</span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.targetAchieved.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.targetAchieved.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.peakHours.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.peakHours.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.promotion.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.promotion.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.highestProduct.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.highestProduct.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.lowestProduct.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.lowestProduct.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.peopleCount.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.peopleCount.note}>
+                      —
                     </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.customerCalls.note}>
-                        ?
-                      </span>
+                    <td className="muted" title={OVERALL_COLUMNS.customerCalls.note}>
+                      —
                     </td>
                     <td title={OVERALL_COLUMNS.mostIssue.note}>
                       {mostIssue ? (

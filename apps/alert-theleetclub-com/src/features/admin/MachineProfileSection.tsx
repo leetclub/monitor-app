@@ -292,6 +292,7 @@ export function MachineProfileSection() {
   });
 
   const rows = profilesQ.data?.rows ?? [];
+  const [expandedMachineId, setExpandedMachineId] = useState<string | null>(null);
 
   const toggleDay = (d: number) => {
     setCustomDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b)));
@@ -638,32 +639,113 @@ export function MachineProfileSection() {
                 const feedTag = (vm?.vendon_location_owner ?? '').trim();
                 const displayTag = feedTag || r.location_owner || '—';
                 const tagHint = fleetTagSourceDescription(vm?.vendon_tag_source ?? undefined);
+                const expanded = expandedMachineId === r.machine_id;
                 return (
-                  <tr key={r.machine_id}>
-                    <td className="tableCellWrap">{r.machine_name || r.machine_id}</td>
-                    <td className="tableCellWrap" title={tagHint ? `${displayTag}. ${tagHint}` : displayTag}>
-                      {displayTag}
-                    </td>
-                    <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
-                    <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button type="button" className="primary" onClick={() => loadProfileIntoForm(r)}>
-                        Edit
-                      </button>{' '}
-                      <button
-                        type="button"
-                        className="danger"
-                        disabled={delMut.isPending}
-                        onClick={() => {
-                          if (confirm(`Remove saved profile for ${r.machine_name || r.machine_id}?`)) {
-                            delMut.mutate(r.machine_id);
-                          }
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={r.machine_id}>
+                      <td className="tableCellWrap">{r.machine_name || r.machine_id}</td>
+                      <td className="tableCellWrap" title={tagHint ? `${displayTag}. ${tagHint}` : displayTag}>
+                        {displayTag}
+                      </td>
+                      <td>{r.location_hours ? `${r.location_hours} h` : '—'}</td>
+                      <td className="muted">{r.updated_at?.slice(0, 16) || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedMachineId((cur) => (cur === r.machine_id ? null : r.machine_id))}
+                          title="Show all saved data for this machine"
+                        >
+                          {expanded ? 'Hide' : 'View'}
+                        </button>{' '}
+                        <button type="button" className="primary" onClick={() => loadProfileIntoForm(r)}>
+                          Edit
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="danger"
+                          disabled={delMut.isPending}
+                          onClick={() => {
+                            if (confirm(`Remove saved profile for ${r.machine_name || r.machine_id}?`)) {
+                              delMut.mutate(r.machine_id);
+                            }
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr key={`${r.machine_id}-details`}>
+                        <td colSpan={5} style={{ background: 'var(--panel)', borderTop: '1px solid var(--border)' }}>
+                          <div style={{ padding: 12 }}>
+                            <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
+                              Saved data
+                            </div>
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                gap: 10,
+                                alignItems: 'start',
+                              }}
+                            >
+                              <div>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                                  Operating days
+                                </div>
+                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                  {JSON.stringify(r.operating_days ?? null, null, 2)}
+                                </code>
+                              </div>
+                              <div>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                                  Cleaning windows
+                                </div>
+                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                  {JSON.stringify(r.cleaning_windows ?? null, null, 2)}
+                                </code>
+                              </div>
+                              <div>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                                  Operator hours
+                                </div>
+                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                  {JSON.stringify(r.operator_hours ?? null, null, 2)}
+                                </code>
+                              </div>
+                              <div>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                                  Technician schedule
+                                </div>
+                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                  {JSON.stringify(r.technician_schedule ?? null, null, 2)}
+                                </code>
+                              </div>
+                              <div>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                                  QA schedule
+                                </div>
+                                <code style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                                  {JSON.stringify(r.qa_schedule ?? null, null, 2)}
+                                </code>
+                              </div>
+                              <div>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                                  Time zone / priority
+                                </div>
+                                <div style={{ fontSize: 13 }}>
+                                  <div>
+                                    <strong>{String(r.timezone ?? '—')}</strong>
+                                  </div>
+                                  <div className="muted">Priority: {r.priority != null ? String(r.priority) : '—'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </>
                 );
               })}
               {rows.length === 0 && !profilesQ.isLoading ? (
