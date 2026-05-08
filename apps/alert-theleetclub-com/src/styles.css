@@ -903,18 +903,64 @@ label.adminFormLabel > textarea {
   min-width: 0;
 }
 
-/* Equal columns on wide screens; single column on narrow — avoids uneven auto-fit widths */
+/* Equal columns; minimum width stops selects truncating “Choose…” / “Select…” */
 .adminMachineCoreRow {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(12rem, 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 @media (max-width: 840px) {
   .adminMachineCoreRow {
     grid-template-columns: 1fr;
   }
+}
+
+.adminCardMachineProfile .adminMachineCoreRow .adminFieldCell > select,
+.adminCardMachineProfile .adminMachineCoreRow .adminFieldCell > input {
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+.adminOperatingDaysBlock {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.adminOperatingDaysLabelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.adminOperatingDaysCaption {
+  margin-bottom: 0 !important;
+}
+
+.adminFieldCaptionSpacer {
+  visibility: hidden;
+  margin-bottom: 6px;
+  min-height: calc(12px * 1.35);
+  font-size: 12px;
+  line-height: 1.35;
+  user-select: none;
+  pointer-events: none;
+}
+
+.adminTimePairActionCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.adminTimePairActionCell > .danger {
+  flex-shrink: 0;
 }
 
 .adminTechQaIntro {
@@ -964,9 +1010,9 @@ label.adminFormLabel > textarea {
 .adminButtonRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 /* Time zone + priority: two fields only (avoid empty third grid column). */
@@ -986,10 +1032,10 @@ label.adminFormLabel > textarea {
 
 .adminTimePairRow {
   display: grid;
-  grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) min-content;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) minmax(min-content, auto);
   gap: 10px 14px;
   align-items: end;
-  max-width: min(100%, 26rem);
+  max-width: min(100%, 28rem);
 }
 
 @media (max-width: 520px) {
@@ -997,10 +1043,15 @@ label.adminFormLabel > textarea {
     grid-template-columns: 1fr 1fr;
   }
 
-  .adminTimePairRow > button.danger {
+  .adminTimePairRow > .adminTimePairActionCell {
     grid-column: 1 / -1;
-    justify-self: start;
-    margin-top: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .adminTimePairRow > .adminTimePairActionCell .adminFieldCaptionSpacer {
+    display: none;
   }
 }
 
@@ -1068,11 +1119,11 @@ label.adminDayCheckbox {
 
 .adminStaffHoursRow {
   display: grid;
-  grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) min-content;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 8.5rem) minmax(min-content, auto);
   gap: 10px 14px;
   align-items: end;
   margin-bottom: 8px;
-  max-width: min(100%, 26rem);
+  max-width: min(100%, 28rem);
 }
 
 @media (max-width: 520px) {
@@ -1080,11 +1131,22 @@ label.adminDayCheckbox {
     grid-template-columns: 1fr 1fr;
   }
 
-  .adminStaffHoursRow > button.danger {
+  .adminStaffHoursRow > .adminTimePairActionCell {
     grid-column: 1 / -1;
-    justify-self: start;
-    margin-top: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
   }
+
+  .adminStaffHoursRow > .adminTimePairActionCell .adminFieldCaptionSpacer {
+    display: none;
+  }
+}
+
+.adminCardMachineProfile .adminDetails input[type='time'],
+.adminCardMachineProfile .adminDetails .adminTimePairActionCell .danger {
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
 .adminDetails > p.muted:first-of-type {

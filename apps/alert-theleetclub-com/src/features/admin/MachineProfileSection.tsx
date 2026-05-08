@@ -280,20 +280,25 @@ function StaffVisitScheduleRows(props: {
                     }}
                   />
                 </div>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => {
-                    setRows((prev) => {
-                      const next = [...prev];
-                      const wins = next[idx].windows.filter((_, i) => i !== wi);
-                      next[idx] = { ...next[idx], windows: wins.length ? wins : [{ start: '', end: '' }] };
-                      return next;
-                    });
-                  }}
-                >
-                  Remove slot
-                </button>
+                <div className="adminTimePairActionCell">
+                  <span className="adminFieldCaption adminFieldCaptionSpacer" aria-hidden>
+                    {' '}
+                  </span>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => {
+                      setRows((prev) => {
+                        const next = [...prev];
+                        const wins = next[idx].windows.filter((_, i) => i !== wi);
+                        next[idx] = { ...next[idx], windows: wins.length ? wins : [{ start: '', end: '' }] };
+                        return next;
+                      });
+                    }}
+                  >
+                    Remove slot
+                  </button>
+                </div>
               </div>
             ))}
             <button
@@ -478,7 +483,7 @@ export function MachineProfileSection() {
         add real Admin data for review.
       </p>
 
-      <div className="adminCard">
+      <div className="adminCard adminCardMachineProfile">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">{machineId ? `Edit: ${machineName || machineId}` : 'Machine profile'}</h2>
           <HelpTip text="Required: vending machine + at least one cleaning window. Operators, technician, and QA officer schedules are optional." />
@@ -570,28 +575,25 @@ export function MachineProfileSection() {
             </p>
           ) : null}
 
-          <div style={{ marginTop: 12 }} className="adminInlineDayPick">
-            <span className="adminGroupLabel" style={{ marginRight: 10, display: 'inline', textTransform: 'none', letterSpacing: 'normal' }}>
-              Operating days
-            </span>
-            <HelpTip text="All week, weekends off, or pick individual days." />
-            <label style={{ display: 'inline-flex', marginRight: 12, marginLeft: 8 }}>
-              <input type="radio" name="od" checked={opPreset === 'all_week'} onChange={() => setOpPreset('all_week')} />{' '}
-              All week
-            </label>
-            <label style={{ display: 'inline-flex', marginRight: 12 }}>
-              <input
-                type="radio"
-                name="od"
-                checked={opPreset === 'weekends_off'}
-                onChange={() => setOpPreset('weekends_off')}
-              />{' '}
-              Weekends off
-            </label>
-            <label style={{ display: 'inline-flex' }}>
-              <input type="radio" name="od" checked={opPreset === 'custom'} onChange={() => setOpPreset('custom')} />{' '}
-              Pick days
-            </label>
+          <div className="adminOperatingDaysBlock">
+            <div className="adminOperatingDaysLabelRow">
+              <span className="adminFieldCaption adminOperatingDaysCaption">Operating days</span>
+              <HelpTip text="All week, weekends off, or pick individual days." />
+            </div>
+            <div className="adminInlineDayPick">
+              <label>
+                <input type="radio" name="od" checked={opPreset === 'all_week'} onChange={() => setOpPreset('all_week')} />
+                All week
+              </label>
+              <label>
+                <input type="radio" name="od" checked={opPreset === 'weekends_off'} onChange={() => setOpPreset('weekends_off')} />
+                Weekends off
+              </label>
+              <label>
+                <input type="radio" name="od" checked={opPreset === 'custom'} onChange={() => setOpPreset('custom')} />
+                Pick days
+              </label>
+            </div>
           </div>
           {opPreset === 'custom' ? (
             <div className="adminVisitDayStrip" style={{ marginTop: 10 }}>
@@ -634,9 +636,14 @@ export function MachineProfileSection() {
                   }}
                 />
               </div>
-              <button type="button" className="danger" onClick={() => setCleaningWindows((prev) => prev.filter((_, i) => i !== idx))}>
-                Remove
-              </button>
+              <div className="adminTimePairActionCell">
+                <span className="adminFieldCaption adminFieldCaptionSpacer" aria-hidden>
+                  {' '}
+                </span>
+                <button type="button" className="danger" onClick={() => setCleaningWindows((prev) => prev.filter((_, i) => i !== idx))}>
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
           <button type="button" className="primary" onClick={() => setCleaningWindows((p) => [...p, { start: '', end: '' }])}>
@@ -691,17 +698,22 @@ export function MachineProfileSection() {
                       }}
                     />
                   </div>
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => {
-                      const next = [...operators];
-                      next[oi] = { ...next[oi], windows: next[oi].windows.filter((_, i) => i !== wi) };
-                      setOperators(next);
-                    }}
-                  >
-                    Remove
-                  </button>
+                  <div className="adminTimePairActionCell">
+                    <span className="adminFieldCaption adminFieldCaptionSpacer" aria-hidden>
+                      {' '}
+                    </span>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => {
+                        const next = [...operators];
+                        next[oi] = { ...next[oi], windows: next[oi].windows.filter((_, i) => i !== wi) };
+                        setOperators(next);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="adminButtonRow">
@@ -732,7 +744,7 @@ export function MachineProfileSection() {
             Technician &amp; QA Officer
           </summary>
           <p className="muted adminTechQaIntro">
-            Use <strong>Name of Tech Responsible</strong> and <strong>Name of QA Responsible</strong> as <strong>one line of text each</strong>. Then set visit days and hours. Add more rows if several people cover this machine.
+            Each block below: one text field for tech or QA (single line), then visit days and hours.
           </p>
           <StaffVisitScheduleRows variant="technician" rows={technicianRows} setRows={setTechnicianRows} />
           <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} />
