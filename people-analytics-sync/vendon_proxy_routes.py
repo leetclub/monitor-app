@@ -1294,6 +1294,9 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                 continue
             total_sales = 0.0
             total_tx = 0
+            product_counts: Dict[str, int] = {}
+            hour_counts: Dict[int, int] = {}
+            tz_kw = ZoneInfo("Asia/Kuwait")
             for v in vends:
                 try:
                     price = float(v.get("price") or 0)
@@ -1301,6 +1304,36 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                     price = 0.0
                 total_sales += price
                 total_tx += 1
+                try:
+                    prod_name, _sel = _stats_vend_product_fields(v)
+                    if prod_name:
+                        product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
+                except Exception:
+                    pass
+                try:
+                    ts_raw = v.get("datetime") or v.get("timestamp") or 0
+                    ts_i = int(ts_raw) if ts_raw is not None else 0
+                    if ts_i > 0:
+                        hour = datetime.fromtimestamp(ts_i, tz=timezone.utc).astimezone(tz_kw).hour
+                        hour_counts[hour] = int(hour_counts.get(hour, 0)) + 1
+                except Exception:
+                    pass
+
+            top_product = None
+            low_product = None
+            if product_counts:
+                # Sort by count desc, name asc
+                ordered = sorted(product_counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
+                top_product = {"name": ordered[0][0], "count": int(ordered[0][1])}
+                # Lowest non-zero (count asc, name asc)
+                ordered_low = sorted(product_counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
+                low_product = {"name": ordered_low[0][0], "count": int(ordered_low[0][1])}
+
+            peak_hour = None
+            if hour_counts:
+                # Highest count; tie-breaker earliest hour.
+                best_hour, best_count = sorted(hour_counts.items(), key=lambda kv: (-int(kv[1]), int(kv[0])))[0]
+                peak_hour = {"hour": int(best_hour), "count": int(best_count), "label": f"{int(best_hour):02d}:00"}
 
             rec = VendonDailyMachineRevenueCache(
                 cache_date=day,
@@ -1308,7 +1341,15 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                 machine_name=m["name"],
                 total_sales_kwd=total_sales,
                 total_transactions=total_tx,
-                payload_json={"machine_id": m["id"], "machine_name": m["name"], "totalSales": total_sales, "totalTransactions": total_tx},
+                payload_json={
+                    "machine_id": m["id"],
+                    "machine_name": m["name"],
+                    "totalSales": total_sales,
+                    "totalTransactions": total_tx,
+                    "topProduct": top_product,
+                    "lowProduct": low_product,
+                    "peakHour": peak_hour,
+                },
                 created_at=datetime.utcnow(),
             )
             db.add(rec)

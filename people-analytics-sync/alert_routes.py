@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
@@ -25,6 +25,8 @@ from vendon_machine_helpers import (
     vendon_machine_tag_for_alert_admin_detail,
 )
 from vendon_proxy_routes import compute_remote_credits_logs_classic
+from models import VendonDailyMachineRevenueCache, create_engine_and_session
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ VENDON_API_BASE = (os.environ.get("VENDON_API_BASE") or "").strip().rstrip("/")
 VENDON_API_KEY = (os.environ.get("VENDON_API_KEY") or "").strip()
 
 _dash_session_factory = None
+_pa_session_factory = None
 
 
 def _dash_session() -> Session:
@@ -39,6 +42,13 @@ def _dash_session() -> Session:
     if _dash_session_factory is None:
         _, _dash_session_factory = create_dashboard_engine_and_session()
     return _dash_session_factory()
+
+
+def _pa_session() -> Session:
+    global _pa_session_factory
+    if _pa_session_factory is None:
+        _, _pa_session_factory = create_engine_and_session()
+    return _pa_session_factory()
 
 
 def _require_session_email() -> Optional[str]:
@@ -505,6 +515,97 @@ def register_alert_routes(app) -> None:
             return jsonify({"rows": out})
         except Exception as ex:
             logger.exception("alert overall admin profiles")
+            return jsonify({"error": "failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
+    def alert_overall_vendon_sales_summary():
+        """
+        Per-machine sales / tx + product/peak-hour helpers from VendonDailyMachineRevenueCache.
+        This is used by the Alert Overall board to fill fields that can be sourced reliably.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        preset = (request.args.get("preset") or "today_vs_yesterday").strip()
+        tz = ZoneInfo("Asia/Kuwait")
+        today_kw = datetime.now(tz).date()
+
+        if preset == "today_vs_same_day_last_week":
+            a0 = today_kw
+            b0 = today_kw - timedelta(days=7)
+        else:
+            # Default: today vs yesterday
+            a0 = today_kw
+            b0 = today_kw - timedelta(days=1)
+
+        date_a = a0.isoformat()
+        date_b = b0.isoformat()
+
+        db = _pa_session()
+        try:
+            # Sum totals for each machine for each day (cache is per-day).
+            rows = (
+                db.query(
+                    VendonDailyMachineRevenueCache.cache_date.label("cache_date"),
+                    VendonDailyMachineRevenueCache.machine_id.label("machine_id"),
+                    func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).label("sales_kwd"),
+                    func.sum(VendonDailyMachineRevenueCache.total_transactions).label("tx_count"),
+                    func.max(VendonDailyMachineRevenueCache.payload_json).label("payload_json"),
+                )
+                .filter(VendonDailyMachineRevenueCache.cache_date.in_([a0, b0]))
+                .group_by(VendonDailyMachineRevenueCache.cache_date, VendonDailyMachineRevenueCache.machine_id)
+                .all()
+            )
+
+            by_machine: Dict[str, Dict[str, Any]] = {}
+            for r in rows:
+                mid = (r.machine_id or "").strip()
+                if not mid:
+                    continue
+                ent = by_machine.get(mid) or {"machine_id": mid}
+                if r.cache_date == a0:
+                    ent["a"] = {
+                        "date": date_a,
+                        "salesKwd": float(r.sales_kwd or 0),
+                        "tx": int(r.tx_count or 0),
+                        "payload": r.payload_json or {},
+                    }
+                elif r.cache_date == b0:
+                    ent["b"] = {
+                        "date": date_b,
+                        "salesKwd": float(r.sales_kwd or 0),
+                        "tx": int(r.tx_count or 0),
+                        "payload": r.payload_json or {},
+                    }
+                by_machine[mid] = ent
+
+            out: Dict[str, Any] = {"preset": preset, "dateA": date_a, "dateB": date_b, "byMachineId": {}}
+            for mid, ent in by_machine.items():
+                a = ent.get("a")
+                b = ent.get("b")
+                a_sales = float(a.get("salesKwd") or 0) if isinstance(a, dict) else None
+                b_sales = float(b.get("salesKwd") or 0) if isinstance(b, dict) else None
+                trend_pct = None
+                if a_sales is not None and b_sales is not None and b_sales > 0:
+                    trend_pct = ((a_sales - b_sales) / b_sales) * 100.0
+                payload = (a.get("payload") if isinstance(a, dict) else {}) or {}
+                out["byMachineId"][mid] = {
+                    "aSalesKwd": a_sales,
+                    "bSalesKwd": b_sales,
+                    "trendPct": trend_pct,
+                    "peakHour": payload.get("peakHour"),
+                    "topProduct": payload.get("topProduct"),
+                    "lowProduct": payload.get("lowProduct"),
+                }
+
+            return jsonify(out)
+        except Exception as ex:
+            logger.exception("alert overall vendon sales summary")
             return jsonify({"error": "failed", "message": str(ex)}), 500
         finally:
             db.close()

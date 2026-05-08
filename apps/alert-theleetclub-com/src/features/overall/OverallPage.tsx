@@ -37,6 +37,23 @@ type AdminProfileRow = {
 
 type AdminProfilesResponse = { rows: AdminProfileRow[] };
 
+type VendonSalesSummaryResponse = {
+  preset: string;
+  dateA: string;
+  dateB: string;
+  byMachineId: Record<
+    string,
+    {
+      aSalesKwd: number | null;
+      bSalesKwd: number | null;
+      trendPct: number | null;
+      peakHour?: { hour: number; count: number; label: string } | null;
+      topProduct?: { name: string; count: number } | null;
+      lowProduct?: { name: string; count: number } | null;
+    }
+  >;
+};
+
 function snapshotMostIssue(snap: RedAlertRow | undefined): string {
   const reasons = snap?.reasons;
   if (!reasons?.length) return '';
@@ -72,21 +89,6 @@ function formatPct(pct: number): string {
   return `${sign}${p}%`;
 }
 
-function snapshotTrendForCompare(compare: CompareSelection, snap: RedAlertRow | undefined): string {
-  const pct =
-    compare.preset === 'today_vs_yesterday'
-      ? snap?.happenedPctVsYesterdaySameElapsed
-      : compare.preset === 'today_vs_same_day_last_week'
-        ? snap?.happenedPctVsSameDayLastWeek
-        : compare.preset === 'wtd_vs_last_week'
-          ? snap?.happenedPctVsPriorWeek
-          : null;
-  if (pct == null) return '—';
-  const n = typeof pct === 'number' ? pct : Number(pct);
-  if (!Number.isFinite(n)) return '—';
-  return formatPct(n);
-}
-
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const setComparePersist = useCallback((next: CompareSelection) => {
@@ -110,6 +112,13 @@ export function OverallPage() {
     queryKey: ['alert-overall-admin-profiles'],
     queryFn: () => apiGet<AdminProfilesResponse>('/api/alert/overall/admin-profiles'),
     refetchInterval: 60_000,
+  });
+
+  const vendonSummaryQ = useQuery({
+    queryKey: ['alert-overall-vendon-sales-summary', compare.preset],
+    queryFn: () =>
+      apiGet<VendonSalesSummaryResponse>(`/api/alert/overall/vendon-sales-summary?preset=${encodeURIComponent(compare.preset)}`),
+    refetchInterval: 5 * 60_000,
   });
 
   const machines = useMemo(() => {
@@ -212,11 +221,11 @@ export function OverallPage() {
             type="button"
             className="btnSolid"
             onClick={() => {
-              void Promise.all([machinesQ.refetch(), snapQ.refetch(), profilesQ.refetch()]);
+              void Promise.all([machinesQ.refetch(), snapQ.refetch(), profilesQ.refetch(), vendonSummaryQ.refetch()]);
             }}
-            disabled={machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching}
+            disabled={machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching || vendonSummaryQ.isFetching}
           >
-            {machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching ? 'Refreshing…' : 'Refresh'}
+            {machinesQ.isFetching || snapQ.isFetching || profilesQ.isFetching || vendonSummaryQ.isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </header>
@@ -297,6 +306,7 @@ export function OverallPage() {
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
                 const minsOk = mins != null && typeof mins === 'number' && !Number.isNaN(mins);
                 const prof = profileByMachineId.get(m.id);
+                const vendon = vendonSummaryQ.data?.byMachineId?.[m.id];
                 const locHours = String(prof?.location_hours ?? '').trim();
                 const operating = locHours ? `${locHours} hrs` : '—';
                 const lastCleanedIso = snap?.lastCleaningAt != null ? String(snap.lastCleaningAt).trim() : '';
@@ -315,6 +325,10 @@ export function OverallPage() {
                   snap?.lastTransactionAt ??
                   snap?.last_transaction_at ??
                   null;
+                const peakHourLabel = vendon?.peakHour?.label || '';
+                const topProduct = vendon?.topProduct?.name || '';
+                const lowProduct = vendon?.lowProduct?.name || '';
+                const trendPct = vendon?.trendPct;
                 return (
                   <tr key={m.id}>
                     <td title={locHours ? 'Alert Admin → machine profile → Location hours' : 'Set Location hours in Alert Admin'}>
@@ -350,9 +364,9 @@ export function OverallPage() {
                           ? `${String(mins)} min since sale`
                           : '—'}
                     </td>
-                    <td title="Trend uses the Red Alert snapshot compare percent (not sales).">
-                      {snapshotTrendForCompare(compare, snap) !== '—' ? (
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{snapshotTrendForCompare(compare, snap)}</span>
+                    <td title="Sales trend uses Vendon cached daily sales for the selected preset (Kuwait day).">
+                      {typeof trendPct === 'number' && Number.isFinite(trendPct) ? (
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPct(trendPct)}</span>
                       ) : (
                         <span className="muted">—</span>
                       )}
@@ -360,17 +374,17 @@ export function OverallPage() {
                     <td className="muted" title={OVERALL_COLUMNS.targetAchieved.note}>
                       —
                     </td>
-                    <td className="muted" title={OVERALL_COLUMNS.peakHours.note}>
-                      —
+                    <td title="Peak hour uses Vendon vends (cached) bucketed by Kuwait local hour.">
+                      {peakHourLabel ? <span>{peakHourLabel}</span> : <span className="muted">—</span>}
                     </td>
                     <td className="muted" title={OVERALL_COLUMNS.promotion.note}>
                       —
                     </td>
-                    <td className="muted" title={OVERALL_COLUMNS.highestProduct.note}>
-                      —
+                    <td title="Highest product uses Vendon vends (cached) for the Kuwait day (by count).">
+                      {topProduct ? <span className="tableCellWrap">{topProduct}</span> : <span className="muted">—</span>}
                     </td>
-                    <td className="muted" title={OVERALL_COLUMNS.lowestProduct.note}>
-                      —
+                    <td title="Lowest product uses Vendon vends (cached) for the Kuwait day (by count).">
+                      {lowProduct ? <span className="tableCellWrap">{lowProduct}</span> : <span className="muted">—</span>}
                     </td>
                     <td className="muted" title={OVERALL_COLUMNS.peopleCount.note}>
                       —
