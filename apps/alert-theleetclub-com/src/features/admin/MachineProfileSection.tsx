@@ -189,6 +189,10 @@ function StaffVisitScheduleRows(props: {
   const { variant, rows, setRows } = props;
   const nameFieldCaption = variant === 'technician' ? 'Name of Tech Responsible' : 'Name of QA Responsible';
   const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
+  const ph =
+    variant === 'technician'
+      ? 'Example: Ahmad Ali responsible for MOH North machines'
+      : 'Example: Sara Khan responsible for QA visits at this site';
 
   const toggleDay = (rowIdx: number, d: number) => {
     setRows((prev) => {
@@ -206,10 +210,7 @@ function StaffVisitScheduleRows(props: {
         {sectionTitle}
       </div>
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0, marginBottom: 12, lineHeight: 1.45 }}>
-        {variant === 'technician'
-          ? 'Technician name and what they are responsible for go in one text field (a single string). Then choose visit days and hours.'
-          : 'QA officer name and what they are responsible for go in one text field (a single string). Then choose visit days and hours.'}{' '}
-        Use <strong>Add another person</strong> when more than one technician or QA officer applies.
+        Fill <strong>{nameFieldCaption}</strong> as <strong>one string</strong>, then visit days and hours. Multiple people: <strong>Add another person</strong>.
       </p>
       {rows.map((row, idx) => (
         <div key={idx} className="adminStaffPersonBlock">
@@ -219,11 +220,7 @@ function StaffVisitScheduleRows(props: {
               <input
                 className="adminInputFluid"
                 value={row.name}
-                placeholder={
-                  variant === 'technician'
-                    ? 'Ahmad Ali, responsible for MOH North'
-                    : 'Sara Khan, responsible for on-site QA'
-                }
+                placeholder={ph}
                 onChange={(e) => {
                   const next = [...rows];
                   next[idx] = { ...next[idx], name: e.target.value };
@@ -265,8 +262,8 @@ function StaffVisitScheduleRows(props: {
             </div>
             {row.windows.map((w, wi) => (
               <div key={wi} className="adminStaffHoursRow">
-                <label className="adminFormLabel adminFormLabelTime">
-                  Start
+                <div className="adminFieldCell">
+                  <span className="adminFieldCaption">Start</span>
                   <input
                     type="time"
                     value={w.start}
@@ -278,9 +275,9 @@ function StaffVisitScheduleRows(props: {
                       setRows(next);
                     }}
                   />
-                </label>
-                <label className="adminFormLabel adminFormLabelTime">
-                  End
+                </div>
+                <div className="adminFieldCell">
+                  <span className="adminFieldCaption">End</span>
                   <input
                     type="time"
                     value={w.end}
@@ -292,7 +289,7 @@ function StaffVisitScheduleRows(props: {
                       setRows(next);
                     }}
                   />
-                </label>
+                </div>
                 <button
                   type="button"
                   className="danger"
@@ -509,9 +506,10 @@ export function MachineProfileSection() {
             <HelpTip text="Machine, tag, open-hours preset, operating days." />
           </div>
           <div className="adminMachineCoreRow">
-            <label className="adminFormLabel adminFormLabelMachine" title="Machines from the catalog">
-              Vending machine
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Vending machine</span>
               <select
+                title="Machines from the catalog"
                 value={machineId}
                 onChange={(e) => {
                   const id = e.target.value;
@@ -535,11 +533,12 @@ export function MachineProfileSection() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="adminFormLabel adminFormLabelTag" title="Location Owner (from the live device feed when present; used for grouping)">
-              Location Owner
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Location Owner</span>
               <input
                 name="location_owner"
+                title="From live feed when present; used for grouping"
                 list="alert-location-owner-options"
                 value={vendonLocationTag || locationOwner}
                 onChange={(e) => (vendonLocationTag ? null : setLocationOwner(e.target.value))}
@@ -552,17 +551,17 @@ export function MachineProfileSection() {
                   <option key={o} value={o} />
                 ))}
               </datalist>
-            </label>
-            <label className="adminFormLabel adminFormLabelHours" title="Site open duration (Overall ‘Operating hours’ source)">
-              Location hours
-              <select value={locationHours} onChange={(e) => setLocationHours(e.target.value)}>
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Location hours</span>
+              <select title="Site open duration (Overall operating hours)" value={locationHours} onChange={(e) => setLocationHours(e.target.value)}>
                 <option value="">Select…</option>
                 <option value="9">9 hrs</option>
                 <option value="12">12 hrs</option>
                 <option value="16">16 hrs</option>
                 <option value="24">24 hrs</option>
               </select>
-            </label>
+            </div>
           </div>
 
           {machineId && vendonLocationTag ? (
@@ -621,8 +620,8 @@ export function MachineProfileSection() {
           </summary>
           {cleaningWindows.map((w, idx) => (
             <div key={idx} className="adminTimePairRow" style={{ marginBottom: 8 }}>
-              <label className="adminFormLabel adminFormLabelTime">
-                From
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">From</span>
                 <input
                   type="time"
                   value={w.start}
@@ -632,9 +631,9 @@ export function MachineProfileSection() {
                     setCleaningWindows(next);
                   }}
                 />
-              </label>
-              <label className="adminFormLabel adminFormLabelTime">
-                To
+              </div>
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">To</span>
                 <input
                   type="time"
                   value={w.end}
@@ -644,7 +643,7 @@ export function MachineProfileSection() {
                     setCleaningWindows(next);
                   }}
                 />
-              </label>
+              </div>
               <button type="button" className="danger" onClick={() => setCleaningWindows((prev) => prev.filter((_, i) => i !== idx))}>
                 Remove
               </button>
@@ -669,8 +668,8 @@ export function MachineProfileSection() {
                 marginBottom: 10,
               }}
             >
-              <label className="adminFormLabel" style={{ width: '100%' }}>
-                Name
+              <div className="adminFieldCell" style={{ marginBottom: 8 }}>
+                <span className="adminFieldCaption">Name</span>
                 <input
                   value={op.name}
                   onChange={(e) => {
@@ -679,11 +678,11 @@ export function MachineProfileSection() {
                     setOperators(next);
                   }}
                 />
-              </label>
+              </div>
               {op.windows.map((w, wi) => (
                 <div key={wi} className="adminTimePairRow" style={{ marginTop: 8 }}>
-                  <label className="adminFormLabel adminFormLabelTime">
-                    From
+                  <div className="adminFieldCell">
+                    <span className="adminFieldCaption">From</span>
                     <input
                       type="time"
                       value={w.start}
@@ -695,9 +694,9 @@ export function MachineProfileSection() {
                         setOperators(next);
                       }}
                     />
-                  </label>
-                  <label className="adminFormLabel adminFormLabelTime">
-                    To
+                  </div>
+                  <div className="adminFieldCell">
+                    <span className="adminFieldCaption">To</span>
                     <input
                       type="time"
                       value={w.end}
@@ -709,7 +708,7 @@ export function MachineProfileSection() {
                         setOperators(next);
                       }}
                     />
-                  </label>
+                  </div>
                   <button
                     type="button"
                     className="danger"
@@ -746,11 +745,11 @@ export function MachineProfileSection() {
         </details>
 
         <details className="adminDetails">
-          <summary title="Each row: one text field for name + responsibility, visit days, visit hours.">
+          <summary title="One text field per person: Name of Tech Responsible or Name of QA Responsible (single string), then days and hours.">
             Technician &amp; QA Officer
           </summary>
           <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0, lineHeight: 1.45 }}>
-            For each person, type <strong>name and responsibility together in one string</strong>, then set days and times. Empty rows are not saved.
+            <strong>Name of Tech Responsible</strong> and <strong>Name of QA Responsible</strong> are each a <strong>single text field</strong> (name + responsibility in one string). Then choose visit days and start/end hours.
           </p>
           <StaffVisitScheduleRows variant="technician" rows={technicianRows} setRows={setTechnicianRows} />
           <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} />
@@ -764,15 +763,24 @@ export function MachineProfileSection() {
             <strong>Time zone</strong> applies when interpreting cleaning and operator windows (default <code>Asia/Kuwait</code>).{' '}
             <strong>Priority</strong> resolves overlaps on automated cleaning rules for this machine — higher wins.
           </p>
-          <div className="adminMachineCoreRow" style={{ marginTop: 8 }}>
-            <label className="adminFormLabel adminFormLabelTag" title="IANA name, e.g. Asia/Kuwait — used when interpreting time windows">
-              Time zone
-              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
-            </label>
-            <label className="adminFormLabel adminFormLabelHours" title="Higher wins when Red Alert cleaning rules overlap for this machine">
-              Priority
-              <input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
-            </label>
+          <div className="adminTzPriorityRow" style={{ marginTop: 8 }}>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Time zone</span>
+              <input
+                title="IANA name, e.g. Asia/Kuwait"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+              />
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Priority</span>
+              <input
+                type="number"
+                title="Higher wins when cleaning rules overlap"
+                value={priority}
+                onChange={(e) => setPriority(Number(e.target.value))}
+              />
+            </div>
           </div>
         </details>
 

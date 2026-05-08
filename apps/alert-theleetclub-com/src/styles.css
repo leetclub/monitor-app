@@ -864,11 +864,11 @@ th {
   border-top: 1px solid var(--border);
 }
 
-/* Machine profile & admin forms: stack caption above control (global `label` is row flex and breaks multi-field rows). */
+/* Machine profile: never use bare <label> for stacked fields — global label {} is row flex. Prefer .adminFieldCell + .adminFieldCaption. */
 label.adminFormLabel {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
   gap: 6px;
   font-size: 12px;
   color: var(--muted);
@@ -882,38 +882,64 @@ label.adminFormLabel > textarea {
   min-width: 0;
 }
 
-.adminMachineCoreRow {
+.adminFieldCell {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
-.adminMachineCoreRow label.adminFormLabelMachine {
-  flex: 2 1 220px;
-  min-width: min(100%, 200px);
+.adminFieldCell > input,
+.adminFieldCell > select {
+  width: 100%;
+  min-width: 0;
 }
 
-.adminMachineCoreRow label.adminFormLabelTag {
-  flex: 1 1 180px;
-  min-width: min(100%, 160px);
+.adminMachineCoreRow {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 7.75rem);
+  gap: 14px 18px;
+  align-items: end;
 }
 
-.adminMachineCoreRow label.adminFormLabelHours {
-  flex: 0 1 140px;
-  min-width: 112px;
+@media (max-width: 900px) {
+  .adminMachineCoreRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Time zone + priority: two fields only (avoid empty third grid column). */
+.adminTzPriorityRow {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 7rem);
+  gap: 14px 18px;
+  align-items: end;
+  max-width: min(100%, 28rem);
+}
+
+@media (max-width: 520px) {
+  .adminTzPriorityRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 .adminTimePairRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 7.75rem) minmax(0, 7.75rem) auto;
+  gap: 10px 14px;
+  align-items: end;
 }
 
-.adminTimePairRow label.adminFormLabelTime {
-  flex: 0 1 118px;
-  min-width: 104px;
+@media (max-width: 520px) {
+  .adminTimePairRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .adminTimePairRow > button.danger,
+  .adminTimePairRow > button.primary {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
 }
 
 .adminStaffPersonBlock {
@@ -941,21 +967,22 @@ label.adminFormLabel > textarea {
 }
 
 .adminStaffInputRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
   align-items: center;
   margin-bottom: 4px;
 }
 
 .adminStaffInputRow input.adminInputFluid {
-  flex: 1 1 240px;
+  width: 100%;
   min-width: 0;
 }
 
 .adminStaffInputRow .adminStaffRemoveCompact {
   flex: 0 0 auto;
   white-space: nowrap;
+  align-self: center;
 }
 
 .adminVisitDayStrip {
@@ -977,11 +1004,22 @@ label.adminDayCheckbox {
 }
 
 .adminStaffHoursRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 7.75rem) minmax(0, 7.75rem) auto;
+  gap: 10px 14px;
+  align-items: end;
   margin-bottom: 8px;
+}
+
+@media (max-width: 520px) {
+  .adminStaffHoursRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .adminStaffHoursRow > button.danger {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
 }
 
 .adminDetails > p.muted:first-of-type {
