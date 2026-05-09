@@ -242,8 +242,8 @@ function attendanceLabelFromShift(
   const expMin = Number(mExp[1]) * 60 + Number(mExp[2]);
   const delta = clockMin - expMin;
   if (delta < 10) return { label: 'On Time', color: 'g' };
-  if (delta <= 20) return { label: 'Late', color: 'y' };
-  if (delta <= 60) return { label: 'Tardy', color: 'o' };
+  if (delta <= 10) return { label: 'Late', color: 'y' };
+  if (delta <= 20) return { label: 'Tardy', color: 'o' };
   return { label: 'Absent', color: 'r' };
 }
 
