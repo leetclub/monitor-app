@@ -513,7 +513,16 @@ export function OverallPage() {
               <tr>
                 {OVERALL_XLSX_ORDER.map((key) => (
                   <th key={key} title={headerTooltip(key)}>
-                    {OVERALL_HEADER_SHORT[key]}
+                    {key === 'operatingHours' ? (
+                      <>
+                        {OVERALL_HEADER_SHORT[key]}
+                        <div className="muted" style={{ fontSize: '0.68rem', fontWeight: 500, marginTop: 2, lineHeight: 1.2 }}>
+                          Admin
+                        </div>
+                      </>
+                    ) : (
+                      OVERALL_HEADER_SHORT[key]
+                    )}
                   </th>
                 ))}
               </tr>
@@ -534,12 +543,12 @@ export function OverallPage() {
                 const prof = profileByMachineId.get(m.id);
                 const vendon = vendonSummaryQ.data?.byMachineId?.[m.id];
                 const locHours = String(prof?.location_hours ?? '').trim();
-                const locationOwner = String(m.vendon_location_owner ?? prof?.location_owner ?? '').trim();
-                const operating = locHours ? `${locHours} hrs` : '—';
+                const adminLocationOwner = String(prof?.location_owner ?? '').trim();
+                const vendonTagOwner = String(m.vendon_location_owner ?? '').trim();
+                const locationOwner = adminLocationOwner || vendonTagOwner;
                 const lastCleanedIso = snap?.lastCleaningAt != null ? String(snap.lastCleaningAt).trim() : '';
                 const vendFailSummary = snapshotVendFailSummary(snap);
                 const mostIssue = snapshotMostIssue(snap);
-                const machTag = locationOwner;
                 const operator =
                   String(prof?.operator_name ?? '').trim() ||
                   String(snap?.operator ?? snap?.operatorName ?? snap?.redAlertOperator ?? '').trim() ||
@@ -591,24 +600,71 @@ export function OverallPage() {
                   <tr key={m.id}>
                     <td
                       title={
-                        locHours
-                          ? `Alert Admin → machine profile → Location hours${adminMetaHintParts.length ? ` · ${adminMetaHintParts.join(' · ')}` : ''}`
-                          : `Set Location hours in Alert Admin${adminMetaHintParts.length ? ` · ${adminMetaHintParts.join(' · ')}` : ''}`
+                        [
+                          'Alert Admin → Machines → Location hours (9 / 12 / 16 / 24 hrs) and Location owner.',
+                          adminLocationOwner ? 'Owner from Admin profile.' : vendonTagOwner ? 'Owner from Vendon tag (no Admin owner saved).' : '',
+                          locHours ? '' : 'Operating hours not saved for this machine yet.',
+                          adminMetaHintParts.length ? adminMetaHintParts.join(' · ') : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
                       }
                     >
-                      {operating}
+                      <div
+                        className="muted"
+                        style={{
+                          fontSize: '0.68rem',
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          fontWeight: 700,
+                          marginBottom: 4,
+                        }}
+                      >
+                        Alert Admin
+                      </div>
+                      <div style={{ lineHeight: 1.35 }}>
+                        <strong>Operating hours:</strong>{' '}
+                        {locHours ? (
+                          <span>
+                            {locHours} hrs
+                          </span>
+                        ) : (
+                          <span className="muted">Not set</span>
+                        )}
+                      </div>
+                      {!locHours ? (
+                        <div className="muted" style={{ fontSize: '0.74rem', marginTop: 3 }}>
+                          Choose 9, 12, 16, or 24 hrs in Admin → Machines → Location hours.
+                        </div>
+                      ) : null}
+                      <div style={{ marginTop: 8, lineHeight: 1.35 }}>
+                        <strong>Location owner:</strong>{' '}
+                        {locationOwner ? (
+                          <span>{locationOwner}</span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </div>
+                      {!locationOwner ? (
+                        <div className="muted" style={{ fontSize: '0.74rem', marginTop: 3 }}>
+                          e.g. MOH, O2, KU — set in Admin → Machines (or uses Vendon tag when saved).
+                        </div>
+                      ) : adminLocationOwner ? (
+                        <div className="muted" style={{ fontSize: '0.72rem', marginTop: 2 }}>
+                          From Admin profile
+                        </div>
+                      ) : vendonTagOwner ? (
+                        <div className="muted" style={{ fontSize: '0.72rem', marginTop: 2 }}>
+                          From Vendon tag (save Location owner in Admin to override)
+                        </div>
+                      ) : null}
                       {daysLabel ? (
-                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: 6 }}>
                           {daysLabel}
                         </div>
                       ) : null}
-                      {locationOwner ? (
-                        <div className="muted" style={{ fontSize: '0.78rem' }}>
-                          Location Owner: {locationOwner}
-                        </div>
-                      ) : null}
                       {prof?.timezone ? (
-                        <div className="muted" style={{ fontSize: '0.78rem' }}>
+                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: 2 }}>
                           TZ: {String(prof.timezone)}
                         </div>
                       ) : null}
@@ -618,11 +674,6 @@ export function OverallPage() {
                       <div className="muted" style={{ fontSize: '0.78rem' }}>
                         #{m.id}
                       </div>
-                      {machTag ? (
-                        <div className="muted" style={{ fontSize: '0.78rem' }}>
-                          Location Owner: {machTag}
-                        </div>
-                      ) : null}
                     </td>
                     <td>
                       {operator}

@@ -55,7 +55,8 @@ export const OVERALL_HEADER_SHORT: Record<OverallColumnKey, string> = {
 export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: string }> = {
   operatingHours: {
     title: 'Operating Hours',
-    note: 'Alert Admin machine profile: Location hours field (free text). Not inferred from Vendon.',
+    note:
+      'Alert Admin → Machines: Location hours preset (9 / 12 / 16 / 24 hrs) and Location owner (e.g. MOH, O2, KU). Saved profile overrides Vendon fleet tag when both exist.',
   },
   vendingMachine: { title: 'Vending Machine' },
   operator: { title: 'Operator' },
