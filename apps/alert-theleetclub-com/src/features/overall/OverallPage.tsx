@@ -513,16 +513,7 @@ export function OverallPage() {
               <tr>
                 {OVERALL_XLSX_ORDER.map((key) => (
                   <th key={key} title={headerTooltip(key)}>
-                    {key === 'operatingHours' ? (
-                      <>
-                        {OVERALL_HEADER_SHORT[key]}
-                        <div className="muted" style={{ fontSize: '0.68rem', fontWeight: 500, marginTop: 2, lineHeight: 1.2 }}>
-                          Admin
-                        </div>
-                      </>
-                    ) : (
-                      OVERALL_HEADER_SHORT[key]
-                    )}
+                    {OVERALL_HEADER_SHORT[key]}
                   </th>
                 ))}
               </tr>
@@ -601,65 +592,24 @@ export function OverallPage() {
                     <td
                       title={
                         [
-                          'Alert Admin → Machines → Location hours (9 / 12 / 16 / 24 hrs) and Location owner.',
-                          adminLocationOwner ? 'Owner from Admin profile.' : vendonTagOwner ? 'Owner from Vendon tag (no Admin owner saved).' : '',
-                          locHours ? '' : 'Operating hours not saved for this machine yet.',
+                          headerTooltip('operatingHours'),
+                          adminLocationOwner
+                            ? 'Owner: Admin profile.'
+                            : vendonTagOwner
+                              ? 'Owner: Vendon tag (no Admin owner).'
+                              : '',
                           adminMetaHintParts.length ? adminMetaHintParts.join(' · ') : '',
                         ]
                           .filter(Boolean)
                           .join(' ')
                       }
                     >
-                      <div
-                        className="muted"
-                        style={{
-                          fontSize: '0.68rem',
-                          letterSpacing: '0.06em',
-                          textTransform: 'uppercase',
-                          fontWeight: 700,
-                          marginBottom: 4,
-                        }}
-                      >
-                        Alert Admin
+                      <div style={{ lineHeight: 1.35 }}>{locHours ? `${locHours} hrs` : <span className="muted">—</span>}</div>
+                      <div className="muted" style={{ fontSize: '0.78rem', marginTop: 4 }}>
+                        {locationOwner || '—'}
                       </div>
-                      <div style={{ lineHeight: 1.35 }}>
-                        <strong>Operating hours:</strong>{' '}
-                        {locHours ? (
-                          <span>
-                            {locHours} hrs
-                          </span>
-                        ) : (
-                          <span className="muted">Not set</span>
-                        )}
-                      </div>
-                      {!locHours ? (
-                        <div className="muted" style={{ fontSize: '0.74rem', marginTop: 3 }}>
-                          Choose 9, 12, 16, or 24 hrs in Admin → Machines → Location hours.
-                        </div>
-                      ) : null}
-                      <div style={{ marginTop: 8, lineHeight: 1.35 }}>
-                        <strong>Location owner:</strong>{' '}
-                        {locationOwner ? (
-                          <span>{locationOwner}</span>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </div>
-                      {!locationOwner ? (
-                        <div className="muted" style={{ fontSize: '0.74rem', marginTop: 3 }}>
-                          e.g. MOH, O2, KU — set in Admin → Machines (or uses Vendon tag when saved).
-                        </div>
-                      ) : adminLocationOwner ? (
-                        <div className="muted" style={{ fontSize: '0.72rem', marginTop: 2 }}>
-                          From Admin profile
-                        </div>
-                      ) : vendonTagOwner ? (
-                        <div className="muted" style={{ fontSize: '0.72rem', marginTop: 2 }}>
-                          From Vendon tag (save Location owner in Admin to override)
-                        </div>
-                      ) : null}
                       {daysLabel ? (
-                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: 6 }}>
+                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: 4 }}>
                           {daysLabel}
                         </div>
                       ) : null}

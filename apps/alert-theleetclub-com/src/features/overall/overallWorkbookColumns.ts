@@ -56,7 +56,7 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   operatingHours: {
     title: 'Operating Hours',
     note:
-      'Alert Admin → Machines: Location hours preset (9 / 12 / 16 / 24 hrs) and Location owner (e.g. MOH, O2, KU). Saved profile overrides Vendon fleet tag when both exist.',
+      'Alert Admin machine profile: location hours preset (9 / 12 / 16 / 24) and location owner. If owner is empty, Vendon fleet tag is shown.',
   },
   vendingMachine: { title: 'Vending Machine' },
   operator: { title: 'Operator' },
