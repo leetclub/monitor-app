@@ -7,7 +7,8 @@ import sys
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+from zoneinfo import ZoneInfo
 import requests
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +23,59 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _sync_timezone() -> ZoneInfo:
+    tz_name = (os.getenv("TIMEZONE") or "Asia/Kuwait").strip() or "Asia/Kuwait"
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        logger.warning("Invalid TIMEZONE=%s; using Asia/Kuwait", tz_name)
+        return ZoneInfo("Asia/Kuwait")
+
+
+def _compute_sync_window(
+    days_back: int,
+    interval: str,
+) -> Tuple[datetime, datetime, str]:
+    """
+    Return (start_dt, end_dt, mode_label) in the configured timezone (default Asia/Kuwait).
+
+    Live sync (cron): SYNC_DAYS_BACK=0 and SYNC_LIVE_DAYS>=1 re-fetches full calendar days
+    (today + yesterday by default) on each run so Videoloft bucket revisions upsert into Postgres.
+
+    Legacy hourly: SYNC_DAYS_BACK=0 and no SYNC_LIVE_DAYS → previous hour only.
+    Backfill: SYNC_DAYS_BACK>0 → last N days (hour rows aligned to midnight).
+    """
+    tz = _sync_timezone()
+    now = datetime.now(tz)
+    live_days = int(os.getenv("SYNC_LIVE_DAYS", "0") or "0")
+    hours_back = int(os.getenv("SYNC_HOURS_BACK", "0") or "0")
+
+    if interval == "hour":
+        end_dt = now.replace(minute=0, second=0, microsecond=0)
+    else:
+        end_dt = now
+
+    if days_back == 0:
+        if live_days > 0 and interval == "hour":
+            start_dt = (now - timedelta(days=live_days - 1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            return start_dt, end_dt, f"live_days={live_days}"
+        if hours_back > 0 and interval == "hour":
+            start_dt = end_dt - timedelta(hours=hours_back)
+            return start_dt, end_dt, f"hours_back={hours_back}"
+        if interval == "hour":
+            start_dt = end_dt - timedelta(hours=1)
+            return start_dt, end_dt, "last_hour"
+        start_dt = now - timedelta(hours=1)
+        return start_dt, end_dt, "last_hour"
+
+    start_dt = end_dt - timedelta(days=days_back)
+    if interval == "hour":
+        start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_dt, end_dt, f"days_back={days_back}"
 
 
 class VideoloftClient:
@@ -278,39 +332,19 @@ class PeopleAnalyticsSync:
                 uidds = [cam['id'] for cam in cameras]
             
             logger.info(f"Syncing data for {len(uidds)} devices, days_back={days_back}, interval={interval}")
-            
-            # Calculate time range
-            now = datetime.now()
-            # For hourly syncs, always align to hour boundaries to match Videoloft bucketing.
-            # Otherwise Videoloft may return shifted buckets like 17:27->18:27 which won't match UI expectations.
-            if interval == "hour":
-                end_dt = now.replace(minute=0, second=0, microsecond=0)
-            else:
-                end_dt = now
+
+            start_dt, end_dt, window_mode = _compute_sync_window(days_back, interval)
+            start_time = int(start_dt.timestamp() * 1000)
             end_time = int(end_dt.timestamp() * 1000)
-            
-            # If days_back=0, fetch only the last hour (for hourly cronjobs)
-            # Otherwise, fetch the specified number of days
-            if days_back == 0:
-                # Fetch only last hour for hourly syncs
-                if interval == "hour":
-                    start_dt = end_dt - timedelta(hours=1)
-                else:
-                    start_dt = now - timedelta(hours=1)
-                start_time = int(start_dt.timestamp() * 1000)
-            else:
-                # Fetch the last N days.
-                # For hourly backfills we must align to day boundaries, otherwise we only fetch partial days
-                # (e.g. starting at 17:27) which will NEVER match a full-day hourly query in the UI.
-                start_dt = end_dt - timedelta(days=days_back)
-                if interval == "hour":
-                    start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-                start_time = int(start_dt.timestamp() * 1000)
-            
-            # Use UTC for logs/consistency (timestamps are epoch-based).
-            start_date_str = datetime.utcfromtimestamp(start_time / 1000).strftime('%Y-%m-%d %H:%M')
-            end_date_str = datetime.utcfromtimestamp(end_time / 1000).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"Fetching data from {start_date_str} to {end_date_str} (inclusive)")
+
+            tz = _sync_timezone()
+            logger.info(
+                "Fetch window (%s, %s): %s -> %s",
+                window_mode,
+                tz.key,
+                start_dt.strftime("%Y-%m-%d %H:%M"),
+                end_dt.strftime("%Y-%m-%d %H:%M"),
+            )
 
             # Large hourly backfills must be chunked to avoid huge responses/timeouts.
             # For interval='hour' and long ranges, split into chunks (default 7 days).

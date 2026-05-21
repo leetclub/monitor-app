@@ -4,12 +4,8 @@ metadata:
   name: people-analytics-sync
   namespace: leet-monitor
 spec:
-  # Run every hour at minute 0
-  schedule: "0 * * * *"
-  # Note: For different schedules, use:
-  # "* * * * *" - every minute
-  # "*/5 * * * *" - every 5 minutes
-  # "*/15 * * * *" - every 15 minutes
+  # Live sync: every 5 minutes, re-upsert today + yesterday (Kuwait) hour buckets from Videoloft
+  schedule: "*/5 * * * *"
   # Keep 3 successful and 1 failed job
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
@@ -70,16 +66,19 @@ spec:
                   name: people-analytics-secrets
                   key: videoloft-password
             - name: SYNC_DAYS_BACK
-              value: "0"  # 0 = fetch only last hour (for hourly cronjobs)
+              value: "0"
+            # With SYNC_DAYS_BACK=0: re-fetch this many Kuwait calendar days (today + yesterday = 2)
+            - name: SYNC_LIVE_DAYS
+              value: "2"
             - name: SYNC_INTERVAL
-              value: "hour"  # Use hour interval (will be converted to 3600000 ms for API)
+              value: "hour"
             - name: TIMEZONE
               value: "Asia/Kuwait"
             resources:
               requests:
-                memory: "256Mi"
-                cpu: "100m"
+                memory: "384Mi"
+                cpu: "200m"
               limits:
-                memory: "512Mi"
-                cpu: "500m"
+                memory: "768Mi"
+                cpu: "750m"
 

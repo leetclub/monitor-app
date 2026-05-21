@@ -1,61 +1,44 @@
-# CronJob Strategy: Hourly Sync
+# CronJob Strategy: Live Sync (DB ≈ Videoloft)
 
-## Recommended Approach: Fetch Last Hour Only
+## Production CronJob (current)
 
-### Why Fetch Only Last Hour?
+**Goal:** Postgres `people_analytics_records` stays aligned with Videoloft for **today + yesterday** (Kuwait), including when Videoloft **revises** past hour buckets.
 
-✅ **Efficiency**: 
-- Less data to process (only ~12 devices × 1 hour = minimal data)
-- Faster syncs (typically < 5 seconds)
-- Lower API usage
+| Setting | Value | Meaning |
+|--------|--------|---------|
+| `schedule` | `*/5 * * * *` | Every 5 minutes |
+| `SYNC_DAYS_BACK` | `0` | Not a multi-day backfill |
+| `SYNC_LIVE_DAYS` | `2` | From **yesterday 00:00** through **current hour** (Kuwait) |
+| `SYNC_INTERVAL` | `hour` | Hour buckets (sent to Videoloft as `3600000`) |
+| `TIMEZONE` | `Asia/Kuwait` | Bucket boundaries |
 
-✅ **Upsert Logic Handles Everything**:
-- The unique constraint prevents duplicates
-- If a record already exists, it gets updated
-- No need to fetch all data every time
+Each run **upserts** all hour rows in that window. If Videoloft increases `in`/`out` for an earlier hour, the next sync run updates the same `(uidd, first_timestamp, interval_type)` row.
 
-✅ **Better Performance**:
-- Less database load
-- Faster queries
-- Lower bandwidth usage
+### Why not “last hour only”?
 
-### How It Works
+Hourly “last 1 hour” sync does **not** re-pull older buckets. The Monitor **DB vs Videoloft** compare then shows drift for any day that Videoloft adjusted after the hour was first stored.
 
-1. **Hourly CronJob** runs at minute 0 of every hour
-2. **Fetches last 1 hour** of data from Videoloft
-3. **Upsert logic**:
-   - If record exists (same device + time period): Updates it
-   - If record doesn't exist: Inserts it
-4. **Result**: Database always has the latest data without duplicates
+### Optional env overrides (`sync_service.py`)
 
-### Configuration
+- `SYNC_LIVE_DAYS=3` — wider live window (e.g. today + 2 prior days)
+- `SYNC_HOURS_BACK=48` — rolling 48h (used when `SYNC_LIVE_DAYS` is unset and `SYNC_DAYS_BACK=0`)
+- `SYNC_DAYS_BACK>0` — backfill mode (see `hourly-backfill-365d-job.yaml`)
 
-The CronJob is configured with:
-- `schedule: "0 * * * *"` - Runs every hour at :00
-- `SYNC_DAYS_BACK: "0"` - Fetch only last hour
-- `SYNC_INTERVAL: "hour"` - Use hour-level intervals
-
-### Example Timeline
+### Example timeline (live)
 
 ```
-10:00 AM - CronJob runs, fetches 9:00-10:00 data
-10:01 AM - New data arrives in Videoloft for 9:00-10:00
-11:00 AM - CronJob runs, fetches 10:00-11:00 data
-          - Also updates 9:00-10:00 if Videoloft updated it
+14:05 — sync runs: upsert all hours from yesterday 00:00 → today 14:00 (Kuwait)
+14:10 — Videoloft revises today 10:00 bucket; sync runs again and updates DB row
 ```
 
-### Alternative: Fetch All Data (NOT Recommended)
+### Backfill / historical days
 
-If you fetch all data every hour:
-- ❌ Slower (processes hundreds/thousands of records)
-- ❌ More API calls
-- ❌ Higher database load
-- ❌ Unnecessary (upsert already handles it)
-
-**Only fetch all data when:**
-- Initial historical sync
-- Manual full sync
+**Only fetch all days when:**
+- Initial historical sync (`initial-sync-job.yaml`, `hourly-backfill-365d-job.yaml`)
+- Manual job with higher `SYNC_DAYS_BACK`
 - Recovery from downtime
+
+Older dates (e.g. a single day weeks ago) are **not** refreshed by the live cron; run a one-off backfill for that range.
 
 ## Migration from Every Minute to Every Hour
 
