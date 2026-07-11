@@ -9,6 +9,7 @@ import { AccessProvider, useAccess } from '@/context/AccessContext';
 import { LoginPage } from '@/pages/LoginPage';
 import { NoAccessPage } from '@/pages/NoAccessPage';
 import { NavIcon } from '@/components/NavIcon';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import {
   navDrawerMediaQuery,
   persistNavExpandedPreference,
@@ -294,6 +295,7 @@ function UserTopBar() {
         <span className="topBarClock">{kuwaitClockLabel(clock)}</span>
       </div>
       <div className="topBarEnd">
+        <ThemeToggle compact />
         <span className="topBarSignedIn">
           <NavIcon name="account_circle" />
           <strong>{user.email}</strong>

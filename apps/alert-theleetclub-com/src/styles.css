@@ -1,6 +1,7 @@
-:root {
+:root,
+html[data-theme='classic'] {
   color-scheme: dark;
-  /* Stitch v2 — Tactical Monitoring System (docs/stitch-export-v2) */
+  /* Classic — Stitch tactical monitoring (docs/stitch-export-v2). Toggle Pro v2 via ThemeToggle. */
   --bg: #111318;
   --bg-elevated: #0c0e13;
   --panel: #1e1f25;

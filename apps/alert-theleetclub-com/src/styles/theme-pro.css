@@ -1,0 +1,266 @@
+/**
+ * Pro v2 — professional ops / command-floor look.
+ * Toggle via html[data-theme="pro"] (Classic remains default / data-theme="classic").
+ */
+
+html[data-theme='pro'] {
+  color-scheme: dark;
+  /* Midnight command floor — cool steel, live signal teal, amber caution */
+  --bg: #070b12;
+  --bg-elevated: #0a1018;
+  --panel: #101822;
+  --panel2: #0d141e;
+  --surface-container-low: #0d141e;
+  --surface-container-high: #182232;
+  --surface-variant: #1e2a3c;
+  --text: #e8eef6;
+  --muted: #8b9bb0;
+  --on-surface-variant: #b7c5d8;
+  --border: #243044;
+  --border-soft: rgba(36, 48, 68, 0.9);
+  --outline-variant: #2a3a52;
+  --accent: #2dd4bf;
+  --accent-blue: #5b9dff;
+  --primary-salmon: #f0a58a;
+  --danger: #ff5c5c;
+  --warn: #f5b942;
+  --link: #7eb6ff;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 28px rgba(0, 0, 0, 0.35);
+  --font-sans: 'Sora', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  --pro-glow: rgba(45, 212, 191, 0.12);
+  --pro-scan: rgba(91, 157, 255, 0.06);
+}
+
+html[data-theme='pro'] body {
+  background:
+    radial-gradient(1200px 600px at 12% -10%, var(--pro-scan), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, var(--pro-glow), transparent 50%),
+    linear-gradient(180deg, #080d15 0%, var(--bg) 42%, #060910 100%);
+  background-attachment: fixed;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme='pro'] .topBar {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(7, 11, 18, 0.82) !important;
+  border-bottom-color: rgba(45, 212, 191, 0.14) !important;
+  min-height: 44px;
+}
+
+html[data-theme='pro'] .topBarClock {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+html[data-theme='pro'] .sideNav {
+  background: linear-gradient(180deg, #0e1622 0%, #0a111a 100%) !important;
+  border-right-color: rgba(45, 212, 191, 0.14) !important;
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='pro'] .sideNavBrand {
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+html[data-theme='pro'] .sideNavBrand .brand,
+html[data-theme='pro'] .sideNavBrand .brandFull {
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+html[data-theme='pro'] .sideNavTagline {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+html[data-theme='pro'] .navLink {
+  border-radius: var(--radius-md);
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+html[data-theme='pro'] .navLink:hover {
+  background: rgba(45, 212, 191, 0.08);
+  color: var(--text);
+}
+
+html[data-theme='pro'] .navLink.navLinkActive,
+html[data-theme='pro'] a.navLink.navLinkActive {
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.18), rgba(45, 212, 191, 0.04));
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+html[data-theme='pro'] .panel,
+html[data-theme='pro'] .opsInset,
+html[data-theme='pro'] .opsDashboardSection {
+  border-radius: var(--radius-lg);
+  border-color: var(--border-soft);
+  background: rgba(16, 24, 34, 0.88);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme='pro'] .opsDashboardSectionTitle,
+html[data-theme='pro'] .stitchOpsPanelTitle,
+html[data-theme='pro'] .opsRevenueTotalsEyebrow {
+  font-family: var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+html[data-theme='pro'] .opsRevenueTotalsBar {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(10, 16, 24, 0.92);
+  border-top: 1px solid rgba(45, 212, 191, 0.2);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='pro'] .opsRevenueTotalsVal,
+html[data-theme='pro'] .opsRevenueTotalsTrend {
+  font-family: var(--font-mono);
+}
+
+html[data-theme='pro'] .loginShell {
+  background:
+    radial-gradient(800px 480px at 50% -20%, rgba(45, 212, 191, 0.16), transparent 60%),
+    radial-gradient(600px 400px at 80% 100%, rgba(91, 157, 255, 0.1), transparent 55%),
+    linear-gradient(165deg, #060910 0%, #0a121c 50%, #070b12 100%);
+}
+
+html[data-theme='pro'] .loginCard {
+  border-radius: 18px;
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  background: rgba(12, 18, 28, 0.92);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  padding: 36px 32px;
+}
+
+html[data-theme='pro'] .loginTitle {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-size: 1.45rem;
+}
+
+html[data-theme='pro'] .loginSubtitle {
+  letter-spacing: 0.04em;
+}
+
+html[data-theme='pro'] .stitchOpsTable thead th,
+html[data-theme='pro'] .opsFleetTable thead th {
+  font-family: var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(8, 12, 20, 0.75);
+  border-bottom-color: rgba(45, 212, 191, 0.12);
+}
+
+html[data-theme='pro'] .stitchOpsTable tbody tr:hover,
+html[data-theme='pro'] .opsFleetTable tbody tr:hover {
+  background: rgba(45, 212, 191, 0.05);
+}
+
+html[data-theme='pro'] .opsMetricBox,
+html[data-theme='pro'] .opsCellBox {
+  border-radius: var(--radius-md);
+  border-color: var(--border);
+  background: rgba(14, 20, 30, 0.9);
+}
+
+html[data-theme='pro'] .primary,
+html[data-theme='pro'] button.primary {
+  background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+  color: #042f2e;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+html[data-theme='pro'] .primary:hover,
+html[data-theme='pro'] button.primary:hover {
+  filter: brightness(1.06);
+}
+
+html[data-theme='pro'] .themeToggle {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(10, 16, 24, 0.8);
+}
+
+html[data-theme='pro'] .themeToggleBtn--active {
+  background: rgba(45, 212, 191, 0.2);
+  color: var(--accent);
+}
+
+/* Theme toggle chrome (both themes) */
+.themeToggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+  flex-shrink: 0;
+}
+
+.themeToggleBtn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 5px 9px;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  line-height: 1.2;
+}
+
+.themeToggleBtn:hover {
+  color: var(--text);
+}
+
+.themeToggleBtn--active {
+  background: var(--surface-variant);
+  color: var(--text);
+}
+
+.themeToggle--compact .themeToggleBtn {
+  padding: 4px 7px;
+  font-size: 9px;
+}
+
+.loginThemeRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}

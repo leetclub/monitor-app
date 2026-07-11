@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-12 | **UI themes Classic / Pro v2:** Toggle in top bar + login (persisted). **Classic** = current tactical Stitch look. **Pro v2** = command-floor restyle (midnight steel, teal signal accents, Sora + IBM Plex Mono, glass top bar / fleet bar). Compare and pick; default remains Classic. |
 | 2026-07-10 | **Fleet revenue — Yest. full day:** On Today vs Yesterday, the secondary strip compares **full yesterday vs full day-before (−2d)** from the revenue cache (not vs partial today). Label **vs −2d**. Main bar still uses same-elapsed today vs yesterday. |
 | 2026-07-10 | **Sales Acceleration (SX):** New Red Flags column **SX** (Loc · Prod) — YoY-style lead pts + dual stack. Formula: growth = (cur−prev)/prev; SX = G_current − G_previous. Same compare presets as Sales. Admin: location daily KD target (overrides week default) + **SX product** name + **product cups/day** target. API: `GET /api/alert/overall/sales-acceleration`. |
 | 2026-07-10 | **QA Visit sortable headers:** Fleet + inspection history use the same **⇅ / ▼ / ▲** column sort as Red Flags (click cycles desc → asc → clear). Sort dropdowns removed. |
