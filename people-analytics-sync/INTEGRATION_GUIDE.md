@@ -9,6 +9,12 @@ The new architecture:
 2. **API Service** provides REST endpoints to query the stored data
 3. **Frontend** calls the API service instead of Videoloft directly
 
+### Daily vs hourly in the API
+
+- Live sync stores **hour** rows in Postgres.
+- Monitor **Daily** (`interval=date`) responses are built by **summing hour buckets per Kuwait calendar day** (not mixed with legacy `date` rows — avoids double-counting in charts).
+- **Hourly** (`interval=hour`) returns hour rows as stored.
+
 ## Step 1: Deploy the Services
 
 Follow the setup instructions in `README.md` to deploy:
@@ -41,7 +47,8 @@ function fetchPeopleAnalyticsFromDatabase(params) {
       start_date: startDate,
       end_date: endDate,
       interval: interval === 'date' ? 'date' : (interval === 3600000 ? 'hour' : '60000'),
-      limit: '1000'
+      timezone: timeZone || 'Asia/Kuwait',
+      limit: interval === 3600000 || interval === 'hour' ? '10000' : '1000'
     });
     
     const url = `${PEOPLE_ANALYTICS_API_BASE}/people-analytics?${queryParams}`;

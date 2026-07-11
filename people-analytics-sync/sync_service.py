@@ -34,6 +34,38 @@ def _sync_timezone() -> ZoneInfo:
         return ZoneInfo("Asia/Kuwait")
 
 
+def _env_flag(name: str, default: str = "1") -> bool:
+    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "")
+
+
+def _align_bucket_timestamps(
+    first_naive: datetime,
+    last_naive: datetime,
+    interval: str,
+    tz: ZoneInfo,
+) -> Tuple[datetime, datetime]:
+    """
+    Canonical bucket boundaries in the configured timezone (default Asia/Kuwait).
+    Prevents duplicate hour rows that share the same Kuwait hour but different UTC keys.
+    """
+    first_utc = first_naive.replace(tzinfo=ZoneInfo("UTC"))
+    first_local = first_utc.astimezone(tz)
+
+    if interval == "hour":
+        start_local = first_local.replace(minute=0, second=0, microsecond=0)
+        end_local = start_local + timedelta(hours=1) - timedelta(seconds=1)
+    elif interval == "date":
+        start_local = first_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_local = start_local.replace(hour=23, minute=59, second=59, microsecond=0)
+    else:
+        return first_naive, last_naive
+
+    return (
+        start_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None),
+        end_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None),
+    )
+
+
 def _compute_sync_window(
     days_back: int,
     interval: str,
@@ -52,17 +84,26 @@ def _compute_sync_window(
     live_days = int(os.getenv("SYNC_LIVE_DAYS", "0") or "0")
     hours_back = int(os.getenv("SYNC_HOURS_BACK", "0") or "0")
 
+    if days_back == 0:
+        if live_days > 0:
+            start_dt = (now - timedelta(days=live_days - 1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            if interval == "hour":
+                # Include the current in-progress hour bucket (Videoloft endTime is exclusive-ish).
+                end_dt = (now + timedelta(hours=1)).replace(
+                    minute=0, second=0, microsecond=0
+                )
+            else:
+                end_dt = now.replace(hour=23, minute=59, second=59, microsecond=0)
+            return start_dt, end_dt, f"live_days={live_days}"
+
     if interval == "hour":
         end_dt = now.replace(minute=0, second=0, microsecond=0)
     else:
         end_dt = now
 
     if days_back == 0:
-        if live_days > 0 and interval == "hour":
-            start_dt = (now - timedelta(days=live_days - 1)).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-            return start_dt, end_dt, f"live_days={live_days}"
         if hours_back > 0 and interval == "hour":
             start_dt = end_dt - timedelta(hours=hours_back)
             return start_dt, end_dt, f"hours_back={hours_back}"
@@ -301,6 +342,94 @@ class PeopleAnalyticsSync:
             session.rollback()
         finally:
             session.close()
+
+    def _should_chunk_window(self, start_dt: datetime, end_dt: datetime, interval: str) -> bool:
+        span_days = (end_dt - start_dt).total_seconds() / 86400
+        chunk_min_days = float(os.getenv("SYNC_CHUNK_MIN_DAYS", "1" if interval == "hour" else "7"))
+        return span_days >= chunk_min_days
+
+    def _fetch_raw_for_range(
+        self,
+        uidds: List[str],
+        range_start: datetime,
+        range_end: datetime,
+        interval: str,
+        timezone: str,
+    ) -> List[Dict]:
+        start_ms = int(range_start.timestamp() * 1000)
+        end_ms = int(range_end.timestamp() * 1000)
+        per_device = _env_flag("SYNC_PER_DEVICE", "1") and len(uidds) > 1
+
+        if per_device:
+            merged: List[Dict] = []
+            for uidd in uidds:
+                part = self.videoloft.fetch_people_analytics(
+                    uidds=[uidd],
+                    start_time=start_ms,
+                    end_time=end_ms,
+                    interval=interval,
+                    timezone=timezone,
+                )
+                if part and isinstance(part, list):
+                    merged.extend(part)
+            logger.info(
+                "Per-device fetch (%s -> %s): %s records across %s devices",
+                range_start.strftime("%Y-%m-%d %H:%M"),
+                range_end.strftime("%Y-%m-%d %H:%M"),
+                len(merged),
+                len(uidds),
+            )
+            return merged
+
+        data = self.videoloft.fetch_people_analytics(
+            uidds=uidds,
+            start_time=start_ms,
+            end_time=end_ms,
+            interval=interval,
+            timezone=timezone,
+        )
+        return data if isinstance(data, list) else []
+
+    def _sync_window_to_db(
+        self,
+        uidds: List[str],
+        start_dt: datetime,
+        end_dt: datetime,
+        interval: str,
+        timezone: str,
+    ) -> int:
+        """Fetch Videoloft data for a window and upsert into Postgres (chunked when large)."""
+        chunk_days = int(os.getenv("SYNC_CHUNK_DAYS", "7"))
+        records_synced = 0
+
+        if not self._should_chunk_window(start_dt, end_dt, interval):
+            raw_data = self._fetch_raw_for_range(
+                uidds, start_dt, end_dt, interval, timezone
+            )
+            if raw_data:
+                records_synced = self._store_records(raw_data, uidds, interval)
+            return records_synced
+
+        logger.info("Time-chunked fetch+store enabled: SYNC_CHUNK_DAYS=%s", chunk_days)
+        chunk_start = start_dt
+        while chunk_start < end_dt:
+            chunk_end = min(chunk_start + timedelta(days=chunk_days), end_dt)
+            chunk_data = self._fetch_raw_for_range(
+                uidds, chunk_start, chunk_end, interval, timezone
+            )
+            if chunk_data:
+                stored = self._store_records(chunk_data, uidds, interval)
+                records_synced += stored
+                logger.info(
+                    "Chunk %s -> %s: fetched %s, stored %s (running total %s)",
+                    chunk_start.strftime("%Y-%m-%d %H:%M"),
+                    chunk_end.strftime("%Y-%m-%d %H:%M"),
+                    len(chunk_data),
+                    stored,
+                    records_synced,
+                )
+            chunk_start = chunk_end
+        return records_synced
     
     def sync_data(
         self, 
@@ -334,10 +463,8 @@ class PeopleAnalyticsSync:
             logger.info(f"Syncing data for {len(uidds)} devices, days_back={days_back}, interval={interval}")
 
             start_dt, end_dt, window_mode = _compute_sync_window(days_back, interval)
-            start_time = int(start_dt.timestamp() * 1000)
-            end_time = int(end_dt.timestamp() * 1000)
-
             tz = _sync_timezone()
+            timezone = os.getenv("TIMEZONE", "Asia/Kuwait")
             logger.info(
                 "Fetch window (%s, %s): %s -> %s",
                 window_mode,
@@ -346,61 +473,14 @@ class PeopleAnalyticsSync:
                 end_dt.strftime("%Y-%m-%d %H:%M"),
             )
 
-            # Large hourly backfills must be chunked to avoid huge responses/timeouts.
-            # For interval='hour' and long ranges, split into chunks (default 7 days).
-            chunk_days = int(os.getenv("SYNC_CHUNK_DAYS", "7"))
-            should_chunk = (interval == "hour") and (days_back >= chunk_days)
+            records_synced = self._sync_window_to_db(
+                uidds, start_dt, end_dt, interval, timezone
+            )
 
-            total_raw = []
-            if should_chunk:
-                logger.info(f"Chunked backfill enabled: SYNC_CHUNK_DAYS={chunk_days}")
-                chunk_start = datetime.utcfromtimestamp(start_time / 1000)
-                chunk_end_global = datetime.utcfromtimestamp(end_time / 1000)
-
-                while chunk_start < chunk_end_global:
-                    chunk_end = min(chunk_start + timedelta(days=chunk_days), chunk_end_global)
-                    cs = int(chunk_start.timestamp() * 1000)
-                    ce = int(chunk_end.timestamp() * 1000)
-                    logger.info(
-                        f"Fetching chunk: {chunk_start.strftime('%Y-%m-%d %H:%M')} -> {chunk_end.strftime('%Y-%m-%d %H:%M')}"
-                    )
-                    chunk_data = self.videoloft.fetch_people_analytics(
-                        uidds=uidds,
-                        start_time=cs,
-                        end_time=ce,
-                        interval=interval,
-                        timezone=os.getenv('TIMEZONE', 'Asia/Kuwait')
-                    )
-                    if chunk_data and isinstance(chunk_data, list):
-                        total_raw.extend(chunk_data)
-                        logger.info(f"Chunk fetched {len(chunk_data)} records (running total {len(total_raw)})")
-                    else:
-                        logger.info("Chunk returned 0 records")
-                    # advance
-                    chunk_start = chunk_end
-                raw_data = total_raw
-            else:
-                # Fetch data from Videoloft (single request)
-                raw_data = self.videoloft.fetch_people_analytics(
-                    uidds=uidds,
-                    start_time=start_time,
-                    end_time=end_time,
-                    interval=interval,
-                    timezone=os.getenv('TIMEZONE', 'Asia/Kuwait')
-                )
-            
-            if not raw_data or not isinstance(raw_data, list):
-                logger.warning("No data received from Videoloft API (empty response)")
-                self.complete_sync('success', 0, None)  # Not an error, just no data
-                return True  # Still successful, just no data to sync
-            
-            if len(raw_data) == 0:
-                logger.info("Videoloft returned empty data array - no records for this time period")
-                self.complete_sync('success', 0, None)  # Not an error, just no data
-                return True  # Still successful, just no data to sync
-            
-            # Store data in database
-            records_synced = self._store_records(raw_data, uidds, interval)
+            if records_synced == 0:
+                logger.info("No records stored for this window (Videoloft may have returned no data)")
+                self.complete_sync('success', 0, None)
+                return True
             
             # Update sync log - 0 records is not a failure, just no data available
             if records_synced > 0:
@@ -440,9 +520,14 @@ class PeopleAnalyticsSync:
                         last_ts = last_ts * 1000
                     
                     # Store timestamps as UTC-naive to keep comparisons consistent in DB.
-                    # (API converts local day boundaries -> UTC before filtering.)
                     first_timestamp = datetime.utcfromtimestamp(first_ts / 1000)
                     last_timestamp = datetime.utcfromtimestamp(last_ts / 1000)
+                    first_timestamp, last_timestamp = _align_bucket_timestamps(
+                        first_timestamp,
+                        last_timestamp,
+                        interval,
+                        _sync_timezone(),
+                    )
                     
                     # Calculate metrics
                     people_in = int(record.get('in', 0)) if record.get('in') is not None else 0
@@ -546,6 +631,14 @@ def main():
         # Initialize database
         logger.info("Initializing database...")
         init_database()
+
+        if _env_flag("RUN_DB_RECONCILE", "0"):
+            logger.info("RUN_DB_RECONCILE=1 — cleaning duplicate hours and legacy date rows")
+            from reconcile_people_db import reconcile_all
+
+            if not reconcile_all():
+                logger.error("DB reconcile failed")
+                sys.exit(1)
         
         # Create sync service
         sync_service = PeopleAnalyticsSync()
@@ -566,6 +659,22 @@ def main():
             days_back=days_back,
             interval=interval
         )
+
+        if success and interval == "hour" and _env_flag("SYNC_ALSO_DATE", "0"):
+            live_days = int(os.getenv("SYNC_LIVE_DAYS", "0") or "0")
+            if days_back == 0 and live_days > 0:
+                logger.info("Also syncing daily (date) buckets for live window")
+                success = sync_service.sync_data(
+                    uidds=uidds, days_back=0, interval="date"
+                ) and success
+            elif days_back > 0:
+                logger.info(
+                    "Also syncing daily (date) buckets for backfill (days_back=%s)",
+                    days_back,
+                )
+                success = sync_service.sync_data(
+                    uidds=uidds, days_back=days_back, interval="date"
+                ) and success
         
         if success:
             logger.info("Sync completed successfully")

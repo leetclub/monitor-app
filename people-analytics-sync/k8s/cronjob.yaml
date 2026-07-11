@@ -4,8 +4,9 @@ metadata:
   name: people-analytics-sync
   namespace: leet-monitor
 spec:
-  # Live sync: every 5 minutes, re-upsert today + yesterday (Kuwait) hour buckets from Videoloft
+  # Live sync: every 5 minutes — all cameras, re-upsert rolling window from Videoloft (see SYNC_LIVE_DAYS)
   schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
   # Keep 3 successful and 1 failed job
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
@@ -67,11 +68,18 @@ spec:
                   key: videoloft-password
             - name: SYNC_DAYS_BACK
               value: "0"
-            # With SYNC_DAYS_BACK=0: re-fetch this many Kuwait calendar days (today + yesterday = 2)
+            # Rolling live window (Kuwait calendar days, all machines). Catches Videoloft bucket revisions.
             - name: SYNC_LIVE_DAYS
-              value: "2"
+              value: "14"
+            - name: SYNC_PER_DEVICE
+              value: "1"
             - name: SYNC_INTERVAL
               value: "hour"
+            - name: SYNC_CHUNK_DAYS
+              value: "1"
+            # Daily totals come from API hour aggregation — do not store parallel date rows.
+            - name: SYNC_ALSO_DATE
+              value: "0"
             - name: TIMEZONE
               value: "Asia/Kuwait"
             resources:

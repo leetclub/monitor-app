@@ -19,6 +19,8 @@ export interface AlertRuntimeEnv {
   SLACK_AM_SUHAIB_USER_ID?: string;
   /** Optional JSON object: operator email (lowercase) → Slack user id. Example: {"op@co.com":"U123"} */
   SLACK_OP_EMAIL_MAP_JSON?: string;
+  /** Optional JSON: operator email → phone and/or whatsapp. Example: {"op@co.com":{"phone":"+965123","whatsapp":"965123"}} */
+  OPERATOR_CONTACT_MAP_JSON?: string;
   /** Optional local dev: bypass login. */
   VITE_DEV_USER_EMAIL?: string;
 }
@@ -43,6 +45,7 @@ function fromVite(): AlertRuntimeEnv {
     SLACK_AM_AHMED_USER_ID: import.meta.env.VITE_SLACK_AM_AHMED_USER_ID,
     SLACK_AM_SUHAIB_USER_ID: import.meta.env.VITE_SLACK_AM_SUHAIB_USER_ID,
     SLACK_OP_EMAIL_MAP_JSON: import.meta.env.VITE_SLACK_OP_EMAIL_MAP_JSON,
+    OPERATOR_CONTACT_MAP_JSON: import.meta.env.VITE_OPERATOR_CONTACT_MAP_JSON,
     VITE_DEV_USER_EMAIL: import.meta.env.VITE_DEV_USER_EMAIL,
   };
 }

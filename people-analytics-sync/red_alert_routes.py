@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import smtplib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time as dt_time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
@@ -563,6 +563,25 @@ def _ensure_machine_operator_live_table(db: Session) -> None:
     )
 
 
+def _load_machine_operator_live_map() -> Dict[str, Tuple[str, int]]:
+    """Seed latest WEB operator timestamps from Postgres (survives between recomputes)."""
+    db = _dash_session()
+    try:
+        _ensure_machine_operator_live_table(db)
+        rows = db.query(MachineOperatorLive).all()
+        out: Dict[str, Tuple[str, int]] = {}
+        for r in rows:
+            ts_i = int(r.last_credit_ts) if r.last_credit_ts else 0
+            if ts_i > 0:
+                out[str(r.machine_id)] = (str(r.operator_name or "").strip(), ts_i)
+        return out
+    except Exception:
+        logger.exception("load machine_operator_live")
+        return {}
+    finally:
+        db.close()
+
+
 def _persist_last_web_operators(last_web_op: Dict[str, Tuple[str, int]]) -> None:
     """Upsert latest WEB-cashless operator per machine (Postgres, monitoring_dashboard)."""
     if not last_web_op:
@@ -801,7 +820,7 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
 
     vends_by_mid: Dict[str, List[int]] = {}
     last_vend: Dict[str, int] = {}
-    last_web_op: Dict[str, Tuple[str, int]] = {}
+    last_web_op: Dict[str, Tuple[str, int]] = _load_machine_operator_live_map()
     for v in vends_21d:
         mid = str(v.get("machine_id") or v.get("machine") or "")
         if not mid:
@@ -816,10 +835,10 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             last_vend[mid] = ts_i
         if _vend_looks_web_cashless(v):
             un = str(v.get("user_name") or "").strip()
-            if un:
-                prev = last_web_op.get(mid)
-                if not prev or ts_i > prev[1]:
-                    last_web_op[mid] = (un, ts_i)
+            prev = last_web_op.get(mid)
+            if not prev or ts_i > prev[1]:
+                prev_name = prev[0] if prev else ""
+                last_web_op[mid] = (un or prev_name, ts_i)
 
     events_14d, ee = _fetch_events_window(ts_14d, to_ts)
     if ee:
@@ -830,6 +849,7 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
     fail_today: Dict[str, int] = {}
     fail_same_day_lw: Dict[str, int] = {}
     fail_yesterday: Dict[str, int] = {}
+    fail_day_before: Dict[str, int] = {}
     fail_24h: Dict[str, int] = {}
     off_events_by_mid: Dict[str, List[Tuple[int, Optional[int]]]] = {}
 
@@ -839,6 +859,8 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
     lw_day_hi_excl = lw_day_lo + elapsed_today
     yesterday_lo = today_lo - 86400
     yesterday_hi_excl = yesterday_lo + elapsed_today
+    day_before_lo = today_lo - 2 * 86400
+    day_before_hi_excl = day_before_lo + elapsed_today
 
     for e in events_14d:
         name = e.get("name") or ""
@@ -881,6 +903,8 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             fail_same_day_lw[mid] = fail_same_day_lw.get(mid, 0) + 1
         if elapsed_today > 0 and yesterday_lo <= rt < yesterday_hi_excl:
             fail_yesterday[mid] = fail_yesterday.get(mid, 0) + 1
+        if elapsed_today > 0 and day_before_lo <= rt < day_before_hi_excl:
+            fail_day_before[mid] = fail_day_before.get(mid, 0) + 1
         if rt >= ts_24h:
             fail_24h[mid] = fail_24h.get(mid, 0) + 1
 
@@ -994,6 +1018,12 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             c_stale_y = count_stale_sale_episodes_adjusted(vlist, yesterday_lo, y_end_incl, ctx, STALE_SALE_SEC)
             c_off_y = _count_off_episodes_ge_threshold(off_list, yesterday_lo, yesterday_hi_excl, to_ts, ctx, OFF_STALE_SEC)
             c_fail_y = fail_yesterday.get(mid, 0)
+            db_end_incl = day_before_lo + elapsed_today - 1
+            c_stale_db = count_stale_sale_episodes_adjusted(vlist, day_before_lo, db_end_incl, ctx, STALE_SALE_SEC)
+            c_off_db = _count_off_episodes_ge_threshold(
+                off_list, day_before_lo, day_before_hi_excl, to_ts, ctx, OFF_STALE_SEC
+            )
+            c_fail_db = fail_day_before.get(mid, 0)
         else:
             c_stale_td = 0
             c_off_td = 0
@@ -1002,6 +1032,9 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             c_stale_y = 0
             c_off_y = 0
             c_fail_y = 0
+            c_stale_db = 0
+            c_off_db = 0
+            c_fail_db = 0
 
         sum_tw = c_fail_tw + c_off_tw + c_stale_tw
         sum_lw = c_fail_lw + c_off_lw + c_stale_lw
@@ -1018,6 +1051,7 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
         sum_td = c_fail_td + c_off_td + c_stale_td
         sum_ldw = c_fail_ldw + c_off_ldw + c_stale_ldw
         sum_y = c_fail_y + c_off_y + c_stale_y
+        sum_db = c_fail_db + c_off_db + c_stale_db
         denom_sd = max(sum_ldw, 0.01)
         try:
             pct_sd = ((sum_td - sum_ldw) / denom_sd) * 100.0
@@ -1028,6 +1062,12 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             pct_vs_y = ((sum_td - sum_y) / denom_y) * 100.0
         except Exception:
             pct_vs_y = 0.0
+        if sum_db > 0:
+            pct_vs_db = ((sum_y - sum_db) / float(sum_db)) * 100.0
+        elif sum_y > 0:
+            pct_vs_db = 100.0
+        else:
+            pct_vs_db = 0.0
 
         manual_op = (cfg.red_alert_operator_name if cfg and cfg.red_alert_operator_name else "").strip()
         web_t = last_web_op.get(mid)
@@ -1040,6 +1080,24 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             op_name = "—"
         cleaning_op = (ctx.cleaning_operator if ctx else "") or ""
         mail = (cfg.strike_operator_email if cfg and cfg.strike_operator_email else "") or ""
+        if not mail and mid:
+            try:
+                from operator_contact_lib import resolve_vendon_user_for_machine
+
+                vu = resolve_vendon_user_for_machine(mid)
+                if vu:
+                    mail = str(vu.get("email") or "").strip() or mail
+            except Exception:
+                logger.exception("red_alert: vendon machine operator email (non-fatal)")
+        if not mail and op_name and op_name != "—":
+            try:
+                from operator_contact_lib import resolve_vendon_email_for_operator_name
+
+                vendon_mail = resolve_vendon_email_for_operator_name(op_name)
+                if vendon_mail:
+                    mail = vendon_mail
+            except Exception:
+                logger.exception("red_alert: vendon operator email match (non-fatal)")
         # Admin-only flag from live_machine_config (null if no row for this machine_id).
         if cfg is None:
             pfa_admin: Optional[bool] = None
@@ -1057,10 +1115,55 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
         subj = quote("Go Check: " + (m.get("name") or mid))
         body = quote("Please check machine " + (m.get("name") or mid) + " (" + mid + "). Reasons: " + "; ".join(reasons))
         action_url = ("mailto:" + mail + "?subject=" + subj + "&body=" + body) if mail else ""
+        if mail:
+            try:
+                from slack_user_map_lib import get_slack_user_map_payload
+
+                smap = get_slack_user_map_payload().get("map") or {}
+                team = get_slack_user_map_payload().get("teamId") or ""
+                uid = smap.get(mail.lower())
+                if team and uid:
+                    action_url = f"slack://user?team={team}&id={uid}"
+            except Exception:
+                pass
 
         last_clean_iso = daily_cleaning_end_iso_by_machine.get(mid) or (
             cfg.last_cleaning_at.isoformat() if cfg and cfg.last_cleaning_at else None
         )
+
+        operator_last_access_at = None
+        if web_t and web_t[1]:
+            try:
+                operator_last_access_at = datetime.fromtimestamp(int(web_t[1]), tz=timezone.utc).isoformat()
+            except Exception:
+                operator_last_access_at = None
+
+        daily_target = None
+        if cfg and cfg.daily_sales_target is not None:
+            try:
+                daily_target = float(cfg.daily_sales_target)
+            except (TypeError, ValueError):
+                daily_target = None
+
+        if daily_target is None:
+            try:
+                from week_revenue_target_lib import daily_target_kd_from_week
+
+                daily_target = daily_target_kd_from_week(m["name"])
+            except Exception:
+                pass
+
+        cleaning_overdue_15h = False
+        hours_since_cleaning = None
+        if last_clean_iso:
+            try:
+                lc = datetime.fromisoformat(str(last_clean_iso).replace("Z", "+00:00"))
+                if lc.tzinfo is None:
+                    lc = lc.replace(tzinfo=timezone.utc)
+                hours_since_cleaning = round((now - lc).total_seconds() / 3600.0, 2)
+                cleaning_overdue_15h = hours_since_cleaning > 15.0
+            except Exception:
+                pass
 
         rows_out.append(
             {
@@ -1070,6 +1173,11 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
                 "operator": op_name,
                 "cleaningOperator": cleaning_op or None,
                 "operatorEmail": mail or None,
+                "strikeOperatorEmail": mail or None,
+                "operatorLastAccessAt": operator_last_access_at,
+                "dailyTarget": daily_target,
+                "cleaningOverdue15h": cleaning_overdue_15h,
+                "hoursSinceCleaning": hours_since_cleaning,
                 # Prefer Vendon-derived Attendance & Cleaning daily cleaning end time; fall back to manual Live Dashboard config.
                 "lastCleaningAt": last_clean_iso,
                 "lastTransactionAtUtc": last_tx_at_utc,
@@ -1081,22 +1189,26 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
                     "dispenseFailsToday": c_fail_td,
                     "dispenseFailsSameDayLastWeek": c_fail_ldw,
                     "dispenseFailsYesterdaySameElapsed": c_fail_y,
+                    "dispenseFailsDayBeforeSameElapsed": c_fail_db,
                     "offEpisodesThisWeek": c_off_tw,
                     "offEpisodesLastWeek": c_off_lw,
                     "offEpisodesToday": c_off_td,
                     "offEpisodesSameDayLastWeek": c_off_ldw,
                     "offEpisodesYesterdaySameElapsed": c_off_y,
+                    "offEpisodesDayBeforeSameElapsed": c_off_db,
                     "staleSaleEpisodesThisWeek": c_stale_tw,
                     "staleSaleEpisodesLastWeek": c_stale_lw,
                     "staleSaleEpisodesToday": c_stale_td,
                     "staleSaleEpisodesSameDayLastWeek": c_stale_ldw,
                     "staleSaleEpisodesYesterdaySameElapsed": c_stale_y,
+                    "staleSaleEpisodesDayBeforeSameElapsed": c_stale_db,
                     "totalCriteriaHitsThisWeek": sum_tw,
                     "totalCriteriaHitsLastWeek": sum_lw,
                     "totalCriteriaHitsLastWeekAlignedToWtD": aligned_lw_baseline,
                     "totalCriteriaHitsToday": sum_td,
                     "totalCriteriaHitsSameDayLastWeek": sum_ldw,
                     "totalCriteriaHitsYesterdaySameElapsed": sum_y,
+                    "totalCriteriaHitsDayBeforeSameElapsed": sum_db,
                     "dispenseFails7d": c_fail_tw,
                     "dispenseFailsPrior7d": c_fail_lw,
                     "offEvents7d": c_off_tw,
@@ -1115,6 +1227,8 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
                 "happenedPctVsSameDayLastWeek": round(pct_sd, 1),
                 "happenedYesterdaySameElapsed": sum_y,
                 "happenedPctVsYesterdaySameElapsed": round(pct_vs_y, 1),
+                "happenedDayBeforeSameElapsed": sum_db,
+                "happenedPctVsDayBefore": round(pct_vs_db, 1),
                 "reasons": reasons,
                 "pfaExcludeCleaning": pfa_board,
                 "pfaExcludeCleaningAdmin": pfa_admin,
@@ -1185,6 +1299,226 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
             ),
         },
         "rows": rows_out,
+    }
+
+
+_DAILY_INCIDENTS_ELAPSED_HISTORY_DAYS = int(os.environ.get("ALERT_DAILY_INCIDENTS_ELAPSED_HISTORY_DAYS", "7"))
+
+
+def _incident_hits_components(
+    mid: str,
+    win_lo: int,
+    win_hi_excl: int,
+    stale_hi_incl: int,
+    now_ts: int,
+    ctx: Any,
+    vlist: List[int],
+    off_list: List[Tuple[int, Optional[int]]],
+    fail_count: int,
+) -> int:
+    """Combined A+B+C incident load for one elapsed window."""
+    if win_hi_excl <= win_lo and fail_count <= 0:
+        return 0
+    c_stale = count_stale_sale_episodes_adjusted(vlist, win_lo, stale_hi_incl, ctx, STALE_SALE_SEC)
+    c_off = _count_off_episodes_ge_threshold(off_list, win_lo, win_hi_excl, now_ts, ctx, OFF_STALE_SEC)
+    return int(fail_count + c_stale + c_off)
+
+
+def compute_daily_incidents_elapsed(
+    machine_ids: Optional[List[str]] = None,
+    history_days: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Per-machine combined incident load (A+B+C) for Kuwait calendar days through the same elapsed clock.
+
+    Returns dailyElapsed[] (today, yesterday, …) for trend history popups on Alert Red Flags.
+    """
+    now = datetime.now(timezone.utc)
+    to_ts = int(now.timestamp())
+    tz = ZoneInfo("Asia/Kuwait")
+    now_local = now.astimezone(tz)
+    today_date = now_local.date()
+    today_lo = _kuwait_calendar_day_start_ts(now)
+    elapsed_today = max(0, to_ts - today_lo)
+    hist_n = max(2, min(history_days or _DAILY_INCIDENTS_ELAPSED_HISTORY_DAYS, 14))
+    day_offsets = [today_date - timedelta(days=i) for i in range(hist_n)]
+
+    id_set: Optional[set] = None
+    if machine_ids:
+        id_set = {str(x).strip() for x in machine_ids if str(x).strip()}
+
+    mrows, m_err = vendon_fetch_machine_list(_vendon_get)
+    if m_err:
+        return {"error": m_err, "byMachineId": {}}
+
+    machine_list: List[Dict[str, str]] = []
+    for m in mrows:
+        if m.get("id") is None:
+            continue
+        mid = str(m.get("id"))
+        if id_set is not None and mid not in id_set:
+            continue
+        name = m.get("name") or mid
+        if machine_row_excluded(name, mid):
+            continue
+        machine_list.append({"id": mid, "name": name})
+
+    if not machine_list:
+        return {
+            "timezone": "Asia/Kuwait",
+            "today": today_date.isoformat(),
+            "yesterday": (today_date - timedelta(days=1)).isoformat(),
+            "historyDays": hist_n,
+            "historyDates": [d.isoformat() for d in day_offsets],
+            "asOfLocal": now_local.strftime("%Y-%m-%dT%H:%M:%S"),
+            "comparisonNote": (
+                "Each day: midnight Kuwait through the same clock time as this request "
+                "(combined stale-sale + OFF + vend-fail criteria hits)."
+            ),
+            "byMachineId": {},
+        }
+
+    cleaning_rules: List[MachineCleaningSchedule] = []
+    db_sched = _dash_session()
+    try:
+        cleaning_rules = db_sched.query(MachineCleaningSchedule).all()
+    finally:
+        db_sched.close()
+
+    cleaning_by_mid: Dict[str, Any] = {}
+    for m in machine_list:
+        cleaning_by_mid[m["id"]] = resolve_cleaning_context(m["name"], cleaning_rules)
+
+    earliest_day = day_offsets[-1]
+    fetch_start = int(datetime.combine(earliest_day, dt_time.min, tzinfo=tz).timestamp())
+    ts_14d = to_ts - 14 * 86400
+
+    vends_21d, ve = _fetch_all_vends(fetch_start, to_ts)
+    if ve:
+        logger.warning("daily_incidents_elapsed vends: %s", ve)
+
+    vends_by_mid: Dict[str, List[int]] = {}
+    for v in vends_21d:
+        mid = str(v.get("machine_id") or v.get("machine") or "")
+        if not mid or (id_set is not None and mid not in id_set):
+            continue
+        ts = v.get("timestamp") or v.get("time")
+        try:
+            ts_i = int(ts)
+        except (TypeError, ValueError):
+            continue
+        vends_by_mid.setdefault(mid, []).append(ts_i)
+
+    events_14d, ee = _fetch_events_window(max(ts_14d, fetch_start), to_ts)
+    if ee:
+        logger.warning("daily_incidents_elapsed events: %s", ee)
+
+    fail_counts: Dict[str, List[int]] = {}
+    off_events_by_mid: Dict[str, List[Tuple[int, Optional[int]]]] = {}
+
+    for mid in cleaning_by_mid:
+        fail_counts[mid] = [0] * hist_n
+
+    for e in events_14d:
+        name = e.get("name") or ""
+        base = e.get("base_code") or ""
+        if name in EXCLUDED_EVENT_NAMES or base in EXCLUDED_EVENT_NAMES:
+            continue
+        mid = str(e.get("machine_id") or e.get("machine") or "")
+        if not mid or mid not in fail_counts:
+            continue
+        ra = e.get("received_at")
+        try:
+            rt = int(ra) if ra is not None else 0
+        except (TypeError, ValueError):
+            rt = 0
+        if rt <= 0:
+            continue
+
+        ctx = cleaning_by_mid.get(mid)
+        disp = _map_display_name(e)
+        if disp in ("KNet OFF", "Machine OFF"):
+            if not is_timestamp_in_cleaning(rt, ctx):
+                res = e.get("resolved_at")
+                try:
+                    res_i = int(res) if res is not None else None
+                except (TypeError, ValueError):
+                    res_i = None
+                off_events_by_mid.setdefault(mid, []).append((rt, res_i))
+
+        if name != RAW_VEND_FAIL and base != RAW_VEND_FAIL:
+            continue
+        if is_timestamp_in_cleaning(rt, ctx):
+            continue
+
+        for i in range(hist_n):
+            day_lo = today_lo - i * 86400
+            if i == 0:
+                if today_lo <= rt < to_ts:
+                    fail_counts[mid][i] += 1
+            elif elapsed_today > 0:
+                day_hi_excl = day_lo + elapsed_today
+                if day_lo <= rt < day_hi_excl:
+                    fail_counts[mid][i] += 1
+
+    by_machine: Dict[str, Dict[str, Any]] = {}
+    for m in machine_list:
+        mid = m["id"]
+        ctx = cleaning_by_mid.get(mid)
+        vlist = vends_by_mid.get(mid, [])
+        off_list = off_events_by_mid.get(mid, [])
+        fails = fail_counts.get(mid, [0] * hist_n)
+        daily: List[Dict[str, Any]] = []
+
+        for i, d in enumerate(day_offsets):
+            day_lo = today_lo - i * 86400
+            if i == 0:
+                win_hi_excl = to_ts
+                stale_hi = to_ts
+            elif elapsed_today > 0:
+                win_hi_excl = day_lo + elapsed_today
+                stale_hi = day_lo + elapsed_today - 1
+            else:
+                win_hi_excl = day_lo
+                stale_hi = day_lo
+            hits = _incident_hits_components(
+                mid,
+                day_lo,
+                win_hi_excl,
+                stale_hi,
+                to_ts,
+                ctx,
+                vlist,
+                off_list,
+                fails[i] if i < len(fails) else 0,
+            )
+            daily.append({"date": d.isoformat(), "weekday": d.strftime("%a"), "hits": hits})
+
+        today_h = daily[0]["hits"] if daily else 0
+        yest_h = daily[1]["hits"] if len(daily) > 1 else 0
+        trend_pct = None
+        if yest_h > 0:
+            trend_pct = round(((today_h - yest_h) / float(yest_h)) * 100.0, 2)
+
+        by_machine[mid] = {
+            "todayHits": today_h,
+            "yesterdaySameElapsedHits": yest_h,
+            "trendPct": trend_pct,
+            "dailyElapsed": daily,
+        }
+
+    return {
+        "timezone": "Asia/Kuwait",
+        "today": today_date.isoformat(),
+        "yesterday": (today_date - timedelta(days=1)).isoformat(),
+        "historyDays": hist_n,
+        "historyDates": [d.isoformat() for d in day_offsets],
+        "asOfLocal": now_local.strftime("%Y-%m-%dT%H:%M:%S"),
+        "comparisonNote": (
+            "Each day: midnight Kuwait through the same clock time as this request "
+            "(combined stale-sale + OFF + vend-fail criteria hits)."
+        ),
+        "byMachineId": by_machine,
     }
 
 

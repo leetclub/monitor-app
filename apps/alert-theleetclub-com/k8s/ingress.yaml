@@ -4,12 +4,23 @@ metadata:
   name: alert-app-ingress
   namespace: leet-monitor
   annotations:
-    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
 spec:
+  ingressClassName: nginx
   rules:
     - host: alert.theleetclub.com
       http:
         paths:
+          # Same-origin /api → people-api (first-party session cookies; do not call people-api.theleetclub.com from the browser).
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: people-analytics-api
+                port:
+                  number: 80
           - path: /
             pathType: Prefix
             backend:
@@ -21,4 +32,3 @@ spec:
     - hosts:
         - alert.theleetclub.com
       secretName: theleetclub-tls
-

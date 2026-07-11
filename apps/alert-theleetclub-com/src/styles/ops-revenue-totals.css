@@ -1,0 +1,292 @@
+/* Fixed fleet revenue total — follows compare preset; sits above bottom safe area */
+
+:root {
+  --ops-revenue-bar-h: 80px;
+  --ops-revenue-pad-y: 10px;
+  --ops-revenue-label-h: 16px;
+  --ops-revenue-value-h: 1.35rem;
+}
+
+.stitchShell .contentMain.appMain {
+  padding-bottom: calc(18px + var(--ops-revenue-bar-h) + var(--safe-bottom, 0px));
+}
+
+.opsRevenueTotalsBar {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  z-index: 45;
+  min-height: var(--ops-revenue-bar-h);
+  box-sizing: border-box;
+  border-top: 2px solid #6d4a45;
+  background: linear-gradient(180deg, rgba(18, 22, 30, 0.98) 0%, rgba(8, 10, 14, 0.99) 100%);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
+  overflow: visible;
+}
+
+@media (min-width: 768px) {
+  .stitchShell:not(.appShellNavDrawer) .opsRevenueTotalsBar {
+    left: var(--stitch-nav-w, var(--stitch-nav-w-rail, 64px));
+  }
+
+  .stitchShell.appShellNavDrawer .opsRevenueTotalsBar {
+    left: var(--stitch-nav-w-rail, 64px);
+  }
+}
+
+@media (max-width: 767px) {
+  .stitchShell.appShellNavDrawer .opsRevenueTotalsBar {
+    left: var(--stitch-nav-w-rail, 64px);
+  }
+}
+
+.opsRevenueTotalsInner {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0 20px;
+  min-height: var(--ops-revenue-bar-h);
+  padding: var(--ops-revenue-pad-y) 16px;
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(var(--ops-revenue-pad-y), env(safe-area-inset-bottom, 0px));
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.opsRevenueTotalsBrand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.opsRevenueTotalsEyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c9a8a3;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.opsRevenueTotalsCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.opsRevenueTotalsMetrics {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0 22px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+}
+
+.opsRevenueTotalsMetrics::-webkit-scrollbar {
+  display: none;
+}
+
+.opsRevenueTotalsMetric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.opsRevenueTotalsTrendWrap {
+  min-width: 4.5rem;
+}
+
+.opsRevenueTotalsLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: #c9a8a3;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.opsRevenueTotalsVal {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f1f5f9;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
+  font-size: 1.15rem;
+  color: #ffffff;
+}
+
+.opsRevenueTotalsValMuted {
+  color: #cbd5e1;
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+
+.opsRevenueTotalsTrend {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.opsRevenueTotalsTrendMuted {
+  color: #64748b;
+  font-size: 1rem;
+}
+
+.opsRevenueTotalsAsOf {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: none;
+  line-height: 1.2;
+}
+
+.opsRevenueTotalsFreshness {
+  color: #94a8b8;
+}
+
+@media (min-width: 900px) {
+  .opsRevenueTotalsAsOf {
+    display: block;
+  }
+}
+
+.opsRevenueTotalsMetricDivider {
+  padding-left: 18px;
+  margin-left: 2px;
+  border-left: 2px solid rgba(109, 74, 69, 0.75);
+}
+
+/* iPad / tablet */
+@media (min-width: 768px) {
+  :root {
+    --ops-revenue-bar-h: 104px;
+    --ops-revenue-pad-y: 14px;
+    --ops-revenue-value-h: 1.42rem;
+  }
+
+  .opsRevenueTotalsInner {
+    padding-left: 22px;
+    padding-right: max(22px, env(safe-area-inset-right));
+    gap: 0 28px;
+  }
+
+  .opsRevenueTotalsBrand {
+    gap: 5px;
+    padding-right: 8px;
+  }
+
+  .opsRevenueTotalsEyebrow {
+    font-size: 11px;
+  }
+
+  .opsRevenueTotalsCount {
+    font-size: 11px;
+  }
+
+  .opsRevenueTotalsMetrics {
+    gap: 0 28px;
+  }
+
+  .opsRevenueTotalsMetric {
+    gap: 8px;
+  }
+
+  .opsRevenueTotalsLabel {
+    font-size: 11px;
+  }
+
+  .opsRevenueTotalsVal {
+    font-size: 1.28rem;
+  }
+
+  .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
+    font-size: 1.48rem;
+  }
+
+  .opsRevenueTotalsValMuted {
+    font-size: 1.12rem;
+  }
+
+  .opsRevenueTotalsTrend {
+    font-size: 1.35rem;
+  }
+
+  .opsRevenueTotalsTrendMuted {
+    font-size: 1.15rem;
+  }
+
+  .opsRevenueTotalsAsOf {
+    font-size: 11px;
+  }
+
+  .opsRevenueTotalsMetricDivider {
+    padding-left: 22px;
+  }
+}
+
+@media (max-width: 720px) {
+  .opsRevenueTotalsMetricDivider {
+    padding-left: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --ops-revenue-bar-h: 88px;
+    --ops-revenue-pad-y: 8px;
+  }
+
+  .opsRevenueTotalsCount {
+    display: none;
+  }
+
+  .opsRevenueTotalsMetrics {
+    gap: 0 14px;
+  }
+
+  .opsRevenueTotalsVal {
+    font-size: 0.95rem;
+  }
+
+  .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
+    font-size: 1.05rem;
+  }
+
+  .opsRevenueTotalsTrend {
+    font-size: 1rem;
+  }
+}

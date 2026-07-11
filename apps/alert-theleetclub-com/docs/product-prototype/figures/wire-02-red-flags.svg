@@ -28,10 +28,10 @@
     <rect class="boxMuted" x="12" y="56" width="760" height="68" rx="4"/>
     <text x="20" y="76" class="label" font-size="9px">Compare preset</text>
     <rect class="box" x="20" y="84" width="132" height="22" rx="3"/>
-    <text x="28" y="99" class="tiny">Today vs Yesterday</text>
-    <rect class="box" x="160" y="84" width="80" height="22" rx="3"/>
-    <text x="168" y="99" class="tiny">Range A/B …</text>
-    <text x="20" y="118" class="hint" font-size="8px">Date ranges feed comparisons when KPI wiring lands.</text>
+    <text x="28" y="99" class="tiny">Today vs Yesterday ▾</text>
+    <rect class="box" x="160" y="84" width="148" height="22" rx="3"/>
+    <text x="168" y="99" class="tiny">Yesterday vs Day Before</text>
+    <text x="20" y="118" class="hint" font-size="8px">Presets drive Frequency sort + sales stack (Today/Yest. or Yest./−2d).</text>
 
     <rect class="box" x="12" y="132" width="760" height="120" rx="4"/>
     <line x1="12" y1="158" x2="772" y2="158" stroke="#cbd5e1"/>
@@ -44,13 +44,18 @@
     <text x="600" y="152" class="label" font-size="8px">Reasons</text>
     <text x="20" y="182" class="hint" font-size="8px">Vend-A12</text>
     <text x="180" y="182" class="hint" font-size="8px">Farwaniya</text>
-    <text x="300" y="182" class="hint" font-size="8px">Ahmed</text>
+    <rect class="boxMuted" x="296" y="164" width="72" height="22" rx="3"/>
+    <text x="304" y="179" class="label" font-size="8px">Mark</text>
+    <rect x="304" y="188" width="28" height="12" rx="2" fill="#fef9c3" stroke="#eab308" stroke-width="0.8"/>
+    <text x="308" y="197" class="tiny" font-size="6px">Late</text>
+    <text x="300" y="210" class="hint" font-size="6px">tap → icons + schedule</text>
     <text x="420" y="182" class="hint" font-size="8px">142</text>
     <text x="452" y="176" class="hint" font-size="6px">[▂] Score · [↗] Trend · [◎] Gap ↓N</text>
     <text x="452" y="186" class="hint" font-size="6px">green/red per rule · ↑% bands</text>
     <text x="600" y="176" class="hint" font-size="7px">Stale transaction</text>
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
     <text x="20" y="228" class="hint" font-size="8px">(more rows)</text>
-    <text x="20" y="246" class="tiny">Trailing workbook columns: Send credit / Vends resolved / Test credits / Last cleaning — green·orange·red tiers (Vendon + Admin cleaning windows).</text>
+    <text x="520" y="228" class="tiny">Swipe / drag · ◀ ▶ pan</text>
+    <text x="20" y="246" class="tiny">Workbook: Live operator (no sort) · Last / tx ↕ · Op. activity · Sales today ↕ · Target · Frequency · … Fixed fleet bar: Today total · Yest. full day · vs −2d. QA cell → history filters + score trend + PDF.</text>
   </g>
 </svg>

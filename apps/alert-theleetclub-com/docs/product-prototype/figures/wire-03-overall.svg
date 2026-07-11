@@ -25,7 +25,7 @@
 
     <rect class="boxMuted" x="12" y="52" width="760" height="52" rx="4"/>
     <text x="20" y="74" class="tiny">[ Compare preset row - same controls as Red Flags ]</text>
-    <text x="20" y="92" class="hint" font-size="8px">KPI rows grow as backend mapping expands.</text>
+    <text x="20" y="92" class="hint" font-size="8px">Fleet table: Operator · Op. activity · Sales today/MTD (sort high→low) · same compare presets as Red Flags.</text>
 
     <rect class="box" x="12" y="112" width="760" height="104" rx="4"/>
     <text x="20" y="136" class="label" font-size="9px">Machines</text>
@@ -36,6 +36,7 @@
     <text x="340" y="162" class="label" font-size="8px">Id</text>
     <text x="28" y="182" class="hint" font-size="8px">Alpha Station</text>
     <text x="340" y="182" class="hint" font-size="8px">393033</text>
+    <text x="480" y="182" class="tiny">◀ ▶ pan / drag sideways</text>
     <text x="28" y="202" class="hint" font-size="8px">…</text>
   </g>
 </svg>

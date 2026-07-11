@@ -4,19 +4,59 @@ import { ComparePresetPicker, type CompareSelection } from '@/components/Compare
 import {
   initialCompareSelection,
   persistCompareSelection,
+  presetApiQueryString,
 } from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
-import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { cleaningWindowsFromAdmin, lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
+import { fetchCleaningWorkflowMapBatched, fetchMachineAttendanceMapBatched } from '@/lib/leetWorkflowApi';
+import { freshnessNotice } from '@/lib/dataFreshness';
 import { safeText } from '@/lib/safeText';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
 import {
   OVERALL_COLUMNS,
-  OVERALL_HEADER_SHORT,
-  OVERALL_XLSX_ORDER,
   type OverallColumnKey,
 } from './overallWorkbookColumns';
+import { OverallFleetRow, overallHeaderClass, type FleetRowBundle } from './overallFleetCells';
+import { SalesHistoryModal } from '@/components/SalesHistoryModal';
+import { AlertTableHeader } from '@/components/AlertTableHeader';
+import { StitchOpsPanel } from '@/components/StitchOpsPanel';
+import type { StitchKpi } from '@/components/StitchKpiStrip';
+import { useAuth } from '@/context/AuthContext';
+import { useOverallColumnPrefs } from '@/lib/useOverallColumnPrefs';
+import { visibleOverallColumns } from './overallColumnVisibility';
+import { OverallColumnPicker } from './OverallColumnPicker';
+import { TableScrollControls } from '@/components/TableScrollControls';
+import {
+  salesElapsedForMachine,
+  resolveSalesTrendPct,
+  type DailySalesElapsedResponse,
+} from '@/lib/salesDisplay';
+import { OVERALL_TABLE_HEADERS } from '@/lib/tableHeaderLabels';
+import {
+  qaFindingsForMachineName,
+  qaVisitForMachineName,
+  techVisitForMachineName,
+  type QaFindingsResponse,
+  type QaSummaryResponse,
+} from '@/lib/qaVisitDisplay';
+import {
+  aggregateFleetSalesForPreset,
+  applyApiFleetElapsedTotals,
+  fleetYesterdayFullDayKwd,
+  fleetDayBeforeFullDayKwd,
+  footfallDisplayForPreset,
+  presetLabels,
+  salesPairForPreset,
+} from '@/lib/presetComparison';
+import { OpsRevenueTotalsBar } from '@/components/OpsRevenueTotalsBar';
+import rfStyles from '@/features/redflags/RedFlagsBoard.module.css';
 import styles from './OverallPage.module.css';
+import { cycleColumnSort, sortDirForColumn, type ColumnSortState } from '@/lib/tableColumnSort';
+import {
+  OVERALL_SORTABLE_COLUMNS,
+  sortFleetMachines,
+  type OverallSortContext,
+} from './overallTableSort';
 
 type Machine = { id: string; name: string; vendon_location_owner?: string | null };
 type MachinesResponse = { machines: Machine[] };
@@ -46,8 +86,10 @@ type AdminProfilesResponse = { rows: AdminProfileRow[] };
 
 type VendonSalesSummaryResponse = {
   preset: string;
-  dateA: string;
-  dateB: string;
+  dateAStart?: string;
+  dateBStart?: string;
+  labelA?: string;
+  labelB?: string;
   byMachineId: Record<
     string,
     {
@@ -55,6 +97,7 @@ type VendonSalesSummaryResponse = {
       bSalesKwd: number | null;
       trendPct: number | null;
       peakHour?: { hour: number; count: number; label: string } | null;
+      peakHourFromYesterday?: boolean;
       topProduct?: { name: string; count: number } | null;
       lowProduct?: { name: string; count: number } | null;
     }
@@ -115,7 +158,11 @@ type PeopleFootfallRow = {
   mapped?: boolean;
   todayIn?: number | null;
   yesterdayIn?: number | null;
+  primaryIn?: number | null;
+  baselineIn?: number | null;
   trendPct?: number | null;
+  primaryLabel?: string | null;
+  baselineLabel?: string | null;
   uidds?: string[];
   resolve?: string;
   hint?: string | null;
@@ -123,8 +170,11 @@ type PeopleFootfallRow = {
 
 type PeopleFootfallResponse = {
   timezone: string;
+  preset?: string;
   today: string;
   yesterday: string;
+  labelA?: string;
+  labelB?: string;
   videoloftDevicesLoaded?: boolean;
   byMachineId?: Record<string, PeopleFootfallRow>;
   machinesProcessed?: number;
@@ -158,18 +208,6 @@ function snapshotVendFailSummary(snap: RedAlertRow | undefined): string {
   if (td != null && Number(td) > 0) parts.push(`${td} today`);
   if (wtd != null && Number(wtd) > 0) parts.push(`${wtd} WTD`);
   return parts.join(' · ');
-}
-
-function formatPct(pct: number): string {
-  const p = Math.round(pct);
-  if (!Number.isFinite(p)) return '—';
-  const sign = p > 0 ? '+' : '';
-  return `${sign}${p}%`;
-}
-
-function formatKwd(x: number): string {
-  if (!Number.isFinite(x)) return '—';
-  return `${x.toFixed(2)} KWD`;
 }
 
 function fmtTimeRange(start: string, end: string): string {
@@ -216,12 +254,6 @@ function operatorHoursSummary(raw: unknown): string {
   return t;
 }
 
-function comparePct(a: number, b: number): number | null {
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  if (b <= 0) return null;
-  return ((a - b) / b) * 100;
-}
-
 function attendanceLabelFromShift(
   m: LiveDashboardMachine | undefined,
 ): { label: string; color: 'g' | 'y' | 'o' | 'r' } | null {
@@ -249,6 +281,18 @@ function attendanceLabelFromShift(
 
 export function OverallPage() {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
+  const { user } = useAuth();
+  const { stored: columnStored, setColumns: handleColumnsChange, syncState: columnSyncState } =
+    useOverallColumnPrefs(user?.email);
+  const visibleColumns = useMemo(
+    () => visibleOverallColumns(columnStored),
+    [columnStored],
+  );
+  const [salesDetail, setSalesDetail] = useState<FleetRowBundle | null>(null);
+  const [columnSort, setColumnSort] = useState<ColumnSortState<OverallColumnKey>>({
+    column: null,
+    dir: null,
+  });
   const setComparePersist = useCallback((next: CompareSelection) => {
     setCompare(next);
     persistCompareSelection(next);
@@ -273,10 +317,20 @@ export function OverallPage() {
   });
 
   const vendonSummaryQ = useQuery({
-    queryKey: ['alert-overall-vendon-sales-summary', compare.preset],
+    queryKey: ['alert-overall-vendon-sales-summary', compare.preset, compare.a.start, compare.a.end, compare.b.start, compare.b.end],
     queryFn: () =>
-      apiGet<VendonSalesSummaryResponse>(`/api/alert/overall/vendon-sales-summary?preset=${encodeURIComponent(compare.preset)}`),
+      apiGet<VendonSalesSummaryResponse>(
+        `/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compare.preset, compare)}`,
+      ),
     refetchInterval: 5 * 60_000,
+  });
+
+  const dailySalesQ = useQuery({
+    queryKey: ['alert-overall-daily-sales-elapsed', compare.preset],
+    queryFn: () => apiGet<DailySalesElapsedResponse>('/api/alert/overall/daily-sales-elapsed'),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
   });
 
   const vendonLastTxQ = useQuery({
@@ -299,12 +353,51 @@ export function OverallPage() {
     refetchInterval: 15 * 60_000,
   });
 
-  /** Videoloft / people-api DB ``people_analytics_records`` ``people_in`` (date buckets), Kuwait today vs yesterday — Monitor v1 map + device list parity. */
   const peopleFootfallQ = useQuery({
-    queryKey: ['alert-overall-people-footfall'],
-    queryFn: () => apiGet<PeopleFootfallResponse>('/api/alert/overall/people-footfall'),
+    queryKey: ['alert-overall-people-footfall', compare.preset, compare.a.start, compare.a.end, compare.b.start, compare.b.end],
+    queryFn: () =>
+      apiGet<PeopleFootfallResponse>(
+        `/api/alert/overall/people-footfall?${presetApiQueryString(compare.preset, compare)}`,
+      ),
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
+  });
+
+  const qaSummaryQ = useQuery({
+    queryKey: ['alert-qa-summary'],
+    queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
+    staleTime: 30 * 60_000,
+    refetchInterval: 30 * 60_000,
+  });
+
+  const qaFindingsQ = useQuery({
+    queryKey: ['alert-qa-findings'],
+    queryFn: () => apiGet<QaFindingsResponse>('/api/alert/qa/findings'),
+    staleTime: 10 * 60_000,
+    refetchInterval: 10 * 60_000,
+  });
+
+  const mtdVendonQ = useQuery({
+    queryKey: ['alert-overall-vendon-mtd'],
+    queryFn: () =>
+      apiGet<{ byMachineId?: Record<string, { aSalesKwd?: number | null }> }>(
+        '/api/alert/overall/vendon-sales-summary?preset=mtd_vs_mtd',
+      ),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+  const mtdYoyVendonQ = useQuery({
+    queryKey: ['alert-overall-vendon-mtd-yoy'],
+    queryFn: () =>
+      apiGet<{
+        byMachineId?: Record<
+          string,
+          { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+        >;
+      }>('/api/alert/overall/vendon-sales-summary?preset=mtd_vs_yoy'),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const machines = useMemo(() => {
@@ -351,6 +444,28 @@ export function OverallPage() {
 
   const fleetFromSnapshotFallback = fleetMachines.length > 0 && machines.length === 0;
 
+  const fleetMachineIdsKey = useMemo(() => {
+    const ids = fleetMachines.map((m) => m.id).filter(Boolean);
+    ids.sort();
+    return ids.join(',');
+  }, [fleetMachines]);
+
+  const workflowAttendanceQ = useQuery({
+    queryKey: ['leet-workflow-attendance-map', fleetMachineIdsKey],
+    queryFn: () => fetchMachineAttendanceMapBatched(fleetMachines.map((m) => m.id)),
+    enabled: fleetMachines.length > 0,
+    staleTime: 2 * 60_000,
+    refetchInterval: 3 * 60_000,
+  });
+
+  const workflowCleaningQ = useQuery({
+    queryKey: ['leet-workflow-cleaning-map', fleetMachineIdsKey],
+    queryFn: () => fetchCleaningWorkflowMapBatched(fleetMachines.map((m) => m.id)),
+    enabled: fleetMachines.length > 0,
+    staleTime: 2 * 60_000,
+    refetchInterval: 3 * 60_000,
+  });
+
   const loadingFleetTable =
     fleetMachines.length === 0 && (machinesQ.isLoading || (machines.length === 0 && snapQ.isLoading));
 
@@ -387,146 +502,274 @@ export function OverallPage() {
     return m;
   }, [liveSnapQ.data]);
 
-  const snapshotMachineCount = snapshotByMachineId.size;
-
-  const presetLabels = useMemo(
-    () =>
-      ({
-        today_vs_yesterday: 'Today VS Yesterday (default view)',
-        today_vs_same_day_last_week: 'Today VS Same Day Last Week',
-        wtd_vs_last_week: 'WTD VS Last Week',
-        mtd_vs_mtd: 'Month to date VS Month to date',
-        custom_vs_custom: 'Custom period VS Custom period',
-      }) as const,
-    [],
+  const overallSortCtx = useMemo(
+    (): OverallSortContext => ({
+      compare,
+      snapshotById: snapshotByMachineId,
+      profileById: profileByMachineId,
+      dailySales: dailySalesQ.data,
+      dailySalesReady: dailySalesQ.isSuccess,
+      vendonByMachine: vendonSummaryQ.data?.byMachineId,
+      mtdByMachine: mtdVendonQ.data?.byMachineId,
+      mtdReady: mtdVendonQ.isSuccess && Boolean(mtdVendonQ.data?.byMachineId),
+      mtdYoyByMachine: mtdYoyVendonQ.data?.byMachineId,
+      mtdYoyReady: mtdYoyVendonQ.isSuccess && Boolean(mtdYoyVendonQ.data?.byMachineId),
+      lastTxByMachine: vendonLastTxQ.data?.byMachineId,
+      liveById: liveByMachineId,
+      wasteByMachine: wasteByMachineQ.data?.byMachineId,
+      footfallByMachine: peopleFootfallQ.data?.byMachineId,
+      qaSummary: qaSummaryQ.data,
+    }),
+    [
+      compare,
+      snapshotByMachineId,
+      profileByMachineId,
+      dailySalesQ.data,
+      dailySalesQ.isSuccess,
+      vendonSummaryQ.data?.byMachineId,
+      mtdVendonQ.data,
+      mtdVendonQ.isSuccess,
+      mtdYoyVendonQ.data,
+      mtdYoyVendonQ.isSuccess,
+      vendonLastTxQ.data?.byMachineId,
+      liveByMachineId,
+      wasteByMachineQ.data?.byMachineId,
+      peopleFootfallQ.data?.byMachineId,
+      qaSummaryQ.data,
+    ],
   );
 
+  const onSortColumn = useCallback((key: OverallColumnKey) => {
+    setColumnSort((prev) => cycleColumnSort(prev, key));
+  }, []);
+
+  const sortedFleetMachines = useMemo(
+    () => sortFleetMachines(fleetMachines, columnSort, overallSortCtx),
+    [fleetMachines, columnSort, overallSortCtx],
+  );
+
+  const vendonSalesLabels = useMemo(
+    () => ({
+      primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+      baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+    }),
+    [vendonSummaryQ.data?.labelA, vendonSummaryQ.data?.labelB],
+  );
+
+  const fleetRevenueTotals = useMemo(() => {
+    const ids = fleetMachines.map((m) => m.id).filter(Boolean);
+    const rowTotals = aggregateFleetSalesForPreset(
+      ids,
+      compare.preset,
+      compare,
+      dailySalesQ.data?.byMachineId,
+      vendonSummaryQ.data?.byMachineId,
+      { labelA: vendonSummaryQ.data?.labelA, labelB: vendonSummaryQ.data?.labelB },
+      { dailySalesReady: dailySalesQ.isSuccess },
+    );
+    return applyApiFleetElapsedTotals(compare.preset, rowTotals, dailySalesQ.data, dailySalesQ.isSuccess);
+  }, [
+    fleetMachines,
+    compare,
+    dailySalesQ.data,
+    dailySalesQ.isSuccess,
+    vendonSummaryQ.data?.byMachineId,
+    vendonSummaryQ.data?.labelA,
+    vendonSummaryQ.data?.labelB,
+  ]);
+
+  const fleetYesterdayOverall = useMemo(() => {
+    if (compare.preset !== 'today_vs_yesterday') return null;
+    const ids = fleetMachines.map((m) => m.id).filter(Boolean);
+    const kwd = fleetYesterdayFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
+    const dayBefore = fleetDayBeforeFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
+    return {
+      kwd,
+      trendVsDayBeforePct: resolveSalesTrendPct(null, kwd, dayBefore),
+    };
+  }, [compare, fleetMachines, dailySalesQ.data]);
+
+  const snapshotMachineCount = snapshotByMachineId.size;
+
+  const salesComparisonNote = useMemo(
+    () => presetLabels(compare.preset).caption,
+    [compare.preset],
+  );
+
+  const isRefreshing =
+    machinesQ.isFetching ||
+    snapQ.isFetching ||
+    profilesQ.isFetching ||
+    vendonSummaryQ.isFetching ||
+    dailySalesQ.isFetching ||
+    vendonLastTxQ.isFetching ||
+    liveSnapQ.isFetching ||
+    wasteByMachineQ.isFetching ||
+    peopleFootfallQ.isFetching ||
+    mtdVendonQ.isFetching ||
+    mtdYoyVendonQ.isFetching ||
+    qaSummaryQ.isFetching ||
+    qaFindingsQ.isFetching ||
+    workflowAttendanceQ.isFetching;
+
+  const refetchAll = useCallback(() => {
+    void Promise.all([
+      machinesQ.refetch(),
+      snapQ.refetch(),
+      profilesQ.refetch(),
+      vendonSummaryQ.refetch(),
+      dailySalesQ.refetch(),
+      vendonLastTxQ.refetch(),
+      liveSnapQ.refetch(),
+      wasteByMachineQ.refetch(),
+      peopleFootfallQ.refetch(),
+      mtdVendonQ.refetch(),
+      mtdYoyVendonQ.refetch(),
+      qaSummaryQ.refetch(),
+      qaFindingsQ.refetch(),
+      workflowAttendanceQ.refetch(),
+    ]);
+  }, [
+    machinesQ,
+    snapQ,
+    profilesQ,
+    vendonSummaryQ,
+    dailySalesQ,
+    vendonLastTxQ,
+    liveSnapQ,
+    wasteByMachineQ,
+    peopleFootfallQ,
+    mtdVendonQ,
+    mtdYoyVendonQ,
+    qaSummaryQ,
+    qaFindingsQ,
+    workflowAttendanceQ,
+  ]);
+
+  const overallKpis = useMemo((): StitchKpi[] => {
+    const presetShort =
+      compare.preset === 'today_vs_yesterday'
+        ? 'Today'
+        : compare.preset === 'yesterday_vs_day_before'
+          ? 'Yest.'
+          : compare.preset === 'wtd_vs_last_week'
+            ? 'WTD'
+            : compare.preset === 'mtd_vs_mtd'
+              ? 'MTD'
+              : 'Custom';
+    return [
+      { label: 'Fleet', value: String(fleetMachines.length), sub: 'machines' },
+      {
+        label: 'Red Flags',
+        value: String(snapshotMachineCount),
+        sub: 'in snapshot',
+        tone: snapshotMachineCount > 0 ? 'warn' : 'good',
+      },
+      { label: 'Admin', value: String(profileByMachineId.size), sub: 'profiles' },
+      { label: 'Compare', value: presetShort, sub: 'timespan' },
+    ];
+  }, [fleetMachines.length, snapshotMachineCount, profileByMachineId.size, compare.preset]);
+
   return (
-    <div className="pageShell">
-      <header className="pageHero">
-        <div className="pageHeroMain">
-          <h1 className="pageTitle">Overall</h1>
-          <p className="pageSubtitle">
-            Fleet overview: <strong>Operating hours</strong> from Alert Admin machine profiles; <strong>Wastage</strong> mirrors
-            Monitor v1 motion + Vendon; <strong>People Count</strong> mirrors Monitor Videoloft mapping plus the same people-analytics DB
-            as the classic People tab; last transaction / cleaning / reasons / vend-fail counts prefer the{' '}
-            <strong>Red Alert snapshot</strong> when present. Columns without a workbook source still show <strong>—</strong>.
+    <div className="pageShellWide">
+      <StitchOpsPanel
+        compact
+        iconName="overall"
+        title="Overall"
+        badge={`${fleetMachines.length} machines`}
+        kpis={overallKpis}
+        toolbar={
+          <>
+            <span className="stitchOpsLive">
+              <span className="stitchOpsLiveDot" aria-hidden />
+              Auto · ~1m
+            </span>
+            <button type="button" className="stitchOpsRefresh stitchOpsRefreshCompact" onClick={refetchAll} disabled={isRefreshing}>
+              {isRefreshing ? '…' : 'Refresh'}
+            </button>
+          </>
+        }
+      >
+        <div className="opsPrepCompact">
+          <div className="opsPrepRow">
+            <div className="stitchOpsControls opsPrepControls">
+              <ComparePresetPicker value={compare} onChange={setComparePersist} />
+            </div>
+          </div>
+          <OverallColumnPicker
+            compact
+            stored={columnStored}
+            visibleKeys={visibleColumns}
+            visibleCount={visibleColumns.length}
+            syncState={columnSyncState}
+            onChange={handleColumnsChange}
+          />
+          <p className="opsPrepSalesLine">
+            <strong>Sales</strong> — {salesComparisonNote}
+            {dailySalesQ.data?.asOfLocal ? ` · ${dailySalesQ.data.asOfLocal.replace('T', ' ')} KWT` : ''}
           </p>
         </div>
-        <div className="pageHeroAside">
-          <p className="pageMeta">Auto refresh ~1 min</p>
-          <button
-            type="button"
-            className="btnSolid"
-            onClick={() => {
-              void Promise.all([
-                machinesQ.refetch(),
-                snapQ.refetch(),
-                profilesQ.refetch(),
-                vendonSummaryQ.refetch(),
-                vendonLastTxQ.refetch(),
-                liveSnapQ.refetch(),
-                wasteByMachineQ.refetch(),
-                peopleFootfallQ.refetch(),
-              ]);
-            }}
-            disabled={
-              machinesQ.isFetching ||
-              snapQ.isFetching ||
-              profilesQ.isFetching ||
-              vendonSummaryQ.isFetching ||
-              vendonLastTxQ.isFetching ||
-              liveSnapQ.isFetching ||
-              wasteByMachineQ.isFetching ||
-              peopleFootfallQ.isFetching
-            }
-          >
-            {machinesQ.isFetching ||
-            snapQ.isFetching ||
-            profilesQ.isFetching ||
-            vendonSummaryQ.isFetching ||
-            vendonLastTxQ.isFetching ||
-            liveSnapQ.isFetching ||
-            wasteByMachineQ.isFetching ||
-            peopleFootfallQ.isFetching
-              ? 'Refreshing…'
-              : 'Refresh'}
-          </button>
-        </div>
-      </header>
 
-      <section className="surfaceCard surfaceCardSpaced">
-        <div className="surfaceSectionLabel">Timespan comparison</div>
-        <ComparePresetPicker value={compare} onChange={setComparePersist} />
-        <p className="surfaceHint">
-          Selected: <strong>{presetLabels[compare.preset]}</strong>. Period A/B apply when comparison metrics are available.
-        </p>
-      </section>
-
-      {machinesQ.isError ? (
-        <section className="surfaceCard surfaceCardSpaced surfaceCardWarn">
-          <p className="surfaceHint" style={{ margin: 0 }}>
+        {machinesQ.isError ? (
+          <p className="stitchOpsAlert opsAlertInline" role="alert">
             {(machinesQ.error as Error).message}
             {fleetFromSnapshotFallback
-              ? ' — Rows below use the Red Alert snapshot so you still see machines that appear on Red Flags.'
+              ? ' — Rows use the Red Alert snapshot so you still see machines from Red Flags.'
               : ''}
           </p>
-        </section>
-      ) : null}
-
-      {fleetFromSnapshotFallback ? (
-        <section className="surfaceCard surfaceCardSpaced">
-          <p className="surfaceHint" style={{ margin: 0 }}>
-            Fleet list is built from the <strong>Red Alert snapshot</strong> because the live Vendon machine list was empty
-            or unavailable. Tags may be missing until{' '}
-            <code style={{ fontSize: '0.88em' }}>GET /api/alert/machines</code> returns data.
+        ) : null}
+        {fleetFromSnapshotFallback ? (
+          <p className="stitchOpsAlert stitchOpsAlertInfo opsAlertInline">
+            Fleet list built from the <strong>Red Alert snapshot</strong> (Vendon list unavailable).
           </p>
-        </section>
-      ) : null}
-
-      {snapQ.isError ? (
-        <section className="surfaceCard surfaceCardSpaced surfaceCardWarn">
-          <p className="surfaceHint" style={{ margin: 0 }}>
-            Red Alert snapshot could not be loaded: {(snapQ.error as Error).message}. Last transaction / operator merge may
-            be incomplete.
+        ) : null}
+        {snapQ.isError ? (
+          <p className="stitchOpsAlert opsAlertInline" role="alert">
+            Red Alert snapshot failed: {(snapQ.error as Error).message}. Last transaction merge may be incomplete.
           </p>
-        </section>
-      ) : null}
-
-      {fleetMachines.length > 0 && snapshotMachineCount < fleetMachines.length ? (
-        <section className="surfaceCard surfaceCardSpaced">
-          <p className="surfaceHint" style={{ margin: 0 }}>
-            Snapshot-backed columns fill only for machines in the current Red Flags list ({snapshotMachineCount} of{' '}
-            {fleetMachines.length} rows here). Machines that are not flagged still show name/tag and Admin profile fields.
+        ) : null}
+        {fleetMachines.length > 0 && snapshotMachineCount < fleetMachines.length ? (
+          <p className="stitchOpsAlert stitchOpsAlertInfo opsAlertInline">
+            Snapshot columns apply to {snapshotMachineCount} of {fleetMachines.length} rows.
           </p>
-        </section>
-      ) : null}
+        ) : null}
 
-      <section className="surfaceCard">
-        <div className={styles.fleetToolbar}>
-          <span className="surfaceBadge">{fleetMachines.length} machines</span>
-        </div>
-
-        <div className={`tableWrap tableWrapLoose ${styles.fleetWrap}`}>
-          <table>
+        <section className="opsDashboardSection opsDashboardSection--data" aria-label="Fleet table">
+          <div className="opsDashboardSectionBody opsDashboardSectionBody--data">
+          <div className="opsTableLead">
+            <span className="opsTableLeadTitle">Fleet</span>
+            <span className="opsDashboardSectionBadge">
+              {fleetMachines.length} rows · {visibleColumns.length} cols
+            </span>
+          </div>
+        <TableScrollControls scrollerClassName={styles.fleetWrap}>
+          <table className={`${rfStyles.table} stitchOpsTable`}>
             <thead>
               <tr>
-                {OVERALL_XLSX_ORDER.map((key) => (
-                  <th key={key} title={headerTooltip(key)}>
-                    {OVERALL_HEADER_SHORT[key]}
-                  </th>
+                {visibleColumns.map((key) => (
+                  <AlertTableHeader
+                    key={key}
+                    label={OVERALL_TABLE_HEADERS[key]}
+                    title={headerTooltip(key)}
+                    className={overallHeaderClass(key)}
+                    sortable={OVERALL_SORTABLE_COLUMNS.has(key)}
+                    sortDir={sortDirForColumn(columnSort, key)}
+                    onSortClick={
+                      OVERALL_SORTABLE_COLUMNS.has(key) ? () => onSortColumn(key) : undefined
+                    }
+                  />
                 ))}
               </tr>
             </thead>
             <tbody>
               {loadingFleetTable ? (
                 <tr>
-                  <td colSpan={20} className="muted">
+                  <td colSpan={visibleColumns.length} className="muted">
                     Loading…
                   </td>
                 </tr>
               ) : null}
-              {fleetMachines.map((m) => {
+              {sortedFleetMachines.map((m) => {
                 const snap = snapshotByMachineId.get(m.id);
                 const live = liveByMachineId.get(m.id);
                 const mins = snap?.minutesSinceLastTransaction ?? snap?.minutes_since_last_transaction;
@@ -558,16 +801,37 @@ export function OverallPage() {
                     ? new Date(Number(vendonTx.timestamp) * 1000).toISOString()
                     : '';
                 const peakHourLabel = vendon?.peakHour?.label || '';
+                const peakHourCount =
+                  vendon?.peakHour?.count != null && Number.isFinite(Number(vendon.peakHour.count))
+                    ? Number(vendon.peakHour.count)
+                    : null;
+                const peakHourFromYesterday = Boolean(vendon?.peakHourFromYesterday);
                 const topProduct = vendon?.topProduct?.name || '';
                 const lowProduct = vendon?.lowProduct?.name || '';
-                const trendPct = vendon?.trendPct;
-                const aSales = vendon?.aSalesKwd;
-                const bSales = vendon?.bSalesKwd;
-                const liveSalesTrend = comparePct(Number(live?.salesToday ?? NaN), Number(live?.salesYesterday ?? NaN));
-                const liveTargetPct =
-                  live?.dailyTarget != null && Number(live.dailyTarget) > 0
-                    ? (Number(live?.salesToday ?? 0) / Number(live.dailyTarget)) * 100
+                const salesElapsed = salesElapsedForMachine(dailySalesQ.data, m.id, dailySalesQ.isSuccess);
+                const mtdSalesKwd = mtdVendonQ.data?.byMachineId?.[m.id]?.aSalesKwd;
+                const mtdYoyRow = mtdYoyVendonQ.data?.byMachineId?.[m.id];
+                const footfallEntry = peopleFootfallQ.data?.byMachineId?.[m.id];
+                const salesPair = salesPairForPreset(
+                  compare.preset,
+                  salesElapsed,
+                  compare,
+                  vendon,
+                  vendonSalesLabels,
+                );
+                const footfallPair = footfallDisplayForPreset(compare.preset, footfallEntry, footfallEntry);
+                const presetTargetPct =
+                  live?.dailyTarget != null &&
+                  Number(live.dailyTarget) > 0 &&
+                  salesPair.primary != null &&
+                  Number.isFinite(salesPair.primary)
+                    ? (salesPair.primary / Number(live.dailyTarget)) * 100
                     : null;
+                const liveTargetPct =
+                  presetTargetPct ??
+                  (live?.dailyTarget != null && Number(live.dailyTarget) > 0
+                    ? (Number(live?.salesToday ?? 0) / Number(live.dailyTarget)) * 100
+                    : null);
                 const att = attendanceLabelFromShift(live);
                 const cleanIso = lastCleanedIso || String(live?.lastCleaningAt ?? '').trim();
                 const cleanWins = cleaningWindowsFromAdmin(prof?.cleaning_windows);
@@ -581,233 +845,95 @@ export function OverallPage() {
                 const opHours = operatorHoursSummary(prof?.operator_hours);
                 const wasteEntry = wasteByMachineQ.data?.byMachineId?.[m.id];
                 const wastePct = wasteEntry?.wastePct;
-                const footfallEntry = peopleFootfallQ.data?.byMachineId?.[m.id];
-                const fcMapped = Boolean(footfallEntry?.mapped);
-                const fcToday = footfallEntry?.todayIn;
-                const fcYesterday = footfallEntry?.yesterdayIn;
-                const fcTrend = footfallEntry?.trendPct;
-                const qcIso = live?.lastQcVisitAt ? String(live.lastQcVisitAt).trim() : '';
+                const qaVisit = qaVisitForMachineName(
+                  m.name || m.id,
+                  qaSummaryQ.data?.byLocationKey,
+                  qaSummaryQ.data?.adminSummaryMtdByMachine,
+                  qaSummaryQ.data?.latestByMachine,
+                );
+                const techVisit = techVisitForMachineName(m.name || m.id, qaSummaryQ.data?.byLocationKeyTech);
+                const qaFindings = qaFindingsForMachineName(m.name || m.id, qaFindingsQ.data?.findings);
+                const qcIso =
+                  (qaVisit?.lastVisitAt ? String(qaVisit.lastVisitAt).trim() : '') ||
+                  (live?.lastQcVisitAt ? String(live.lastQcVisitAt).trim() : '');
+                const techIso = techVisit?.lastVisitAt ? String(techVisit.lastVisitAt).trim() : '';
+                const dailyTargetKd =
+                  snap?.dailyTarget != null && Number.isFinite(Number(snap.dailyTarget))
+                    ? Number(snap.dailyTarget)
+                    : live?.dailyTarget != null && Number.isFinite(Number(live.dailyTarget))
+                      ? Number(live.dailyTarget)
+                      : null;
+                const bundle: FleetRowBundle = {
+                  m,
+                  snap,
+                  live,
+                  prof,
+                  vendon,
+                  salesElapsed,
+                  salesPair,
+                  mtdSalesKwd,
+                  mtdYoySalesKwd: mtdYoyRow?.aSalesKwd,
+                  mtdYoyLyKwd: mtdYoyRow?.bSalesKwd,
+                  mtdYoyTrendPct: mtdYoyRow?.trendPct,
+                  footfallPair,
+                  vendonTxIso,
+                  wastePct: wastePct ?? undefined,
+                  wasteSkipped: wasteByMachineQ.data?.skipped,
+                  wasteReason: wasteByMachineQ.data?.reason,
+                  wasteDate: wasteByMachineQ.data?.date,
+                  wasteError: wasteEntry?.error ?? null,
+                  footfall: footfallEntry,
+                  footfallTz: peopleFootfallQ.data?.timezone,
+                  operatingDaysLabel: daysLabel,
+                  operatorHoursSummary: opHours,
+                  attendance: att,
+                  workflowAttendance: workflowAttendanceQ.data?.byMachineId?.[m.id],
+                  workflowCleaning: workflowCleaningQ.data?.byMachineId?.[m.id],
+                  workflowConfigured: workflowAttendanceQ.data?.configured !== false,
+                  cleanIso,
+                  cleanStatus,
+                  vendFailSummary,
+                  mostIssue,
+                  operator,
+                  txRaw,
+                  minsOk,
+                  mins,
+                  peakHourLabel,
+                  peakHourCount,
+                  peakHourFromYesterday,
+                  topProduct,
+                  lowProduct,
+                  liveTargetPct,
+                  qcIso,
+                  techIso,
+                  qaVisit,
+                  techVisit,
+                  qaFindings,
+                  qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
+                  qaError: qaSummaryQ.data?.error || qaFindingsQ.data?.error || null,
+                  comparePreset: compare.preset,
+                  snapTime: snapQ.data?.generatedAt ?? snapQ.data?.cacheGeneratedAt ?? null,
+                  dailyTargetKd,
+                  workflowLoaded: workflowAttendanceQ.isFetched,
+                  cleaningOverdue15h: !!snap?.cleaningOverdue15h,
+                  adminMetaHintParts,
+                  locationOwner,
+                  locHours,
+                  adminLocationOwner,
+                  vendonTagOwner,
+                };
                 return (
-                  <tr key={m.id}>
-                    <td
-                      title={
-                        [
-                          headerTooltip('operatingHours'),
-                          adminLocationOwner
-                            ? 'Owner: Admin profile.'
-                            : vendonTagOwner
-                              ? 'Owner: Vendon tag (no Admin owner).'
-                              : '',
-                          adminMetaHintParts.length ? adminMetaHintParts.join(' · ') : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')
-                      }
-                    >
-                      <div style={{ lineHeight: 1.35 }}>{locHours ? `${locHours} hrs` : <span className="muted">—</span>}</div>
-                      <div className="muted" style={{ fontSize: '0.78rem', marginTop: 4 }}>
-                        {locationOwner || '—'}
-                      </div>
-                      {daysLabel ? (
-                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: 4 }}>
-                          {daysLabel}
-                        </div>
-                      ) : null}
-                      {prof?.timezone ? (
-                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: 2 }}>
-                          TZ: {String(prof.timezone)}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>
-                      {m.name}
-                      <div className="muted" style={{ fontSize: '0.78rem' }}>
-                        #{m.id}
-                      </div>
-                    </td>
-                    <td>
-                      {operator}
-                      {opHours ? (
-                        <div className="muted" style={{ fontSize: '0.78rem' }}>
-                          {opHours}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td title={OVERALL_COLUMNS.attendance.note}>
-                      {att ? (
-                        <span
-                          className={
-                            att.color === 'g'
-                              ? 'pillSuccess'
-                              : att.color === 'y'
-                                ? 'pillWarn'
-                                : att.color === 'o'
-                                  ? 'pillWarn'
-                                  : 'pillDanger'
-                          }
-                          style={{ fontSize: '0.78rem' }}
-                        >
-                          {att.label}
-                        </span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td title={OVERALL_COLUMNS.lastCleaned.note}>
-                      {cleanIso ? (
-                        <>
-                          <div>{formatKuwaitDateTime(cleanIso)}</div>
-                          {cleanStatus ? (
-                            <div style={{ marginTop: 4 }}>
-                              <span
-                                className={
-                                  cleanStatus.color === 'g'
-                                    ? 'pillSuccess'
-                                    : cleanStatus.color === 'y'
-                                      ? 'pillWarn'
-                                      : 'pillDanger'
-                                }
-                                style={{ fontSize: '0.78rem' }}
-                              >
-                                {cleanStatus.label}
-                              </span>
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td title={OVERALL_COLUMNS.lastVendFailed.note}>
-                      {vendFailSummary ? vendFailSummary : <span className="muted">—</span>}
-                    </td>
-                    <td
-                      title={
-                        txRaw
-                          ? 'Red Alert snapshot'
-                          : minsOk
-                            ? 'Minutes since last sale (snapshot)'
-                            : vendonTxIso
-                              ? 'Vendon last transaction (24h window)'
-                              : undefined
-                      }
-                    >
-                      {txRaw ? (
-                        formatKuwaitDateTime(String(txRaw))
-                      ) : minsOk ? (
-                        `${String(mins)} min since sale`
-                      ) : vendonTxIso ? (
-                        formatKuwaitDateTime(vendonTxIso)
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td
-                      title={
-                        aSales != null && bSales != null
-                          ? `Sales A: ${formatKwd(aSales)} · Sales B: ${formatKwd(bSales)}`
-                          : 'Sales trend uses Vendon cached daily sales for the selected preset (Kuwait day).'
-                      }
-                    >
-                      {typeof trendPct === 'number' && Number.isFinite(trendPct) ? (
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPct(trendPct)}</span>
-                      ) : typeof liveSalesTrend === 'number' && Number.isFinite(liveSalesTrend) ? (
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatPct(liveSalesTrend)}</span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td title={OVERALL_COLUMNS.targetAchieved.note}>
-                      {typeof liveTargetPct === 'number' && Number.isFinite(liveTargetPct) ? (
-                        <span className={liveTargetPct >= 100 ? 'pillSuccess' : 'pillDanger'} style={{ fontSize: '0.78rem' }}>
-                          {Math.round(liveTargetPct)}%
-                        </span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td title="Peak hour uses Vendon vends (cached) bucketed by Kuwait local hour.">
-                      {peakHourLabel ? <span>{peakHourLabel}</span> : <span className="muted">—</span>}
-                    </td>
-                    <td className="muted" title={OVERALL_COLUMNS.promotion.note}>
-                      —
-                    </td>
-                    <td title="Highest product uses Vendon vends (cached) for the Kuwait day (by count).">
-                      {topProduct ? <span className="tableCellWrap">{topProduct}</span> : <span className="muted">—</span>}
-                    </td>
-                    <td title="Lowest product uses Vendon vends (cached) for the Kuwait day (by count).">
-                      {lowProduct ? <span className="tableCellWrap">{lowProduct}</span> : <span className="muted">—</span>}
-                    </td>
-                    <td
-                      title={
-                        fcMapped && typeof fcToday === 'number' && Number.isFinite(fcToday)
-                          ? `Monitor v1 Videoloft map → summed people_in (${peopleFootfallQ.data?.timezone ?? 'Asia/Kuwait'} calendar day; DB synced from Videoloft).`
-                          : footfallEntry?.hint === 'no_camera_mapping'
-                            ? `${OVERALL_COLUMNS.peopleCount.title}: add this machine to the same people-camera map as Monitor (ALERT_PEOPLE_CAMERA_MAP_JSON or alert_people_camera_map.json).`
-                            : `${OVERALL_COLUMNS.peopleCount.title} — ${OVERALL_COLUMNS.peopleCount.note ?? ''}`
-                      }
-                    >
-                      {fcMapped && typeof fcToday === 'number' && Number.isFinite(fcToday) ? (
-                        <>
-                          <div style={{ fontVariantNumeric: 'tabular-nums' }}>{fcToday}</div>
-                          {typeof fcTrend === 'number' && Number.isFinite(fcTrend) ? (
-                            <div className="muted" style={{ fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums' }}>
-                              {formatPct(fcTrend)} vs yest.
-                            </div>
-                          ) : (
-                            <div className="muted" style={{ fontSize: '0.78rem' }}>
-                              {typeof fcYesterday === 'number' && fcYesterday === 0 ? 'no baseline yesterday' : '—'}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td className="muted" title={OVERALL_COLUMNS.customerCalls.note}>
-                      —
-                    </td>
-                    <td title={OVERALL_COLUMNS.mostIssue.note}>
-                      {mostIssue ? (
-                        <span style={{ fontSize: '0.88rem' }}>{mostIssue}</span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td title={`${OVERALL_COLUMNS.lastQaCheck.title} — Live Dashboard config / Monitor parity (QC visit timestamp)`}>
-                      {qcIso ? formatKuwaitDateTime(qcIso) : <span className="muted">—</span>}
-                    </td>
-                    <td className="muted" title={OVERALL_COLUMNS.lastTechCheck.note}>
-                      —
-                    </td>
-                    <td
-                      title={
-                        wasteEntry?.error
-                          ? `${OVERALL_COLUMNS.wastagePct.title}: ${wasteEntry.error}`
-                          : `${OVERALL_COLUMNS.wastagePct.title} — Kuwait ${wasteByMachineQ.data?.date ?? ''} — same formula as Monitor v1 waste tab (motion overrides + Vendon vends).`
-                      }
-                    >
-                      {typeof wastePct === 'number' && Number.isFinite(wastePct) ? (
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{wastePct.toFixed(1)}%</span>
-                      ) : wasteByMachineQ.data?.skipped ? (
-                        <span className="muted" title={wasteByMachineQ.data?.reason}>
-                          —
-                        </span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td className="muted">
-                      <span className="fleetCellMissing" title={OVERALL_COLUMNS.promotionRuns.note}>
-                        ?
-                      </span>
-                    </td>
-                  </tr>
+                  <OverallFleetRow
+                    key={m.id}
+                    bundle={bundle}
+                    columns={visibleColumns}
+                    onSalesDetail={setSalesDetail}
+                  />
                 );
               })}
               {fleetMachines.length === 0 && !loadingFleetTable ? (
                 <tr>
-                  <td colSpan={20} className="muted">
+                  <td colSpan={visibleColumns.length} className="muted">
                     No machines returned. If Red Flags shows machines, check server{' '}
                     <strong>VENDON_API_BASE</strong> / <strong>VENDON_API_KEY</strong> for{' '}
                     <code style={{ fontSize: '0.88em' }}>/api/alert/machines</code> — the Overall tab needs either Vendon
@@ -817,14 +943,37 @@ export function OverallPage() {
               ) : null}
             </tbody>
           </table>
-        </div>
-        <p className="surfaceHint" style={{ marginTop: 12, marginBottom: 0 }}>
-          Operating hours use the Alert Admin machine profile <strong>Location hours</strong> field. Fleet tags prefer the live
-          Vendon feed; snapshot metrics (tx, cleaning, reasons, vend fails) apply only when the machine is in the Red Flags
-          snapshot. <strong>Footfall</strong> uses the same Videoloft→machine map as Monitor and the synced people-analytics DB.
-          <strong>?</strong> = not wired yet — hover column headers for detail.
-        </p>
-      </section>
+        </TableScrollControls>
+          </div>
+        </section>
+      </StitchOpsPanel>
+
+      {fleetMachines.length > 0 ? (
+        <OpsRevenueTotalsBar
+          totals={fleetRevenueTotals}
+          machineCount={fleetRevenueTotals.machineCount}
+          loading={fleetRevenueTotals.loading}
+          asOfLocal={dailySalesQ.data?.asOfLocal}
+          salesFreshnessNote={
+            dailySalesQ.isFetched
+              ? freshnessNotice('minute', dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal, {
+                  fetching: dailySalesQ.isFetching,
+                })
+              : null
+          }
+          yesterdayOverall={fleetYesterdayOverall}
+        />
+      ) : null}
+
+      {salesDetail && salesDetail.salesElapsed ? (
+        <SalesHistoryModal
+          machineName={salesDetail.m.name}
+          machineId={salesDetail.m.id}
+          row={salesDetail.salesElapsed}
+          meta={dailySalesQ.data}
+          onClose={() => setSalesDetail(null)}
+        />
+      ) : null}
     </div>
   );
 }

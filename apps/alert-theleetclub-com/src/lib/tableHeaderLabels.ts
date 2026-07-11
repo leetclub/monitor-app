@@ -1,0 +1,53 @@
+import type { HeaderDisplay } from '@/components/AlertTableHeader';
+import type { OverallColumnKey } from '@/features/overall/overallWorkbookColumns';
+import type { RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColumns';
+
+/** Every column uses main + sub (or spacer sub) so thead rows align on one baseline grid. */
+export const RED_FLAGS_TABLE_HEADERS: Record<RedFlagsColumnKey, HeaderDisplay> = {
+  vendingMachine: { main: 'Vending', sub: 'machine' },
+  alertType: { main: 'Alert', sub: 'type' },
+  operator: { main: 'Live', sub: 'operator' },
+  operatorActivity: { main: 'Operator', sub: 'activity' },
+  lastTransaction: { main: 'Last', sub: 'tx' },
+  dailySales: { main: 'Sales', sub: 'today' },
+  mtdSales: { main: 'Sales', sub: 'MTD' },
+  mtdYoySales: { main: 'YoY', sub: 'month MTD' },
+  dailyTarget: { main: 'Target', sub: 'today' },
+  salesAcceleration: { main: 'SX', sub: 'Loc · Prod' },
+  frequency: { main: 'Frequency', sub: 'trend' },
+  goCheck: { main: 'GO', sub: 'check' },
+  sendCredit: { main: 'Credits', sub: 'sent' },
+  vendsResolved: { main: 'Vends', sub: 'resolved' },
+  testCredits: { main: 'Dispense', sub: 'tests' },
+  lastCleaning: { main: 'Last', sub: 'clean' },
+  qaVisit: { main: 'QA', sub: 'visit' },
+  techVisit: { main: 'Tech', sub: 'visit' },
+  callOp: { main: 'Call OP' },
+  callAm: { main: 'Call', sub: 'AM' },
+};
+
+export const OVERALL_TABLE_HEADERS: Record<OverallColumnKey, HeaderDisplay> = {
+  operatingHours: { main: 'Op.', sub: 'hours' },
+  vendingMachine: { main: 'Vending', sub: 'machine' },
+  operator: { main: 'Live', sub: 'operator' },
+  operatorActivity: { main: 'Operator', sub: 'activity' },
+  attendance: { main: 'Shift', sub: 'attend' },
+  lastCleaned: { main: 'Last', sub: 'clean' },
+  lastVendFailed: { main: 'Vend', sub: 'failed' },
+  lastTransaction: { main: 'Last', sub: 'tx' },
+  salesTrend: { main: 'Sales', sub: 'today' },
+  mtdSales: { main: 'Sales', sub: 'MTD' },
+  mtdYoySales: { main: 'YoY', sub: 'month MTD' },
+  targetAchieved: { main: 'Target', sub: '%' },
+  peakHours: { main: 'Peak', sub: 'hour' },
+  promotion: { main: 'Promo', sub: 'slot' },
+  highestProduct: { main: 'Top', sub: 'SKU' },
+  lowestProduct: { main: 'Low', sub: 'SKU' },
+  peopleCount: { main: 'Footfall', sub: 'vs yest' },
+  customerCalls: { main: 'Customer', sub: 'calls' },
+  mostIssue: { main: 'Top', sub: 'issue' },
+  lastQaCheck: { main: 'QA', sub: 'check' },
+  lastTechCheck: { main: 'Tech', sub: 'check' },
+  wastagePct: { main: 'Waste', sub: '%' },
+  promotionRuns: { main: 'Promo', sub: 'runs' },
+};

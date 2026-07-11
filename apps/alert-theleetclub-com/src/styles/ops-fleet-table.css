@@ -1,0 +1,214 @@
+/* Shared fleet table readability — align Overall with Red Flags */
+
+.stitchOpsTable.opsFleetTable tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+
+.stitchOpsTable.opsFleetTable tbody tr:nth-child(even) {
+  background: rgba(23, 28, 35, 0.55);
+}
+
+.stitchOpsTable.opsFleetTable tbody tr:hover {
+  background: rgba(33, 38, 45, 0.85);
+}
+
+.stitchOpsTable.opsFleetTable tbody tr.opsRowCleaningOverdue {
+  box-shadow: inset 3px 0 0 0 #dc2626;
+}
+
+.stitchOpsTable.opsFleetTable tbody tr.opsRowCleaningOverdue :global(.cleaningCell) {
+  outline: 1px solid rgba(220, 38, 38, 0.55);
+  border-radius: 6px;
+}
+
+.stitchOpsTable.opsFleetTable tbody td {
+  padding: 0.45rem 0.5rem;
+  vertical-align: top;
+  font-size: 0.82rem;
+  line-height: 1.38;
+  color: #dee2ec;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.stitchOpsTable.opsFleetTable .opsMachineName {
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: #f1f5f9;
+  line-height: 1.3;
+}
+
+.stitchOpsTable.opsFleetTable .opsMachineId {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #ad8883;
+}
+
+.stitchOpsTable.opsFleetTable .opsCellSub {
+  margin-top: 4px;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: #ad8883;
+}
+
+.stitchOpsTable.opsFleetTable .opsCellMuted {
+  color: #8b949e;
+}
+
+.stitchOpsTable.opsFleetTable .opsTdMetric {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.stitchOpsTable.opsFleetTable .opsTdIssue {
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: #fecaca;
+  max-width: 16rem;
+}
+
+/* Sticky machine column while scrolling metrics */
+.stitchOpsTable .opsStickyCol {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #1a1b21;
+  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
+}
+
+.stitchOpsTable thead .opsStickyCol {
+  z-index: 4;
+  background: #171c23;
+}
+
+.stitchOpsTable tbody tr:nth-child(even) .opsStickyCol {
+  background: #171c23;
+}
+
+.stitchOpsTable tbody tr:hover .opsStickyCol {
+  background: #21262d;
+}
+
+/* Sticky Call OP / Call AM while scrolling wide Red Flags checklist */
+.stitchOpsTable .opsStickyColRight {
+  position: sticky;
+  z-index: 3;
+  background: #1a1b21;
+  box-shadow: -4px 0 8px rgba(0, 0, 0, 0.28);
+}
+
+.stitchOpsTable .opsStickyColRightAm {
+  right: 0;
+  min-width: 4.75rem;
+}
+
+.stitchOpsTable .opsStickyColRightOp {
+  right: 4.75rem;
+  min-width: 4.75rem;
+}
+
+.stitchOpsTable thead .opsStickyColRight {
+  z-index: 5;
+  background: #171c23;
+}
+
+.stitchOpsTable tbody tr:nth-child(even) .opsStickyColRight {
+  background: #171c23;
+}
+
+.stitchOpsTable tbody tr:hover .opsStickyColRight {
+  background: #21262d;
+}
+
+.stitchTableScrollHint {
+  display: block;
+  margin: 0 14px;
+  padding: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ad8883;
+  text-align: center;
+}
+
+.stitchTableScrollWrap {
+  position: relative;
+}
+
+.stitchTableScrollNav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 14px 4px;
+}
+
+.stitchTableScrollBtn {
+  min-width: 2rem;
+  height: 1.85rem;
+  padding: 0 0.45rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(33, 38, 45, 0.95);
+  color: #e6edf3;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stitchTableScrollBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stitchTableScrollBtn:not(:disabled):hover {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(48, 54, 61, 0.98);
+}
+
+.stitchTableScroll--pan {
+  cursor: grab;
+  scrollbar-width: thin;
+  scrollbar-color: #6e7681 #161b22;
+}
+
+.stitchTableScroll--pan::-webkit-scrollbar {
+  height: 10px;
+}
+
+.stitchTableScroll--pan::-webkit-scrollbar-thumb {
+  background: #6e7681;
+  border-radius: 999px;
+}
+
+.stitchTableScroll--dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.stitchTableScrollWrap::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  top: 28px;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to left, rgba(22, 27, 34, 0.98), transparent);
+  z-index: 6;
+}
+
+@media (min-width: 768px) and (max-width: 1366px) {
+  .stitchOpsTable.opsFleetTable tbody td {
+    font-size: 0.86rem;
+    padding: 0.5rem 0.55rem;
+  }
+
+  .stitchOpsTable.opsFleetTable .opsMachineName {
+    font-size: 0.9rem;
+  }
+}

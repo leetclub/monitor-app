@@ -12,6 +12,31 @@ function parseTimestampMs(raw: string): number {
   return Number.isNaN(t) ? NaN : t;
 }
 
+/** Two-line cleaning cell: date row + compact time (no seconds). */
+export function formatKuwaitCleaningWhen(iso: string | null | undefined): { date: string; time: string } | null {
+  const ms = parseTimestampMs(String(iso ?? ''));
+  if (Number.isNaN(ms)) return null;
+  try {
+    const d = new Date(ms);
+    const date = d.toLocaleDateString('en-GB', {
+      timeZone: 'Asia/Kuwait',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const time =
+      d.toLocaleTimeString('en-GB', {
+        timeZone: 'Asia/Kuwait',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }) + ' KWT';
+    return { date, time };
+  } catch {
+    return null;
+  }
+}
+
 export function formatKuwaitDateTime(iso: string | null | undefined): string {
   const ms = parseTimestampMs(String(iso ?? ''));
   if (Number.isNaN(ms)) return iso ? String(iso) : '—';
@@ -31,4 +56,22 @@ export function formatKuwaitDateTime(iso: string | null | undefined): string {
   } catch {
     return String(iso);
   }
+}
+
+/** Relative time for operator last machine access (e.g. "5 min ago"). */
+export function formatRelativeAgo(iso: string | null | undefined, nowMs: number = Date.now()): string | null {
+  const ms = parseTimestampMs(String(iso ?? ''));
+  if (Number.isNaN(ms)) return null;
+  const diffSec = Math.max(0, Math.floor((nowMs - ms) / 1000));
+  if (diffSec < 45) return 'just now';
+  if (diffSec < 3600) {
+    const m = Math.floor(diffSec / 60);
+    return m === 1 ? '1 min ago' : `${m} min ago`;
+  }
+  if (diffSec < 86400) {
+    const h = Math.floor(diffSec / 3600);
+    return h === 1 ? '1 hr ago' : `${h} hr ago`;
+  }
+  const d = Math.floor(diffSec / 86400);
+  return d === 1 ? '1 day ago' : `${d} days ago`;
 }

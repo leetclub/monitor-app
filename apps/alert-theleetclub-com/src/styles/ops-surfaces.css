@@ -1,0 +1,398 @@
+/**
+ * Shared inset surfaces for Ops dashboards (Red Flags / Overall).
+ * KPI cards, compare bar, column composer, sales banner, alerts — one visual language.
+ */
+.stitchOpsPanel {
+  --ops-surface-bg: #171c23;
+  --ops-surface-bg-hover: #1e1f25;
+  --ops-surface-border: #5d3f3b;
+  --ops-surface-radius: 8px;
+  --ops-surface-pad-y: 10px;
+  --ops-surface-pad-x: 12px;
+  --ops-surface-gap: 10px;
+  --ops-inset-x: 14px;
+  --ops-accent: #c45c4a;
+  --ops-label-color: #ad8883;
+  --ops-title-color: #dee2ec;
+}
+
+.opsInset {
+  margin-left: 0;
+  margin-right: 0;
+  padding: var(--ops-surface-pad-y) var(--ops-surface-pad-x);
+  border: 1px solid var(--ops-surface-border);
+  border-radius: var(--ops-surface-radius);
+  background: var(--ops-surface-bg);
+}
+
+.opsInset--tight {
+  padding: 8px 10px;
+}
+
+.opsInset--flushTop {
+  margin-top: 12px;
+}
+
+.opsToolStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ops-surface-gap);
+  margin-top: 0;
+}
+
+.opsToolStack .opsInset,
+.opsToolStack .stitchOpsControls {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.opsSectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: var(--ops-surface-gap);
+}
+
+.opsSectionTitle {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-label-color);
+}
+
+.opsSectionTitleStrong {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--ops-title-color);
+}
+
+.opsSectionMeta {
+  font-size: 11px;
+  color: #8a9aab;
+  font-variant-numeric: tabular-nums;
+}
+
+.opsSelectGrid {
+  display: grid;
+  gap: var(--ops-surface-gap);
+}
+
+.opsSelectGrid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.opsSelectGrid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .opsSelectGrid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .opsSelectGrid--4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.opsSelectCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 0;
+  padding: var(--ops-surface-pad-y) var(--ops-surface-pad-x);
+  border: 1px solid var(--ops-surface-border);
+  border-radius: var(--ops-surface-radius);
+  background: var(--ops-surface-bg);
+  color: #c4b5b2;
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.opsSelectCard:hover {
+  background: var(--ops-surface-bg-hover);
+  border-color: #6a5040;
+}
+
+.opsSelectCard--active {
+  border-color: var(--ops-accent);
+  background: var(--ops-surface-bg-hover);
+  color: var(--ops-title-color);
+  box-shadow: inset 0 0 0 1px rgba(196, 92, 74, 0.28);
+}
+
+.opsSelectCardLabel {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: inherit;
+}
+
+.opsSelectCardHint {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #8a9aab;
+}
+
+.opsStatusPill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ops-surface-border);
+  background: #252a32;
+  color: #8a9aab;
+  white-space: nowrap;
+}
+
+.opsStatusPill--ok {
+  color: #7cb896;
+  border-color: rgba(124, 184, 150, 0.35);
+  background: rgba(60, 120, 90, 0.12);
+}
+
+.opsStatusPill--busy {
+  color: #c4a574;
+}
+
+.opsStatusPill--warn {
+  color: #d4a574;
+}
+
+@media (max-width: 1024px) {
+  .stitchOpsPanel {
+    --ops-inset-x: 10px;
+  }
+}
+
+/* Dashboard section grid — groups cards with visible headers */
+.opsDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px var(--ops-inset-x) 10px;
+}
+
+.opsDashboardGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.opsDashboardGrid--2col {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+}
+
+@media (max-width: 960px) {
+  .opsDashboardGrid--2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.opsDashboardSection {
+  border: 1px solid var(--ops-surface-border);
+  border-radius: var(--ops-surface-radius);
+  background: var(--ops-surface-bg);
+  overflow: hidden;
+}
+
+.opsDashboardSectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ops-surface-border);
+  background: var(--ops-surface-bg-hover);
+}
+
+.opsDashboardSectionTitle {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ops-label-color);
+}
+
+.opsDashboardSectionBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #8a9aab;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ops-surface-border);
+  background: #252a32;
+}
+
+.opsDashboardSectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.opsDashboardSectionBody--kpis {
+  padding: 10px 12px 12px;
+}
+
+.opsDashboardSectionBody--kpis .stitchKpiRow {
+  margin: 0;
+  padding: 0;
+}
+
+.opsDashboardSectionBody--data {
+  padding: 0;
+  gap: 0;
+}
+
+.opsDashboardSectionBody--data .stitchTablePanelHead {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.opsDashboardSectionBody--data .stitchTableScrollHint {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #8a9aab;
+  border-bottom: 1px solid var(--ops-surface-border);
+}
+
+.opsDashboardSectionBody--data .stitchTableScrollWrap {
+  margin: 0;
+}
+
+.opsDashboardSectionBody--data .stitchTableScroll {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+/* Nested surfaces: no double horizontal inset */
+.opsDashboardSectionBody .opsInset,
+.opsDashboardSectionBody .stitchOpsControls,
+.opsDashboardSectionBody .alertSalesBanner,
+.opsDashboardSectionBody .stitchOpsAlert,
+.opsDashboardSectionBody .opsToolStack {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.opsDashboardSectionBody .opsToolStack {
+  margin-top: 0;
+}
+
+.opsDashboardSectionBody .stitchOpsHint {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+/* Tighter dashboard — less gap before table */
+.opsDashboard--tight {
+  gap: 6px;
+  padding: 4px var(--ops-inset-x) 6px;
+}
+
+.opsPrepCompact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--ops-surface-border);
+  border-radius: var(--ops-surface-radius);
+  background: var(--ops-surface-bg);
+}
+
+.opsPrepRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+
+.opsPrepControls {
+  margin: 0 !important;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.opsPrepSalesLine {
+  margin: 0;
+  padding: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #9aa8b8;
+  border-top: 1px solid rgba(93, 63, 59, 0.45);
+}
+
+.opsPrepSalesLine strong {
+  color: #dee2ec;
+  font-weight: 700;
+}
+
+.opsAlertInline {
+  margin: 0 !important;
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+.opsDashboardSection--data {
+  border: none;
+  background: transparent;
+}
+
+.opsTableLead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ops-surface-border);
+  background: var(--ops-surface-bg-hover);
+}
+
+.opsTableLeadTitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ops-label-color);
+}
+
+.stitchTableScrollHint--tight {
+  margin: 0 !important;
+  padding: 4px 12px !important;
+  font-size: 10px !important;
+  border-bottom: 1px solid var(--ops-surface-border);
+}

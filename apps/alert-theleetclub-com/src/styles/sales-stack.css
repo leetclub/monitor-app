@@ -1,0 +1,686 @@
+/* Stacked sales comparison (Overall / Red Flags) */
+
+.salesStack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 5.75rem;
+  max-width: 7.5rem;
+}
+
+.salesStackBtn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  border-radius: 6px;
+}
+
+.salesStackBtn:hover .salesStackBoxToday,
+.salesStackBtn:focus-visible .salesStackBoxToday {
+  filter: brightness(1.08);
+}
+
+.salesStackBtn:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.55);
+  outline-offset: 2px;
+}
+
+.salesStackEmpty {
+  color: #8b949e;
+  font-weight: 600;
+}
+
+.salesStackBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+  line-height: 1.2;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.salesStackBoxToday {
+  font-weight: 700;
+}
+
+.salesStackBoxUp {
+  border-color: rgba(83, 225, 111, 0.35);
+  background: rgba(83, 225, 111, 0.1);
+}
+
+.salesStackBoxUp .salesStackVal {
+  color: #86efac;
+}
+
+.salesStackBoxDown {
+  border-color: rgba(255, 59, 48, 0.35);
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.salesStackBoxDown .salesStackVal {
+  color: #fca5a5;
+}
+
+.salesStackBoxOwner {
+  border-color: rgba(167, 139, 250, 0.35);
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.salesStackBoxOwner .salesStackVal {
+  color: #ddd6fe;
+}
+
+.salesStackBoxYest {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.salesStackBoxMuted {
+  opacity: 0.75;
+}
+
+.salesStackLabel {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ad8883;
+}
+
+.salesStackVal {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #e2e8f0;
+}
+
+.salesStackTrend {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.stitchOpsTable .opsColSales,
+.stitchOpsTable td:has(.salesStack) {
+  min-width: 6.25rem;
+  width: 6.25rem;
+}
+
+@media (min-width: 768px) and (max-width: 1366px) {
+  .salesStackVal {
+    font-size: 0.8rem;
+  }
+}
+
+/* History modal */
+
+.salesHistoryBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2, 4, 10, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.salesHistoryModal {
+  width: min(420px, 100%);
+  max-height: min(88dvh, 640px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+  border: 1px solid #5d3f3b;
+  background: linear-gradient(165deg, #1a1b21, #121016);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+  padding: 1rem 1.15rem 1.2rem;
+}
+
+.salesHistoryHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.salesHistoryEyebrow {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #ad8883;
+}
+
+.salesHistoryTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.salesHistorySub {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #ad8883;
+}
+
+.salesHistoryClose {
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.salesHistoryNote {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #ad8883;
+}
+
+.salesHistoryTodayHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(83, 225, 111, 0.28);
+  background: rgba(83, 225, 111, 0.08);
+}
+
+.salesHistoryTodayLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ad8883;
+  margin-bottom: 2px;
+}
+
+.salesHistoryTodayDate {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.salesHistoryTodayVal {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #86efac;
+  white-space: nowrap;
+}
+
+.salesHistoryCompareHead {
+  margin-bottom: 8px;
+}
+
+.salesHistoryCompareTitle {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.35;
+}
+
+.salesHistoryCompareSub {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ad8883;
+}
+
+.salesHistoryCompareGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.salesHistoryGridLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ad8883;
+  margin-bottom: 2px;
+}
+
+.salesHistoryGridVal {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f1f5f9;
+}
+
+.salesHistoryGridTrend {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.salesHistoryList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.salesHistoryRow {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.salesHistoryRowUp {
+  border-color: rgba(83, 225, 111, 0.3);
+  background: rgba(83, 225, 111, 0.08);
+}
+
+.salesHistoryRowDown {
+  border-color: rgba(255, 59, 48, 0.3);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+.salesHistoryRowDate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 4px;
+}
+
+.salesHistoryWeekday {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #ad8883;
+}
+
+.salesHistoryDate {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.salesHistoryTag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #5d3f3b;
+  color: #dee2ec;
+}
+
+.salesHistoryRowVal {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+}
+
+.salesHistoryRowTrend {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.salesHistoryRowTrendMuted {
+  color: #8b949e;
+}
+
+.salesHistoryEmpty {
+  margin: 0;
+  color: #ad8883;
+  font-size: 0.85rem;
+}
+
+.salesHistoryFootnote {
+  margin-top: 0.85rem;
+  font-size: 0.78rem;
+  opacity: 0.82;
+}
+
+.operatorWorkflowSection {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(93, 63, 59, 0.45);
+}
+
+.operatorWorkflowSection .salesHistoryCompareTitle {
+  margin: 0 0 0.5rem;
+}
+
+/* Incident trend history (Red Flags) — higher % is worse */
+
+.trendHistoryHero {
+  border-color: rgba(255, 180, 170, 0.28);
+  background: rgba(255, 180, 170, 0.08);
+}
+
+.trendHistoryHeroVal {
+  color: #fecaca;
+}
+
+.trendHistoryRowUp {
+  border-color: rgba(255, 59, 48, 0.3);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+.trendHistoryRowDown {
+  border-color: rgba(83, 225, 111, 0.3);
+  background: rgba(83, 225, 111, 0.08);
+}
+
+.historyModalContact {
+  margin: 0 0 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.historyModalSectionTitle {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a8a8b3;
+}
+
+.historyModalLegend,
+.historyModalNoteMuted {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #b8b8c4;
+}
+
+.historyModalNoteMuted {
+  color: #9a9aa8;
+  font-size: 0.78rem;
+}
+
+.historyModalFreqGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.historyModalFreqCard {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.historyModalFreqLabel {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9a9aa8;
+}
+
+.historyModalFreqVal {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.historyModalFreqExplain {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #9a9aa8;
+}
+
+.historyModalRowExplain {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #c4c4d0;
+}
+
+.opContactBar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opContactBarTable {
+  gap: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.callAmBtn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--link);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(173, 198, 255, 0.45);
+  text-underline-offset: 2px;
+}
+
+.callAmBtn:hover {
+  color: #c8daff;
+}
+
+.opContactSlotMiss {
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.opContactSlotMiss:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.opContactWho {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #e5e7eb;
+}
+
+.opContactSlots {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
+}
+
+.opContactSlots--modal.opContactSlotsIconsOnly {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  justify-items: center;
+  align-items: stretch;
+  padding: 12px 8px 16px;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.opContactSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  line-height: 0;
+  box-sizing: border-box;
+}
+
+.opContactSlotTable {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.opContactSlotModal {
+  min-width: 0;
+  width: 100%;
+  max-width: 64px;
+  min-height: 52px;
+  padding: 8px;
+  flex-direction: column;
+}
+
+.opContactSlotIconsOnly.opContactSlotModal {
+  aspect-ratio: 1;
+  max-width: 72px;
+  min-height: 0;
+  padding: 10px;
+}
+
+.opContactSlotsIconsOnly .opContactIcon {
+  width: 28px;
+  height: 28px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.operatorContactIconsWrap {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.operatorContactSectionModal {
+  align-items: center;
+  width: 100%;
+}
+
+.opContactSlotOn {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.opContactSlotOn:hover {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.opContactSlotOff {
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.opContactSlotOff .opContactIcon {
+  filter: grayscale(1) brightness(0.55);
+  opacity: 0.65;
+}
+
+.opContactSlotOn .opContactIcon {
+  filter: none;
+  opacity: 1;
+}
+
+.opContactSlotLabel {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.opContactIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.opContactSlotTable .opContactIcon {
+  width: 13px;
+  height: 13px;
+}
+
+.trendBreakdownPanel {
+  margin-top: 4px;
+}
+
+.trendBreakdownInDetail .trendBreakdownPanel .historyModalSectionTitle {
+  margin-top: 0;
+}
+
+.salesHistoryModal {
+  max-height: min(92vh, 820px);
+  overflow-y: auto;
+}
+
+@media (max-width: 520px) {
+  .historyModalFreqGrid {
+    grid-template-columns: 1fr;
+  }
+}

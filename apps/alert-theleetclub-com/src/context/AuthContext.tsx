@@ -48,29 +48,37 @@ async function fetchJson(
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => readDevUser());
-  const [loading] = useState(false);
+  const devUser = readDevUser();
+  const [user, setUser] = useState<AuthUser | null>(() => devUser);
+  const [loading, setLoading] = useState(() => !devUser);
 
-  // Restore Flask session on refresh.
+  // Restore Flask session on refresh (same-origin /api when ALERT_API_URL is empty).
   useEffect(() => {
-    if (readDevUser()) return;
+    if (devUser) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
         const r = await fetch(apiUrl('/api/me'), { credentials: 'include' });
-        if (!r.ok || cancelled) return;
-        const j = (await r.json()) as { email?: string };
-        if (j.email && !cancelled) {
-          setUser({ email: j.email, name: j.email.split('@')[0] });
+        if (cancelled) return;
+        if (r.ok) {
+          const j = (await r.json()) as { email?: string };
+          if (j.email) {
+            setUser({ email: j.email, name: j.email.split('@')[0] });
+          }
         }
       } catch {
         /* offline */
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [devUser]);
 
   const completeGoogleCredential = useCallback(async (credential: string) => {
     const r = await fetchJson('/api/auth/google', {
@@ -104,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const ok = await completeGoogleCredential(String(resp?.credential || ''));
             resolve(ok);
           },
-          auto_select: false,
+          auto_select: true,
           use_fedcm_for_prompt: false,
         });
         (window as any).google.accounts.id.prompt();
@@ -154,4 +162,3 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
-

@@ -57,10 +57,22 @@ export function lastCleanedStatus(params: {
   const { lastCleaningIso, cleaningWindows } = params;
   const day = kuwaitDateKey(lastCleaningIso);
   const today = kuwaitDateKey(new Date().toISOString());
-  if (!day || day !== today) return { label: 'No cleaning', color: 'r' };
+  if (!day || day !== today) return { label: 'Not today', color: 'r' };
   const t = kuwaitMinutesOfDay(lastCleaningIso);
-  if (t == null) return { label: 'Cleaned', color: 'y' };
-  if (!cleaningWindows.length) return { label: 'Cleaned', color: 'y' };
+  if (t == null) return { label: 'Today', color: 'y' };
+  if (!cleaningWindows.length) return { label: 'Today', color: 'y' };
   const inside = cleaningWindows.some((w) => t >= w.startMin && t <= w.endMin);
-  return inside ? { label: 'On schedule', color: 'g' } : { label: 'Outside schedule', color: 'y' };
+  return inside ? { label: 'On schedule', color: 'g' } : { label: 'Off schedule', color: 'y' };
+}
+
+export function cleaningStatusTitle(
+  iso: string,
+  status: { label: string; color: 'g' | 'y' | 'r' },
+): string {
+  const when = kuwaitDateKey(iso);
+  const today = kuwaitDateKey(new Date().toISOString());
+  if (when && when !== today) {
+    return `Last clean ${when} (Kuwait). Status: no clean recorded for today (${today}).`;
+  }
+  return `Last clean today (${when || 'Kuwait'}). Status: ${status.label}.`;
 }

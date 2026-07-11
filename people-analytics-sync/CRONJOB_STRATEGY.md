@@ -8,9 +8,21 @@
 |--------|--------|---------|
 | `schedule` | `*/5 * * * *` | Every 5 minutes |
 | `SYNC_DAYS_BACK` | `0` | Not a multi-day backfill |
-| `SYNC_LIVE_DAYS` | `2` | From **yesterday 00:00** through **current hour** (Kuwait) |
-| `SYNC_INTERVAL` | `hour` | Hour buckets (sent to Videoloft as `3600000`) |
-| `TIMEZONE` | `Asia/Kuwait` | Bucket boundaries |
+| `SYNC_LIVE_DAYS` | `14` | Rolling window: last 14 Kuwait calendar days through current hour |
+| `SYNC_PER_DEVICE` | `1` | One Videoloft request per camera (avoids ~100-row cap) |
+| **Full refresh** | `people-analytics-sync-full-refresh` | Daily 03:30 Kuwait — reconcile + `SYNC_DAYS_BACK=365`, all cameras |
+| `SYNC_INTERVAL` | `hour` | Hour buckets only (`SYNC_ALSO_DATE=0`; API builds daily from hours) |
+| `SYNC_ALSO_DATE` | `0` | Do not store parallel `date` rows (prevents double-count) |
+| `TIMEZONE` | `Asia/Kuwait` | Canonical Kuwait hour keys on upsert |
+
+### Fleet reconcile (all machines, all stored days)
+
+```bash
+bash scripts/run-people-fleet-reconcile.sh
+kubectl logs -n leet-monitor -l job=people-analytics-fleet-reconcile -f
+```
+
+`RUN_DB_RECONCILE=1` removes duplicate hour rows per camera/hour and deletes legacy `date` rows before backfill.
 
 Each run **upserts** all hour rows in that window. If Videoloft increases `in`/`out` for an earlier hour, the next sync run updates the same `(uidd, first_timestamp, interval_type)` row.
 
@@ -39,6 +51,21 @@ Hourly “last 1 hour” sync does **not** re-pull older buckets. The Monitor **
 - Recovery from downtime
 
 Older dates (e.g. a single day weeks ago) are **not** refreshed by the live cron; run a one-off backfill for that range.
+
+### Full historical load (all Videoloft hour buckets)
+
+Videoloft returns only ~**100 rows** per request when many `uidds` are sent together. The sync service therefore:
+
+- **`SYNC_PER_DEVICE=1`** (default) — one API call per camera per time chunk
+- **`SYNC_CHUNK_DAYS=7`** — split long ranges into 7-day windows
+
+One-time job (365 days, hourly):
+
+```bash
+kubectl delete job people-analytics-hourly-backfill-365d -n leet-monitor --ignore-not-found
+kubectl apply -f people-analytics-sync/k8s/hourly-backfill-365d-job.yaml -n leet-monitor
+kubectl logs -n leet-monitor -l job=people-analytics-hourly-backfill-365d -f
+```
 
 ## Migration from Every Minute to Every Hour
 

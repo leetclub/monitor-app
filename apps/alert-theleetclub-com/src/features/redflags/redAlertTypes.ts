@@ -1,7 +1,7 @@
 /** Row shape served by cached Red Alert snapshot (`GET /api/alert/red-flags/snapshot`). Parity with monitoring-app-v2 Red Alert. */
 
 /** Board column “trend” baseline: week-to-date vs last week, or Kuwait “today so far” vs aligned windows. */
-export type RedAlertCompareMode = 'week' | 'sameWeekdayLw' | 'yesterday';
+export type RedAlertCompareMode = 'week' | 'sameWeekdayLw' | 'yesterday' | 'yesterdayVsDayBefore';
 
 export type RedAlertFrequency = {
   totalCriteriaHitsThisWeek?: number | null;
@@ -10,6 +10,7 @@ export type RedAlertFrequency = {
   totalCriteriaHitsSameDayLastWeek?: number | null;
   totalCriteriaHitsLastWeekAlignedToWtD?: number | null;
   totalCriteriaHitsYesterdaySameElapsed?: number | null;
+  totalCriteriaHitsDayBeforeSameElapsed?: number | null;
   totalCriteriaHits7d?: number | null;
   totalCriteriaHitsPrior7d?: number | null;
   staleSaleEpisodesThisWeek?: number | null;
@@ -80,13 +81,24 @@ export type RedAlertRow = {
   happenedPctVsSameDayLastWeek?: number | null;
   happenedYesterdaySameElapsed?: number | null;
   happenedPctVsYesterdaySameElapsed?: number | null;
+  happenedDayBeforeSameElapsed?: number | null;
+  happenedPctVsDayBefore?: number | null;
   goCheckUrl?: string | null;
+  /** Live Dashboard strike email (API may also send as operatorEmail). */
   strikeOperatorEmail?: string | null;
+  operatorEmail?: string | null;
   pfaExcludeCleaning?: boolean | null;
   pfaExcludeCleaningAdmin?: boolean | null;
   onCleaningSchedule?: boolean;
   alertPriorityTier?: number | null;
   duringScheduledCleaningNow?: boolean;
+  /** ISO timestamp of operator last WEB cashless vend on this machine. */
+  operatorLastAccessAt?: string | null;
+  /** Daily sales target KWD (Live Dashboard config or week target / 7). */
+  dailyTarget?: number | null;
+  /** True when last cleaning was more than 15 hours ago. */
+  cleaningOverdue15h?: boolean;
+  hoursSinceCleaning?: number | null;
 };
 
 export type RedAlertSnapshotResponse = {
@@ -115,6 +127,8 @@ export type RedAlertDetailPayload = {
   happenedPctVsSameDayLastWeek?: number | null;
   happenedYesterdaySameElapsed?: number | null;
   happenedPctVsYesterdaySameElapsed?: number | null;
+  happenedDayBeforeSameElapsed?: number | null;
+  happenedPctVsDayBefore?: number | null;
   compareMode: RedAlertCompareMode;
   goCheckUrl?: string | null;
   strikeOperatorEmail?: string | null;

@@ -5,7 +5,7 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time as dt_time, date
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
@@ -16,22 +16,43 @@ from sqlalchemy.orm import Session
 
 from dashboard_access_models import (
     AlertMachineProfile,
+    AlertDailySalesElapsedCache,
+    AlertUserUiPrefs,
+    LiveMachineConfig,
     MachineCleaningSchedule,
+    QaManualSummary,
     RedAlertSnapshotCache,
     create_dashboard_engine_and_session,
 )
-from dashboard_access_routes import resolve_session_allowed_tabs
+from dashboard_access_routes import resolve_session_allowed_tabs, _check_secret
 from vendon_machine_helpers import (
     machine_row_excluded,
     vendon_fetch_machine_list,
     vendon_json_api_error_message,
     vendon_machine_tag_for_alert_admin_detail,
 )
-from vendon_proxy_routes import compute_remote_credits_logs_classic, compute_vends_resolved_for_machine
+from vendon_proxy_routes import (
+    compute_remote_credits_logs_classic,
+    compute_vends_resolved_for_machine,
+    _fetch_vends_stats_window,
+    _refresh_revenue_cache_single_day,
+)
+from red_alert_routes import compute_daily_incidents_elapsed
 from models import PeopleAnalyticsRecord, VendonDailyMachineRevenueCache, create_engine_and_session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 logger = logging.getLogger(__name__)
+
+LOCATION_OWNER_CANONICAL = ("MOH", "KU", "O2", "Others")
+
+
+def _decimal_or_none(v: Any) -> Optional[float]:
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 VENDON_API_BASE = (os.environ.get("VENDON_API_BASE") or "").strip().rstrip("/")
 VENDON_API_KEY = (os.environ.get("VENDON_API_KEY") or "").strip()
@@ -44,6 +65,164 @@ MOTION_AREA_OVERRIDES_API_KEY = (os.environ.get("MOTION_AREA_OVERRIDES_API_KEY")
 
 _dash_session_factory = None
 _pa_session_factory = None
+
+# Short TTL caches so Alert boards do not stampede the single gunicorn worker.
+_ALERT_ROUTE_CACHE: Dict[str, Tuple[float, Any]] = {}
+_ALERT_REMOTE_CREDITS_CACHE_SEC = int(os.environ.get("ALERT_REMOTE_CREDITS_CACHE_SEC", "90"))
+_ALERT_REMOTE_CREDITS_MAX_VENDS_RESOLVE = int(os.environ.get("ALERT_REMOTE_CREDITS_MAX_VENDS_RESOLVE", "12"))
+_ALERT_REMOTE_CREDITS_MAX_WORKERS = int(os.environ.get("ALERT_REMOTE_CREDITS_MAX_WORKERS", "4"))
+_DAILY_SALES_ELAPSED_CACHE_SEC = int(os.environ.get("ALERT_DAILY_SALES_ELAPSED_CACHE_SEC", "60"))
+_DAILY_SALES_DB_STALE_SEC = int(os.environ.get("ALERT_DAILY_SALES_DB_STALE_SEC", "55"))
+_DAILY_SALES_ELAPSED_HISTORY_DAYS = int(os.environ.get("ALERT_DAILY_SALES_ELAPSED_HISTORY_DAYS", "8"))
+_DAILY_INCIDENTS_ELAPSED_CACHE_SEC = int(os.environ.get("ALERT_DAILY_INCIDENTS_ELAPSED_CACHE_SEC", "120"))
+_ALERT_REVENUE_CACHE_SEED_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_SEED_TTL_SEC", "900"))
+
+
+def _vendon_revenue_cache_has_day(db: Session, day: date) -> bool:
+    return (
+        db.query(VendonDailyMachineRevenueCache.id)
+        .filter(VendonDailyMachineRevenueCache.cache_date == day)
+        .limit(1)
+        .first()
+        is not None
+    )
+
+
+def _maybe_seed_vendon_revenue_cache(day: date) -> None:
+    """Queue background warm of vendon_daily_machine_revenue_cache (never blocks the HTTP request)."""
+    throttle_key = f"revenue_seed:{day.isoformat()}"
+    cached = _alert_cache_get(throttle_key, _ALERT_REVENUE_CACHE_SEED_TTL_SEC)
+    if cached is not None:
+        return
+    db = _pa_session()
+    try:
+        if _vendon_revenue_cache_has_day(db, day):
+            _alert_cache_set(throttle_key, {"ok": True, "skipped": "exists"})
+            return
+    finally:
+        db.close()
+
+    _alert_cache_set(throttle_key, {"ok": False, "inFlight": True})
+
+    def _run_seed() -> None:
+        try:
+            res = _refresh_revenue_cache_single_day(day.isoformat())
+            _alert_cache_set(throttle_key, res)
+            if not res.get("ok"):
+                logger.warning("vendon revenue cache seed failed for %s: %s", day.isoformat(), res.get("error"))
+        except Exception:
+            logger.exception("vendon revenue cache seed error for %s", day.isoformat())
+
+    import threading
+
+    threading.Thread(target=_run_seed, daemon=True).start()
+
+
+def _ensure_alert_ops_cache_tables(db: Session) -> None:
+    db.execute(
+        text(
+            """
+        CREATE TABLE IF NOT EXISTS alert_workflow_attendance_cache (
+          id INTEGER PRIMARY KEY,
+          payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          generated_at TIMESTAMPTZ,
+          compute_error TEXT
+        );
+        INSERT INTO alert_workflow_attendance_cache (id, payload_json)
+        VALUES (1, '{}'::jsonb) ON CONFLICT (id) DO NOTHING;
+        CREATE TABLE IF NOT EXISTS alert_daily_sales_elapsed_cache (
+          id INTEGER PRIMARY KEY,
+          payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          cache_bucket TEXT,
+          generated_at TIMESTAMPTZ,
+          compute_error TEXT
+        );
+        INSERT INTO alert_daily_sales_elapsed_cache (id, payload_json)
+        VALUES (1, '{}'::jsonb) ON CONFLICT (id) DO NOTHING;
+    """
+        )
+    )
+
+
+def _load_daily_sales_elapsed_db_cache() -> Optional[Dict[str, Any]]:
+    db = _dash_session()
+    try:
+        _ensure_alert_ops_cache_tables(db)
+        db.commit()
+        row = db.query(AlertDailySalesElapsedCache).filter(AlertDailySalesElapsedCache.id == 1).first()
+        if not row or not isinstance(row.payload_json, dict) or not row.payload_json.get("byMachineId"):
+            return None
+        payload = dict(row.payload_json)
+        if row.generated_at:
+            payload["cacheGeneratedAt"] = row.generated_at.isoformat()
+        payload["fromCache"] = True
+        if row.cache_bucket:
+            payload["cacheBucket"] = row.cache_bucket
+        return payload
+    finally:
+        db.close()
+
+
+def _save_daily_sales_elapsed_db_cache(payload: Optional[Dict[str, Any]], err: Optional[str], cache_bucket: str) -> None:
+    db = _dash_session()
+    try:
+        _ensure_alert_ops_cache_tables(db)
+        db.commit()
+        row = db.query(AlertDailySalesElapsedCache).filter(AlertDailySalesElapsedCache.id == 1).first()
+        if not row:
+            row = AlertDailySalesElapsedCache(id=1, payload_json={})
+            db.add(row)
+        if err:
+            row.compute_error = err
+            db.commit()
+            return
+        row.payload_json = payload or {}
+        row.cache_bucket = cache_bucket
+        row.generated_at = datetime.now(timezone.utc)
+        row.compute_error = None
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def _daily_sales_cache_is_stale(payload: Dict[str, Any], cache_bucket: str) -> bool:
+    if payload.get("cacheBucket") != cache_bucket:
+        return True
+    gen = payload.get("cacheGeneratedAt")
+    if not gen:
+        return True
+    try:
+        ts = datetime.fromisoformat(str(gen).replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - ts).total_seconds()
+        return age > _DAILY_SALES_DB_STALE_SEC
+    except Exception:
+        return True
+
+
+def _kuwait_elapsed_window_end(day: date, now_local: datetime) -> datetime:
+    tz = now_local.tzinfo
+    if day == now_local.date():
+        return now_local
+    return datetime.combine(day, now_local.time(), tzinfo=tz)
+
+
+def _alert_cache_get(key: str, ttl_sec: int) -> Optional[Any]:
+    ent = _ALERT_ROUTE_CACHE.get(key)
+    if not ent:
+        return None
+    ts, val = ent
+    if time.monotonic() - ts > ttl_sec:
+        return None
+    return val
+
+
+def _alert_cache_set(key: str, val: Any) -> None:
+    _ALERT_ROUTE_CACHE[key] = (time.monotonic(), val)
 
 
 def _dash_session() -> Session:
@@ -156,7 +335,7 @@ def _vendon_get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Opt
     if params:
         url = f"{url}?{urlencode({k: v for k, v in params.items() if v is not None})}"
     try:
-        r = requests.get(url, headers=_vendon_headers(), timeout=120)
+        r = requests.get(url, headers=_vendon_headers(), timeout=45)
         if r.status_code != 200:
             return None, f"Vendon API error {r.status_code}: {r.text[:500]}"
         data = r.json()
@@ -234,6 +413,46 @@ def _fetch_vends_machine_day(machine_id: str, from_ts: int, to_ts: int) -> Tuple
             break
         off += page_limit
     return out[:25000], None
+
+
+def _fetch_all_vends(from_ts: int, to_ts: int, *, max_rows: int = 12000) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Paginated /stats/vends for fleet-wide windows (Alert Overall same-elapsed sales)."""
+    rows: List[Dict[str, Any]] = []
+    off = 0
+    page_limit = 500
+    while off < 50000 and len(rows) < max_rows:
+        params: Dict[str, Any] = {
+            "from_timestamp": from_ts,
+            "to_timestamp": to_ts,
+            "limit": page_limit,
+            "offset": off,
+        }
+        data, err = _vendon_get("/stats/vends", params)
+        if err:
+            return [], err
+        chunk = data.get("result") if isinstance(data, dict) else None
+        chunk = chunk if isinstance(chunk, list) else []
+        rows.extend(chunk)
+        if len(chunk) < page_limit:
+            break
+        off += page_limit
+    return rows[:max_rows], None
+
+
+def _vend_amount_kwd(v: Dict[str, Any]) -> float:
+    amt_raw = v.get("price") or v.get("amount") or v.get("Amount") or 0
+    try:
+        return float(amt_raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _vend_ts(v: Dict[str, Any]) -> int:
+    ts_raw = v.get("datetime") or v.get("timestamp") or v.get("time") or 0
+    try:
+        return int(ts_raw) if ts_raw is not None else 0
+    except (TypeError, ValueError):
+        return 0
 
 
 def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], Optional[str], Dict[str, Any]]:
@@ -472,21 +691,346 @@ def _local_calendar_day_bounds_utc_naive(day_iso: str, tz_name: str) -> Tuple[da
 def _sum_people_in_by_uidd_day(
     pa_session, uidd_set: frozenset, day_iso: str, tz_name: str
 ) -> Dict[str, int]:
-    """Per-uidd summed ``people_in`` for interval ``date`` in the given local calendar day (Monitor-style)."""
+    """
+    Per-uidd summed ``people_in`` for a Kuwait calendar day.
+
+    Live cron stores **hour** buckets; legacy backfill may have **date** rows.
+    Prefer hourly sums when present so today/yesterday match Videoloft; otherwise use daily rows.
+    """
     if not uidd_set:
         return {}
     start_naive_utc, end_naive_utc = _local_calendar_day_bounds_utc_naive(day_iso, tz_name)
     uid_list = list(uidd_set)
-    rows = (
-        pa_session.query(PeopleAnalyticsRecord.uidd, func.sum(PeopleAnalyticsRecord.people_in))
-        .filter(PeopleAnalyticsRecord.interval_type == "date")
-        .filter(PeopleAnalyticsRecord.uidd.in_(uid_list))
-        .filter(PeopleAnalyticsRecord.first_timestamp >= start_naive_utc)
-        .filter(PeopleAnalyticsRecord.first_timestamp <= end_naive_utc)
-        .group_by(PeopleAnalyticsRecord.uidd)
-        .all()
+
+    def _sum_for_interval(interval_type: str) -> Dict[str, int]:
+        rows = (
+            pa_session.query(PeopleAnalyticsRecord.uidd, func.sum(PeopleAnalyticsRecord.people_in))
+            .filter(PeopleAnalyticsRecord.interval_type == interval_type)
+            .filter(PeopleAnalyticsRecord.uidd.in_(uid_list))
+            .filter(PeopleAnalyticsRecord.first_timestamp >= start_naive_utc)
+            .filter(PeopleAnalyticsRecord.first_timestamp <= end_naive_utc)
+            .group_by(PeopleAnalyticsRecord.uidd)
+            .all()
+        )
+        return {str(r[0]): int(r[1] or 0) for r in rows}
+
+    hour_map = _sum_for_interval("hour")
+    date_map = _sum_for_interval("date")
+    out: Dict[str, int] = {}
+    for u in uid_list:
+        h = hour_map.get(u, 0)
+        if h > 0:
+            out[u] = h
+        else:
+            out[u] = date_map.get(u, 0)
+    return out
+
+
+def _classic_remote_credits_by_machine(day_iso: str) -> Dict[str, Dict[str, int]]:
+    """Fleet-wide credits + drink tests for a Kuwait day (cached — expensive Vendon scan)."""
+    key = f"rc-classic:{day_iso}"
+    hit = _alert_cache_get(key, max(_ALERT_REMOTE_CREDITS_CACHE_SEC, 120))
+    if isinstance(hit, dict):
+        return hit
+    out = compute_remote_credits_logs_classic(day_iso, day_iso, "")
+    totals = out.get("totals") if isinstance(out, dict) else None
+    totals = totals if isinstance(totals, list) else []
+    by_machine: Dict[str, Dict[str, int]] = {}
+    for t in totals:
+        if not isinstance(t, dict):
+            continue
+        mid = str(t.get("machine_id") or "").strip()
+        if not mid:
+            continue
+        by_machine[mid] = {
+            "credits_sent": int(t.get("count") or 0),
+            "dispense_tests": int(t.get("drink_tests_count") or 0),
+        }
+    _alert_cache_set(key, by_machine)
+    return by_machine
+
+
+def _alert_allowed_machine_ids() -> Tuple[set[str], Optional[str]]:
+    """Active Vendon machines shown in Alert (excludes test/hidden rows)."""
+    rows, err = vendon_fetch_machine_list(_vendon_get)
+    if err:
+        return set(), err
+    allowed: set[str] = set()
+    for m in rows or []:
+        if m.get("id") is None:
+            continue
+        mid = str(m.get("id")).strip()
+        mname = m.get("name") or mid
+        if not mid or machine_row_excluded(mname, mid):
+            continue
+        allowed.add(mid)
+    if not allowed:
+        return set(), "No fleet machines after exclusions"
+    return allowed, None
+
+
+def _vend_machine_id(v: Dict[str, Any]) -> str:
+    mid_raw = v.get("machine_id")
+    if mid_raw is None:
+        mid_raw = v.get("machine")
+    if mid_raw is None:
+        return ""
+    return str(mid_raw).strip()
+
+
+def _vend_row_dedupe_key(v: Dict[str, Any]) -> str:
+    for k in ("id", "vend_id", "transaction_id", "sale_id"):
+        raw = v.get(k)
+        if raw is not None and str(raw).strip():
+            return f"{k}:{raw}"
+    ts_i = _vend_ts(v)
+    mid = _vend_machine_id(v)
+    amt = _vend_amount_kwd(v)
+    return f"ts:{ts_i}:{mid}:{amt}"
+
+
+def _machine_window_sales_kwd(mid: str, ws: int, we: int) -> Tuple[float, bool]:
+    """Per-machine /stats/vends — Kuwait elapsed window [ws, we], deduped rows."""
+    vends, err = _fetch_vends_stats_window(ws, we, mid, max_rows=25000)
+    if err:
+        raise RuntimeError(f"machine {mid}: {err}")
+    truncated = len(vends) >= 25000
+    total = 0.0
+    seen: set[str] = set()
+    for v in vends:
+        if not isinstance(v, dict):
+            continue
+        ts_i = _vend_ts(v)
+        if ts_i <= 0 or ts_i < ws or ts_i > we:
+            continue
+        amt = _vend_amount_kwd(v)
+        if amt <= 0:
+            continue
+        key = _vend_row_dedupe_key(v)
+        if key in seen:
+            continue
+        seen.add(key)
+        total += amt
+    return total, truncated
+
+
+def _refresh_daily_sales_elapsed_cache_internal(
+    now_local: Optional[datetime] = None,
+) -> Tuple[Dict[str, Any], Optional[Any]]:
+    tz = ZoneInfo("Asia/Kuwait")
+    now_local = now_local or datetime.now(tz)
+    cache_bucket = now_local.replace(second=0, microsecond=0).isoformat()
+    allowed_ids, allow_err = _alert_allowed_machine_ids()
+    if allow_err:
+        err_body = {
+            "error": allow_err,
+            "timezone": "Asia/Kuwait",
+            "today": now_local.date().isoformat(),
+            "asOfLocal": now_local.isoformat(),
+            "byMachineId": {},
+        }
+        _save_daily_sales_elapsed_db_cache(None, allow_err, cache_bucket)
+        return {}, (jsonify(err_body), 502)
+    allowed_list = sorted(allowed_ids)
+
+    today = now_local.date()
+    yesterday = today - timedelta(days=1)
+    history_days = max(2, min(_DAILY_SALES_ELAPSED_HISTORY_DAYS, 14))
+    day_offsets = [today - timedelta(days=i) for i in range(history_days)]
+
+    elapsed_windows: List[Tuple[int, int]] = []
+    for d in day_offsets:
+        ws = int(datetime.combine(d, dt_time.min, tzinfo=tz).timestamp())
+        we = int(_kuwait_elapsed_window_end(d, now_local).timestamp())
+        elapsed_windows.append((ws, we))
+
+    def _sales_elapsed_machine_entry(mid: str) -> Dict[str, Any]:
+        return {
+            "machineId": mid,
+            "todayKwd": 0.0,
+            "yesterdaySameElapsedKwd": 0.0,
+            "yesterdayFullDayKwd": 0.0,
+            "dailyElapsed": [
+                {"date": d.isoformat(), "weekday": d.strftime("%a"), "kwd": 0.0}
+                for d in day_offsets
+            ],
+        }
+
+    by_machine: Dict[str, Dict[str, Any]] = {mid: _sales_elapsed_machine_entry(mid) for mid in allowed_list}
+
+    def _apply_machine_kwd(mid: str, i: int, kwd: float, truncated: bool) -> None:
+        ent = by_machine[mid]
+        ent["dailyElapsed"][i]["kwd"] = round(float(ent["dailyElapsed"][i].get("kwd") or 0) + kwd, 4)
+        if i == 0:
+            ent["todayKwd"] = round(float(ent.get("todayKwd") or 0) + kwd, 4)
+        elif i == 1:
+            ent["yesterdaySameElapsedKwd"] = round(float(ent.get("yesterdaySameElapsedKwd") or 0) + kwd, 4)
+        if truncated and i < len(ent["dailyElapsed"]) and isinstance(ent["dailyElapsed"][i], dict):
+            ent["dailyElapsed"][i]["incomplete"] = True
+
+    per_machine_jobs: List[Tuple[str, int, int, int]] = []
+    for i in range(min(2, len(elapsed_windows))):
+        ws, we = elapsed_windows[i]
+        for mid in allowed_list:
+            per_machine_jobs.append((mid, i, ws, we))
+
+    def _per_machine_job(job: Tuple[str, int, int, int]) -> Tuple[str, int, float, bool, Optional[str]]:
+        mid, i, ws, we = job
+        try:
+            kwd, truncated = _machine_window_sales_kwd(mid, ws, we)
+            return mid, i, kwd, truncated, None
+        except Exception as ex:
+            return mid, i, 0.0, False, str(ex)
+
+    workers = min(8, max(1, len(allowed_list)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for mid, i, kwd, truncated, err in pool.map(_per_machine_job, per_machine_jobs):
+            if err:
+                logger.warning("daily-sales-elapsed machine %s day %s: %s", mid, i, err)
+                continue
+            _apply_machine_kwd(mid, i, kwd, truncated)
+
+    def _apply_vends_for_day(i: int, vends: List[Dict[str, Any]], ws: int, we: int) -> None:
+        day_truncated = len(vends) >= 12000
+        for v in vends:
+            if not isinstance(v, dict):
+                continue
+            mid = _vend_machine_id(v)
+            if not mid or mid not in allowed_ids:
+                continue
+            ts_i = _vend_ts(v)
+            if ts_i <= 0 or ts_i < ws or ts_i > we:
+                continue
+            amt = _vend_amount_kwd(v)
+            if amt <= 0:
+                continue
+            _apply_machine_kwd(mid, i, amt, False)
+
+        if day_truncated:
+            for mid in allowed_list:
+                daily = by_machine[mid].get("dailyElapsed") or []
+                if i < len(daily) and isinstance(daily[i], dict):
+                    daily[i]["incomplete"] = True
+
+    for i in range(2, len(elapsed_windows)):
+        ws, we = elapsed_windows[i]
+        vends, err = _fetch_all_vends(ws, we)
+        if err:
+            logger.warning("daily-sales-elapsed skip day %s: %s", day_offsets[i].isoformat(), err)
+            continue
+        _apply_vends_for_day(i, vends, ws, we)
+
+    # Yesterday + day-before full calendar days — revenue cache (completed-day totals).
+    day_before = today - timedelta(days=2)
+    for full_day in (yesterday, day_before):
+        _maybe_seed_vendon_revenue_cache(full_day)
+    rev_db = _pa_session()
+    try:
+        for full_day in (yesterday, day_before):
+            if not _vendon_revenue_cache_has_day(rev_db, full_day):
+                try:
+                    _refresh_revenue_cache_single_day(full_day.isoformat())
+                except Exception:
+                    logger.exception("daily-sales-elapsed sync revenue seed for %s", full_day.isoformat())
+
+        rev_rows = (
+            rev_db.query(VendonDailyMachineRevenueCache)
+            .filter(VendonDailyMachineRevenueCache.cache_date.in_([yesterday, day_before]))
+            .all()
+        )
+        for r in rev_rows:
+            mid = (r.machine_id or "").strip()
+            if not mid or mid not in allowed_ids:
+                continue
+            sales = float(r.total_sales_kwd or 0)
+            if sales <= 0:
+                continue
+            ent = by_machine[mid]
+            if r.cache_date == yesterday:
+                ent["yesterdayFullDayKwd"] = round(sales, 4)
+                ent["yesterdayFullDaySource"] = "revenue_cache"
+            elif r.cache_date == day_before:
+                ent["dayBeforeFullDayKwd"] = round(sales, 4)
+                ent["dayBeforeFullDaySource"] = "revenue_cache"
+    finally:
+        rev_db.close()
+
+    out: Dict[str, Any] = {}
+    for mid in allowed_list:
+        ent = by_machine[mid]
+        daily = ent.get("dailyElapsed") or []
+        for slot in daily:
+            if isinstance(slot, dict):
+                slot["kwd"] = round(float(slot.get("kwd") or 0), 4)
+        today_k = round(float(ent.get("todayKwd") or 0), 4)
+        yest_k = round(float(ent.get("yesterdaySameElapsedKwd") or 0), 4)
+        if daily and isinstance(daily[0], dict):
+            today_k = round(float(daily[0].get("kwd") or today_k), 4)
+        if len(daily) > 1 and isinstance(daily[1], dict):
+            yest_k = round(float(daily[1].get("kwd") or yest_k), 4)
+        yest_full_raw = ent.get("yesterdayFullDayKwd")
+        yest_full_k: Optional[float] = None
+        if yest_full_raw is not None:
+            yest_full_k = round(float(yest_full_raw or 0), 4)
+            if yest_full_k <= 0:
+                yest_full_k = None
+        day_before_full_raw = ent.get("dayBeforeFullDayKwd")
+        day_before_full_k: Optional[float] = None
+        if day_before_full_raw is not None:
+            day_before_full_k = round(float(day_before_full_raw or 0), 4)
+            if day_before_full_k <= 0:
+                day_before_full_k = None
+        trend_pct = None
+        if yest_k > 0:
+            trend_pct = round(((today_k - yest_k) / yest_k) * 100.0, 2)
+        row_out: Dict[str, Any] = {
+            "todayKwd": today_k,
+            "yesterdaySameElapsedKwd": yest_k,
+            "trendPct": trend_pct,
+            "dailyElapsed": daily,
+        }
+        if yest_full_k is not None:
+            row_out["yesterdayFullDayKwd"] = yest_full_k
+        if day_before_full_k is not None:
+            row_out["dayBeforeFullDayKwd"] = day_before_full_k
+        if ent.get("yesterdayFullDayIncomplete"):
+            row_out["yesterdayFullDayIncomplete"] = True
+        out[mid] = row_out
+
+    fleet_today = round(sum(float(v.get("todayKwd") or 0) for v in out.values()), 4)
+    fleet_yest_full = round(
+        sum(float(v["yesterdayFullDayKwd"]) for v in out.values() if v.get("yesterdayFullDayKwd") is not None),
+        4,
     )
-    return {str(r[0]): int(r[1] or 0) for r in rows}
+    fleet_day_before_full = round(
+        sum(float(v["dayBeforeFullDayKwd"]) for v in out.values() if v.get("dayBeforeFullDayKwd") is not None),
+        4,
+    )
+    fleet_yest_elapsed = round(
+        sum(float(v.get("yesterdaySameElapsedKwd") or 0) for v in out.values()),
+        4,
+    )
+
+    payload: Dict[str, Any] = {
+        "timezone": "Asia/Kuwait",
+        "today": today.isoformat(),
+        "yesterday": yesterday.isoformat(),
+        "historyDays": history_days,
+        "historyDates": [d.isoformat() for d in day_offsets],
+        "asOfLocal": now_local.strftime("%Y-%m-%dT%H:%M:%S"),
+        "comparisonNote": "Each day: midnight Kuwait through the same clock time as this request (fair intraday windows).",
+        "fleetTodayKwd": fleet_today,
+        "fleetYesterdayFullDayKwd": fleet_yest_full,
+        "fleetDayBeforeFullDayKwd": fleet_day_before_full,
+        "fleetYesterdaySameElapsedKwd": fleet_yest_elapsed,
+        "allowedMachineIds": allowed_list,
+        "byMachineId": out,
+        "cacheBucket": cache_bucket,
+        "cacheGeneratedAt": datetime.now(timezone.utc).isoformat(),
+        "stale": False,
+    }
+    _save_daily_sales_elapsed_db_cache(payload, None, cache_bucket)
+    return payload, None
 
 
 def register_alert_routes(app) -> None:
@@ -522,8 +1066,429 @@ def register_alert_routes(app) -> None:
             )
         machines.sort(key=lambda x: (x.get("name") or "").lower())
         # Do not merge ``/location`` endpoint names — those are site/branch titles, not machine/fleet tags (confuses Admin datalist).
-        options = sorted(set(tags_from_machines), key=lambda s: s.lower())
+        options = sorted(set(list(LOCATION_OWNER_CANONICAL) + tags_from_machines), key=lambda s: s.lower())
         return jsonify({"machines": machines, "location_owner_options": options})
+
+    @app.route("/api/alert/operator-contact", methods=["GET", "OPTIONS"])
+    def alert_operator_contact():
+        """Resolve operator email, phone, and Slack DM from strike email and/or display name."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from operator_contact_lib import resolve_operator_contact
+
+        email = (request.args.get("email") or request.args.get("strikeEmail") or "").strip()
+        name = (request.args.get("name") or request.args.get("operatorName") or "").strip()
+        machine_id = (request.args.get("machineId") or request.args.get("machine_id") or "").strip()
+        if not email and not name and not machine_id:
+            return jsonify({"error": "email, name, or machineId required"}), 400
+        try:
+            out = resolve_operator_contact(email=email or None, operator_name=name or None, machine_id=machine_id or None)
+            return jsonify(out)
+        except Exception as ex:
+            logger.exception("alert_operator_contact")
+            return jsonify({"error": str(ex)}), 500
+
+    @app.route("/api/alert/slack-user-map", methods=["GET", "OPTIONS"])
+    def alert_slack_user_map():
+        """Email → Slack user id for all workspace members (cached users.list)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from slack_user_map_lib import get_slack_user_map_payload
+
+        force = (request.args.get("refresh") or "").strip().lower() in ("1", "true", "yes")
+        try:
+            return jsonify(get_slack_user_map_payload(force=force))
+        except Exception as ex:
+            logger.exception("alert_slack_user_map")
+            return jsonify({"error": str(ex)}), 500
+
+    @app.route("/api/alert/qa/last-visit", methods=["GET", "OPTIONS"])
+    def alert_qa_last_visit():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        machine_name = (request.args.get("machineName") or request.args.get("name") or "").strip()
+        if not machine_name:
+            return jsonify({"error": "machineName required"}), 400
+        from safetyculture_qa_lib import qa_visit_for_machine_name
+        from qa_manual_summary_lib import admin_summary_mtd_for_machine, admin_summary_month_counts
+
+        hit = qa_visit_for_machine_name(machine_name)
+        db = _dash_session()
+        try:
+            counts = admin_summary_month_counts(db)
+            mtd = admin_summary_mtd_for_machine(machine_name, counts)
+        finally:
+            db.close()
+        if hit:
+            hit = {**hit, "adminSummaryMtd": mtd}
+        return jsonify({"visit": hit, "adminSummaryMtd": mtd})
+
+    @app.route("/api/alert/qa/machine-audits", methods=["GET", "OPTIONS"])
+    def alert_qa_machine_audits():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        machine_name = (request.args.get("machineName") or request.args.get("name") or "").strip()
+        if not machine_name:
+            return jsonify({"error": "machineName required"}), 400
+        from safetyculture_qa_lib import list_qc_audits_for_machine
+
+        days_raw = request.args.get("days")
+        days = int(days_raw) if days_raw and str(days_raw).isdigit() else None
+        payload = list_qc_audits_for_machine(
+            machine_name,
+            days=days,
+            date_from=(request.args.get("from") or request.args.get("dateFrom") or "").strip() or None,
+            date_to=(request.args.get("to") or request.args.get("dateTo") or "").strip() or None,
+            location_query=(request.args.get("location") or request.args.get("locationQuery") or "").strip() or None,
+            sort=(request.args.get("sort") or "date").strip(),
+            order=(request.args.get("order") or "desc").strip(),
+        )
+        return jsonify(payload)
+
+    @app.route("/api/alert/qa/fleet", methods=["GET", "OPTIONS"])
+    def alert_qa_fleet():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from qa_manual_summary_lib import admin_summary_mtd_for_machine, admin_summary_month_counts, kuwait_year_month
+        from safetyculture_qa_lib import fleet_qc_visits_in_range
+
+        rows, err = vendon_fetch_machine_list(_vendon_get)
+        if err:
+            return jsonify({"error": err, "byMachine": {}, "total": 0}), 502
+        machine_names: List[str] = []
+        for m in rows:
+            if m.get("id") is None:
+                continue
+            mname = str(m.get("name") or m.get("id") or "").strip()
+            if not mname or machine_row_excluded(mname, str(m.get("id"))):
+                continue
+            machine_names.append(mname)
+
+        payload = fleet_qc_visits_in_range(
+            machine_names,
+            date_from=(request.args.get("from") or request.args.get("dateFrom") or "").strip() or None,
+            date_to=(request.args.get("to") or request.args.get("dateTo") or "").strip() or None,
+        )
+        db = _dash_session()
+        try:
+            counts = admin_summary_month_counts(db)
+        finally:
+            db.close()
+        by_machine = dict(payload.get("byMachine") or {})
+        enriched: Dict[str, Any] = {}
+        for mname, row in by_machine.items():
+            if not isinstance(row, dict):
+                continue
+            admin_mtd = admin_summary_mtd_for_machine(mname, counts)
+            enriched[mname] = {**row, "adminSummaryMtd": admin_mtd}
+        payload = dict(payload)
+        payload["byMachine"] = enriched
+        payload["adminSummaryMtdByMachine"] = counts
+        payload["yearMonth"] = kuwait_year_month()
+        return jsonify(payload)
+
+    @app.route("/api/alert/qa/summary", methods=["GET", "OPTIONS"])
+    def alert_qa_summary():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from qa_manual_summary_lib import (
+            admin_summary_mtd_for_machine,
+            admin_summary_month_counts,
+            enrich_qc_visits_with_admin_summaries,
+            kuwait_year_month,
+        )
+        from safetyculture_qa_lib import latest_qc_by_machine_map, qa_visits_payload
+
+        payload = qa_visits_payload()
+        rows, list_err = vendon_fetch_machine_list(_vendon_get)
+        machine_names: List[str] = []
+        if not list_err:
+            for m in rows:
+                if m.get("id") is None:
+                    continue
+                mname = str(m.get("name") or m.get("id") or "").strip()
+                if not mname or machine_row_excluded(mname, str(m.get("id"))):
+                    continue
+                machine_names.append(mname)
+
+        latest_map: Dict[str, Any] = {}
+        latest_payload: Dict[str, Any] = {}
+        if machine_names:
+            latest_payload = latest_qc_by_machine_map(machine_names)
+            latest_map = dict(latest_payload.get("byMachine") or {})
+
+        db = _dash_session()
+        try:
+            counts = admin_summary_month_counts(db)
+            by_loc = dict(payload.get("byLocationKey") or {})
+            by_loc = enrich_qc_visits_with_admin_summaries(by_loc, db)
+        finally:
+            db.close()
+        payload = dict(payload)
+        payload["adminSummaryMtdByMachine"] = counts
+        payload["yearMonth"] = kuwait_year_month()
+        latest_by_machine: Dict[str, Any] = {}
+        for mname, row in latest_map.items():
+            if not isinstance(row, dict):
+                continue
+            admin_mtd = admin_summary_mtd_for_machine(mname, counts)
+            latest_by_machine[mname] = {**row, "adminSummaryMtd": admin_mtd}
+        payload["latestByMachine"] = latest_by_machine
+        payload["latestByMachineDateFrom"] = latest_payload.get("dateFrom") if latest_map else None
+        payload["latestByMachineDateTo"] = latest_payload.get("dateTo") if latest_map else None
+        for nk, row in list(by_loc.items()):
+            if isinstance(row, dict):
+                loc = str(row.get("location") or "")
+                admin_mtd = counts.get(nk, 0) or admin_summary_mtd_for_machine(loc, counts)
+                by_loc[nk] = {**row, "adminSummaryMtd": admin_mtd}
+        payload["byLocationKey"] = by_loc
+        visits = []
+        for row in payload.get("visits") or []:
+            if not isinstance(row, dict):
+                continue
+            loc = str(row.get("location") or "")
+            from safetyculture_qa_lib import _norm_key
+
+            nk = _norm_key(loc)
+            admin_mtd = counts.get(nk, 0) or admin_summary_mtd_for_machine(loc, counts)
+            visits.append({**row, "adminSummaryMtd": admin_mtd})
+        payload["visits"] = visits
+        return jsonify(payload)
+
+    @app.route("/api/alert/qa/findings", methods=["GET", "OPTIONS"])
+    def alert_qa_findings():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from qa_findings_lib import qa_findings_payload
+
+        return jsonify(qa_findings_payload())
+
+    @app.route("/api/alert/qa/manual-summary", methods=["GET", "OPTIONS"])
+    def alert_qa_manual_summary():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        machine_name = (request.args.get("machineName") or request.args.get("name") or "").strip()
+        if not machine_name:
+            return jsonify({"error": "machineName required"}), 400
+
+        from qa_machine_alias_lib import machine_names_for_lookup
+        from qa_manual_summary_lib import kuwait_year_month, month_count_for_machine, parse_bullet_lines
+
+        db = _dash_session()
+        try:
+            names = machine_names_for_lookup(machine_name)
+            row = (
+                db.query(QaManualSummary)
+                .filter(func.lower(func.trim(QaManualSummary.machine_name)).in_(names))
+                .order_by(QaManualSummary.created_at.desc())
+                .first()
+            )
+            month_count = month_count_for_machine(db, machine_name)
+            if not row:
+                return jsonify(
+                    {
+                        "machineName": machine_name,
+                        "summary": None,
+                        "bullets": [],
+                        "savedAt": None,
+                        "savedBy": None,
+                        "monthCount": month_count,
+                        "yearMonth": kuwait_year_month(),
+                    }
+                )
+            return jsonify(
+                {
+                    "machineName": row.machine_name,
+                    "summary": row.summary_text,
+                    "bullets": parse_bullet_lines(row.summary_text),
+                    "savedAt": row.created_at.isoformat() if row.created_at else None,
+                    "savedBy": row.created_by,
+                    "monthCount": month_count,
+                    "yearMonth": kuwait_year_month(),
+                }
+            )
+        except Exception as ex:
+            logger.exception("alert_qa_manual_summary")
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/admin/qa-manual-summaries", methods=["GET", "POST", "OPTIONS"])
+    def alert_admin_qa_manual_summaries():
+        if request.method == "OPTIONS":
+            return "", 204
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+
+        from qa_machine_alias_lib import machine_names_for_lookup
+        from qa_manual_summary_lib import (
+            kuwait_year_month,
+            month_count_for_machine,
+            parse_bullet_lines,
+            validate_bullet_summary,
+        )
+
+        db = _dash_session()
+        try:
+            if request.method == "GET":
+                machine_name = (request.args.get("machineName") or request.args.get("name") or "").strip()
+                if not machine_name:
+                    return jsonify({"error": "machineName required"}), 400
+                ym = kuwait_year_month()
+                names = machine_names_for_lookup(machine_name)
+                rows = (
+                    db.query(QaManualSummary)
+                    .filter(func.lower(func.trim(QaManualSummary.machine_name)).in_(names))
+                    .filter(
+                        text(
+                            "to_char(created_at AT TIME ZONE 'Asia/Kuwait', 'YYYY-MM') = :ym"
+                        ).bindparams(ym=ym)
+                    )
+                    .order_by(QaManualSummary.created_at.desc())
+                    .limit(50)
+                    .all()
+                )
+                month_count = month_count_for_machine(db, machine_name)
+                latest = (
+                    db.query(QaManualSummary)
+                    .filter(func.lower(func.trim(QaManualSummary.machine_name)).in_(names))
+                    .order_by(QaManualSummary.created_at.desc())
+                    .first()
+                )
+                out_rows = []
+                for r in rows:
+                    out_rows.append(
+                        {
+                            "id": r.id,
+                            "summary": r.summary_text,
+                            "bullets": parse_bullet_lines(r.summary_text),
+                            "savedAt": r.created_at.isoformat() if r.created_at else None,
+                            "savedBy": r.created_by,
+                        }
+                    )
+                latest_payload = None
+                if latest:
+                    latest_payload = {
+                        "machineName": latest.machine_name,
+                        "summary": latest.summary_text,
+                        "bullets": parse_bullet_lines(latest.summary_text),
+                        "savedAt": latest.created_at.isoformat() if latest.created_at else None,
+                        "savedBy": latest.created_by,
+                    }
+                return jsonify(
+                    {
+                        "machineName": machine_name,
+                        "yearMonth": ym,
+                        "monthCount": month_count,
+                        "rows": out_rows,
+                        "latest": latest_payload,
+                    }
+                )
+
+            body = request.get_json(silent=True) or {}
+            machine_name = (body.get("machineName") or body.get("machine_name") or "").strip()
+            summary_text = (body.get("summary") or body.get("summary_text") or "").strip()
+            if not machine_name:
+                return jsonify({"error": "machineName required"}), 400
+            ok, err = validate_bullet_summary(summary_text)
+            if not ok:
+                return jsonify({"error": "invalid_format", "message": err}), 400
+
+            row = QaManualSummary(
+                machine_name=machine_name,
+                summary_text=summary_text,
+                created_by=email,
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            month_count = month_count_for_machine(db, machine_name)
+            return jsonify(
+                {
+                    "ok": True,
+                    "id": row.id,
+                    "machineName": machine_name,
+                    "summary": summary_text,
+                    "bullets": parse_bullet_lines(summary_text),
+                    "savedAt": row.created_at.isoformat() if row.created_at else None,
+                    "savedBy": email,
+                    "monthCount": month_count,
+                    "yearMonth": kuwait_year_month(),
+                }
+            )
+        except Exception as ex:
+            logger.exception("alert_admin_qa_manual_summaries")
+            db.rollback()
+            return jsonify({"error": "save_failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/targets/machine-detail", methods=["GET", "OPTIONS"])
+    def alert_targets_machine_detail():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        machine_id = (request.args.get("machineId") or request.args.get("machine_id") or "").strip()
+        machine_name = (request.args.get("machineName") or request.args.get("name") or "").strip()
+        if not machine_id:
+            return jsonify({"error": "machineId required"}), 400
+        from alert_target_lib import build_machine_target_detail
+
+        db = _dash_session()
+        try:
+            prof = db.query(AlertMachineProfile).filter(AlertMachineProfile.machine_id == machine_id).first()
+            loc_owner = (prof.location_owner if prof else None) or None
+            daily_cfg = None
+            from dashboard_access_models import LiveMachineConfig
+
+            lmc = db.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == machine_id).first()
+            if lmc and lmc.daily_sales_target is not None:
+                daily_cfg = float(lmc.daily_sales_target)
+            today_kwd = float(request.args.get("todayKwd") or 0)
+            yest_kwd = float(request.args.get("yesterdayKwd") or 0)
+            out = build_machine_target_detail(
+                machine_id=machine_id,
+                machine_name=machine_name or (prof.machine_name if prof else machine_id),
+                location_owner=loc_owner,
+                daily_target_cfg=daily_cfg,
+                today_kwd=today_kwd,
+                yesterday_kwd=yest_kwd,
+                db=db,
+            )
+            return jsonify(out)
+        except Exception as ex:
+            logger.exception("alert_targets_machine_detail")
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
 
     @app.route("/api/alert/red-flags/snapshot", methods=["GET", "OPTIONS"])
     def alert_red_flags_snapshot():
@@ -584,29 +1549,26 @@ def register_alert_routes(app) -> None:
             if len(requested_machines) > 400:
                 requested_machines = requested_machines[:400]
 
-            out = compute_remote_credits_logs_classic(kuwait_today, kuwait_today, "")
-            totals = out.get("totals") if isinstance(out, dict) else None
-            totals = totals if isinstance(totals, list) else []
+            cache_key = f"rc:{kuwait_today}:{','.join(sorted(requested_machines))}"
+            cached = _alert_cache_get(cache_key, _ALERT_REMOTE_CREDITS_CACHE_SEC)
+            if cached is not None:
+                return jsonify(cached)
+
+            classic = _classic_remote_credits_by_machine(kuwait_today)
+            scope_ids = requested_machines if requested_machines else list(classic.keys())
             by_machine: Dict[str, Any] = {}
-            for t in totals:
-                if not isinstance(t, dict):
-                    continue
-                mid = str(t.get("machine_id") or "").strip()
-                if not mid:
-                    continue
+            for mid in scope_ids:
+                base = classic.get(mid)
                 by_machine[mid] = {
-                    "credits_sent": int(t.get("count") or 0),
-                    "dispense_tests": int(t.get("drink_tests_count") or 0),
+                    "credits_sent": int(base.get("credits_sent") or 0) if base else 0,
+                    "dispense_tests": int(base.get("dispense_tests") or 0) if base else 0,
                 }
 
-            ids_for_zeros = list(requested_machines) if requested_machines else []
-            for mid in ids_for_zeros:
-                if mid not in by_machine:
-                    by_machine[mid] = {"credits_sent": 0, "dispense_tests": 0}
-
-            resolve_ids = list(dict.fromkeys(requested_machines if requested_machines else list(by_machine.keys())))
+            resolve_ids = list(dict.fromkeys(requested_machines if requested_machines else list(classic.keys())))
             if resolve_ids:
-                max_workers = min(12, max(1, len(resolve_ids)))
+                cap = max(1, _ALERT_REMOTE_CREDITS_MAX_VENDS_RESOLVE)
+                resolve_ids = resolve_ids[:cap]
+                max_workers = min(_ALERT_REMOTE_CREDITS_MAX_WORKERS, max(1, len(resolve_ids)))
 
                 def _one(mid: str) -> Tuple[str, Dict[str, Any]]:
                     try:
@@ -622,7 +1584,7 @@ def register_alert_routes(app) -> None:
                         row = by_machine.setdefault(mid, {"credits_sent": 0, "dispense_tests": 0})
                         row["vends_resolved"] = vr.get("status") if isinstance(vr, dict) else "unknown"
 
-            profile_ids = list(set(requested_machines) | set(by_machine.keys()))
+            profile_ids = list(dict.fromkeys(requested_machines)) if requested_machines else list(by_machine.keys())
             if profile_ids:
                 db = _dash_session()
                 try:
@@ -638,7 +1600,9 @@ def register_alert_routes(app) -> None:
                 finally:
                     db.close()
 
-            return jsonify({"date": kuwait_today, "byMachineId": by_machine})
+            payload = {"date": kuwait_today, "byMachineId": by_machine}
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
         except Exception as ex:
             logger.exception("alert_remote_credits_today_totals")
             return jsonify({"date": None, "byMachineId": {}, "error": str(ex)}), 200
@@ -747,6 +1711,18 @@ def register_alert_routes(app) -> None:
                     AlertMachineProfile.machine_id.asc(),
                 ).all()
                 out: List[Dict[str, Any]] = []
+                target_by_mid: Dict[str, Dict[str, Any]] = {}
+                for lmc in db.query(LiveMachineConfig).all():
+                    mid_k = str(lmc.machine_id)
+                    target_by_mid[mid_k] = {
+                        "daily_sales_target": (
+                            float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None
+                        ),
+                        "sx_product_name": (lmc.sx_product_name or None),
+                        "daily_product_target": (
+                            float(lmc.daily_product_target) if lmc.daily_product_target is not None else None
+                        ),
+                    }
                 for r in rows:
                     pat = (r.machine_name or r.machine_id or "").strip()
                     priority_out = 10
@@ -758,6 +1734,7 @@ def register_alert_routes(app) -> None:
                         )
                         if sched is not None:
                             priority_out = int(sched.priority or 0)
+                    lmc_fields = target_by_mid.get(str(r.machine_id)) or {}
                     out.append(
                         {
                             "machine_id": r.machine_id,
@@ -771,6 +1748,9 @@ def register_alert_routes(app) -> None:
                             "qa_schedule": r.qa_schedule,
                             "timezone": r.timezone,
                             "priority": priority_out,
+                            "daily_sales_target": lmc_fields.get("daily_sales_target"),
+                            "sx_product_name": lmc_fields.get("sx_product_name"),
+                            "daily_product_target": lmc_fields.get("daily_product_target"),
                             "updated_by": r.updated_by,
                             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                         }
@@ -803,6 +1783,9 @@ def register_alert_routes(app) -> None:
                 qa = []
             tz_s = (body.get("timezone") or "Asia/Kuwait").strip() or "Asia/Kuwait"
             priority = int(body.get("priority") or 10)
+            daily_target_raw = body.get("daily_sales_target")
+            sx_product_name_raw = body.get("sx_product_name")
+            daily_product_target_raw = body.get("daily_product_target")
 
             now = datetime.now(timezone.utc)
             row = db.query(AlertMachineProfile).filter(AlertMachineProfile.machine_id == mid).first()
@@ -845,6 +1828,22 @@ def register_alert_routes(app) -> None:
                 timezone_s=tz_s,
                 priority=priority,
             )
+            if (
+                "daily_sales_target" in body
+                or "sx_product_name" in body
+                or "daily_product_target" in body
+            ):
+                lmc = db.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
+                if not lmc:
+                    lmc = LiveMachineConfig(machine_id=mid)
+                    db.add(lmc)
+                if "daily_sales_target" in body:
+                    lmc.daily_sales_target = _decimal_or_none(daily_target_raw)
+                if "sx_product_name" in body:
+                    pname = (str(sx_product_name_raw).strip() if sx_product_name_raw is not None else "") or None
+                    lmc.sx_product_name = pname
+                if "daily_product_target" in body:
+                    lmc.daily_product_target = _decimal_or_none(daily_product_target_raw)
             db.commit()
             db.refresh(row)
             return jsonify({"ok": True, "machine_id": row.machine_id, "updated_by": email})
@@ -880,6 +1879,7 @@ def register_alert_routes(app) -> None:
                 out.append(
                     {
                         "machine_id": r.machine_id,
+                        "machine_name": r.machine_name,
                         "location_owner": r.location_owner,
                         "location_hours": r.location_hours,
                         "operator_name": op0,
@@ -889,7 +1889,6 @@ def register_alert_routes(app) -> None:
                         "operator_hours": r.operator_hours,
                         "technician_schedule": r.technician_schedule,
                         "qa_schedule": r.qa_schedule,
-                        "priority": r.priority,
                         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                     }
                 )
@@ -903,8 +1902,8 @@ def register_alert_routes(app) -> None:
     @app.route("/api/alert/overall/last-transactions", methods=["GET", "OPTIONS"])
     def alert_overall_last_transactions():
         """
-        Vendon-backed last transaction per machine (last 24h window).
-        Used as a fallback for machines that are not present in the Red Alert snapshot.
+        Vendon-backed last transaction per machine (last 7d window).
+        Used as a fallback when the Red Alert snapshot has no ISO timestamp.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -912,11 +1911,11 @@ def register_alert_routes(app) -> None:
         if denied:
             return denied
         now = int(datetime.now(timezone.utc).timestamp())
-        day_ago = now - 24 * 60 * 60
+        week_ago = now - 7 * 24 * 60 * 60
         params: Dict[str, Any] = {
-            "from_timestamp": day_ago,
+            "from_timestamp": week_ago,
             "to_timestamp": now,
-            "limit": 1000,
+            "limit": 5000,
             "offset": 0,
         }
         data, err = _vendon_get("/stats/vends", params)
@@ -952,7 +1951,190 @@ def register_alert_routes(app) -> None:
                     "amount": trx.get("price") or 0,
                 }
 
-        return jsonify({"byMachineId": latest, "fromTimestamp": day_ago, "toTimestamp": now})
+        return jsonify({"byMachineId": latest, "fromTimestamp": week_ago, "toTimestamp": now})
+
+    @app.route("/api/alert/overall/daily-sales-elapsed", methods=["GET", "OPTIONS"])
+    def alert_overall_daily_sales_elapsed():
+        """
+        Kuwait calendar **today so far** vs **yesterday until the same clock time** (when the request runs).
+
+        Uses Vendon /stats/vends — fair intraday comparison for the Overall **Sales** column.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        cache_bucket = now_local.replace(second=0, microsecond=0).isoformat()
+        cache_key = f"sales-elapsed:v3:{cache_bucket}"
+        force_fresh = (request.args.get("fresh") or "").strip().lower() in ("1", "true", "yes")
+        cached = _alert_cache_get(cache_key, _DAILY_SALES_ELAPSED_CACHE_SEC)
+        if cached is not None and not force_fresh:
+            return jsonify(cached)
+
+        db_cached = _load_daily_sales_elapsed_db_cache()
+        db_stale = db_cached is not None and _daily_sales_cache_is_stale(db_cached, cache_bucket)
+
+        if force_fresh or db_cached is None or db_stale:
+            payload, err_status = _refresh_daily_sales_elapsed_cache_internal(now_local)
+            if err_status:
+                return err_status
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
+
+        _alert_cache_set(cache_key, db_cached)
+        return jsonify(db_cached)
+
+    @app.route("/api/alert/red-flags/daily-incidents-elapsed", methods=["GET", "OPTIONS"])
+    def alert_red_flags_daily_incidents_elapsed():
+        """
+        Kuwait calendar **today so far** vs **yesterday / prior days** until the same clock time.
+
+        Combined Red Alert criteria hits (stale sale + OFF + vend fail) for trend history popups.
+        Optional ``machines=id1,id2`` limits scope (max 400 ids).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        cache_bucket = now_local.replace(second=0, microsecond=0).isoformat()
+        raw_ids = (request.args.get("machines") or "").strip()
+        requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
+        if len(requested) > 400:
+            requested = requested[:400]
+        cache_key = f"incidents-elapsed:{cache_bucket}:{','.join(sorted(requested))}"
+        cached = _alert_cache_get(cache_key, _DAILY_INCIDENTS_ELAPSED_CACHE_SEC)
+        if cached is not None:
+            return jsonify(cached)
+
+        try:
+            payload = compute_daily_incidents_elapsed(
+                machine_ids=requested if requested else None,
+            )
+        except Exception as ex:
+            logger.exception("alert_red_flags_daily_incidents_elapsed")
+            return (
+                jsonify(
+                    {
+                        "error": str(ex),
+                        "timezone": "Asia/Kuwait",
+                        "today": now_local.date().isoformat(),
+                        "asOfLocal": now_local.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "byMachineId": {},
+                    }
+                ),
+                502,
+            )
+
+        if payload.get("error"):
+            return (
+                jsonify(
+                    {
+                        "error": payload.get("error"),
+                        "timezone": "Asia/Kuwait",
+                        "today": now_local.date().isoformat(),
+                        "asOfLocal": now_local.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "byMachineId": {},
+                    }
+                ),
+                502,
+            )
+
+        _alert_cache_set(cache_key, payload)
+        return jsonify(payload)
+
+    def _kuwait_week_start_sunday(d: date) -> date:
+        return d - timedelta(days=(d.weekday() + 1) % 7)
+
+    def _parse_iso_date(s: Optional[str]) -> Optional[date]:
+        if not s:
+            return None
+        try:
+            return datetime.strptime(str(s)[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    def _alert_preset_periods(
+        preset: str,
+        today: date,
+        a_start: Optional[str] = None,
+        a_end: Optional[str] = None,
+        b_start: Optional[str] = None,
+        b_end: Optional[str] = None,
+    ) -> Tuple[Tuple[date, date], Tuple[date, date], str, str]:
+        """Half-open [start, end) calendar ranges for period A vs B + short labels."""
+        y = today - timedelta(days=1)
+        db = today - timedelta(days=2)
+        lw = today - timedelta(days=7)
+
+        def day_range(d0: date) -> Tuple[date, date]:
+            return d0, d0 + timedelta(days=1)
+
+        if preset == "yesterday_vs_day_before":
+            return day_range(y), day_range(db), "Yest.", "−2d"
+        if preset == "today_vs_same_day_last_week":
+            return day_range(today), day_range(lw), "Today", "LW"
+        if preset == "wtd_vs_last_week":
+            ws = _kuwait_week_start_sunday(today)
+            elapsed = (today - ws).days + 1
+            last_ws = ws - timedelta(days=7)
+            last_end = last_ws + timedelta(days=elapsed)
+            return (ws, today + timedelta(days=1)), (last_ws, last_end), "WTD", "Last WTD"
+        if preset == "mtd_vs_mtd":
+            m0 = date(today.year, today.month, 1)
+            if today.month == 1:
+                prev_m0 = date(today.year - 1, 12, 1)
+            else:
+                prev_m0 = date(today.year, today.month - 1, 1)
+            import calendar
+
+            prev_last = calendar.monthrange(prev_m0.year, prev_m0.month)[1]
+            prev_end = date(prev_m0.year, prev_m0.month, min(today.day, prev_last))
+            return (m0, today + timedelta(days=1)), (prev_m0, prev_end + timedelta(days=1)), "MTD", "Last MTD"
+        if preset == "mtd_vs_yoy":
+            import calendar
+
+            m0 = date(today.year, today.month, 1)
+            ly_year = today.year - 1
+            ly_m0 = date(ly_year, today.month, 1)
+            ly_last = calendar.monthrange(ly_year, today.month)[1]
+            ly_end = date(ly_year, today.month, min(today.day, ly_last))
+            return (m0, today + timedelta(days=1)), (ly_m0, ly_end + timedelta(days=1)), "MTD", "YoY"
+        if preset == "custom_vs_custom":
+            a_lo = _parse_iso_date(a_start)
+            a_hi = _parse_iso_date(a_end)
+            b_lo = _parse_iso_date(b_start)
+            b_hi = _parse_iso_date(b_end)
+            if a_lo and a_hi and a_lo < a_hi and b_lo and b_hi and b_lo < b_hi:
+                return (a_lo, a_hi), (b_lo, b_hi), "Period A", "Period B"
+        return day_range(today), day_range(y), "Today", "Yest."
+
+    def _sum_sales_in_range(
+        rows: List[VendonDailyMachineRevenueCache],
+        start_incl: date,
+        end_excl: date,
+    ) -> Tuple[float, int, Optional[Dict[str, Any]]]:
+        sales = 0.0
+        tx = 0
+        latest_payload: Optional[Dict[str, Any]] = None
+        latest_day: Optional[date] = None
+        for r in rows:
+            cd = r.cache_date
+            if cd is None or cd < start_incl or cd >= end_excl:
+                continue
+            sales += float(r.total_sales_kwd or 0)
+            tx += int(r.total_transactions or 0)
+            if latest_day is None or cd > latest_day:
+                latest_day = cd
+                latest_payload = r.payload_json if isinstance(r.payload_json, dict) else None
+        return sales, tx, latest_payload
 
     @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
     def alert_overall_vendon_sales_summary():
@@ -970,70 +2152,102 @@ def register_alert_routes(app) -> None:
         tz = ZoneInfo("Asia/Kuwait")
         today_kw = datetime.now(tz).date()
 
-        if preset == "today_vs_same_day_last_week":
-            a0 = today_kw
-            b0 = today_kw - timedelta(days=7)
-        else:
-            # Default: today vs yesterday
-            a0 = today_kw
-            b0 = today_kw - timedelta(days=1)
+        (a_lo, a_hi), (b_lo, b_hi), label_a, label_b = _alert_preset_periods(
+            preset,
+            today_kw,
+            request.args.get("aStart"),
+            request.args.get("aEnd"),
+            request.args.get("bStart"),
+            request.args.get("bEnd"),
+        )
 
-        date_a = a0.isoformat()
-        date_b = b0.isoformat()
+        fetch_lo = min(a_lo, b_lo)
+        fetch_hi = max(a_hi, b_hi)
+
+        b_period_days: set[date] = set()
+        cur = b_lo
+        while cur < b_hi:
+            b_period_days.add(cur)
+            cur += timedelta(days=1)
+
+        a_period_days: set[date] = set()
+        cur = a_lo
+        while cur < a_hi:
+            a_period_days.add(cur)
+            cur += timedelta(days=1)
+
+        seed_days = a_period_days | b_period_days
+        recent_cutoff = today_kw - timedelta(days=62)
+        for d in sorted(seed_days):
+            # YoY baseline is same calendar month last year — outside the 62-day warm window.
+            needs_yoy_baseline = preset == "mtd_vs_yoy" and d in b_period_days
+            if needs_yoy_baseline or d >= recent_cutoff:
+                _maybe_seed_vendon_revenue_cache(d)
+
+        fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
+        fleet_ids: List[str] = []
+        if not fleet_err and fleet_rows:
+            for m in fleet_rows:
+                if m.get("id") is None:
+                    continue
+                mid = str(m.get("id")).strip()
+                mname = m.get("name") or mid
+                if not mid or machine_row_excluded(str(mname), mid):
+                    continue
+                fleet_ids.append(mid)
 
         db = _pa_session()
         try:
-            # Sum totals for each machine for each day (cache is per-day).
-            rows = (
-                db.query(
-                    VendonDailyMachineRevenueCache.cache_date.label("cache_date"),
-                    VendonDailyMachineRevenueCache.machine_id.label("machine_id"),
-                    func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).label("sales_kwd"),
-                    func.sum(VendonDailyMachineRevenueCache.total_transactions).label("tx_count"),
-                    func.max(VendonDailyMachineRevenueCache.payload_json).label("payload_json"),
+            cache_rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date < fetch_hi,
                 )
-                .filter(VendonDailyMachineRevenueCache.cache_date.in_([a0, b0]))
-                .group_by(VendonDailyMachineRevenueCache.cache_date, VendonDailyMachineRevenueCache.machine_id)
                 .all()
             )
 
-            by_machine: Dict[str, Dict[str, Any]] = {}
-            for r in rows:
+            by_machine_rows: Dict[str, List[VendonDailyMachineRevenueCache]] = {}
+            for r in cache_rows:
                 mid = (r.machine_id or "").strip()
                 if not mid:
                     continue
-                ent = by_machine.get(mid) or {"machine_id": mid}
-                if r.cache_date == a0:
-                    ent["a"] = {
-                        "date": date_a,
-                        "salesKwd": float(r.sales_kwd or 0),
-                        "tx": int(r.tx_count or 0),
-                        "payload": r.payload_json or {},
-                    }
-                elif r.cache_date == b0:
-                    ent["b"] = {
-                        "date": date_b,
-                        "salesKwd": float(r.sales_kwd or 0),
-                        "tx": int(r.tx_count or 0),
-                        "payload": r.payload_json or {},
-                    }
-                by_machine[mid] = ent
+                by_machine_rows.setdefault(mid, []).append(r)
+            for mid in fleet_ids:
+                by_machine_rows.setdefault(mid, [])
 
-            out: Dict[str, Any] = {"preset": preset, "dateA": date_a, "dateB": date_b, "byMachineId": {}}
-            for mid, ent in by_machine.items():
-                a = ent.get("a")
-                b = ent.get("b")
-                a_sales = float(a.get("salesKwd") or 0) if isinstance(a, dict) else None
-                b_sales = float(b.get("salesKwd") or 0) if isinstance(b, dict) else None
+            out: Dict[str, Any] = {
+                "preset": preset,
+                "dateAStart": a_lo.isoformat(),
+                "dateAEnd": a_hi.isoformat(),
+                "dateBStart": b_lo.isoformat(),
+                "dateBEnd": b_hi.isoformat(),
+                "labelA": label_a,
+                "labelB": label_b,
+                "byMachineId": {},
+            }
+            for mid, rows in by_machine_rows.items():
+                a_sales, a_tx, a_payload = _sum_sales_in_range(rows, a_lo, a_hi)
+                b_sales, b_tx, b_payload = _sum_sales_in_range(rows, b_lo, b_hi)
                 trend_pct = None
-                if a_sales is not None and b_sales is not None and b_sales > 0:
+                if b_sales > 0:
                     trend_pct = ((a_sales - b_sales) / b_sales) * 100.0
-                payload = (a.get("payload") if isinstance(a, dict) else {}) or {}
+                payload = a_payload or {}
+                peak_hour = payload.get("peakHour")
+                peak_hour_from_yesterday = False
+                if not peak_hour and isinstance(b_payload, dict):
+                    y_ph = b_payload.get("peakHour") if isinstance(b_payload, dict) else None
+                    if isinstance(y_ph, dict) and y_ph.get("label"):
+                        peak_hour = {**y_ph, "label": f"{y_ph.get('label')} yest."}
+                        peak_hour_from_yesterday = True
                 out["byMachineId"][mid] = {
-                    "aSalesKwd": a_sales,
-                    "bSalesKwd": b_sales,
-                    "trendPct": trend_pct,
-                    "peakHour": payload.get("peakHour"),
+                    "aSalesKwd": round(a_sales, 4),
+                    "bSalesKwd": round(b_sales, 4),
+                    "aTx": a_tx,
+                    "bTx": b_tx,
+                    "trendPct": round(trend_pct, 2) if trend_pct is not None else None,
+                    "peakHour": peak_hour,
+                    "peakHourFromYesterday": peak_hour_from_yesterday,
                     "topProduct": payload.get("topProduct"),
                     "lowProduct": payload.get("lowProduct"),
                 }
@@ -1041,6 +2255,161 @@ def register_alert_routes(app) -> None:
             return jsonify(out)
         except Exception as ex:
             logger.exception("alert overall vendon sales summary")
+            return jsonify({"error": "failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/overall/sales-acceleration", methods=["GET", "OPTIONS"])
+    def alert_overall_sales_acceleration():
+        """
+        Sales Acceleration (SX) per machine — location KD + optional linked product cups.
+        Same compare presets as vendon-sales-summary. SX = G_current − G_previous
+        where G = (cur − prev) / prev.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        from alert_sx_lib import compute_fleet_sx
+        from week_revenue_target_lib import daily_target_kd_from_week
+
+        preset = (request.args.get("preset") or "today_vs_yesterday").strip()
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+        (a_lo, a_hi), (b_lo, b_hi), label_a, label_b = _alert_preset_periods(
+            preset,
+            today,
+            request.args.get("aStart"),
+            request.args.get("aEnd"),
+            request.args.get("bStart"),
+            request.args.get("bEnd"),
+        )
+        elapsed_for_today = preset in ("today_vs_yesterday", "today_vs_same_day_last_week")
+
+        fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
+        if fleet_err:
+            return jsonify({"error": fleet_err, "byMachineId": {}}), 502
+
+        machine_ids: List[str] = []
+        machine_names: Dict[str, str] = {}
+        for m in fleet_rows:
+            if m.get("id") is None:
+                continue
+            mid = str(m["id"])
+            mname = str(m.get("name") or mid).strip()
+            if not mname or machine_row_excluded(mname, mid):
+                continue
+            machine_ids.append(mid)
+            machine_names[mid] = mname
+
+        scope = (request.args.get("machines") or "").strip()
+        if scope:
+            want = {x.strip() for x in scope.split(",") if x.strip()}
+            machine_ids = [m for m in machine_ids if m in want]
+
+        dash = _dash_session()
+        try:
+            cfg_by_mid: Dict[str, Dict[str, Any]] = {}
+            for lmc in dash.query(LiveMachineConfig).all():
+                mid = str(lmc.machine_id)
+                cfg_by_mid[mid] = {
+                    "daily_sales_target": (
+                        float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None
+                    ),
+                    "sx_product_name": (lmc.sx_product_name or None),
+                    "daily_product_target": (
+                        float(lmc.daily_product_target) if lmc.daily_product_target is not None else None
+                    ),
+                }
+            for r in dash.query(AlertMachineProfile).all():
+                mid = str(r.machine_id)
+                cfg_by_mid.setdefault(mid, {})
+                cfg_by_mid[mid]["location_owner"] = r.location_owner
+        finally:
+            dash.close()
+
+        from alert_sx_lib import third_period
+
+        c_lo, c_hi = third_period(a_lo, a_hi, b_lo, b_hi)
+        fetch_lo = min(a_lo, b_lo, c_lo)
+        fetch_hi = max(a_hi, b_hi, c_hi)
+
+        db = _pa_session()
+        try:
+            cache_rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date < fetch_hi,
+                )
+                .all()
+            )
+            kwd_by_mid_day: Dict[str, Dict[date, float]] = {}
+            for r in cache_rows:
+                mid = str(r.machine_id or "").strip()
+                if not mid or r.cache_date is None:
+                    continue
+                kwd_by_mid_day.setdefault(mid, {})[r.cache_date] = float(r.total_sales_kwd or 0)
+
+            # Overlay elapsed KD for today/yesterday when using today-based presets
+            if elapsed_for_today:
+                elapsed_payload = _load_daily_sales_elapsed_db_cache()
+                by_e = (elapsed_payload or {}).get("byMachineId") or {}
+                for mid in machine_ids:
+                    ent = by_e.get(mid) if isinstance(by_e, dict) else None
+                    if not isinstance(ent, dict):
+                        continue
+                    days_map = kwd_by_mid_day.setdefault(mid, {})
+                    if ent.get("todayKwd") is not None:
+                        days_map[today] = float(ent["todayKwd"])
+                    y = today - timedelta(days=1)
+                    if ent.get("yesterdaySameElapsedKwd") is not None:
+                        days_map[y] = float(ent["yesterdaySameElapsedKwd"])
+                    daily = ent.get("dailyElapsed") or []
+                    if isinstance(daily, list):
+                        for i, row in enumerate(daily):
+                            if not isinstance(row, dict) or row.get("kwd") is None:
+                                continue
+                            try:
+                                d = date.fromisoformat(str(row.get("date") or ""))
+                            except Exception:
+                                continue
+                            if i >= 2:
+                                days_map[d] = float(row["kwd"])
+
+            def _fetch_vends(from_ts: int, to_ts: int, mid: str):
+                return _fetch_vends_machine_day(mid, from_ts, to_ts)
+
+            def _fallback_target(mname: str, owner: Optional[str]) -> Optional[float]:
+                try:
+                    return daily_target_kd_from_week(mname, owner)
+                except Exception:
+                    return None
+
+            out = compute_fleet_sx(
+                machine_ids=machine_ids,
+                machine_names=machine_names,
+                cfg_by_mid=cfg_by_mid,
+                kwd_by_mid_day=kwd_by_mid_day,
+                a_lo=a_lo,
+                a_hi=a_hi,
+                b_lo=b_lo,
+                b_hi=b_hi,
+                label_a=label_a,
+                label_b=label_b,
+                today=today,
+                now_local=now_local,
+                elapsed_for_today=elapsed_for_today,
+                fetch_vends_fn=_fetch_vends,
+                daily_target_fallback_fn=_fallback_target,
+            )
+            out["preset"] = preset
+            return jsonify(out)
+        except Exception as ex:
+            logger.exception("alert overall sales acceleration")
             return jsonify({"error": "failed", "message": str(ex)}), 500
         finally:
             db.close()
@@ -1118,14 +2487,15 @@ def register_alert_routes(app) -> None:
     def alert_overall_people_footfall():
         """
         People Count (Monitor v1 / Videoloft): summed ``people_in`` from ``people_analytics_records``
-        for ``interval_type=date`` — same DB source as ``GET /api/people-analytics``.
+        by summing **hour** buckets (live sync) with **date** fallback — same Videoloft source as ``GET /api/people-analytics``.
 
         Resolution order per Vendon machine id:
           1. ``alert_routes.DEFAULT`` map + optional ``alert_people_camera_map.json`` + ``ALERT_PEOPLE_CAMERA_MAP_JSON``
           2. Videoloft ``/devices`` list (cached; needs ``VIDEOLOFT_*`` like the sync worker) to resolve ``cameraNames``
           3. Optional ``ALERT_PEOPLE_FUZZY_MATCH=true`` substring match by machine display name.
 
-        Dates: Kuwait **today vs yesterday** (vs-yesterday trend matches Overall sales trend semantics).
+        Dates: Kuwait calendar ranges per **compare preset** (default today vs yesterday).
+        Query: preset=… and optional aStart/aEnd/bStart/bEnd for custom_vs_custom.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -1133,13 +2503,24 @@ def register_alert_routes(app) -> None:
         if denied:
             return denied
 
+        preset = (request.args.get("preset") or "today_vs_yesterday").strip()
         tz_name = "Asia/Kuwait"
+        tz = ZoneInfo(tz_name)
         today_s = _kuwait_date_today_iso()
         try:
-            d0 = datetime.strptime(today_s, "%Y-%m-%d").date()
-            yesterday_s = (d0 - timedelta(days=1)).isoformat()
+            today_d = datetime.strptime(today_s, "%Y-%m-%d").date()
         except ValueError:
             return jsonify({"error": "invalid server date"}), 500
+
+        (a_lo, a_hi), (b_lo, b_hi), label_a, label_b = _alert_preset_periods(
+            preset,
+            today_d,
+            request.args.get("aStart"),
+            request.args.get("aEnd"),
+            request.args.get("bStart"),
+            request.args.get("bEnd"),
+        )
+        yesterday_s = (today_d - timedelta(days=1)).isoformat()
 
         rows, verr = vendon_fetch_machine_list(_vendon_get)
         if verr:
@@ -1169,26 +2550,41 @@ def register_alert_routes(app) -> None:
         pa = _pa_session()
         try:
             uf = frozenset(all_uidds)
-            by_today = _sum_people_in_by_uidd_day(pa, uf, today_s, tz_name)
-            by_yest = _sum_people_in_by_uidd_day(pa, uf, yesterday_s, tz_name)
+            dates_needed: set = set()
+            cur = a_lo
+            while cur < a_hi:
+                dates_needed.add(cur.isoformat())
+                cur += timedelta(days=1)
+            cur = b_lo
+            while cur < b_hi:
+                dates_needed.add(cur.isoformat())
+                cur += timedelta(days=1)
+            by_day_uidd: Dict[str, Dict[str, int]] = {}
+            for ds in dates_needed:
+                by_day_uidd[ds] = _sum_people_in_by_uidd_day(pa, uf, ds, tz_name)
         finally:
             pa.close()
+
+        def _sum_uidds(uids: List[str], lo: date, hi: date) -> int:
+            total = 0
+            cur = lo
+            while cur < hi:
+                bucket = by_day_uidd.get(cur.isoformat()) or {}
+                for u in uids:
+                    total += int(bucket.get(u, 0) or 0)
+                cur += timedelta(days=1)
+            return total
 
         out: Dict[str, Any] = {}
         videoloft_ok = bool(cameras)
         for mid, mname in mids_info:
             uids, how = resolved.get(mid, ([], "no_mapping"))
             mapped = bool(uids)
-            today_in = 0
-            yest_in = 0
-            per_cam_today = {u: by_today.get(u, 0) for u in uids}
-            per_cam_yest = {u: by_yest.get(u, 0) for u in uids}
-            for u in uids:
-                today_in += int(per_cam_today.get(u, 0) or 0)
-                yest_in += int(per_cam_yest.get(u, 0) or 0)
+            primary_in = _sum_uidds(uids, a_lo, a_hi) if mapped else None
+            baseline_in = _sum_uidds(uids, b_lo, b_hi) if mapped else None
             trend_pct = None
-            if mapped and yest_in > 0:
-                trend_pct = ((float(today_in) - float(yest_in)) / float(yest_in)) * 100.0
+            if mapped and baseline_in is not None and baseline_in > 0:
+                trend_pct = ((float(primary_in) - float(baseline_in)) / float(baseline_in)) * 100.0
             hint = ""
             if not uids:
                 hint = (
@@ -1202,9 +2598,13 @@ def register_alert_routes(app) -> None:
                 )
             out[mid] = {
                 "mapped": mapped,
-                "todayIn": today_in if mapped else None,
-                "yesterdayIn": yest_in if mapped else None,
+                "primaryIn": primary_in if mapped else None,
+                "baselineIn": baseline_in if mapped else None,
+                "todayIn": primary_in if mapped else None,
+                "yesterdayIn": baseline_in if mapped else None,
                 "trendPct": trend_pct if mapped else None,
+                "primaryLabel": label_a,
+                "baselineLabel": label_b,
                 "uidds": uids,
                 "resolve": how,
                 "hint": hint or None,
@@ -1213,8 +2613,15 @@ def register_alert_routes(app) -> None:
         return jsonify(
             {
                 "timezone": tz_name,
+                "preset": preset,
                 "today": today_s,
                 "yesterday": yesterday_s,
+                "dateAStart": a_lo.isoformat(),
+                "dateAEnd": a_hi.isoformat(),
+                "dateBStart": b_lo.isoformat(),
+                "dateBEnd": b_hi.isoformat(),
+                "labelA": label_a,
+                "labelB": label_b,
                 "videoloftDevicesLoaded": videoloft_ok,
                 "byMachineId": out,
                 "machinesProcessed": len(mids_info),
@@ -1245,6 +2652,379 @@ def register_alert_routes(app) -> None:
             logger.exception("alert admin machine profile delete")
             db.rollback()
             return jsonify({"error": "delete_failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/workflow/operator-schedule", methods=["GET", "OPTIONS"])
+    def alert_workflow_operator_schedule():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import get_operator_schedule
+
+        machine_id = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        return jsonify(get_operator_schedule(machine_id))
+
+    @app.route("/api/alert/workflow/machine-attendance-map", methods=["GET", "OPTIONS"])
+    def alert_workflow_machine_attendance_map():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from alert_workflow_cache_lib import (
+            load_workflow_attendance_cache,
+            refresh_workflow_attendance_cache_async,
+            slice_workflow_attendance,
+        )
+        from leet_workflow_lib import get_machine_attendance_summaries
+
+        raw = (request.args.get("machine_ids") or request.args.get("machineIds") or "").strip()
+        machine_ids = [x.strip() for x in raw.split(",") if x.strip()]
+
+        cached = load_workflow_attendance_cache()
+        if cached is not None:
+            refresh_workflow_attendance_cache_async()
+            return jsonify(slice_workflow_attendance(cached, machine_ids))
+
+        payload = get_machine_attendance_summaries(machine_ids, include_contact=False)
+        refresh_workflow_attendance_cache_async()
+        return jsonify(payload)
+
+    @app.route("/api/alert/internal/workflow-attendance-refresh", methods=["POST", "OPTIONS"])
+    def alert_internal_workflow_attendance_refresh():
+        if request.method == "OPTIONS":
+            return "", 204
+        if not _check_secret():
+            return jsonify({"error": "Unauthorized"}), 401
+        from alert_workflow_cache_lib import refresh_workflow_attendance_cache
+
+        try:
+            res = refresh_workflow_attendance_cache()
+            status = 200 if res.get("ok") else 502
+            return jsonify(res), status
+        except Exception as ex:
+            logger.exception("alert_internal_workflow_attendance_refresh")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+
+    @app.route("/api/alert/internal/daily-sales-elapsed-refresh", methods=["POST", "OPTIONS"])
+    def alert_internal_daily_sales_elapsed_refresh():
+        if request.method == "OPTIONS":
+            return "", 204
+        if not _check_secret():
+            return jsonify({"error": "Unauthorized"}), 401
+        try:
+            payload, err_status = _refresh_daily_sales_elapsed_cache_internal()
+            if err_status:
+                return err_status
+            return jsonify(
+                {
+                    "ok": True,
+                    "asOfLocal": payload.get("asOfLocal"),
+                    "fleetTodayKwd": payload.get("fleetTodayKwd"),
+                    "machineCount": len(payload.get("byMachineId") or {}),
+                }
+            )
+        except Exception as ex:
+            logger.exception("alert_internal_daily_sales_elapsed_refresh")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+
+    @app.route("/api/alert/workflow/cleaning", methods=["GET", "OPTIONS"])
+    def alert_workflow_cleaning():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import get_cleaning
+
+        machine_id = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        return jsonify(get_cleaning(machine_id))
+
+    @app.route("/api/alert/workflow/cleaning-map", methods=["GET", "OPTIONS"])
+    def alert_workflow_cleaning_map():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import get_cleaning_map
+
+        raw = (request.args.get("machine_ids") or request.args.get("machineIds") or "").strip()
+        ids = [x.strip() for x in raw.split(",") if x.strip()]
+        return jsonify(get_cleaning_map(ids))
+
+    @app.route("/api/alert/workflow/tech-visit", methods=["GET", "OPTIONS"])
+    def alert_workflow_tech_visit():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import get_tech_visit
+
+        machine_id = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        machine_name = (request.args.get("machine_name") or request.args.get("machineName") or "").strip()
+        return jsonify(get_tech_visit(machine_id, machine_name or None))
+
+    @app.route("/api/alert/workflow/go-check", methods=["POST", "OPTIONS"])
+    def alert_workflow_go_check():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import post_go_check
+
+        body = request.get_json(silent=True) or {}
+        return jsonify(
+            post_go_check(
+                {
+                    "machineId": body.get("machineId") or body.get("machine_id"),
+                    "machineName": body.get("machineName") or body.get("machine_name"),
+                    "errorType": body.get("errorType") or body.get("error_type"),
+                    "message": body.get("message"),
+                }
+            )
+        )
+
+    @app.route("/api/alert/workflow/dm-operator", methods=["POST", "OPTIONS"])
+    def alert_workflow_dm_operator():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import post_dm_operator
+
+        body = request.get_json(silent=True) or {}
+        return jsonify(
+            post_dm_operator(
+                {
+                    "machineId": body.get("machineId") or body.get("machine_id"),
+                    "operatorEmail": body.get("operatorEmail") or body.get("operator_email"),
+                }
+            )
+        )
+
+    @app.route("/api/alert/workflow/qa-bullets", methods=["GET", "OPTIONS"])
+    def alert_workflow_qa_bullets():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import qa_bullets
+
+        audit_id = (request.args.get("audit_id") or request.args.get("auditId") or "").strip()
+        return jsonify(qa_bullets(audit_id))
+
+    @app.route("/api/alert/workflow/qa-report-download", methods=["GET", "OPTIONS"])
+    def alert_workflow_qa_report_download():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from safetyculture_qa_lib import export_audit_pdf
+        from flask import Response
+
+        audit_id = (request.args.get("audit_id") or request.args.get("auditId") or "").strip()
+        pdf_bytes, filename, err = export_audit_pdf(audit_id)
+        if err or not pdf_bytes:
+            return jsonify({"error": err or "export failed"}), 502
+        safe_name = (filename or "qa-report.pdf").replace('"', "")
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_name}"',
+                "Cache-Control": "private, max-age=300",
+            },
+        )
+
+    @app.route("/api/alert/admin/vendon-users", methods=["GET", "OPTIONS"])
+    def alert_admin_vendon_users():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_admin()
+        if denied:
+            return denied
+        try:
+            from target_vendon_users import fetch_vendon_users_for_target
+
+            return jsonify({"users": fetch_vendon_users_for_target()})
+        except Exception as ex:
+            logger.exception("alert_admin_vendon_users")
+            return jsonify({"error": str(ex), "users": []}), 500
+
+    @app.route("/api/alert/admin/area-owners", methods=["GET", "OPTIONS"])
+    def alert_admin_area_owners_list():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_admin()
+        if denied:
+            return denied
+        db = _dash_session()
+        try:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT vendon_user_id, vendon_user_name, machine_ids, login_username,
+                           password_hash, updated_by, updated_at
+                    FROM target_area_owner
+                    ORDER BY vendon_user_name ASC
+                    """
+                )
+            ).fetchall()
+            catalog: Dict[str, str] = {}
+            vendon_rows, _ = vendon_fetch_machine_list(_vendon_get)
+            for m in vendon_rows or []:
+                mid = str(m.get("id") or "").strip()
+                if mid:
+                    catalog[mid] = str(m.get("name") or mid).strip()
+            out: List[Dict[str, Any]] = []
+            for r in rows:
+                mids_raw = r.machine_ids
+                if isinstance(mids_raw, str):
+                    try:
+                        mids_raw = json.loads(mids_raw)
+                    except Exception:
+                        mids_raw = []
+                machine_ids = [str(x) for x in (mids_raw or [])]
+                out.append(
+                    {
+                        "vendonUserId": r.vendon_user_id,
+                        "vendonUserName": r.vendon_user_name,
+                        "machineIds": machine_ids,
+                        "machines": [{"id": mid, "name": catalog.get(mid) or mid} for mid in machine_ids],
+                        "loginUsername": r.login_username,
+                        "hasLogin": bool(r.login_username and r.password_hash),
+                        "updatedBy": r.updated_by,
+                        "updatedAt": r.updated_at.isoformat() if r.updated_at else None,
+                    }
+                )
+            return jsonify({"rows": out})
+        except Exception as ex:
+            logger.exception("alert_admin_area_owners_list")
+            return jsonify({"error": str(ex), "rows": []}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/admin/area-owners/<vendon_user_id>", methods=["PUT", "DELETE", "OPTIONS"])
+    def alert_admin_area_owners_mutate(vendon_user_id: str):
+        if request.method == "OPTIONS":
+            return "", 204
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        uid = (vendon_user_id or "").strip()
+        if not uid:
+            return jsonify({"error": "vendon_user_id required"}), 400
+        db = _dash_session()
+        try:
+            if request.method == "DELETE":
+                db.execute(text("DELETE FROM target_area_owner WHERE vendon_user_id = :id"), {"id": uid})
+                db.commit()
+                return jsonify({"ok": True})
+
+            body = request.get_json(silent=True) or {}
+            from target_site_routes import hash_area_password
+
+            name = str(body.get("vendonUserName") or body.get("name") or "").strip()
+            raw_ids = body.get("machineIds") or []
+            if not isinstance(raw_ids, list):
+                return jsonify({"error": "machineIds must be a list"}), 400
+            machine_ids = [str(x).strip() for x in raw_ids if str(x).strip()]
+            password = body.get("password") or body.get("newPassword")
+            login_username = str(body.get("loginUsername") or "").strip().lower() or None
+
+            db.execute(
+                text(
+                    """
+                    INSERT INTO target_area_owner (vendon_user_id, vendon_user_name, machine_ids, updated_by, updated_at)
+                    VALUES (:id, :name, CAST(:mids AS jsonb), :by, NOW())
+                    ON CONFLICT (vendon_user_id) DO UPDATE SET
+                      vendon_user_name = EXCLUDED.vendon_user_name,
+                      machine_ids = EXCLUDED.machine_ids,
+                      updated_by = EXCLUDED.updated_by,
+                      updated_at = NOW()
+                    """
+                ),
+                {"id": uid, "name": name or uid, "mids": json.dumps(machine_ids), "by": email},
+            )
+            if login_username or password:
+                sets: List[str] = []
+                params: Dict[str, Any] = {"id": uid}
+                if login_username:
+                    sets.append("login_username = :login")
+                    params["login"] = login_username
+                if password:
+                    if len(str(password)) < 6:
+                        return jsonify({"error": "Password must be at least 6 characters"}), 400
+                    sets.append("password_hash = :phash")
+                    params["phash"] = hash_area_password(str(password))
+                if sets:
+                    db.execute(
+                        text(f"UPDATE target_area_owner SET {', '.join(sets)} WHERE vendon_user_id = :id"),
+                        params,
+                    )
+            db.commit()
+            return jsonify({"ok": True})
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_admin_area_owners_mutate")
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/me/ui-prefs", methods=["GET", "PUT", "OPTIONS"])
+    def alert_me_ui_prefs():
+        """Per-user Alert UI preferences (column layouts, etc.)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        email, denied = _require_alert_read()
+        if denied:
+            return denied
+        db = _dash_session()
+        try:
+            if request.method == "GET":
+                row = db.query(AlertUserUiPrefs).filter(AlertUserUiPrefs.email == email).first()
+                prefs = row.prefs if row and isinstance(row.prefs, dict) else {}
+                return jsonify({"email": email, "prefs": prefs, "updatedAt": row.updated_at.isoformat() if row and row.updated_at else None})
+
+            body = request.get_json(silent=True) or {}
+            if not isinstance(body, dict):
+                return jsonify({"error": "JSON object required"}), 400
+            patch = body.get("prefs")
+            if patch is None and "redFlagsColumns" in body:
+                patch = {"redFlagsColumns": body.get("redFlagsColumns")}
+            if not isinstance(patch, dict):
+                return jsonify({"error": "prefs object required"}), 400
+
+            row = db.query(AlertUserUiPrefs).filter(AlertUserUiPrefs.email == email).first()
+            merged: Dict[str, Any] = dict(row.prefs) if row and isinstance(row.prefs, dict) else {}
+            for key, val in patch.items():
+                if isinstance(val, dict) and isinstance(merged.get(key), dict):
+                    inner = dict(merged[key])
+                    inner.update(val)
+                    merged[key] = inner
+                else:
+                    merged[key] = val
+            if row:
+                row.prefs = merged
+            else:
+                row = AlertUserUiPrefs(email=email, prefs=merged)
+                db.add(row)
+            db.commit()
+            db.refresh(row)
+            return jsonify({"email": email, "prefs": row.prefs, "updatedAt": row.updated_at.isoformat() if row.updated_at else None})
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_me_ui_prefs")
+            return jsonify({"error": str(ex)}), 500
         finally:
             db.close()
 

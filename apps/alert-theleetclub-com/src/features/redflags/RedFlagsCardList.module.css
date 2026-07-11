@@ -1,0 +1,267 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  list-style: none;
+}
+
+.card {
+  margin: 0;
+  padding: 0 0 12px;
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  border-left: 3px solid rgba(196, 92, 74, 0.55);
+  background: var(--ops-surface-bg, #171c23);
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cardMainTap {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.cardInteractive {
+  padding: 0 14px;
+  margin-top: 8px;
+}
+
+.operatorBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px 0;
+}
+
+.salesBlock {
+  margin-bottom: 10px;
+}
+
+.salesBlock .salesStack {
+  max-width: 100%;
+  margin-top: 4px;
+}
+
+.freqPillBtn {
+  cursor: pointer;
+  touch-action: manipulation;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.freqPillBtn:hover {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.freqPillGood {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.freqPillBad {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.detailBtn {
+  border: none;
+  background: transparent;
+  color: #ad8883;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  touch-action: manipulation;
+}
+
+.cardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 0;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.card:hover {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: linear-gradient(135deg, rgba(40, 24, 28, 0.95), rgba(22, 18, 24, 0.98));
+}
+
+.cardNew {
+  border-left-color: #fca5a5;
+  box-shadow: inset 0 0 0 1px rgba(252, 165, 165, 0.15);
+}
+
+.cardUpdated {
+  border-left-color: #fde047;
+}
+
+.cardHot {
+  box-shadow: inset 3px 0 0 0 #f87171;
+}
+
+.cardCleaningOverdue {
+  border-left-color: #dc2626;
+  box-shadow: inset 3px 0 0 0 #dc2626;
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cardChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 999px;
+}
+
+.chipNew {
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.chipUpd {
+  color: #fde68a;
+  border: 1px solid rgba(253, 224, 71, 0.35);
+  background: rgba(253, 224, 71, 0.08);
+}
+
+.chipP2 {
+  color: #ad8883;
+  border: 1px solid #5d3f3b;
+}
+
+.machineName {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #f8fafc;
+  line-height: 1.25;
+}
+
+.machineId {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #ad8883;
+  margin-top: 2px;
+}
+
+.alertLead {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.metricRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.metric {
+  min-width: 0;
+}
+
+.metricLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ad8883;
+  margin-bottom: 2px;
+}
+
+.metricVal {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.35;
+}
+
+.freqRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.freqPill {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.freqPillLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #ad8883;
+  margin-bottom: 2px;
+}
+
+.freqPillVal {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.goBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(185, 28, 28, 0.25);
+  color: #fecaca;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+}
+
+.goBtn:hover {
+  background: rgba(185, 28, 28, 0.4);
+}

@@ -1,0 +1,607 @@
+/**
+ * Stitch shell layout — from docs/stitch-export/code.html
+ * Fixed sidebar only on desktop; tablet/phone use drawer (see App.tsx useNavCompact).
+ */
+
+:root {
+  --stitch-nav-w-rail: 64px;
+  --stitch-nav-w-expanded: 196px;
+}
+
+@media (min-width: 1367px) {
+  .stitchShell:not(.appShellNavDrawer) {
+    --stitch-nav-w: var(--stitch-nav-w-expanded, 196px);
+  }
+
+  .stitchShell.appShellNavRail:not(.appShellNavDrawer) {
+    --stitch-nav-w: var(--stitch-nav-w-rail, 64px);
+  }
+
+  .stitchShell:not(.appShellNavDrawer) .sideNav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: var(--stitch-nav-w);
+    height: 100dvh;
+    padding-top: calc(32px + var(--safe-top));
+    padding-bottom: calc(20px + var(--safe-bottom));
+    background: #1b2027;
+    border-right: 1px solid #5d3f3b;
+  }
+
+  .stitchShell:not(.appShellNavDrawer) .mainColumn {
+    margin-left: var(--stitch-nav-w);
+    min-height: 100dvh;
+    width: calc(100% - var(--stitch-nav-w));
+  }
+
+  .stitchShell:not(.appShellNavDrawer) .topBar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    min-height: 40px;
+    background: #090b10;
+    border-bottom: 1px solid #5d3f3b;
+  }
+
+  .stitchShell:not(.appShellNavDrawer) .contentMain.appMain {
+    padding: 10px 14px 18px;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 1366px) {
+  .stitchShell .contentMain.appMain {
+    padding: 12px 16px 20px;
+  }
+
+  .stitchShell .topBar {
+    min-height: 52px;
+    padding: 0 14px;
+  }
+
+  .stitchShell.appShellNavRail:not(.appShellNavDrawer) .sideNav,
+  .stitchShell.appShellNavRail.appShellNavDrawer .sideNav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: 64px;
+    height: 100dvh;
+    padding-top: calc(12px + var(--safe-top));
+    padding-bottom: calc(12px + var(--safe-bottom));
+    background: #1b2027;
+    border-right: 1px solid #5d3f3b;
+  }
+
+  .stitchShell.appShellNavRail:not(.appShellNavDrawer) .mainColumn,
+  .stitchShell.appShellNavRail.appShellNavDrawer .mainColumn {
+    margin-left: 64px;
+    width: calc(100% - 64px);
+  }
+
+  .stitchShell:not(.appShellNavRail):not(.appShellNavDrawer) .sideNav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: var(--stitch-nav-w-expanded, 196px);
+    height: 100dvh;
+    padding-top: calc(12px + var(--safe-top));
+    padding-bottom: calc(12px + var(--safe-bottom));
+    background: #1b2027;
+    border-right: 1px solid #5d3f3b;
+  }
+
+  .stitchShell:not(.appShellNavRail):not(.appShellNavDrawer) .mainColumn {
+    margin-left: var(--stitch-nav-w-expanded, 196px);
+    width: calc(100% - var(--stitch-nav-w-expanded, 196px));
+  }
+}
+
+.stitchDataPanel {
+  background: #1a1b21;
+  border: 1px solid #5d3f3b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stitchDataPanelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #5d3f3b;
+  background: #171c23;
+}
+
+.stitchDataPanelTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #dee2ec;
+}
+
+.stitchDataPanelTitle .navGlyph {
+  color: #ffb4aa;
+  width: 22px;
+  height: 22px;
+}
+
+.stitchDataPanelBody {
+  padding: 0 0 12px;
+}
+
+.stitchKpiRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 14px 0;
+}
+
+@media (min-width: 900px) {
+  .stitchKpiRow {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.stitchKpiCard {
+  padding: var(--ops-surface-pad-y, 10px) var(--ops-surface-pad-x, 12px);
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  background: var(--ops-surface-bg, #171c23);
+}
+
+.stitchKpiLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-label-color, #ad8883);
+  margin-bottom: 4px;
+}
+
+.stitchKpiVal {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  color: #e2e2e9;
+  font-variant-numeric: tabular-nums;
+}
+
+.stitchTablePanelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 12px var(--ops-inset-x, 14px) 0;
+  padding: var(--ops-surface-pad-y, 10px) var(--ops-surface-pad-x, 12px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  border-bottom: none;
+  border-radius: var(--ops-surface-radius, 8px) var(--ops-surface-radius, 8px) 0 0;
+  background: var(--ops-surface-bg-hover, #1e1f25);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-title-color, #e2e2e9);
+}
+
+.stitchTablePanelHead + .stitchTableScroll {
+  margin-top: 0;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  border: 1px solid #5d3f3b;
+  border-top: none;
+}
+
+.stitchKpiValWarn {
+  color: #ff3b30;
+}
+
+.stitchKpiValGood {
+  color: #53e16f;
+}
+
+.stitchKpiSub {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ad8883;
+}
+
+/* Ops dashboard panel — Red Flags / Overall (Stitch export pattern) */
+
+.stitchOpsPanel {
+  display: flex;
+  flex-direction: column;
+}
+
+.stitchOpsPanelCompact .stitchOpsHead {
+  padding: 8px 12px;
+  gap: 6px 10px;
+}
+
+.stitchOpsPanelCompact .stitchDataPanelTitle {
+  font-size: 1rem;
+}
+
+.stitchOpsPanelCompact .stitchDataPanelTitle .navGlyph {
+  width: 18px;
+  height: 18px;
+}
+
+.stitchOpsPanelCompact .stitchOpsBadge {
+  padding: 2px 8px;
+  font-size: 9px;
+}
+
+.stitchOpsPanelCompact .stitchOpsToolbar {
+  gap: 6px;
+}
+
+.stitchOpsRefreshCompact {
+  min-height: 34px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+}
+
+.stitchOpsMetaCompact {
+  margin: 0 !important;
+  padding: 6px var(--ops-inset-x, 14px) 0 !important;
+  font-size: 9px !important;
+}
+
+.stitchOpsPanelCompact .stitchOpsLive {
+  padding: 4px 8px;
+  font-size: 8px;
+}
+
+.stitchOpsPanelCompact .stitchOpsBody {
+  padding-bottom: 10px;
+}
+
+.stitchOpsPanelCompact .stitchKpiVal {
+  font-size: 1.2rem;
+}
+
+.stitchOpsPanelCompact .stitchKpiRow {
+  gap: 8px;
+}
+
+.stitchOpsPanelCompact .stitchKpiCard {
+  padding: 8px 10px;
+}
+
+.stitchOpsPanelCompact .opsDashboard {
+  padding-top: 4px;
+  gap: 8px;
+}
+
+.stitchOpsPanelCompact .opsDashboardSectionBody {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.stitchOpsPanelCompact .opsDashboardSectionHead {
+  padding: 5px 10px;
+}
+
+.stitchOpsMetaInline {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #7a8a9a;
+  white-space: nowrap;
+}
+
+.stitchKpiInline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 6px;
+}
+
+.stitchKpiInlineItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.stitchKpiInlineVal {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  color: #dee2ec;
+  line-height: 1;
+}
+
+.stitchKpiInlineLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a9aab;
+}
+
+.stitchKpiInlineItemWarn .stitchKpiInlineVal {
+  color: #e8b878;
+}
+
+.stitchKpiInlineItemGood .stitchKpiInlineVal {
+  color: #7cb896;
+}
+
+.stitchOpsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #5d3f3b;
+  background: #171c23;
+}
+
+.stitchOpsHeadMain {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.stitchOpsTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.stitchOpsSubtitle {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #ad8883;
+  max-width: 42rem;
+}
+
+.stitchOpsBadge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ad8883;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #5d3f3b;
+  background: #252a32;
+}
+
+.stitchOpsToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 10px;
+  flex: 0 1 auto;
+}
+
+.stitchOpsClock {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #dee2ec;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #5d3f3b;
+  background: #090b10;
+  font-variant-numeric: tabular-nums;
+}
+
+.stitchOpsLive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #53e16f;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(83, 225, 111, 0.35);
+  background: rgba(83, 225, 111, 0.08);
+}
+
+.stitchOpsLiveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #53e16f;
+  box-shadow: 0 0 8px rgba(83, 225, 111, 0.55);
+}
+
+.stitchOpsRefresh {
+  min-height: var(--touch-min);
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid #5d3f3b;
+  background: #252a32;
+  color: #dee2ec;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.stitchOpsRefresh:hover:not(:disabled) {
+  background: #30353d;
+  border-color: #ad8883;
+}
+
+.stitchOpsRefresh:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.stitchOpsBody {
+  padding: 0 0 14px;
+}
+
+.stitchOpsControls {
+  margin: 0;
+  padding: var(--ops-surface-pad-y, 10px) var(--ops-surface-pad-x, 12px);
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  background: var(--ops-surface-bg, #171c23);
+}
+
+.stitchOpsControls :global(.comparePickerRow) {
+  gap: 10px 14px;
+}
+
+.stitchOpsControls :global(.comparePickerRow label) {
+  font-size: 12px;
+  color: #ad8883;
+}
+
+.stitchOpsHint {
+  margin: 8px 14px 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #ad8883;
+}
+
+.stitchOpsBody .alertSalesBanner {
+  margin: 10px var(--ops-inset-x, 14px) 0;
+}
+
+.stitchOpsAlert {
+  margin: 10px var(--ops-inset-x, 14px) 0;
+  padding: var(--ops-surface-pad-y, 10px) var(--ops-surface-pad-x, 12px);
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid rgba(255, 59, 48, 0.35);
+  background: rgba(147, 0, 10, 0.18);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #ffb4ab;
+}
+
+.stitchOpsAlertInfo {
+  border-color: var(--ops-surface-border, #5d3f3b);
+  background: var(--ops-surface-bg, #171c23);
+  color: var(--ops-label-color, #ad8883);
+}
+
+.stitchOpsMeta {
+  margin: 0 14px;
+  padding-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #ad8883;
+}
+
+.stitchTableScroll {
+  margin: 12px 14px 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  border-top: 1px solid #30363d;
+}
+
+.stitchOpsTable {
+  border-collapse: collapse;
+  min-width: 2280px;
+  table-layout: auto;
+}
+
+.stitchOpsTable tbody tr {
+  transition: background 0.12s ease;
+}
+
+.stitchOpsTable tbody tr:hover {
+  background: #21262d;
+}
+
+.stitchOpsTable tbody td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.55);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #dee2ec;
+  vertical-align: top;
+}
+
+.stitchOpsTable tbody td[data-mono='true'],
+.stitchOpsTable .stitchCellMono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1024px) {
+  .stitchOpsHead {
+    padding: 14px;
+  }
+
+  .stitchOpsControls,
+  .stitchOpsHint,
+  .stitchOpsBody .alertSalesBanner,
+  .stitchOpsAlert,
+  .stitchOpsMeta,
+  .stitchTableScroll {
+    margin-left: 10px;
+    margin-right: 10px;
+  }
+
+  .stitchKpiRow {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .stitchOpsTable tbody td {
+    padding: 7px 6px;
+    font-size: 0.76rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .stitchOpsToolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .stitchOpsRefresh {
+    flex: 1 1 auto;
+    min-width: 7rem;
+  }
+}

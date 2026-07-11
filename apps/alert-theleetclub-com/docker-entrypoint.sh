@@ -10,6 +10,7 @@ JSON="$(jq -n \
   --arg SLACK_AM_AHMED_USER_ID "${SLACK_AM_AHMED_USER_ID:-}" \
   --arg SLACK_AM_SUHAIB_USER_ID "${SLACK_AM_SUHAIB_USER_ID:-}" \
   --arg SLACK_OP_EMAIL_MAP_JSON "${SLACK_OP_EMAIL_MAP_JSON:-}" \
+  --arg OPERATOR_CONTACT_MAP_JSON "${OPERATOR_CONTACT_MAP_JSON:-}" \
   '{
     ALERT_API_URL: (if $ALERT_API_URL == "" then null else $ALERT_API_URL end),
     GOOGLE_CLIENT_ID: (if $GOOGLE_CLIENT_ID == "" then null else $GOOGLE_CLIENT_ID end),
@@ -17,7 +18,8 @@ JSON="$(jq -n \
     SLACK_TEAM_ID: (if $SLACK_TEAM_ID == "" then null else $SLACK_TEAM_ID end),
     SLACK_AM_AHMED_USER_ID: (if $SLACK_AM_AHMED_USER_ID == "" then null else $SLACK_AM_AHMED_USER_ID end),
     SLACK_AM_SUHAIB_USER_ID: (if $SLACK_AM_SUHAIB_USER_ID == "" then null else $SLACK_AM_SUHAIB_USER_ID end),
-    SLACK_OP_EMAIL_MAP_JSON: (if $SLACK_OP_EMAIL_MAP_JSON == "" then null else $SLACK_OP_EMAIL_MAP_JSON end)
+    SLACK_OP_EMAIL_MAP_JSON: (if $SLACK_OP_EMAIL_MAP_JSON == "" then null else $SLACK_OP_EMAIL_MAP_JSON end),
+    OPERATOR_CONTACT_MAP_JSON: (if $OPERATOR_CONTACT_MAP_JSON == "" then null else $OPERATOR_CONTACT_MAP_JSON end)
   }')"
 
 printf 'window.__ALERT_ENV__ = %s;\n' "$JSON" > /usr/share/nginx/html/config.js

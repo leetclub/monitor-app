@@ -37,7 +37,7 @@ from dashboard_access_models import (
 )
 from dashboard_access_routes import ALL_DASHBOARD_TAB_IDS, SUPER_ADMIN_EMAILS, _check_secret
 from vendon_constants import EVENT_NAME_MAPPING, EXCLUDED_EVENT_NAMES
-from vendon_machine_helpers import vendon_fetch_machine_list, vendon_json_api_error_message
+from vendon_machine_helpers import machine_row_excluded, vendon_fetch_machine_list, vendon_json_api_error_message
 from models import (
     RemoteCreditReason,
     VendonEventCache,
@@ -1357,7 +1357,7 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
     machines = [
         {"id": str(m.get("id")), "name": m.get("name") or str(m.get("id"))}
         for m in mrows
-        if isinstance(m, dict) and m.get("id") is not None
+        if isinstance(m, dict) and m.get("id") is not None and not machine_row_excluded(m.get("name"), m.get("id"))
     ]
 
     db = _get_people_analytics_session()

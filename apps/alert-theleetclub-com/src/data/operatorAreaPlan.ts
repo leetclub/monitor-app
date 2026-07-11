@@ -47,10 +47,6 @@ function compactAlphaNum(s: string): string {
     .replace(/[^a-z0-9]+/g, '');
 }
 
-/**
- * Resolve area manager from machine display name.
- * Returns null when no label matches (configure Slack IDs only after this resolves).
- */
 export function resolveAreaManagerFromMachineName(machineName: string): AreaManagerKey | null {
   const raw = String(machineName || '').trim();
   if (!raw) return null;
@@ -72,4 +68,24 @@ export function resolveAreaManagerFromMachineName(machineName: string): AreaMana
     if (nCompact.length >= 3 && compact.includes(nCompact)) return am;
   }
   return null;
+}
+
+/** Best-effort AM email from dynamic Slack workspace map (email keys). */
+export function resolveAreaManagerEmail(
+  am: AreaManagerKey,
+  slackEmailMap?: Record<string, string>,
+): string | null {
+  const map = slackEmailMap ?? {};
+  const needles = am === 'suhaib' ? ['suhaib@', 'suhaib.'] : ['ahmed@', 'ahmed.'];
+  for (const email of Object.keys(map)) {
+    const low = email.toLowerCase();
+    if (needles.some((n) => low.includes(n))) return low;
+  }
+  if (am === 'suhaib') return 'suhaib@almaghrebrd.com';
+  if (am === 'ahmed') return 'ahmed@almaghrebrd.com';
+  return null;
+}
+
+export function areaManagerDisplayName(am: AreaManagerKey): string {
+  return am === 'ahmed' ? 'Ahmed' : 'Suhaib';
 }

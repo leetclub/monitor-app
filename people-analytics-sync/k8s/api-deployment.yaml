@@ -4,7 +4,8 @@ metadata:
   name: people-analytics-api
   namespace: leet-monitor
 spec:
-  replicas: 2
+  # Single replica: commercial footfall report cache is in-process memory.
+  replicas: 1
   selector:
     matchLabels:
       app: people-analytics-api
@@ -61,7 +62,17 @@ spec:
           value: "2097152"
         - name: CORS_ALLOWED_ORIGINS
           # Allow GAS web app randomized subdomains (script.googleusercontent.com uses n-<rand>-script.googleusercontent.com)
-          value: "https://monitor-v2.theleetclub.com,https://alert.theleetclub.com,http://localhost:5173,http://127.0.0.1:5173,https://script.googleusercontent.com,https://.*-script\\.googleusercontent\\.com"
+          value: "https://monitor-v2.theleetclub.com,https://alert.theleetclub.com,https://performance.theleetclub.com,https://target.theleetclub.com,https://targets.theleetclub.com,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175,https://script.googleusercontent.com,https://.*-script\\.googleusercontent\\.com"
+        - name: TARGET_SITE_ADMIN_USER
+          value: "admin"
+        - name: TARGET_SITE_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: target-site-admin-password
+              optional: true
+        - name: COMMERCIAL_FOOTFALL_CACHE_TTL_SEC
+          value: "86400"
         - name: DASHBOARD_SUPER_ADMIN_EMAILS
           valueFrom:
             secretKeyRef:
@@ -92,6 +103,8 @@ spec:
               name: people-analytics-secrets
               key: dashboard-access-api-key
               optional: true
+        - name: ACCESS_ALLOWED_EMAIL_DOMAINS
+          value: "theleetclub.com,almaghrebrd.com"
         - name: VENDON_API_KEY
           valueFrom:
             secretKeyRef:
@@ -100,13 +113,29 @@ spec:
               optional: true
         - name: VENDON_API_BASE
           value: "https://cloud.vendon.net/rest/v1.9.0"
+        - name: VIDEOLOFT_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: videoloft-email
+        - name: VIDEOLOFT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: videoloft-username
+              optional: true
+        - name: VIDEOLOFT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: videoloft-password
         # General Cleaning (v2): maintenance uses full URL https://cloud.vendon.net/rest/head/... — not under VENDON_API_BASE.
         # Code defaults correctly; only set VENDON_PREVENTATIVE_MAINTENANCE_URL if Vendon changes the path.
         - name: SLACK_WEBHOOK_URL
           valueFrom:
             secretKeyRef:
-              name: people-analytics-secrets
-              key: slack-webhook-url
+              name: monitoring-app-v2-secrets
+              key: SLACK_WEBHOOK_URL
               optional: true
         # --- Red Alert operator email alerts (optional; safe defaults = disabled) ---
         - name: RED_ALERT_EMAIL_ENABLED
@@ -143,13 +172,91 @@ spec:
               name: people-analytics-secrets
               key: red-alert-smtp-pass
               optional: true
+        - name: SLACK_TEAM_ID
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_WORKSPACE_ID
+              optional: true
+        - name: SLACK_OP_EMAIL_MAP_JSON
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: slack-op-email-map-json
+              optional: true
+        - name: OPERATOR_CONTACT_MAP_JSON
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: operator-contact-map-json
+              optional: true
+        - name: SLACK_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_BOT_TOKEN
+              optional: true
+        - name: SLACK_USER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_USER_TOKEN
+              optional: true
+        - name: SAFETY_CULTURE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SAFETY_CULTURE_API_TOKEN
+              optional: true
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: OPENAI_API_KEY
+              optional: true
+        - name: OPENAI_MODEL
+          value: "gpt-4o-mini"
+        - name: SLACK_ISSUES_ACTIONS_LIST_ID
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_ISSUES_ACTIONS_LIST_ID
+              optional: true
+        - name: SLACK_COOKIE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_COOKIE_TOKEN
+              optional: true
+        - name: SLACK_COOKIE_HEADER
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_COOKIE_HEADER
+              optional: true
+        - name: SLACK_WORKSPACE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-app-v2-secrets
+              key: SLACK_WORKSPACE_HOST
+              optional: true
+        - name: LEET_WORKFLOW_API_BASE
+          value: "https://workflow.theleetclub.com"
+        - name: LEET_WORKFLOW_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: people-analytics-secrets
+              key: leet-workflow-api-key
+              optional: true
+        - name: LEET_WORKFLOW_API_TIMEOUT_SEC
+          value: "30"
         resources:
           requests:
             memory: "256Mi"
             cpu: "100m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "768Mi"
+            cpu: "750m"
         startupProbe:
           httpGet:
             path: /health
@@ -160,18 +267,18 @@ spec:
           httpGet:
             path: /health
             port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 15
-          timeoutSeconds: 5
-          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 4
         readinessProbe:
           httpGet:
             path: /health
             port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 8
+          failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service

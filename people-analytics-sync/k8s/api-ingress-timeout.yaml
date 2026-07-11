@@ -8,9 +8,9 @@ metadata:
     # Forward all paths as-is (don't rewrite)
     nginx.ingress.kubernetes.io/rewrite-target: /
     # Increase timeout for database queries
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "900"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "900"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "900"
 spec:
   rules:
   - host: people-api.theleetclub.com

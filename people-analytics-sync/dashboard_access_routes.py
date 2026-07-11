@@ -6,7 +6,7 @@ Called from Google Apps Script (UrlFetchApp) — email is supplied by GAS from S
 import os
 import re
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Iterable
 
 from flask import jsonify, request, session as flask_session
 from dashboard_access_models import (
@@ -54,18 +54,27 @@ def _parse_allowed_email_domains_from_env() -> List[str]:
     return out
 
 
-def allowed_email_domains_for_editor(editor_email: str) -> List[str]:
-    """Domains allowed when editing dashboard access via session (org + optional env list)."""
-    from_env = _parse_allowed_email_domains_from_env()
-    if from_env:
-        return from_env
+def allowed_email_domains_for_editor(
+    editor_email: str,
+    roster_emails: Optional[Iterable[str]] = None,
+) -> List[str]:
+    """Domains allowed when editing dashboard access (env + editor org + existing roster)."""
+    domains: set[str] = set(_parse_allowed_email_domains_from_env())
     em = str(editor_email or "").strip().lower()
     at = em.rfind("@")
     if at > 0:
         d = em[at + 1 :].strip()
         if d:
-            return [d]
-    return []
+            domains.add(d)
+    if roster_emails:
+        for raw in roster_emails:
+            addr = str(raw or "").strip().lower()
+            if "@" not in addr:
+                continue
+            dom = addr.rsplit("@", 1)[-1].strip()
+            if dom:
+                domains.add(dom)
+    return sorted(domains)
 
 
 def _email_domain_allowed(addr: str, allowed_domains: List[str]) -> bool:
@@ -333,12 +342,18 @@ def register_dashboard_access_routes(app) -> None:
             full = matched_by == 'super_admin' or (
                 allowed and '*' in allowed
             )
+            db_session = get_dashboard_session()
+            try:
+                _, users_raw = _load_rules_raw(db_session)
+                roster = list(users_raw.keys())
+            finally:
+                db_session.close()
             return jsonify(
                 {
                     'email': email,
                     'allowedTabs': allowed,
                     'fullAccess': full,
-                    'allowedEmailDomains': allowed_email_domains_for_editor(email),
+                    'allowedEmailDomains': allowed_email_domains_for_editor(email, roster),
                 }
             )
         except Exception as ex:
@@ -372,6 +387,7 @@ def register_dashboard_access_routes(app) -> None:
         try:
             if request.method == 'GET':
                 default_tabs, users = _load_rules_raw(session)
+                roster = list(users.keys())
                 return jsonify({
                     'ok': True,
                     'defaultTabs': default_tabs,
@@ -379,7 +395,7 @@ def register_dashboard_access_routes(app) -> None:
                     'allTabIds': ALL_DASHBOARD_TAB_IDS,
                     'fromSheetActive': False,
                     'source': 'database',
-                    'allowedEmailDomains': allowed_email_domains_for_editor(email),
+                    'allowedEmailDomains': allowed_email_domains_for_editor(email, roster),
                 })
 
             body = request.get_json(silent=True) or {}
@@ -390,12 +406,23 @@ def register_dashboard_access_routes(app) -> None:
             if not isinstance(users_in, dict):
                 return jsonify({'success': False, 'error': 'users must be an object'}), 400
 
-            allowed_domains = allowed_email_domains_for_editor(email)
+            _, existing_users = _load_rules_raw(session)
+            existing_emails = {
+                str(em).strip().lower()
+                for em in existing_users.keys()
+                if str(em).strip()
+            }
+            allowed_domains = allowed_email_domains_for_editor(
+                email,
+                list(users_in.keys()) + list(existing_users.keys()),
+            )
             for em, tabs in users_in.items():
                 key = str(em).strip().lower()
                 if not key or key in ('default', '_default') or key in SUPER_ADMIN_EMAILS:
                     continue
                 if not isinstance(tabs, list):
+                    continue
+                if key in existing_emails:
                     continue
                 if not _email_domain_allowed(key, allowed_domains):
                     doms = ", ".join(allowed_domains) if allowed_domains else "(none configured)"

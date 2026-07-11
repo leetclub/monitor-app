@@ -1,0 +1,275 @@
+/* Compact ops tables — Stitch export + tablet-friendly headers */
+
+.alertTh {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  vertical-align: bottom;
+  text-align: left;
+  padding: 8px 10px;
+  background: #171c23;
+  border-bottom: 1px solid #5d3f3b;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.alertThInner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 2.35rem;
+}
+
+.alertThMain {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 1.15rem;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: #dee2ec;
+}
+
+.alertThSortable .alertThSortBtn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.alertThSortIcon {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  line-height: 1;
+  color: #6b7280;
+  opacity: 0.55;
+}
+
+.alertThSortIconActive {
+  color: #ad8883;
+  opacity: 1;
+}
+
+.alertThSortIcondesc {
+  transform: translateY(-0.5px);
+}
+
+.alertThSortIconasc {
+  transform: translateY(0.5px);
+}
+
+.alertThLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.alertThSub {
+  display: block;
+  min-height: 0.95rem;
+  line-height: 0.95rem;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ad8883;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alertThSubSpacer {
+  visibility: hidden;
+  user-select: none;
+  pointer-events: none;
+}
+
+.alertThCenter {
+  text-align: center;
+}
+
+.alertThCenter .alertThInner {
+  align-items: center;
+}
+
+.alertThCenter .alertThMain {
+  justify-content: center;
+}
+
+.alertSalesCell {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  min-width: 5.5rem;
+}
+
+.alertSalesToday {
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.alertSalesYest {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.alertSalesUp {
+  color: #53e16f;
+}
+
+.alertSalesDown {
+  color: #ff3b30;
+}
+
+.alertSalesBanner {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  background: var(--ops-surface-bg, #171c23);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--ops-label-color, #ad8883);
+}
+
+.alertSalesBanner strong {
+  color: var(--text);
+}
+
+@media (max-width: 1024px) {
+  .alertTh {
+    padding: 6px 4px;
+  }
+
+  .alertThMain {
+    font-size: 10px;
+  }
+
+  .alertThSub {
+    font-size: 8px;
+  }
+
+  .alertSalesToday {
+    font-size: 0.74rem;
+  }
+
+  .alertSalesYest {
+    font-size: 0.68rem;
+  }
+}
+
+/* Ops tables (Red Flags / Overall): horizontal scroll — never stack letters vertically */
+.stitchTableScroll {
+  max-width: 100%;
+}
+
+.stitchTableScroll table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.stitchTableScroll .stitchOpsTable th,
+.stitchTableScroll .stitchOpsTable td,
+.stitchTableScroll .table th,
+.stitchTableScroll .table td {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
+}
+
+.stitchTableScroll .alertTh,
+.stitchTableScroll .alertThMain,
+.stitchTableScroll .alertThSub {
+  white-space: nowrap;
+}
+
+.stitchTableScroll .alertThCenter,
+.stitchTableScroll .tdMetric,
+.stitchTableScroll .alertSalesCell,
+.stitchTableScroll .wireDash {
+  white-space: nowrap;
+}
+
+.stitchTableScroll .alertSalesCell {
+  min-width: 5.5rem;
+}
+
+.stitchTableScroll .alertSalesCellYoy {
+  min-width: var(--ops-stack-box-w, 4.25rem);
+}
+
+/* Ops tables: scroll hint on tablet + phone (wide checklist) */
+@media (max-width: 1366px) {
+  .stitchTableScroll::after {
+    content: 'Swipe sideways — YoY month · QA · Call OP/AM';
+    display: block;
+    padding: 6px 10px 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ad8883;
+    text-align: center;
+  }
+}
+
+/* iPad / tablet: slightly larger readable type */
+@media (min-width: 768px) and (max-width: 1366px) {
+  .alertThInner {
+    min-height: 2.5rem;
+  }
+
+  .alertThMain {
+    font-size: 12px;
+  }
+
+  .alertThSub {
+    font-size: 10px;
+    min-height: 1rem;
+    line-height: 1rem;
+  }
+
+  .stitchOpsTable tbody td,
+  .stitchTableScroll .table td {
+    font-size: 0.86rem;
+    line-height: 1.4;
+  }
+
+  .stitchKpiVal {
+    font-size: 1.75rem;
+  }
+
+  .stitchOpsSubtitle,
+  .stitchOpsHint {
+    font-size: 0.86rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .stitchTableScroll::after {
+    content: 'Swipe sideways for more columns';
+    display: block;
+    padding: 6px 10px 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ad8883;
+    text-align: center;
+  }
+}

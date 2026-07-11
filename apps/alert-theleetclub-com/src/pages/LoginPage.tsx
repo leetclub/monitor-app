@@ -5,14 +5,20 @@ import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
 import { loadGsiScript } from '@/lib/gsi';
 
 export function LoginPage() {
-  const { signIn, completeGoogleCredential } = useAuth();
+  const { user, loading, signIn, completeGoogleCredential } = useAuth();
   const navigate = useNavigate();
   const gsiRef = useRef<HTMLDivElement>(null);
 
   const clientId = getAlertRuntimeEnv().GOOGLE_CLIENT_ID?.trim();
 
   useEffect(() => {
-    if (!clientId || !gsiRef.current) return;
+    if (!loading && user) {
+      navigate('/', { replace: true });
+    }
+  }, [loading, user, navigate]);
+
+  useEffect(() => {
+    if (!clientId || !gsiRef.current || loading || user) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -25,7 +31,7 @@ export function LoginPage() {
             const ok = await completeGoogleCredential(String(resp?.credential || ''));
             if (ok) navigate('/', { replace: true });
           },
-          auto_select: false,
+          auto_select: true,
           use_fedcm_for_prompt: false,
         });
         gsi.renderButton(gsiRef.current, {
@@ -43,7 +49,17 @@ export function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [clientId, completeGoogleCredential, navigate]);
+  }, [clientId, completeGoogleCredential, navigate, loading, user]);
+
+  if (loading) {
+    return (
+      <div className="loginShell">
+        <div className="loginCard panel" style={{ textAlign: 'center' }}>
+          <div className="muted">Checking your session…</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="loginShell">

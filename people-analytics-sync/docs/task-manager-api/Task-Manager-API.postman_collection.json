@@ -1,0 +1,627 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "Task Manager API",
+		"description": "Read-only JSON API for Task Manager (Laravel).\n\n## Purpose\nThis collection is for external developers who need to read schedule periods, employee schedule entries, attendance users, daily punch details, lateness deductions, and attendance status history.\n\nAll endpoints are `GET` requests under `/api/v1/*`.\n\n## Authentication\nEvery request requires the shared `API_KEY` from the Laravel `.env` file.\n\nYou can authenticate with either header:\n\n```http\nX-Api-Key: {{api_key}}\n```\n\nor:\n\n```http\nAuthorization: Bearer {{api_key}}\n```\n\nIf the key is missing or wrong, the API returns `401 Unauthorized`.\n\n## Collection Variables\n| Variable | Description |\n|----------|-------------|\n| `base_url` | App URL without trailing slash, for example `http://localhost`, `https://task.almaghrerb.com:8890`, or production URL. |\n| `api_key` | Shared API key. Must match `API_KEY` in `.env`. |\n| `schedule_period_id` | Schedule period ID copied from the schedule period list response. |\n| `user_id` | User ID copied from the attendance users list or schedule period employee schedules. |\n\n## Common Response Shapes\nPaginated endpoints return:\n\n```json\n{\n  \"data\": [],\n  \"pagination\": {\n    \"page\": 1,\n    \"per_page\": 25,\n    \"total\": 60,\n    \"total_pages\": 3,\n    \"has_next_page\": true,\n    \"has_prev_page\": false\n  }\n}\n```\n\nEndpoints with `all=true` return all matching rows without pagination:\n\n```json\n{\n  \"data\": [],\n  \"total\": 12\n}\n```\n\nValidation errors return standard Laravel JSON validation responses with HTTP `422`.\n\n## Attendance Status Values\nAttendance day endpoints include:\n\n| Value | Label | Meaning |\n|-------|-------|---------|\n| `present` | `Present` | The user has one or more punches on that date. |\n| `absent` | `Absent` | The date is today or in the past, the user was scheduled to work, and there are no punches. |\n| `pending` | `Pending` | The date is in the future, the user is scheduled to work, and attendance is not known yet. |\n| `not_scheduled` | `Not scheduled` | The user has no published schedule for that date or that weekday is marked off. |\n\n## Attendance Runtime State Values\nAttendance day endpoints also include `state`, which is the current punch replay state for that date:\n\n| Value | Meaning |\n|-------|---------|\n| `idle` | No open work session, or user has clocked out. |\n| `working` | User clocked in and has not clocked out or started a break. |\n| `break` | User started a break and has not ended it. |\n| `corrupt` | Punch sequence is invalid, such as duplicate clock-ins without a clock-out. |\n\n## Endpoint Groups\n### Schedule Periods\nUse these endpoints to list published/draft/active schedule periods and inspect the employees, positions, weekly schedules, and assigned machines in a period.\n\n### Attendance by User\nUse these endpoints to list users who have attendance activity, fetch one user's attendance for one date, or fetch all attendance dates for one user including present, absent, pending, and not scheduled days.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Schedule Periods",
+			"item": [
+				{
+					"name": "List schedule periods (published)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods"
+							]
+						},
+						"description": "Returns schedule periods using the default filters: `published=true`, paginated by `page` and `per_page`.\n\nUse this when the integration only needs live/published periods.\n\nQuery parameters:\n\n| Param | Required | Default | Notes |\n|-------|----------|---------|-------|\n| `page` | No | `1` | Page number. |\n| `per_page` | No | `25` | Page size, max `100`. |\n| `all` | No | `false` | Set `true` to return all matching periods without pagination. |\n| `published` | No | `true` | Set `false` to include drafts. |\n| `active` | No | none | Set `true` for periods covering today's date. |\n| `from` / `to` | No | none | Date overlap filter. If used, pass both as `YYYY-MM-DD`. |\n\nResponse fields include period ID, name, date range, published state, active state, creator, and timestamps."
+					},
+					"response": []
+				},
+				{
+					"name": "List all schedule periods",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods?all=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods"
+							],
+							"query": [
+								{
+									"key": "all",
+									"value": "true",
+									"description": "Return every matching period in one response (no pagination)"
+								},
+								{
+									"key": "published",
+									"value": "false",
+									"description": "Optional: include drafts",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Returns all matching schedule periods in one response by sending `all=true`.\n\nDefault behavior still returns published periods only unless `published=false` is enabled.\n\nResponse shape:\n\n```json\n{\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"June Schedule\",\n      \"start_date\": \"2026-06-01\",\n      \"end_date\": \"2026-06-30\",\n      \"published_at\": \"2026-05-25T10:00:00+00:00\",\n      \"is_published\": true,\n      \"is_active\": true\n    }\n  ],\n  \"total\": 1\n}\n```\n\nCombine with `published=false`, `active=true`, or `from`/`to` filters as needed."
+					},
+					"response": []
+				},
+				{
+					"name": "List schedule periods (active today)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods?active=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods"
+							],
+							"query": [
+								{
+									"key": "active",
+									"value": "true",
+									"description": "Only periods whose date range includes today"
+								}
+							]
+						},
+						"description": "Returns published schedule periods whose date range includes today's date according to the application timezone.\n\nUse this to find the currently active schedule period for attendance and employee placement."
+					},
+					"response": []
+				},
+				{
+					"name": "List schedule periods (include drafts)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods?published=false",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods"
+							],
+							"query": [
+								{
+									"key": "published",
+									"value": "false",
+									"description": "Include unpublished draft periods"
+								}
+							]
+						},
+						"description": "Returns published and unpublished draft schedule periods by setting `published=false`.\n\nUse this only for admin/internal integrations that need to inspect drafts before they go live."
+					},
+					"response": []
+				},
+				{
+					"name": "List schedule periods (date overlap)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods?from=2026-06-01&to=2026-06-30&per_page=25",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-06-01",
+									"description": "Overlap range start (YYYY-MM-DD)"
+								},
+								{
+									"key": "to",
+									"value": "2026-06-30",
+									"description": "Overlap range end (YYYY-MM-DD)"
+								},
+								{
+									"key": "per_page",
+									"value": "25",
+									"description": "Page size (1\u2013100)"
+								}
+							]
+						},
+						"description": "Returns periods whose date range overlaps the supplied `from` / `to` range.\n\nBoth values must be valid dates in `YYYY-MM-DD` format.\n\nOverlap means:\n\n- period starts before or on `to`\n- period ends after or on `from`\n\nUse this when building a calendar or syncing schedules for a month."
+					},
+					"response": []
+				},
+				{
+					"name": "Get schedule period by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods/{{schedule_period_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods",
+								"{{schedule_period_id}}"
+							]
+						},
+						"description": "Returns one schedule period with all employee schedule entries.\n\nUse this endpoint when an external app needs to know who is scheduled, their position, weekly hours, and assigned machines for each working day.\n\nPath variables:\n\n| Variable | Required | Description |\n|----------|----------|-------------|\n| `schedule_period_id` | Yes | Schedule period ID from the list endpoint. |\n\nImportant response fields:\n\n| Field | Description |\n|-------|-------------|\n| `data.id` | Schedule period ID. |\n| `data.name` | Period name. |\n| `data.start_date` / `data.end_date` | Period date range. |\n| `data.is_published` | Whether the period is published. |\n| `data.is_active` | Whether the period covers today's date. |\n| `data.employee_schedules` | Employee schedule entries for this period. |\n| `employee_schedules[].user` | Employee identity: ID, name, email, phone. |\n| `employee_schedules[].position_type` | Machine/role position key, such as `operator`, `route_driver`, `deliver_driver`, or `office`. |\n| `employee_schedules[].position_label` | Human readable position. |\n| `employee_schedules[].weekly_hours` | Total scheduled weekly hours. |\n| `employee_schedules[].schedule` | Weekday map, Saturday through Friday. Working days include `from`, `to`, and optional `vendon_machines`; off days include `off: true`. |\n| `employee_schedules[].revision_count` | Number of saved schedule revisions for that employee entry. |\n\nExample response:\n\n```json\n{\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"June Schedule\",\n    \"start_date\": \"2026-06-01\",\n    \"end_date\": \"2026-06-30\",\n    \"employee_schedules\": [\n      {\n        \"user\": { \"id\": 10, \"name\": \"Jane\", \"email\": \"jane@example.com\" },\n        \"position_type\": \"operator\",\n        \"position_label\": \"Operator\",\n        \"weekly_hours\": 45,\n        \"schedule\": {\n          \"monday\": {\n            \"off\": false,\n            \"from\": \"08:00\",\n            \"to\": \"17:00\",\n            \"vendon_machines\": [\n              { \"id\": 3, \"name\": \"VM-003\" }\n            ]\n          }\n        }\n      }\n    ]\n  }\n}\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Get schedule period (Bearer auth)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/schedule-periods/{{schedule_period_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"schedule-periods",
+								"{{schedule_period_id}}"
+							]
+						},
+						"description": "Same response as `Get schedule period by ID`, but authenticates with:\n\n```http\nAuthorization: Bearer {{api_key}}\n```\n\nUse this request if the consuming client prefers bearer-token style headers instead of `X-Api-Key`."
+					},
+					"response": []
+				}
+			],
+			"description": "Read-only schedule period APIs. These endpoints expose schedule periods and employee schedule entries used by attendance, lateness, and workplace assignment logic."
+		},
+		{
+			"name": "Attendance by user",
+			"item": [
+				{
+					"name": "List attendance users (all)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/attendance/users?all=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"attendance",
+								"users"
+							],
+							"query": [
+								{
+									"key": "all",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Lists users who have at least one attendance punch.\n\nUse this endpoint to discover `user_id` values before calling the day detail or day list endpoints.\n\nQuery parameters:\n\n| Param | Required | Default | Notes |\n|-------|----------|---------|-------|\n| `search` | No | none | Matches user name or email. |\n| `from` | No | none | Only users with punches on/after this date. |\n| `until` | No | none | Only users with punches on/before this date. |\n| `workplace_location_id` | No | none | Only users with punches at this location. |\n| `type` | No | none | One of `clock_in`, `clock_out`, `break_start`, `break_end`. |\n| `within_geofence` | No | none | Boolean filter for geofence result. |\n| `all` | No | `false` | Set `true` to return all matching users without pagination. |\n| `page` | No | `1` | Page number when `all` is false. |\n| `per_page` | No | `25` | Page size, max `100`. |\n\nResponse fields:\n\n| Field | Description |\n|-------|-------------|\n| `id` | User ID for detail endpoints. |\n| `name`, `email`, `phone` | User identity fields. |\n| `last_punch_at` | Latest punch timestamp for that user. |\n| `punch_count` | Total punch count for that user. |"
+					},
+					"response": []
+				},
+				{
+					"name": "Get user attendance for date",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/attendance/users/{{user_id}}?date=2026-06-15",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"attendance",
+								"users",
+								"{{user_id}}"
+							],
+							"query": [
+								{
+									"key": "date",
+									"value": "2026-06-15",
+									"description": "Work date (YYYY-MM-DD). Defaults to today if omitted."
+								}
+							]
+						},
+						"description": "Returns one user's attendance for one work date.\n\nUse this endpoint for a detail screen for a specific day.\n\nQuery parameters:\n\n| Param | Required | Default | Notes |\n|-------|----------|---------|-------|\n| `date` | No | Today | Work date in `YYYY-MM-DD` format. |\n\nImportant response fields:\n\n| Field | Description |\n|-------|-------------|\n| `data.user` | User identity. |\n| `data.date` | Requested work date. |\n| `data.state` | Punch replay state: `idle`, `working`, `break`, or `corrupt`. |\n| `data.attendance_status` | Attendance status: `present`, `absent`, `pending`, or `not_scheduled`. |\n| `data.attendance_status_label` | Human-readable status label. |\n| `data.summary.clock_in_at` | First clock-in timestamp, or `null`. |\n| `data.summary.clock_out_at` | Last clock-out timestamp, or `null`. |\n| `data.summary.on_premises_seconds` | Time between clock-in/out. Open sessions are measured until now. |\n| `data.summary.on_premises_open_ended` | `true` if user is still clocked in. |\n| `data.summary.break_seconds` | Total break time. |\n| `data.summary.net_work_seconds` | On-premises seconds minus breaks. |\n| `data.summary.break_intervals` | Break start/end intervals. |\n| `data.lateness_deduction` | Lateness row for that date, or `null`. |\n| `data.punches` | Ordered punch log for the date. |\n\nAttendance status rules:\n\n- `present`: one or more punches exist on the date.\n- `absent`: date is today/past, user is scheduled, and no punches exist.\n- `pending`: date is in the future, user is scheduled, and no punches exist yet.\n- `not_scheduled`: no published schedule or that weekday is off."
+					},
+					"response": []
+				},
+				{
+					"name": "List user attendance days",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/attendance/users/{{user_id}}/days?from=2026-06-01&until=2026-06-30",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"attendance",
+								"users",
+								"{{user_id}}",
+								"days"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-06-01",
+									"description": "Range start (YYYY-MM-DD). Defaults to the user's first attendance/schedule date."
+								},
+								{
+									"key": "until",
+									"value": "2026-06-30",
+									"description": "Range end (YYYY-MM-DD). Defaults to today."
+								}
+							]
+						},
+						"description": "Returns a date-by-date attendance history for one user.\n\nUse this endpoint when an external client needs the full calendar view for an employee, including days without punches.\n\nQuery parameters:\n\n| Param | Required | Default | Notes |\n|-------|----------|---------|-------|\n| `from` | No | User's first attendance/schedule date | Range start in `YYYY-MM-DD` format. |\n| `until` | No | Today | Range end in `YYYY-MM-DD` format. May be in the future to show `pending` scheduled days. |\n\nResponse shape:\n\n```json\n{\n  \"user\": { \"id\": 1, \"name\": \"Jane\" },\n  \"from\": \"2026-06-01\",\n  \"until\": \"2026-06-30\",\n  \"total\": 30,\n  \"data\": [\n    {\n      \"date\": \"2026-06-22\",\n      \"state\": \"idle\",\n      \"attendance_status\": \"present\",\n      \"attendance_status_label\": \"Present\",\n      \"summary\": {},\n      \"lateness_deduction\": null,\n      \"punches\": []\n    }\n  ]\n}\n```\n\nEach item in `data` has the same day payload as `Get user attendance for date`.\n\nAttendance status values:\n\n- `present`: one or more punches exist on the date.\n- `absent`: date is today/past, user is scheduled, and no punches exist.\n- `pending`: date is in the future, user is scheduled, and attendance is not known yet.\n- `not_scheduled`: no published schedule or that weekday is off."
+					},
+					"response": []
+				}
+			],
+			"description": "Attendance by user APIs. Use these endpoints to discover users with punches, inspect one day, or build a full per-user attendance calendar including absent and pending days."
+		},
+		{
+			"name": "Daily checks",
+			"item": [
+				{
+					"name": "Today's checks (pass today's date)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/daily-checks?all=true&date=2026-06-22",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"daily-checks"
+							],
+							"query": [
+								{
+									"key": "all",
+									"value": "true"
+								},
+								{
+									"key": "date",
+									"value": "2026-06-22",
+									"description": "Today's date (YYYY-MM-DD). Change this to the day you want."
+								}
+							]
+						},
+						"description": "List all daily checks for one day.\n\n```\nGET /api/v1/daily-checks?all=true&date=2026-06-22\n```\n\nReplace `date` with today's date."
+					},
+					"response": []
+				},
+				{
+					"name": "One day + machine (vendon_id)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/daily-checks?all=true&date=2026-06-15&vendon_id=9001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"daily-checks"
+							],
+							"query": [
+								{
+									"key": "all",
+									"value": "true"
+								},
+								{
+									"key": "date",
+									"value": "2026-06-15"
+								},
+								{
+									"key": "vendon_id",
+									"value": "9001",
+									"description": "Machine vendon_id from machine.vendon_id in the response (not the internal DB id)."
+								}
+							]
+						},
+						"description": "List daily checks for one day, filtered by machine **vendon_id** (the external Vendon ID on the machine, not the internal DB id).\n\n```\nGET /api/v1/daily-checks?all=true&date=2026-06-15&vendon_id=9001\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "One day + user",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/daily-checks?all=true&date=2026-06-15&user_id=5",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"daily-checks"
+							],
+							"query": [
+								{
+									"key": "all",
+									"value": "true"
+								},
+								{
+									"key": "date",
+									"value": "2026-06-15"
+								},
+								{
+									"key": "user_id",
+									"value": "5"
+								}
+							]
+						},
+						"description": "List daily checks for one day, filtered to one submitter.\n\n```\nGET /api/v1/daily-checks?all=true&date=2026-06-15&user_id=5\n```"
+					},
+					"response": []
+				},
+				{
+					"name": "Get daily check details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/daily-checks/{{daily_check_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"daily-checks",
+								"{{daily_check_id}}"
+							]
+						},
+						"description": "Returns **full detail** for one daily check by ID.\n\nSet collection variable **`daily_check_id`** from the list response (`data[].id`).\n\n### Everything in the list response, plus:\n\n| Field | Description |\n|-------|-------------|\n| `media` | Uploaded files with public URLs \u2014 cleaning videos and refilled photos |\n| `vm_review` | Admin audit: `load_audit_type` (high_risk / ghost), cleaned, refilled, presentable, camera + reasons when No |\n| `on_cam_inspections` | On-camera inspection log entries if recorded |\n\n### Example\n```\nGET /api/v1/daily-checks/12\nHeader: X-Api-Key: {{api_key}}\n```\n\nUse this when you need to **view photos/videos** or the **complete VM Check audit result**, not just the summary row."
+					},
+					"response": []
+				}
+			],
+			"description": "Vending machine daily check submissions (VM Check / channel daily checks).\n\nList: `GET /api/v1/daily-checks` \u2014 use `all=true` + `date`, optionally `vendon_id` (machine.vendon_id) or `user_id`.\nDetail: `GET /api/v1/daily-checks/{id}` \u2014 set `daily_check_id` from a list response."
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://workflow.theleetclub.com",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "CHANGE_ME",
+			"type": "string"
+		},
+		{
+			"key": "schedule_period_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "daily_check_id",
+			"value": "1",
+			"type": "string"
+		}
+	]
+}

@@ -49,10 +49,15 @@ type ProfileRow = {
   technician_schedule: unknown[];
   qa_schedule: unknown[];
   timezone: string;
+  daily_sales_target?: number | null;
+  sx_product_name?: string | null;
+  daily_product_target?: number | null;
   /** From linked Red Alert cleaning schedule row (higher = wins on overlap) */
   priority?: number;
   updated_at?: string | null;
 };
+
+const LOCATION_OWNER_SUGGESTIONS = ['MOH', 'KU', 'O2', 'Others'];
 
 function fmtTimeWindow(w: TimeWindow): string {
   const s = String(w?.start ?? '').trim();
@@ -347,10 +352,17 @@ export function MachineProfileSection() {
   const [qaRows, setQaRows] = useState<StaffVisitRow[]>([emptyStaffVisitRow()]);
   const [timezone, setTimezone] = useState('Asia/Kuwait');
   const [priority, setPriority] = useState(10);
+  const [dailySalesTarget, setDailySalesTarget] = useState('');
+  const [sxProductName, setSxProductName] = useState('');
+  const [dailyProductTarget, setDailyProductTarget] = useState('');
   const [formErr, setFormErr] = useState<string | null>(null);
 
   const machines = machinesQ.data?.machines ?? [];
   const ownerOptions = machinesQ.data?.location_owner_options ?? [];
+  const ownerOptionsMerged = useMemo(() => {
+    const set = new Set<string>([...LOCATION_OWNER_SUGGESTIONS, ...ownerOptions]);
+    return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [ownerOptions]);
   const machineName = useMemo(() => machines.find((m) => m.id === machineId)?.name ?? '', [machines, machineId]);
   const selectedMachine = useMemo(() => machines.find((m) => m.id === machineId), [machines, machineId]);
   const vendonLocationTag = (selectedMachine?.vendon_location_owner ?? '').trim();
@@ -364,8 +376,7 @@ export function MachineProfileSection() {
     setMachineId(p.machine_id);
     const m = machines.find((x) => x.id === p.machine_id);
     const vendonTag = (m?.vendon_location_owner ?? '').trim();
-    // Do not prefill from DB `location_owner` — it is often a legacy site name. Only show Vendon machine tag (or user-typed value after edit).
-    setLocationOwner(vendonTag);
+    setLocationOwner(vendonTag || (p.location_owner ?? '').trim());
     setLocationHours(p.location_hours ?? '');
     const od = normalizeOperatingDays(p.operating_days);
     setOpPreset(od.preset === 'custom' ? 'custom' : od.preset);
@@ -385,6 +396,17 @@ export function MachineProfileSection() {
     setQaRows(scheduleRowsFromUnknown(p.qa_schedule));
     setTimezone(p.timezone || 'Asia/Kuwait');
     setPriority(typeof p.priority === 'number' && !Number.isNaN(p.priority) ? p.priority : 10);
+    setDailySalesTarget(
+      p.daily_sales_target != null && Number.isFinite(Number(p.daily_sales_target))
+        ? String(p.daily_sales_target)
+        : '',
+    );
+    setSxProductName((p.sx_product_name || '').trim());
+    setDailyProductTarget(
+      p.daily_product_target != null && Number.isFinite(Number(p.daily_product_target))
+        ? String(p.daily_product_target)
+        : '',
+    );
     setFormErr(null);
   },
   [machines],
@@ -402,6 +424,9 @@ export function MachineProfileSection() {
     setQaRows([emptyStaffVisitRow()]);
     setTimezone('Asia/Kuwait');
     setPriority(10);
+    setDailySalesTarget('');
+    setSxProductName('');
+    setDailyProductTarget('');
     setFormErr(null);
   }, []);
 
@@ -420,6 +445,7 @@ export function MachineProfileSection() {
       setQaRows([emptyStaffVisitRow()]);
       setTimezone('Asia/Kuwait');
       setPriority(10);
+      setDailySalesTarget('');
       setFormErr(null);
     },
     [],
@@ -451,6 +477,9 @@ export function MachineProfileSection() {
         qa_schedule: qa,
         timezone,
         priority,
+        daily_sales_target: dailySalesTarget.trim() === '' ? null : Number(dailySalesTarget),
+        sx_product_name: sxProductName.trim() || null,
+        daily_product_target: dailyProductTarget.trim() === '' ? null : Number(dailyProductTarget),
       });
     },
     onSuccess: async () => {
@@ -542,10 +571,47 @@ export function MachineProfileSection() {
                 readOnly={!!vendonLocationTag}
               />
               <datalist id="alert-location-owner-options">
-                {ownerOptions.map((o) => (
+                {ownerOptionsMerged.map((o) => (
                   <option key={o} value={o} />
                 ))}
               </datalist>
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Daily target (KD)</span>
+              <input
+                type="number"
+                min={0}
+                step={0.001}
+                name="daily_sales_target"
+                title="Location daily sales target — overrides week default when set. Used by Target + SX Loc."
+                value={dailySalesTarget}
+                onChange={(e) => setDailySalesTarget(e.target.value)}
+                placeholder="e.g. 45"
+              />
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">SX product</span>
+              <input
+                name="sx_product_name"
+                title="Vendon product name (substring match) for SX Prod and product target"
+                value={sxProductName}
+                onChange={(e) => setSxProductName(e.target.value)}
+                placeholder="e.g. Americano Max"
+                autoComplete="off"
+              />
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Product target (cups/day)</span>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                name="daily_product_target"
+                title="Daily cup target for the linked SX product"
+                value={dailyProductTarget}
+                onChange={(e) => setDailyProductTarget(e.target.value)}
+                placeholder="e.g. 80"
+              />
             </div>
             <div className="adminFieldCell">
               <span className="adminFieldCaption">Location hours</span>

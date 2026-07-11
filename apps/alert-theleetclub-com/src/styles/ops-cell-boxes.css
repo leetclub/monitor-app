@@ -1,0 +1,591 @@
+/* Unified metric / action boxes inside dashboard table cells */
+
+:root {
+  --stitch-nav-w-rail: 64px;
+  --stitch-nav-w-expanded: 196px;
+  --ops-cell-box-h: 64px;
+  --ops-stack-box-w: 4.25rem;
+  --ops-stack-gap: 4px;
+  --ops-cell-box-min-w: var(--ops-stack-box-w);
+}
+
+.stitchOpsTable tbody td {
+  vertical-align: middle;
+}
+
+/* Center metric widgets on the same row midline */
+.stitchOpsTable tbody td.alertSalesCell,
+.stitchOpsTable tbody td.alertSalesCellYoy,
+.stitchOpsTable tbody td:has(.freq3),
+.stitchOpsTable tbody td:has(.mtdYoyCell),
+.stitchOpsTable tbody td:has(.sxCell),
+.stitchOpsTable tbody td:has(.salesStack),
+.stitchOpsTable tbody td:has(.salesStackBtn),
+.stitchOpsTable tbody td:has(.salesStackTarget),
+.stitchOpsTable tbody td:has(.lastTxBox),
+.stitchOpsTable tbody td:has(.linkGo),
+.stitchOpsTable tbody td.tdMetric {
+  vertical-align: middle;
+  text-align: center;
+}
+
+.stitchOpsTable .salesStack,
+.stitchOpsTable .salesStackBtn,
+.stitchOpsTable .salesStackPlaceholder,
+.stitchOpsTable .salesStackTarget,
+.stitchOpsTable .mtdYoyCell,
+.stitchOpsTable .sxCell,
+.stitchOpsTable .freq3,
+.stitchOpsTable .lastTxBox,
+.stitchOpsTable .linkGo,
+.stitchOpsTable .qaVisitCellBtn,
+.stitchOpsTable .cleaningCellBtn,
+.stitchOpsTable .cleaningCell {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.stitchOpsTable .salesStackBtn {
+  display: flex;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.stitchOpsTable .opsMetricCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ops-cell-box-h);
+}
+
+/* Shared metric box footprint (sales / target / freq — not Last tx) */
+.stitchOpsTable .salesStackBox {
+  flex: 1 1 0;
+  min-width: var(--ops-stack-box-w);
+  width: auto;
+  max-width: none;
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  max-height: var(--ops-cell-box-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 3px 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Last tx — same single-box footprint as Score / Trend / Gap */
+.stitchOpsTable .lastTxBox {
+  flex: 0 0 var(--ops-stack-box-w);
+  width: var(--ops-stack-box-w);
+  min-width: var(--ops-stack-box-w);
+  max-width: var(--ops-stack-box-w);
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  max-height: var(--ops-cell-box-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 3px 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.stitchOpsTable .salesStackLabel {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  text-align: center;
+  font-size: 8px;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.stitchOpsTable .salesStackVal {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.12;
+  font-weight: 800;
+}
+
+.stitchOpsTable .salesStackSub {
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: clamp(0.54rem, 2.2vw, 0.62rem);
+  font-weight: 600;
+  line-height: 1.05;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sales & target stacks — equal-width boxes in a row */
+.stitchOpsTable .salesStack,
+.stitchOpsTable .salesStackPlaceholder {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: var(--ops-stack-gap);
+  min-width: 0;
+  width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  min-height: var(--ops-cell-box-h);
+  height: var(--ops-cell-box-h);
+}
+
+.stitchOpsTable .salesStackTarget {
+  width: calc(var(--ops-stack-box-w) * 3 + var(--ops-stack-gap) * 2);
+  max-width: calc(var(--ops-stack-box-w) * 3 + var(--ops-stack-gap) * 2);
+  min-height: var(--ops-cell-box-h);
+  height: var(--ops-cell-box-h);
+}
+
+.stitchOpsTable .salesStackTarget .salesStackBox {
+  flex: 1 1 0;
+  min-width: var(--ops-stack-box-w);
+  gap: 0;
+}
+
+.stitchOpsTable .salesStackTarget .salesStackVal {
+  font-size: 0.68rem;
+}
+
+.stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxUp {
+  border-color: rgba(83, 225, 111, 0.4);
+  background: rgba(83, 225, 111, 0.12);
+  box-shadow: 0 0 10px rgba(83, 225, 111, 0.18);
+}
+
+.stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxUp .salesStackVal {
+  color: #86efac;
+}
+
+.stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxDown {
+  border-color: rgba(255, 59, 48, 0.38);
+  background: rgba(255, 59, 48, 0.1);
+  box-shadow: 0 0 10px rgba(255, 59, 48, 0.14);
+}
+
+.stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxDown .salesStackVal {
+  color: #fca5a5;
+}
+
+.stitchOpsTable .salesStackTarget .salesStackValLeft {
+  font-size: 0.64rem;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+}
+
+.stitchOpsTable .salesStackTarget .salesStackValOwner {
+  font-size: 0.66rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
+  line-height: 1.1;
+  max-width: 100%;
+  color: #ddd6fe;
+}
+
+.stitchOpsTable .salesStackBoxOwner {
+  border-color: rgba(167, 139, 250, 0.38);
+  background: rgba(124, 58, 237, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.06);
+}
+
+/* Sales today — trend % under primary KWD */
+.stitchOpsTable .salesStackBoxToday {
+  gap: 0;
+}
+
+.stitchOpsTable .salesStackTrend {
+  display: block;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(0.62rem, 2.4vw, 0.74rem);
+  font-weight: 800;
+  line-height: 1.05;
+  margin-top: 1px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  max-width: none;
+  overflow: visible;
+}
+
+.stitchOpsTable .salesStackTrendMuted {
+  color: #64748b;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.stitchOpsTable .salesStackTrend.alertSalesUp {
+  color: #53e16f;
+}
+
+.stitchOpsTable .salesStackTrend.alertSalesDown {
+  color: #ff3b30;
+}
+
+.stitchOpsTable .salesStackBoxToday .salesStackVal {
+  font-size: 0.68rem;
+}
+
+/* MTD YoY — column width follows widest %; every cell stretches to match */
+.stitchOpsTable tbody td.alertSalesCellYoy {
+  width: 1%;
+  min-width: var(--ops-stack-box-w);
+}
+
+.stitchOpsTable .mtdYoyCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.08rem;
+  width: 100%;
+  min-width: var(--ops-stack-box-w);
+  min-height: var(--ops-cell-box-h);
+  height: var(--ops-cell-box-h);
+  justify-content: center;
+  padding: 3px 5px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+  overflow: visible;
+}
+
+.stitchOpsTable .mtdYoyTrend {
+  font-size: clamp(0.68rem, 0.5rem + 0.35vw, 0.88rem);
+  font-weight: 800;
+  line-height: 1.1;
+  max-width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.stitchOpsTable .mtdYoyPrimary {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #ad8883;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stitchOpsTable .mtdYoyLy {
+  font-size: 0.56rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* GO CHECK / call actions — same box footprint */
+.stitchOpsTable .linkGo,
+.stitchOpsTable .opsActionBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ops-stack-box-w);
+  min-width: var(--ops-stack-box-w);
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(14, 116, 144, 0.12);
+  box-sizing: border-box;
+  text-decoration: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(96, 165, 250, 0.25);
+  overflow: hidden;
+  color: #7dd3fc;
+}
+
+.stitchOpsTable .linkGoStack {
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 4px;
+  overflow: visible;
+  text-transform: none;
+  line-height: 1.05;
+}
+
+.stitchOpsTable .linkGoLine {
+  display: block;
+  width: 100%;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #bae6fd;
+  white-space: nowrap;
+}
+
+.stitchOpsTable .linkGoLineStrong {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #7dd3fc;
+}
+
+.stitchOpsTable .linkGo:hover,
+.stitchOpsTable .opsActionBox:hover {
+  text-decoration: none;
+  filter: brightness(1.08);
+  border-color: rgba(125, 211, 252, 0.55);
+}
+
+.stitchOpsTable .linkGo--noSlack {
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(30, 41, 59, 0.35);
+  cursor: not-allowed;
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.stitchOpsTable .linkGo--noSlack:hover {
+  filter: none;
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+/* QA / Tech visit button */
+.stitchOpsTable .qaVisitCellBtn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: var(--ops-stack-box-w);
+  min-width: var(--ops-stack-box-w);
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  padding: 4px 5px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: linear-gradient(165deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Cleaning — same footprint */
+.stitchOpsTable .cleaningCellBtn {
+  width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  min-width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: linear-gradient(165deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%);
+  padding: 4px 5px;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.stitchOpsTable .cleaningCell {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: var(--ops-cell-box-h);
+  gap: 3px;
+  width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+}
+
+.stitchOpsTable .cleaningCellDate {
+  font-size: 0.64rem;
+  line-height: 1.1;
+}
+
+.stitchOpsTable .cleaningCellTime {
+  font-size: 0.58rem;
+}
+
+.stitchOpsTable .cleaningPill {
+  font-size: 8px;
+  padding: 2px 5px;
+}
+
+.stitchOpsTable .cleaningCellEmpty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  min-width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.55);
+  box-sizing: border-box;
+}
+
+/* Frequency row — three equal boxes */
+.stitchOpsTable .freq3 {
+  align-items: stretch;
+  width: 100%;
+  min-width: calc(var(--ops-stack-box-w) * 3 + var(--ops-stack-gap) * 2);
+}
+
+.stitchOpsTable .freqBox {
+  min-height: var(--ops-cell-box-h);
+  height: var(--ops-cell-box-h);
+  max-height: var(--ops-cell-box-h);
+  min-width: var(--ops-stack-box-w);
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.stitchOpsTable .freqBoxVal {
+  display: block;
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.stitchOpsTable .freqBox:has(.freqTrendOpen),
+.stitchOpsTable .freqBox:has(.freqScoreOpen),
+.stitchOpsTable .freqBox:has(.freqGapOpen) {
+  padding: 0;
+}
+
+.stitchOpsTable .freqTrendOpen,
+.stitchOpsTable .freqScoreOpen,
+.stitchOpsTable .freqGapOpen {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  min-height: var(--ops-cell-box-h);
+  margin: 0;
+  padding: 4px 5px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(96, 165, 250, 0.25);
+  text-align: center;
+}
+
+.stitchOpsTable tbody td:has(.operatorCell),
+.stitchOpsTable tbody td:has(.operatorCellBtn) {
+  vertical-align: middle;
+  text-align: center;
+}
+
+.stitchOpsTable .operatorCell,
+.stitchOpsTable .operatorCellBtn {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Last transaction — three-line weekday / date / time */
+.stitchOpsTable .lastTxLine {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stitchOpsTable .lastTxLineWd {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #ad8883;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stitchOpsTable .lastTxLineDate {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.stitchOpsTable .lastTxLineTime {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #cbd5e1;
+}
+
+/* Last transaction — compact single box */
+.stitchOpsTable .lastTxBox .salesStackLabel {
+  flex-shrink: 0;
+}
+
+.stitchOpsTable .lastTxBoxVal {
+  font-size: 0.58rem;
+  line-height: 1.12;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.stitchOpsTable .lastTxBoxEst {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  line-height: 1.1;
+}
+
+.stitchOpsTable.opsFleetTable tbody td {
+  vertical-align: middle;
+}

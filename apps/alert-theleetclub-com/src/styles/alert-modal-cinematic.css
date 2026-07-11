@@ -1,0 +1,328 @@
+/* Cinematic entrance + staggered body for all alert popups */
+
+#alert-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+#alert-modal-root > * {
+  pointer-events: auto;
+}
+
+body.alert-modal-open {
+  overflow: hidden;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+.salesHistoryBackdrop,
+.operatorContactBackdrop,
+.redFlagsDetailBackdrop {
+  animation: alertModalBackdropIn 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.salesHistoryModal,
+.operatorContactModal,
+.redFlagsDetailModal {
+  animation: alertModalPanelIn 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: 50% 48%;
+  will-change: transform, opacity, filter;
+}
+
+.salesHistoryModal .salesHistoryHead,
+.operatorContactModal .operatorContactModalHead,
+.redFlagsDetailModal .redFlagsDetailHead {
+  animation: alertModalContentRise 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *,
+.operatorContactModal > .operatorContactModalHead ~ *,
+.redFlagsDetailModal > .redFlagsDetailHead ~ * {
+  animation: alertModalSectionIn 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *:nth-child(2),
+.operatorContactModal > .operatorContactModalHead ~ *:nth-child(2),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(2) {
+  animation-delay: 130ms;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *:nth-child(3),
+.operatorContactModal > .operatorContactModalHead ~ *:nth-child(3),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(3) {
+  animation-delay: 190ms;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *:nth-child(4),
+.operatorContactModal > .operatorContactModalHead ~ *:nth-child(4),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(4) {
+  animation-delay: 250ms;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *:nth-child(5),
+.operatorContactModal > .operatorContactModalHead ~ *:nth-child(5),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(5) {
+  animation-delay: 310ms;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *:nth-child(6),
+.operatorContactModal > .operatorContactModalHead ~ *:nth-child(6),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(6) {
+  animation-delay: 370ms;
+}
+
+.salesHistoryModal > .salesHistoryHead ~ *:nth-child(n + 7),
+.operatorContactModal > .operatorContactModalHead ~ *:nth-child(n + 7),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(n + 7) {
+  animation-delay: 430ms;
+}
+
+@keyframes alertModalBackdropIn {
+  from {
+    opacity: 0;
+    background: rgba(2, 4, 10, 0);
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    background: rgba(2, 4, 10, 0.72);
+    backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes alertModalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.9);
+    filter: blur(12px);
+  }
+  55% {
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes alertModalContentRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes alertModalSectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alertModalAnticipate {
+  margin: 4px 0 10px;
+  padding: 12px 0 4px;
+}
+
+.alertModalAnticipateHint {
+  margin: 0 0 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.alertModalAnticipateLines {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.alertModalAnticipateLine {
+  display: block;
+  height: 10px;
+  width: 72%;
+  border-radius: 6px;
+  background: linear-gradient(
+    100deg,
+    rgba(148, 163, 184, 0.06) 0%,
+    rgba(148, 163, 184, 0.2) 42%,
+    rgba(148, 163, 184, 0.06) 88%
+  );
+  background-size: 240% 100%;
+  animation: alertModalAnticipateShimmer 2.6s ease-in-out infinite;
+}
+
+.alertModalAnticipateLine--wide {
+  width: 92%;
+}
+
+.alertModalAnticipateLine--short {
+  width: 48%;
+}
+
+@keyframes alertModalAnticipateShimmer {
+  0% {
+    background-position: 130% 0;
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    background-position: -130% 0;
+    opacity: 0.6;
+  }
+}
+
+.alertModalContentReveal {
+  animation: alertModalContentReveal 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes alertModalContentReveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.alertModalContactShimmer {
+  display: flex;
+  gap: 10px;
+  margin: 6px 0 10px;
+}
+
+.alertModalContactShimmerIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(
+    120deg,
+    rgba(148, 163, 184, 0.08) 0%,
+    rgba(148, 163, 184, 0.22) 50%,
+    rgba(148, 163, 184, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: alertModalContactShimmer 2.2s ease-in-out infinite;
+}
+
+@keyframes alertModalContactShimmer {
+  0% {
+    background-position: 120% 0;
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    background-position: -120% 0;
+    opacity: 0.55;
+  }
+}
+
+.salesHistoryClose,
+.operatorContactClose,
+.redFlagsDetailHead .detailCloseBtn {
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.salesHistoryClose:hover,
+.operatorContactClose:hover,
+.redFlagsDetailHead .detailCloseBtn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .salesHistoryBackdrop,
+  .operatorContactBackdrop,
+  .redFlagsDetailBackdrop,
+  .salesHistoryModal,
+  .operatorContactModal,
+  .redFlagsDetailModal,
+  .salesHistoryModal .salesHistoryHead,
+  .operatorContactModal .operatorContactModalHead,
+  .redFlagsDetailModal .redFlagsDetailHead,
+  .salesHistoryModal > .salesHistoryHead ~ *,
+  .operatorContactModal > .operatorContactModalHead ~ *,
+  .redFlagsDetailModal > .redFlagsDetailHead ~ *,
+  .alertModalContentReveal,
+  .alertModalAnticipateLine,
+  .alertModalContactShimmerIcon {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .salesHistoryBackdrop,
+  .operatorContactBackdrop,
+  .redFlagsDetailBackdrop {
+    backdrop-filter: blur(8px);
+  }
+}
+
+/*
+ * iOS Safari (incl. iPad): blur/transform entrance animations often never complete
+ * and leave popups at opacity:0. Skip cinematic motion on touch-first devices.
+ */
+@supports (-webkit-touch-callout: none) {
+  .salesHistoryBackdrop,
+  .operatorContactBackdrop,
+  .redFlagsDetailBackdrop,
+  .salesHistoryModal,
+  .operatorContactModal,
+  .redFlagsDetailModal,
+  .salesHistoryModal .salesHistoryHead,
+  .operatorContactModal .operatorContactModalHead,
+  .redFlagsDetailModal .redFlagsDetailHead,
+  .salesHistoryModal > .salesHistoryHead ~ *,
+  .operatorContactModal > .operatorContactModalHead ~ *,
+  .redFlagsDetailModal > .redFlagsDetailHead ~ *,
+  .alertModalContentReveal,
+  .qaVisitCarouselPanel--enter,
+  .qaVisitCarouselPanel--exit,
+  .qaVisitCarouselBullets li {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .salesHistoryBackdrop,
+  .operatorContactBackdrop,
+  .redFlagsDetailBackdrop {
+    background: rgba(2, 4, 10, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  .salesHistoryModal,
+  .operatorContactModal,
+  .redFlagsDetailModal {
+    -webkit-overflow-scrolling: touch;
+  }
+}

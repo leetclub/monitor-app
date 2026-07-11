@@ -36,9 +36,14 @@ VIDEOLOFT_PASSWORD=your-password
 ### Sync Configuration
 
 ```bash
-SYNC_DAYS_BACK=1              # Number of days back to fetch (default: 1)
-SYNC_INTERVAL=date            # Time interval: 'date', 'hour', or '60000' (default: 'date')
-SYNC_UIDDS=                   # Optional: comma-separated device IDs, leave empty to sync all cameras
+SYNC_DAYS_BACK=0              # 0 = live window (use SYNC_LIVE_DAYS); >0 = backfill last N days
+SYNC_LIVE_DAYS=14             # Live cron: rolling Kuwait calendar days (default 2 in older docs)
+SYNC_INTERVAL=hour            # Live cron: 'hour' (also set SYNC_ALSO_DATE=1 for daily buckets)
+SYNC_CHUNK_DAYS=1             # Split long ranges into N-day Videoloft requests
+SYNC_CHUNK_MIN_DAYS=1         # When span >= this, enable time chunking (hourly)
+SYNC_PER_DEVICE=1             # 1 = one API call per camera (required; avoids ~100-row cap)
+SYNC_ALSO_DATE=1              # After hourly sync, also upsert daily (date) buckets
+SYNC_UIDDS=                   # Optional: comma-separated device IDs; empty = all cameras
 TIMEZONE=Asia/Kuwait          # Timezone for data (default: 'Asia/Kuwait')
 ```
 
@@ -48,6 +53,17 @@ TIMEZONE=Asia/Kuwait          # Timezone for data (default: 'Asia/Kuwait')
 API_PORT=5000                 # Port for API service (default: 5000)
 DEBUG=false                   # Enable debug mode (default: false)
 ```
+
+### Leet Task Manager / Workflow (Alert ops columns)
+
+```bash
+LEET_WORKFLOW_API_BASE=https://workflow.theleetclub.com
+LEET_WORKFLOW_API_KEY=your-shared-api-key
+LEET_WORKFLOW_API_TIMEOUT_SEC=30
+LEET_WORKFLOW_CLEANING_DAYS_BACK=7
+```
+
+Used by Alert **`/api/alert/workflow/*`** routes (operator schedule, attendance map). Auth matches Task Manager docs: `X-Api-Key` header. Do **not** commit the key to git — set in k8s secret `people-analytics-secrets` key `leet-workflow-api-key`.
 
 ## Example .env File
 

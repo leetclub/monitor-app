@@ -99,6 +99,11 @@ export function AlertPeopleManager() {
     return accessDomains;
   }, [rulesQ.data?.allowedEmailDomains, accessDomains]);
 
+  const baselineUserEmails = useMemo(
+    () => new Set(Object.keys(rulesQ.data?.users ?? {})),
+    [rulesQ.data?.users],
+  );
+
   useEffect(() => {
     if (!rulesQ.data) return;
     setRules(normalizeRules(rulesQ.data));
@@ -195,9 +200,10 @@ export function AlertPeopleManager() {
     const normalized = normalizeRules(rules);
     if (allowedEmailDomains.length > 0) {
       for (const u of Object.keys(normalized.users)) {
+        if (baselineUserEmails.has(u)) continue;
         if (!emailMatchesOrgDomains(u, allowedEmailDomains)) {
           setSaveErr(
-            `Save blocked: "${u}" is not on an allowed domain (@${allowedEmailDomains.join(', @')}).`,
+            `Save blocked: new user "${u}" is not on an allowed domain (@${allowedEmailDomains.join(', @')}). Existing users are kept.`,
           );
           return;
         }
@@ -219,6 +225,10 @@ export function AlertPeopleManager() {
         <strong>Main workflow:</strong> defaults → people list → Save. Use{' '}
         <strong>Open Alert</strong> / <strong>Manage Alert</strong> only. If someone shows “Full Monitor”, click{' '}
         <em>Use Leet Alert only</em> to edit them here without opening the full Monitor grid.
+      </p>
+      <p className="muted adminQuietLine" style={{ marginTop: 0, marginBottom: 12, fontSize: '0.85rem' }}>
+        <strong>Note:</strong> Anyone who signs in but is <em>not</em> in the people list below still gets access from{' '}
+        <strong>step 1 defaults</strong> — they will not appear here until you add them by email and Save.
       </p>
 
       <section className="adminCard adminStepCard">

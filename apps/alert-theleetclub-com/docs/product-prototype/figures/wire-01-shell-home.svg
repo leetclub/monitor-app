@@ -30,6 +30,8 @@
     <text x="14" y="152" class="labelInv" font-size="9px">Red Flags</text>
     <rect class="box" x="8" y="170" width="104" height="32" rx="4"/>
     <text x="14" y="190" class="labelInv" font-size="9px">Overall</text>
+    <rect class="box" x="8" y="208" width="104" height="32" rx="4"/>
+    <text x="14" y="228" class="labelInv" font-size="9px">QA Visit</text>
     <text x="8" y="372" class="hintInv">Figures refresh ~1 min</text>
 
     <rect class="boxMain" x="132" y="0" width="652" height="32" rx="4"/>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="320" viewBox="0 0 800 320" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <style><![CDATA[
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+      .boxMuted { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1; }
+      .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
+      .hint { fill: #64748b; font-size: 9px; }
+      .title { fill: #0f172a; font-size: 13px; font-weight: 700; }
+      .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
+      .tiny { fill: #475569; font-size: 8px; }
+    ]]></style>
+  </defs>
+  <text x="8" y="18" class="cap">FIGURE 5 - QA VISIT (OPS DASHBOARD)</text>
+  <g transform="translate(8, 28)">
+    <rect class="box" x="0" y="0" width="784" height="284" rx="6"/>
+    <text x="12" y="28" class="title">QA Visit</text>
+    <text x="12" y="46" class="hint">Same shell as Red Flags / Overall � not a popup clone.</text>
+
+    <rect class="boxMuted" x="12" y="56" width="760" height="36" rx="4"/>
+    <text x="20" y="78" class="tiny">Fleet · searchable machine dropdown · date range · sort · Inspect</text>
+
+    <rect class="box" x="12" y="100" width="760" height="40" rx="4"/>
+    <text x="20" y="124" class="label" font-size="8px">Workspace · switch machine · From · To · SC location · Sort</text>
+
+    <rect class="boxMuted" x="12" y="148" width="760" height="44" rx="4"/>
+    <text x="20" y="168" class="tiny">KPI strip � Inspections � Score � Admin MTD � Week ?</text>
+    <path d="M24 188 L200 180 L380 172 L560 176 L740 168" fill="none" stroke="#38bdf8" stroke-width="2"/>
+
+    <rect class="box" x="12" y="200" width="760" height="72" rx="4"/>
+    <text x="20" y="220" class="label" font-size="8px">stitchOpsTable � history + PDF</text>
+    <text x="20" y="252" class="hint" font-size="8px">Selected row ? findings tabs (Admin / SC / Report) � Download PDF</text>
+  </g>
+</svg>

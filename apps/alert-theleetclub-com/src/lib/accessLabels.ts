@@ -3,7 +3,7 @@
  */
 const TAB_LABEL_SHORT: Record<string, string> = {
   '*': 'Everything (full access)',
-  leetAlert: 'View Leet Alert (Red Flags & Overall)',
+  leetAlert: 'View Leet Alert (Red Flags, Overall & QA Visit)',
   leetAlertAdmin: 'Manage Leet Alert settings',
   redAlert: 'Monitor: Red Alert screens',
   admin: 'Manage who can use Monitor & Alert',

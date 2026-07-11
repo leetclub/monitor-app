@@ -21,13 +21,26 @@ spec:
             - containerPort: 8080
               name: http
           env:
+            # Empty = same-origin /api via Ingress (session cookies stay on alert.theleetclub.com).
             - name: ALERT_API_URL
-              value: "https://people-api.theleetclub.com"
+              value: ""
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:
                   name: people-analytics-secrets
                   key: google-client-id
+                  optional: true
+            - name: SLACK_TEAM_ID
+              valueFrom:
+                secretKeyRef:
+                  name: monitoring-app-v2-secrets
+                  key: SLACK_WORKSPACE_ID
+                  optional: true
+            - name: SLACK_OP_EMAIL_MAP_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: slack-op-email-map-json
                   optional: true
           resources:
             requests:

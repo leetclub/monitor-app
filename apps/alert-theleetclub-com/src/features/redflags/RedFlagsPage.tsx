@@ -7,31 +7,106 @@ import {
   freqHeadingForComparePreset,
   initialCompareSelection,
   persistCompareSelection,
+  presetApiQueryString,
 } from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
 import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
 import { cleaningWindowsFromAdmin, lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
-import { parseEmailToSlackUserMap, slackUserDmUrl } from '@/lib/slackLinks';
-import { resolveAreaManagerFromMachineName } from '@/data/operatorAreaPlan';
-import type { RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
+import { useSlackUserMap } from '@/lib/useSlackUserMap';
+import type { RedAlertCompareMode, RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
 import {
   baselineReasonMap,
   buildDetailPayload,
   filterSnapshotRows,
+  freqBoxVisuals,
   freqSplit,
   getMachineIdRaw,
-  getOperatorDisplay,
-  isLastTransactionEstimated,
-  pickLastEventTs,
-  pickLastTransactionTs,
+  getOperatorDisplayName,
+  resolveOperatorStrikeEmail,
+  getStrikeOperatorEmail,
+  pickLastCleaningIso,
   rankRows,
   reasonKey,
   rowHappensForSort,
   type FreqSplit,
   type RankedRedAlertRow,
 } from './redFlagsModel';
-import { RED_FLAGS_COLUMNS } from './redFlagsWorkbookColumns';
+import { GoCheckWorkflowModal } from '@/components/GoCheckWorkflowModal';
+import { freshnessNotice } from '@/lib/dataFreshness';
+import {
+  aggregateFleetSalesForPreset,
+  applyApiFleetElapsedTotals,
+  fleetYesterdayFullDayKwd,
+  fleetDayBeforeFullDayKwd,
+  presetLabels,
+  salesPairForPreset,
+  targetKwdForPreset,
+} from '@/lib/presetComparison';
+import { OpsRevenueTotalsBar } from '@/components/OpsRevenueTotalsBar';
+import { resolveSalesTrendPct } from '@/lib/salesDisplay';
+import { SalesHistoryModal } from '@/components/SalesHistoryModal';
+import { TrendHistoryModal } from '@/components/TrendHistoryModal';
+import { OperatorContactSection } from '@/components/OperatorContactSection';
+import { TargetDetailModal } from '@/components/TargetDetailModal';
+import { isRowInteractiveTarget, captureRowTapTarget, handleRowClickActivate } from '@/lib/stopRowClick';
+import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
+import { buildFreqColumnContext, type FreqColumnContext } from '@/lib/freqColumnContext';
+import { formatLastTxCompact } from './redFlagsFreqUi';
+import { TrendBreakdownPanel } from '@/components/TrendBreakdownPanel';
+import {
+  canOpenIncidentHistory,
+  trendHistoryComparisons,
+  incidentsElapsedForMachine,
+  resolveIncidentsRow,
+  type DailyIncidentsElapsedResponse,
+  type IncidentsElapsedRow,
+} from '@/lib/incidentsDisplay';
+import {
+  type DailySalesElapsedResponse,
+  formatKwd,
+  formatSalesTrendPct,
+  salesDayKwd,
+  salesElapsedForMachine,
+  type SalesElapsedRow,
+} from '@/lib/salesDisplay';
+import { qaVisitForMachineName, qaFindingsForMachineName, techVisitForMachineName, type QaFindingsResponse, type QaSummaryResponse } from '@/lib/qaVisitDisplay';
+import {
+  requestCleaningNotificationPermission,
+  useCleaningOverdueAlerts,
+} from '@/lib/useCleaningOverdueAlerts';
+import { fetchCleaningWorkflowMapBatched, fetchMachineAttendanceMapBatched, type MachineAttendanceSummary } from '@/lib/leetWorkflowApi';
+import { StitchOpsPanel } from '@/components/StitchOpsPanel';
+import { TableScrollControls } from '@/components/TableScrollControls';
+import { RedFlagsColumnPicker } from './RedFlagsColumnPicker';
+import { visibleRedFlagsColumns } from './redFlagsColumnVisibility';
+import { useAuth } from '@/context/AuthContext';
+import { useRedFlagsColumnPrefs } from '@/lib/useRedFlagsColumnPrefs';
+import {
+  renderRedFlagsBodyCell,
+  renderRedFlagsHeaderCell,
+  redFlagsBodyCellClass,
+  redFlagsBodyCellProps,
+  type RedFlagsHeaderCtx,
+  type RedFlagsRowBundle,
+} from './redFlagsTableRender';
+import type { StitchKpi } from '@/components/StitchKpiStrip';
+import { OpsViewToggle } from '@/components/OpsViewToggle';
+import { useCompactOpsLayout } from '@/lib/compactOpsLayout';
+import { RedFlagsCardList } from './RedFlagsCardList';
+import type { RedFlagsColumnKey } from './redFlagsWorkbookColumns';
+import { cycleColumnSort, type ColumnSortState } from '@/lib/tableColumnSort';
+import { sortRankedRedFlags, type RedFlagsSortContext } from './redFlagsTableSort';
 import styles from './RedFlagsBoard.module.css';
+
+const RED_FLAGS_VIEW_KEY = 'alert_redflags_view';
+type RedFlagsViewMode = 'cards' | 'table';
+
+function initialRedFlagsView(_compact: boolean): RedFlagsViewMode {
+  if (typeof window === 'undefined') return 'table';
+  const saved = localStorage.getItem(RED_FLAGS_VIEW_KEY);
+  if (saved === 'cards' || saved === 'table') return saved;
+  return 'table';
+}
 
 type Snapshot = {
   generatedAt?: string;
@@ -57,273 +132,197 @@ type RemoteCreditsTodayTotals = {
   error?: string;
 };
 
-function sendCreditToneClass(n: number): string {
-  if (!Number.isFinite(n)) return styles.metricUnknown;
-  if (n <= 5) return styles.metricGood;
-  if (n <= 10) return styles.metricWarn;
-  return styles.metricBad;
-}
-
-function testCreditsToneClass(n: number): string {
-  if (!Number.isFinite(n)) return styles.metricUnknown;
-  return n <= 6 ? styles.metricGood : styles.metricBad;
-}
-
-function vendsResolvedToneClass(status: string | undefined): string {
-  if (status === 'green') return styles.metricGood;
-  if (status === 'red') return styles.metricBad;
-  if (status === 'none') return styles.metricGood;
-  return styles.metricUnknown;
-}
-
-function vendsResolvedLabel(status: string | undefined): string {
-  if (status === 'green') return '≤5 min';
-  if (status === 'red') return '>5 min';
-  if (status === 'none') return 'No fail';
-  if (status === 'unknown') return '?';
-  return '?';
-}
-
-function cleaningToneClass(color: 'g' | 'y' | 'r'): string {
-  if (color === 'g') return styles.metricGood;
-  if (color === 'y') return styles.metricWarn;
-  return styles.metricBad;
-}
-
-function parseTimestampMs(raw: string): number {
-  const s = String(raw).trim();
-  if (!s) return NaN;
-  if (/^\d+$/.test(s)) {
-    const n = parseInt(s, 10);
-    if (Number.isNaN(n)) return NaN;
-    return n < 1e12 ? n * 1000 : n;
-  }
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? NaN : t;
-}
-
-function formatKuwaitTs(iso: string): string {
-  const ms = parseTimestampMs(iso);
-  if (!Number.isNaN(ms)) {
-    try {
-      return (
-        new Date(ms).toLocaleString('en-GB', {
-          timeZone: 'Asia/Kuwait',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-        }) + ' KWT'
-      );
-    } catch {
-      return iso;
+type VendonLastTransactionsResponse = {
+  byMachineId: Record<
+    string,
+    {
+      timestamp: number;
+      product_name?: string | null;
+      amount?: number | string | null;
     }
+  >;
+  fromTimestamp?: number;
+  toTimestamp?: number;
+  error?: string;
+};
+
+type LiveDashboardMachine = {
+  machineId: string;
+  lastCleaningAt?: string | null;
+};
+
+type LiveDashboardSnapshotResponse = {
+  machines?: LiveDashboardMachine[];
+};
+
+function vendonTxIsoFromEntry(entry?: { timestamp: number } | null): string {
+  if (entry?.timestamp != null && Number(entry.timestamp) > 0) {
+    return new Date(Number(entry.timestamp) * 1000).toISOString();
   }
-  return iso || '—';
+  return '';
 }
 
-/** Kuwait wall time with seconds (parity with Monitor Red Alert board). */
-function formatRedAlertExactDateTime(iso: string): string {
-  const ms = parseTimestampMs(iso);
-  if (!Number.isNaN(ms)) {
-    try {
-      return (
-        new Date(ms).toLocaleString('en-GB', {
-          timeZone: 'Asia/Kuwait',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-        }) + ' KWT'
-      );
-    } catch {
-      return iso;
-    }
-  }
-  return iso || '—';
-}
+type DetailView = {
+  payload: RedAlertDetailPayload;
+  alertSummary: string;
+  freq: FreqSplit;
+  freqCtx: FreqColumnContext;
+  compareMode: RedAlertCompareMode;
+  trendHero: ReturnType<typeof trendHistoryComparisons>;
+  incidentsMeta?: DailyIncidentsElapsedResponse;
+  operatorName: string;
+  strikeOperatorEmail?: string | null;
+  machineId: string;
+  attendanceSummary?: MachineAttendanceSummary;
+  sales?: SalesElapsedRow;
+  creditsSent?: number;
+  dispenseTests?: number;
+  vendsResolved?: string;
+  cleaningLabel?: string;
+  /** Vendon last-transactions fallback when snapshot has no ISO. */
+  lastTxVendonIso?: string | null;
+};
 
-function freqTrendValTone(fq: FreqSplit): string {
-  if (fq.bottomClass === 'down') return styles.freqDown;
-  if (fq.bottomClass === 'flat') return styles.freqFlat;
-  if (fq.bottomClass === 'up' && fq.upBand) {
-    switch (fq.upBand) {
-      case 1:
-        return styles.freqUp1;
-      case 2:
-        return styles.freqUp2;
-      case 3:
-        return styles.freqUp3;
-      case 4:
-        return styles.freqUp4;
-      default:
-        break;
-    }
-  }
-  return styles.freqUp2;
-}
-
-/** Incident burden vs green (0): higher count → worse → redder (same bands as legacy freq-up ramp). */
-function freqIncidentBurdenTone(n: number): string {
-  if (Number.isNaN(n)) return styles.freqFlat;
-  const mag = Math.max(0, n);
-  if (mag <= 0) return styles.freqDown;
-  const band = mag >= 10 ? 4 : mag >= 5 ? 3 : mag >= 2 ? 2 : 1;
-  switch (band) {
-    case 1:
-      return styles.freqUp1;
-    case 2:
-      return styles.freqUp2;
-    case 3:
-      return styles.freqUp3;
-    case 4:
-      return styles.freqUp4;
-    default:
-      return styles.freqUp2;
-  }
-}
-
-function FreqIconScore() {
-  return (
-    <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
-      <path fill="currentColor" d="M2 14h3V8H2v6zm4.5 0h3V5h-3v9zm4.5 0h3V2h-3v12z" opacity="0.92" />
-    </svg>
-  );
-}
-
-function FreqIconTrend() {
-  return (
-    <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M2 12l4-4 3 3 5-7"
-        opacity="0.92"
-      />
-    </svg>
-  );
-}
-
-function FreqIconVariance() {
-  return (
-    <svg className={styles.freqGlyph} viewBox="0 0 16 16" aria-hidden>
-      <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.25" opacity="0.88" />
-      <circle cx="8" cy="8" r="2" fill="currentColor" opacity="0.78" />
-    </svg>
-  );
-}
-
-function LastTxLines({
-  row,
-  snapshotGeneratedAt,
-}: {
-  row: RedAlertRow;
-  snapshotGeneratedAt?: string | null;
-}) {
-  const txRaw = pickLastTransactionTs(row, snapshotGeneratedAt);
-  const evRaw = pickLastEventTs(row);
-  const estimated = isLastTransactionEstimated(row, snapshotGeneratedAt);
-  const hasTx = !!(txRaw != null && String(txRaw).trim());
-  const hasEv = !!(evRaw != null && String(evRaw).trim());
-  const evDistinct = hasEv && (!hasTx || String(evRaw).trim() !== String(txRaw).trim());
-  const minOnly = row.minutesSinceLastTransaction ?? row.minutes_since_last_transaction;
-  const minStr = minOnly != null ? String(minOnly).trim() : '';
-  return (
-    <>
-      {hasTx ? (
-        <div className={styles.lastTx}>
-          Last tx: {formatRedAlertExactDateTime(String(txRaw))}
-          {estimated ? <span className={styles.lastTxEst}> (est.)</span> : null}
-        </div>
-      ) : minStr !== '' ? (
-        <div className={styles.lastTx}>
-          Last tx: {minStr} min since sale <span className={styles.lastTxEst}>(no ISO)</span>
-        </div>
-      ) : null}
-      {evDistinct ? (
-        <div className={styles.lastTx}>Last OFF event: {formatRedAlertExactDateTime(String(evRaw))}</div>
-      ) : null}
-      {!hasTx && minStr === '' && !evDistinct ? <div className={styles.lastTx}>Last tx: —</div> : null}
-    </>
-  );
-}
-
-function DetailModal({ payload, onClose }: { payload: RedAlertDetailPayload; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void }) {
+  const { payload } = view;
+  const slackMapQ = useSlackUserMap();
+  useAlertModal(onClose);
+  const backdrop = modalBackdropHandlers(onClose);
+  const panel = modalPanelHandlers();
+  const slackContact = useMemo(() => {
+    const env = getAlertRuntimeEnv();
+    return {
+      map: slackMapQ.data?.map ?? {},
+      team: (slackMapQ.data?.teamId || env.SLACK_TEAM_ID || '').trim(),
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [slackMapQ.data]);
 
-  const fq = payload.frequency || {};
   return (
     <div
-      className={styles.backdrop}
+      className={`${styles.backdrop} redFlagsDetailBackdrop`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="red-flags-detail-title"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      {...backdrop}
     >
-      <div className={styles.modal}>
-        <div className={styles.modalHead}>
-          <h2 id="red-flags-detail-title" className={styles.modalTitle}>
-            {payload.machineName || payload.machineId}
-          </h2>
-          <button type="button" className={styles.btn} onClick={onClose}>
-            Close
+      <div className={`${styles.modal} redFlagsDetailModal`} {...panel}>
+        <div className={`${styles.modalHead} redFlagsDetailHead`}>
+          <div>
+            <p className={styles.detailEyebrow}>Machine detail</p>
+            <h2 id="red-flags-detail-title" className={styles.modalTitle}>
+              {payload.machineName || payload.machineId}
+            </h2>
+            <p className={styles.detailMachineId}>#{payload.machineId}</p>
+          </div>
+          <button type="button" className={styles.detailCloseBtn} onClick={onClose} aria-label="Close">
+            ×
           </button>
         </div>
-        <p className={styles.mutedSmall}>{payload.statusLabel}</p>
-        <p>
-          <strong>Operator:</strong> {payload.operator}
-          {payload.cleaningOperator ? ` · Cleaning: ${payload.cleaningOperator}` : null}
-        </p>
-        <p>
-          <strong>Last tx:</strong>{' '}
-          {payload.lastTransactionAtUtc
-            ? formatKuwaitTs(String(payload.lastTransactionAtUtc))
-            : payload.minutesSinceLastTransaction != null
-              ? `${payload.minutesSinceLastTransaction} min since sale`
-              : '—'}
-          {payload.lastTransactionEstimated ? ' (estimated)' : null}
-        </p>
-        {payload.lastOffEventAt || payload.lastOffEventAtUtc ? (
-          <p>
-            <strong>Last OFF event:</strong>{' '}
-            {formatKuwaitTs(String(payload.lastOffEventAt || payload.lastOffEventAtUtc || ''))}
-          </p>
-        ) : null}
-        <p>
-          <strong>Reasons:</strong>
-        </p>
-        <ul>
-          {(payload.reasons || []).map((r, i) => (
-            <li key={i}>{r}</li>
-          ))}
-        </ul>
-        <p className={styles.mutedSmall}>
-          WTD hits: {payload.happensWeek ?? fq.totalCriteriaHitsThisWeek ?? '—'} · Trend %:{' '}
-          {payload.happenedPctVsPriorWeek ?? '—'}
-        </p>
+
+        <div className={styles.detailStatusRow}>
+          <span className={styles.detailStatusPill}>{payload.statusLabel}</span>
+          {payload.duringScheduledCleaningNow ? (
+            <span className={styles.detailStatusPillMuted}>Cleaning window</span>
+          ) : null}
+        </div>
+
+        <section className={styles.detailSection}>
+          <h3 className={styles.detailSectionTitle}>Why flagged</h3>
+          <p className={styles.detailAlertLead}>{view.alertSummary || '—'}</p>
+          {(payload.reasons || []).length > 1 ? (
+            <ul className={styles.detailReasonList}>
+              {(payload.reasons || []).map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+
+        <div className={styles.detailMetricGrid}>
+          <div className={styles.detailMetricCard}>
+            <span className={styles.detailMetricLabel}>Last sale</span>
+            <span className={styles.detailMetricVal}>
+              {payload.lastTransactionAtUtc
+                ? formatLastTxCompact(String(payload.lastTransactionAtUtc))
+                : view.lastTxVendonIso
+                  ? formatLastTxCompact(view.lastTxVendonIso)
+                  : payload.minutesSinceLastTransaction != null
+                    ? `${payload.minutesSinceLastTransaction} min ago`
+                    : '—'}
+            </span>
+            {payload.lastTransactionEstimated ? (
+              <span className={styles.detailMetricSub}>Estimated time</span>
+            ) : view.lastTxVendonIso && !payload.lastTransactionAtUtc ? (
+              <span className={styles.detailMetricSub}>From Vendon last transaction</span>
+            ) : null}
+          </div>
+          <div className={styles.detailMetricCard}>
+            <span className={styles.detailMetricLabel}>Sales today</span>
+            <span className={styles.detailMetricVal}>
+              {view.sales?.todayKwd != null ? formatKwd(view.sales.todayKwd) : '—'}
+            </span>
+            {view.sales?.yesterdaySameElapsedKwd != null ? (
+              <span className={styles.detailMetricSub}>
+                vs {formatKwd(view.sales.yesterdaySameElapsedKwd)} yesterday
+                {view.sales.trendPct != null ? ` (${formatSalesTrendPct(view.sales.trendPct)})` : ''}
+              </span>
+            ) : null}
+          </div>
+          <div className={styles.detailMetricCard}>
+            <span className={styles.detailMetricLabel}>Credits sent</span>
+            <span className={styles.detailMetricVal}>
+              {Number.isFinite(view.creditsSent) ? String(view.creditsSent) : '—'}
+            </span>
+            <span className={styles.detailMetricSub}>
+              Tests: {Number.isFinite(view.dispenseTests) ? view.dispenseTests : '—'}
+            </span>
+          </div>
+          <div className={styles.detailMetricCard}>
+            <span className={styles.detailMetricLabel}>Vends resolved</span>
+            <span className={styles.detailMetricVal}>{view.vendsResolved || '—'}</span>
+            {view.cleaningLabel ? <span className={styles.detailMetricSub}>{view.cleaningLabel}</span> : null}
+          </div>
+        </div>
+
+        <section className={styles.detailSection}>
+          <h3 className={styles.detailSectionTitle}>Contact operator</h3>
+          <OperatorContactSection
+            layout="modal"
+            operatorName={view.operatorName}
+            strikeOperatorEmail={view.strikeOperatorEmail}
+            machineId={view.machineId}
+            machineLabel={payload.machineName || payload.machineId}
+            slackEmailMap={slackContact.map}
+            slackTeamId={slackContact.team}
+            attendanceSummary={view.attendanceSummary}
+          />
+        </section>
+
+        <section className={`${styles.detailSection} trendBreakdownInDetail`}>
+          <TrendBreakdownPanel
+            compareMode={view.compareMode}
+            scoreText={view.freqCtx.scoreText}
+            trendText={view.freqCtx.trendText}
+            gapDisplay={view.freqCtx.gapDisplay}
+            scoreExplain={view.freqCtx.scoreExplain}
+            trendExplain={view.freqCtx.trendExplain}
+            gapExplain={view.freqCtx.gapExplain}
+            heroLabel={view.trendHero.heroLabel}
+            heroValue={view.trendHero.heroValue}
+            heroDate={view.trendHero.heroDate}
+            heroSub={view.trendHero.heroSub}
+            comparisons={view.trendHero.comparisons}
+            asOfLocal={view.incidentsMeta?.asOfLocal}
+            comparisonNote={view.incidentsMeta?.comparisonNote}
+          />
+        </section>
+
         {payload.goCheckUrl ? (
-          <p>
-            <a href={payload.goCheckUrl} className={styles.btnPrimary} style={{ display: 'inline-flex', marginTop: 8 }}>
+          <div className={styles.detailActions}>
+            <a href={payload.goCheckUrl} className={styles.btnPrimary}>
               Go check
             </a>
-          </p>
+          </div>
         ) : null}
       </div>
     </div>
@@ -340,11 +339,81 @@ export function RedFlagsPage() {
 
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [ranked, setRanked] = useState<RankedRedAlertRow[]>([]);
-  const [detail, setDetail] = useState<RedAlertDetailPayload | null>(null);
+  const [detail, setDetail] = useState<DetailView | null>(null);
+  const [trendDetail, setTrendDetail] = useState<{
+    machineName: string;
+    machineId: string;
+    row: IncidentsElapsedRow;
+    snapTrend: {
+      happensWeek?: number | null;
+      happenedLastWeekAlignedSlice?: number | null;
+      happenedLastWeek?: number | null;
+      happenedPctVsPriorWeek?: number | null;
+      happensToday?: number | null;
+      happenedSameDayLastWeek?: number | null;
+      happenedPctVsSameDayLastWeek?: number | null;
+      happenedYesterdaySameElapsed?: number | null;
+      happenedPctVsYesterdaySameElapsed?: number | null;
+    };
+    scoreText: string;
+    trendText: string;
+    gapDisplay: string;
+    scoreExplain: string;
+    trendExplain: string;
+    gapExplain: string;
+    operatorName: string;
+    strikeOperatorEmail?: string | null;
+    attendanceSummary?: MachineAttendanceSummary;
+  } | null>(null);
+  const [salesDetail, setSalesDetail] = useState<{
+    machineName: string;
+    machineId: string;
+    row: SalesElapsedRow;
+    operatorName: string;
+    strikeOperatorEmail?: string | null;
+    attendanceSummary?: MachineAttendanceSummary;
+  } | null>(null);
+  const [targetDetail, setTargetDetail] = useState<{
+    machineName: string;
+    machineId: string;
+    todayKwd?: number;
+    yesterdayKwd?: number;
+    dailyTargetKd?: number | null;
+    locationOwnerName?: string | null;
+  } | null>(null);
+  const [goCheckDetail, setGoCheckDetail] = useState<{
+    machineId: string;
+    machineName: string;
+    alertType: string;
+  } | null>(null);
+  const salesComparisonNote = useMemo(() => presetLabels(compare.preset).caption, [compare.preset]);
+  const [columnSort, setColumnSort] = useState<ColumnSortState<RedFlagsColumnKey>>({
+    column: null,
+    dir: null,
+  });
+  const [notifyPerm, setNotifyPerm] = useState<NotificationPermission | 'unsupported'>(() =>
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported',
+  );
   const [ticker, setTicker] = useState<{ newN: number; updN: number; total: number } | null>(null);
   const prevReasonRef = useRef<Record<string, string>>({});
+  /** Safari/iPad retargets `click` to `<tr>`; remember pointer target for synthetic activation. */
+  const rowTapTargetRef = useRef<HTMLElement | null>(null);
   const hasLoadedRef = useRef(false);
   const [clock, setClock] = useState(() => new Date());
+  const compactOps = useCompactOpsLayout();
+  const [redView, setRedView] = useState<RedFlagsViewMode>(() => initialRedFlagsView(compactOps));
+  const setRedViewPersist = useCallback((mode: RedFlagsViewMode) => {
+    setRedView(mode);
+    try {
+      localStorage.setItem(RED_FLAGS_VIEW_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const { user } = useAuth();
+  const { stored: columnStored, setColumns: handleColumnsChange, syncState: columnSyncState } =
+    useRedFlagsColumnPrefs(user?.email);
+  const visibleColumns = useMemo(() => visibleRedFlagsColumns(columnStored), [columnStored]);
   useEffect(() => {
     const id = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(id);
@@ -356,6 +425,15 @@ export function RedFlagsPage() {
     refetchInterval: 60_000,
   });
 
+  const slackMapQ = useSlackUserMap();
+  const slackContact = useMemo(() => {
+    const env = getAlertRuntimeEnv();
+    return {
+      map: slackMapQ.data?.map ?? {},
+      team: (slackMapQ.data?.teamId || env.SLACK_TEAM_ID || '').trim(),
+    };
+  }, [slackMapQ.data]);
+
   const creditsMachineIdsKey = useMemo(() => {
     const rawRows = (q.data?.rows ?? []) as RedAlertRow[];
     const rows = filterSnapshotRows(rawRows);
@@ -366,15 +444,274 @@ export function RedFlagsPage() {
 
   const creditsQ = useQuery({
     queryKey: ['alert-remote-credits-today-totals', creditsMachineIdsKey],
-    queryFn: () => {
+    queryFn: async () => {
       const base = '/api/alert/remote-credits/today-totals';
-      const url = creditsMachineIdsKey
-        ? `${base}?machines=${encodeURIComponent(creditsMachineIdsKey)}`
-        : base;
-      return apiGet<RemoteCreditsTodayTotals>(url);
+      const ids = creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!ids.length) {
+        return apiGet<RemoteCreditsTodayTotals>(base);
+      }
+      const chunkSize = 12;
+      const merged: NonNullable<RemoteCreditsTodayTotals['byMachineId']> = {};
+      let date: string | null | undefined;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize).join(',');
+        try {
+          const part = await apiGet<RemoteCreditsTodayTotals>(
+            `${base}?machines=${encodeURIComponent(chunk)}`,
+          );
+          date = part.date ?? date;
+          Object.assign(merged, part.byMachineId ?? {});
+        } catch (err) {
+          console.warn('remote-credits chunk failed', chunk.slice(0, 40), err);
+        }
+        if (i + chunkSize < ids.length) {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+      return { date, byMachineId: merged };
     },
     enabled: q.isFetched,
     refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
+  });
+
+  const dailySalesQ = useQuery({
+    queryKey: ['alert-daily-sales-elapsed', compare.preset],
+    queryFn: () => apiGet<DailySalesElapsedResponse>('/api/alert/overall/daily-sales-elapsed'),
+    enabled: q.isFetched,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+  });
+
+  const vendonLastTxQ = useQuery({
+    queryKey: ['alert-overall-vendon-last-transactions'],
+    queryFn: () => apiGet<VendonLastTransactionsResponse>('/api/alert/overall/last-transactions'),
+    enabled: q.isFetched,
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
+  });
+
+  const profilesQ = useQuery({
+    queryKey: ['alert-overall-admin-profiles'],
+    queryFn: () =>
+      apiGet<{ rows?: { machine_id?: string; machine_name?: string; location_owner?: string | null }[] }>(
+        '/api/alert/overall/admin-profiles',
+      ),
+    enabled: q.isFetched,
+    staleTime: 5 * 60_000,
+    refetchInterval: 60_000,
+  });
+
+  const locationOwnerLookup = useMemo(() => {
+    const byId = new Map<string, string>();
+    const byName = new Map<string, string>();
+    const rows = profilesQ.data?.rows;
+    if (!Array.isArray(rows)) return { byId, byName };
+    for (const r of rows) {
+      const id = String(r.machine_id ?? '').trim();
+      const owner = String(r.location_owner ?? '').trim();
+      const name = String(r.machine_name ?? '').trim().toLowerCase();
+      if (id && owner) byId.set(id, owner);
+      if (name && owner) byName.set(name, owner);
+    }
+    return { byId, byName };
+  }, [profilesQ.data?.rows]);
+
+  function resolveLocationOwnerForRow(machId: string, machineName: string): string | null {
+    const fromId = locationOwnerLookup.byId.get(machId);
+    if (fromId) return fromId;
+    const key = String(machineName || '').trim().toLowerCase();
+    if (key) {
+      const fromName = locationOwnerLookup.byName.get(key);
+      if (fromName) return fromName;
+    }
+    return null;
+  }
+
+  const vendonSummaryQ = useQuery({
+    queryKey: [
+      'alert-vendon-sales-summary',
+      compare.preset,
+      compare.a.start,
+      compare.a.end,
+      compare.b.start,
+      compare.b.end,
+    ],
+    queryFn: () =>
+      apiGet<{
+        labelA?: string | null;
+        labelB?: string | null;
+        byMachineId?: Record<
+          string,
+          { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+        >;
+      }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compare.preset, compare)}`),
+    enabled: q.isFetched,
+    refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
+  });
+
+  const sxQ = useQuery({
+    queryKey: [
+      'alert-sales-acceleration',
+      compare.preset,
+      compare.a.start,
+      compare.a.end,
+      compare.b.start,
+      compare.b.end,
+    ],
+    queryFn: () =>
+      apiGet<{
+        byMachineId?: Record<string, import('@/components/SxAccelerationCell').SxAccelerationRow>;
+      }>(`/api/alert/overall/sales-acceleration?${presetApiQueryString(compare.preset, compare)}`),
+    enabled: q.isFetched,
+    refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
+  });
+
+  const liveSnapQ = useQuery({
+    queryKey: ['live-dashboard-snapshot'],
+    queryFn: () => apiGet<LiveDashboardSnapshotResponse>('/api/live-dashboard/snapshot'),
+    enabled: q.isFetched,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  const liveByMachineId = useMemo(() => {
+    const m = new Map<string, LiveDashboardMachine>();
+    const rows = liveSnapQ.data?.machines;
+    if (!Array.isArray(rows)) return m;
+    for (const r of rows) {
+      const id = String(r.machineId ?? '').trim();
+      if (id) m.set(id, r);
+    }
+    return m;
+  }, [liveSnapQ.data]);
+
+  const liveCleaningByMachineId = useMemo(() => {
+    const out: Record<string, string | null> = {};
+    for (const [id, row] of liveByMachineId) {
+      out[id] = row.lastCleaningAt ?? null;
+    }
+    return out;
+  }, [liveByMachineId]);
+
+  const mtdVendonQ = useQuery({
+    queryKey: ['alert-vendon-sales-mtd'],
+    queryFn: () =>
+      apiGet<{
+        byMachineId?: Record<string, { aSalesKwd?: number | null }>;
+      }>('/api/alert/overall/vendon-sales-summary?preset=mtd_vs_mtd'),
+    enabled: q.isFetched,
+    refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
+  });
+
+  const mtdYoyVendonQ = useQuery({
+    queryKey: ['alert-vendon-sales-mtd-yoy'],
+    queryFn: () =>
+      apiGet<{
+        byMachineId?: Record<
+          string,
+          { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+        >;
+      }>('/api/alert/overall/vendon-sales-summary?preset=mtd_vs_yoy'),
+    enabled: q.isFetched,
+    refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
+  });
+
+  const qaSummaryQ = useQuery({
+    queryKey: ['alert-qa-summary'],
+    queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
+    enabled: q.isFetched,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+  const qaFindingsQ = useQuery({
+    queryKey: ['alert-qa-findings'],
+    queryFn: () => apiGet<QaFindingsResponse>('/api/alert/qa/findings'),
+    enabled: q.isFetched,
+    staleTime: 10 * 60_000,
+    refetchInterval: 10 * 60_000,
+  });
+
+  const dailyIncidentsQ = useQuery({
+    queryKey: ['alert-daily-incidents-elapsed', compare.preset, creditsMachineIdsKey],
+    queryFn: async () => {
+      const base = '/api/alert/red-flags/daily-incidents-elapsed';
+      const ids = creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!ids.length) {
+        return apiGet<DailyIncidentsElapsedResponse>(base);
+      }
+      const chunkSize = 12;
+      const merged: NonNullable<DailyIncidentsElapsedResponse['byMachineId']> = {};
+      let asOfLocal: string | undefined;
+      let today: string | undefined;
+      let yesterday: string | undefined;
+      let comparisonNote: string | undefined;
+      let timezone: string | undefined;
+      let historyDays: number | undefined;
+      let historyDates: string[] | undefined;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize).join(',');
+        try {
+          const part = await apiGet<DailyIncidentsElapsedResponse>(
+            `${base}?machines=${encodeURIComponent(chunk)}`,
+          );
+          asOfLocal = part.asOfLocal ?? asOfLocal;
+          today = part.today ?? today;
+          yesterday = part.yesterday ?? yesterday;
+          comparisonNote = part.comparisonNote ?? comparisonNote;
+          timezone = part.timezone ?? timezone;
+          historyDays = part.historyDays ?? historyDays;
+          historyDates = part.historyDates ?? historyDates;
+          Object.assign(merged, part.byMachineId ?? {});
+        } catch (err) {
+          console.warn('daily-incidents-elapsed chunk failed', chunk.slice(0, 40), err);
+        }
+        if (i + chunkSize < ids.length) {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+      return {
+        asOfLocal,
+        today,
+        yesterday,
+        comparisonNote,
+        timezone,
+        historyDays,
+        historyDates,
+        byMachineId: merged,
+      };
+    },
+    enabled: q.isFetched,
+    refetchInterval: 5 * 60_000,
+    staleTime: 2 * 60_000,
+  });
+
+  const workflowAttendanceQ = useQuery({
+    queryKey: ['leet-workflow-attendance-map', creditsMachineIdsKey],
+    queryFn: () =>
+      fetchMachineAttendanceMapBatched(
+        creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean),
+      ),
+    enabled: q.isFetched && Boolean(creditsMachineIdsKey),
+    staleTime: 2 * 60_000,
+    refetchInterval: 3 * 60_000,
+  });
+
+  const workflowCleaningQ = useQuery({
+    queryKey: ['leet-workflow-cleaning-map', creditsMachineIdsKey],
+    queryFn: () =>
+      fetchCleaningWorkflowMapBatched(
+        creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean),
+      ),
+    enabled: q.isFetched && Boolean(creditsMachineIdsKey),
+    staleTime: 2 * 60_000,
+    refetchInterval: 3 * 60_000,
   });
 
   const snapTime = q.data?.generatedAt || q.data?.cacheGeneratedAt || null;
@@ -407,7 +744,7 @@ export function RedFlagsPage() {
       return;
     }
 
-    const list = rankRows(rows, prevMap, compareMode);
+    const list = rankRows(rows, prevMap, compareMode, dailyIncidentsQ.data?.byMachineId);
     const nextPrev: Record<string, string> = {};
     let newN = 0;
     let updN = 0;
@@ -420,15 +757,190 @@ export function RedFlagsPage() {
     prevReasonRef.current = nextPrev;
     setRanked(list);
     setTicker({ newN, updN, total: rows.length });
-  }, [q.data, q.dataUpdatedAt, compareMode, snapTime]);
+  }, [q.data, q.dataUpdatedAt, compareMode, snapTime, dailyIncidentsQ.data]);
+
+  const buildSnapTrend = useCallback((row: RedAlertRow) => ({
+    happensWeek: row.happensWeek,
+    happenedLastWeekAlignedSlice: row.happenedLastWeekAlignedSlice,
+    happenedLastWeek: row.happenedLastWeek,
+    happenedPctVsPriorWeek: row.happenedPctVsPriorWeek,
+    happensToday: row.happensToday ?? row.frequency?.totalCriteriaHitsToday,
+    happenedSameDayLastWeek: row.happenedSameDayLastWeek,
+    happenedPctVsSameDayLastWeek: row.happenedPctVsSameDayLastWeek,
+    happenedYesterdaySameElapsed: row.happenedYesterdaySameElapsed,
+    happenedPctVsYesterdaySameElapsed: row.happenedPctVsYesterdaySameElapsed,
+    happenedDayBeforeSameElapsed: row.happenedDayBeforeSameElapsed,
+    happenedPctVsDayBefore: row.happenedPctVsDayBefore,
+  }), []);
 
   const openDetail = useCallback(
     (d: RankedRedAlertRow) => {
-      const machId = String(getMachineIdRaw(d.row) || '');
+      const row = d.row;
+      const machId = String(getMachineIdRaw(row) || '');
       const statusLabel = d.isNew ? 'New alert' : d.isChanged ? 'Updated' : 'Ongoing';
-      setDetail(buildDetailPayload(d.row, machId, statusLabel, compareMode, snapTime ?? null));
+      const cred = machId ? creditsByMachineId[machId] : undefined;
+      const cleanIso = pickLastCleaningIso(row, liveByMachineId.get(machId)?.lastCleaningAt);
+      const cleanWins = cleaningWindowsFromAdmin(cred?.cleaning_windows);
+      const cleanStatus = cleanIso
+        ? lastCleanedStatus({ lastCleaningIso: cleanIso, cleaningWindows: cleanWins })
+        : null;
+      const alertSummary =
+        row.reasons && row.reasons.length
+          ? String(row.reasons[row.reasons.length - 1] ?? '').replace(/\s+/g, ' ').trim()
+          : 'No alert reason in snapshot';
+      const incidentsRow = resolveIncidentsRow(
+        row,
+        incidentsElapsedForMachine(dailyIncidentsQ.data, machId, dailyIncidentsQ.isSuccess),
+      );
+      const freqCtx = buildFreqColumnContext(row, compareMode, incidentsRow);
+      const snapTrend = buildSnapTrend(row);
+      const trendHero = trendHistoryComparisons(
+        incidentsRow,
+        dailyIncidentsQ.data,
+        compareMode,
+        snapTrend,
+      );
+      const salesRow = salesElapsedForMachine(dailySalesQ.data, machId, dailySalesQ.isSuccess);
+      const vendonSales = vendonSummaryQ.data?.byMachineId?.[machId];
+      const salesPair = salesPairForPreset(
+        compare.preset,
+        salesRow,
+        compare,
+        vendonSales,
+        {
+          primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+          baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+        },
+      );
+      const salesForDetail: SalesElapsedRow | undefined =
+        salesRow ??
+        (salesPair.primary != null && Number.isFinite(salesPair.primary)
+          ? {
+              todayKwd: salesPair.primary,
+              yesterdaySameElapsedKwd:
+                salesPair.baseline != null && Number.isFinite(salesPair.baseline)
+                  ? salesPair.baseline
+                  : undefined,
+              trendPct: salesPair.trendPct ?? null,
+              dailyElapsed: [],
+            }
+          : undefined);
+      setDetail({
+        payload: buildDetailPayload(row, machId, statusLabel, compareMode, snapTime ?? null),
+        alertSummary,
+        freq: freqSplit(row, compareMode, incidentsRow),
+        freqCtx,
+        compareMode,
+        trendHero,
+        incidentsMeta: dailyIncidentsQ.data,
+        machineId: machId,
+        attendanceSummary: workflowAttendanceQ.data?.byMachineId?.[machId],
+        operatorName: getOperatorDisplayName(row, workflowAttendanceQ.data?.byMachineId?.[machId]),
+        strikeOperatorEmail: resolveOperatorStrikeEmail(row, workflowAttendanceQ.data?.byMachineId?.[machId]),
+        sales: salesForDetail,
+        creditsSent: cred?.credits_sent != null ? Number(cred.credits_sent) : undefined,
+        dispenseTests: cred?.dispense_tests != null ? Number(cred.dispense_tests) : undefined,
+        vendsResolved: cred?.vends_resolved != null ? String(cred.vends_resolved) : undefined,
+        cleaningLabel: cleanStatus?.label,
+        lastTxVendonIso: vendonTxIsoFromEntry(vendonLastTxQ.data?.byMachineId?.[machId]) || null,
+      });
     },
-    [compareMode, snapTime],
+    [compare, compareMode, snapTime, creditsByMachineId, liveByMachineId, dailySalesQ.data, dailySalesQ.isSuccess, dailyIncidentsQ.data, dailyIncidentsQ.isSuccess, buildSnapTrend, vendonLastTxQ.data?.byMachineId, vendonSummaryQ.data, workflowAttendanceQ.data?.byMachineId],
+  );
+
+  const openTrendHistory = useCallback(
+    (row: RedAlertRow, machId: string, incidentsRow?: IncidentsElapsedRow) => {
+      const resolved = resolveIncidentsRow(
+        row,
+        incidentsRow ??
+          incidentsElapsedForMachine(dailyIncidentsQ.data, machId, dailyIncidentsQ.isSuccess),
+      );
+      const snapTrend = buildSnapTrend(row);
+      const freqCtx = buildFreqColumnContext(row, compareMode, resolved);
+      setTrendDetail({
+        machineName: String(row.machineName || machId),
+        machineId: machId,
+        row: resolved ?? { todayHits: snapTrend.happensToday ?? undefined },
+        snapTrend,
+        scoreText: freqCtx.scoreText,
+        trendText: freqCtx.trendText,
+        gapDisplay: freqCtx.gapDisplay,
+        scoreExplain: freqCtx.scoreExplain,
+        trendExplain: freqCtx.trendExplain,
+        gapExplain: freqCtx.gapExplain,
+        attendanceSummary: workflowAttendanceQ.data?.byMachineId?.[machId],
+        operatorName: getOperatorDisplayName(row, workflowAttendanceQ.data?.byMachineId?.[machId]),
+        strikeOperatorEmail: resolveOperatorStrikeEmail(row, workflowAttendanceQ.data?.byMachineId?.[machId]),
+      });
+    },
+    [buildSnapTrend, compareMode, dailyIncidentsQ.data, dailyIncidentsQ.isSuccess, workflowAttendanceQ.data?.byMachineId],
+  );
+
+  const openSalesHistory = useCallback((row: RedAlertRow, machId: string, salesRow: SalesElapsedRow) => {
+    setSalesDetail({
+      machineName: String(row.machineName || machId),
+      machineId: machId,
+      row: salesRow,
+      attendanceSummary: workflowAttendanceQ.data?.byMachineId?.[machId],
+      operatorName: getOperatorDisplayName(row, workflowAttendanceQ.data?.byMachineId?.[machId]),
+      strikeOperatorEmail: resolveOperatorStrikeEmail(row, workflowAttendanceQ.data?.byMachineId?.[machId]),
+    });
+  }, [workflowAttendanceQ.data?.byMachineId]);
+
+  const snapshotRows = useMemo(() => filterSnapshotRows((q.data?.rows ?? []) as RedAlertRow[]), [q.data?.rows]);
+  const cleaningOverdueCount = useMemo(
+    () => snapshotRows.filter((r) => r.cleaningOverdue15h).length,
+    [snapshotRows],
+  );
+  useCleaningOverdueAlerts(snapshotRows, q.isFetched);
+
+  const redFlagsSortCtx = useMemo(
+    (): RedFlagsSortContext => ({
+      compareMode,
+      compare,
+      dailySales: dailySalesQ.data,
+      dailySalesReady: dailySalesQ.isSuccess,
+      mtdByMachine: mtdVendonQ.data?.byMachineId,
+      mtdReady: mtdVendonQ.isSuccess && Boolean(mtdVendonQ.data?.byMachineId),
+      mtdYoyByMachine: mtdYoyVendonQ.data?.byMachineId,
+      mtdYoyReady: mtdYoyVendonQ.isSuccess && Boolean(mtdYoyVendonQ.data?.byMachineId),
+      vendonByMachine: vendonSummaryQ.data?.byMachineId,
+      creditsByMachine: creditsByMachineId,
+      incidentsByMachine: dailyIncidentsQ.data?.byMachineId,
+      qaSummary: qaSummaryQ.data,
+      snapshotGeneratedAt: q.data?.cacheGeneratedAt ?? q.data?.generatedAt ?? null,
+      lastTxByMachine: vendonLastTxQ.data?.byMachineId,
+      sxByMachine: sxQ.data?.byMachineId,
+      sxReady: sxQ.isSuccess && Boolean(sxQ.data?.byMachineId),
+    }),
+    [
+      compareMode,
+      compare,
+      dailySalesQ.data,
+      dailySalesQ.isSuccess,
+      mtdVendonQ.data,
+      mtdVendonQ.isSuccess,
+      mtdYoyVendonQ.data,
+      mtdYoyVendonQ.isSuccess,
+      vendonSummaryQ.data?.byMachineId,
+      creditsByMachineId,
+      dailyIncidentsQ.data?.byMachineId,
+      qaSummaryQ.data,
+      q.data?.cacheGeneratedAt,
+      q.data?.generatedAt,
+      vendonLastTxQ.data?.byMachineId,
+      sxQ.data?.byMachineId,
+      sxQ.isSuccess,
+    ],
+  );
+
+  const onSortColumn = useCallback((key: RedFlagsColumnKey) => {
+    setColumnSort((prev) => cycleColumnSort(prev, key));
+  }, []);
+
+  const displayRanked = useMemo(
+    () => sortRankedRedFlags(ranked, columnSort, redFlagsSortCtx),
+    [ranked, columnSort, redFlagsSortCtx],
   );
 
   const freqHeading = useMemo(
@@ -436,234 +948,318 @@ export function RedFlagsPage() {
     [compare.preset, compareMode],
   );
 
+  const vendonSalesLabels = useMemo(
+    () => ({
+      primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+      baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+    }),
+    [vendonSummaryQ.data?.labelA, vendonSummaryQ.data?.labelB],
+  );
+
+  const fleetRevenueTotals = useMemo(() => {
+    const ids = displayRanked.map((d) => String(getMachineIdRaw(d.row) || '')).filter(Boolean);
+    const rowTotals = aggregateFleetSalesForPreset(
+      ids,
+      compare.preset,
+      compare,
+      dailySalesQ.data?.byMachineId,
+      vendonSummaryQ.data?.byMachineId,
+      { labelA: vendonSummaryQ.data?.labelA, labelB: vendonSummaryQ.data?.labelB },
+      { dailySalesReady: dailySalesQ.isSuccess },
+    );
+    return applyApiFleetElapsedTotals(compare.preset, rowTotals, dailySalesQ.data, dailySalesQ.isSuccess);
+  }, [
+    displayRanked,
+    compare,
+    dailySalesQ.data,
+    dailySalesQ.isSuccess,
+    vendonSummaryQ.data?.byMachineId,
+    vendonSummaryQ.data?.labelA,
+    vendonSummaryQ.data?.labelB,
+  ]);
+
+  const fleetYesterdayOverall = useMemo(() => {
+    if (compare.preset !== 'today_vs_yesterday') return null;
+    const ids = displayRanked.map((d) => String(getMachineIdRaw(d.row) || '')).filter(Boolean);
+    const kwd = fleetYesterdayFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
+    const dayBefore = fleetDayBeforeFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
+    return {
+      kwd,
+      trendVsDayBeforePct: resolveSalesTrendPct(null, kwd, dayBefore),
+    };
+  }, [compare, displayRanked, dailySalesQ.data]);
+
+  const headerCtx = useMemo(
+    (): RedFlagsHeaderCtx => ({
+      freqHeading,
+      sort: columnSort,
+      onSortColumn,
+    }),
+    [freqHeading, columnSort, onSortColumn],
+  );
+
+  const tableViewActive = ranked.length > 0 && (!compactOps || redView === 'table');
+
   const emptyClear = q.isSuccess && ranked.length === 0;
 
-  const slackCfg = (() => {
-    const e = getAlertRuntimeEnv();
-    return {
-      team: (e.SLACK_TEAM_ID || '').trim(),
-      amAhmed: (e.SLACK_AM_AHMED_USER_ID || '').trim(),
-      amSuhaib: (e.SLACK_AM_SUHAIB_USER_ID || '').trim(),
-      opMap: parseEmailToSlackUserMap(e.SLACK_OP_EMAIL_MAP_JSON),
-    };
-  })();
+  const redKpis = useMemo((): StitchKpi[] => {
+    const total = ticker?.total ?? 0;
+    let snapVal = '…';
+    if (generatedAt && snapTime) {
+      try {
+        snapVal = new Date(snapTime).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+      } catch {
+        snapVal = 'Live';
+      }
+    } else if (q.isFetched) {
+      snapVal = '—';
+    }
+    return [
+      {
+        label: 'Flagged',
+        value: String(total),
+        sub: total === 0 ? 'all clear' : 'machines',
+        tone: total > 0 ? 'warn' : 'good',
+      },
+      {
+        label: 'New',
+        value: String(ticker?.newN ?? 0),
+        sub: 'this refresh',
+        tone: (ticker?.newN ?? 0) > 0 ? 'warn' : 'default',
+      },
+      {
+        label: 'Updated',
+        value: String(ticker?.updN ?? 0),
+        sub: 'reason change',
+      },
+      {
+        label: 'Snapshot',
+        value: snapVal,
+        sub: generatedAt ? 'Kuwait local' : 'loading',
+      },
+    ];
+  }, [ticker, generatedAt, snapTime, q.isFetched]);
 
   return (
     <div className={styles.root}>
-      <div className={styles.board}>
-        <header className={styles.topBar}>
-          <div className={styles.titleBlock}>
-            <h1 className={styles.title}>Red Flags</h1>
-            <p className={styles.sub}>
-              Live Red Alert snapshot aligned with Monitor. Columns follow the operational checklist through{' '}
-              <strong>GO CHECK</strong>; additional metrics appear when the feed includes them. Refreshes about once a minute.
-              Test devices are excluded.
-            </p>
-          </div>
-          <div className={styles.topRight}>
-            <span className={styles.clock} aria-live="polite">
-              {clock.toLocaleTimeString(undefined, {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-              })}
-            </span>
-            <span className={styles.livePill}>
-              <span className={styles.dot} aria-hidden />
+      <StitchOpsPanel
+        compact
+        iconName="red_flags"
+        title="Red Flags"
+        badge={emptyClear ? 'All clear' : `${ranked.length} machine${ranked.length === 1 ? '' : 's'}`}
+        metaLine={
+          generatedAt ? (
+            <>
+              Snap {generatedAt}
+              {q.isFetching && ranked.length ? ' · updating' : ''}
+            </>
+          ) : null
+        }
+        kpis={redKpis}
+        toolbar={
+          <>
+            <span className="stitchOpsLive">
+              <span className="stitchOpsLiveDot" aria-hidden />
               Live · ~1m
             </span>
-            <button type="button" className={styles.btnPrimary} onClick={() => void q.refetch()} disabled={q.isFetching}>
-              {q.isFetching ? 'Refreshing…' : 'Refresh'}
+            <button
+              type="button"
+              className="stitchOpsRefresh stitchOpsRefreshCompact"
+              onClick={() => void q.refetch()}
+              disabled={q.isFetching}
+            >
+              {q.isFetching ? '…' : 'Refresh'}
             </button>
-          </div>
-        </header>
-
-        <p className={styles.meta}>
-          {generatedAt ? <>Snapshot: {generatedAt}</> : null}
-          <span className={`${styles.syncHint} ${q.isFetching && ranked.length ? styles.syncHintOn : ''}`}> · Updating…</span>
-        </p>
-
-        <div className={styles.compareBar}>
-          <ComparePresetPicker value={compare} onChange={setComparePersist} />
-        </div>
-        <p className={styles.compareBarHint}>
-          Timespan presets match Overall (shared with this browser session). Today / Trend uses the Red Alert snapshot for
-          the selected comparison (Kuwait calendar).
-        </p>
-
-        <div className={styles.tickerRow}>
-          <div className={styles.tickerShell}>
-            <div className={styles.tickerTrack} aria-live="polite">
-              {!q.isFetched && <span className={styles.tMuted}>Loading snapshot…</span>}
-              {q.isError && <span className={styles.tNew}>Could not load data</span>}
-              {emptyClear && (
-                <>
-                  <span className={styles.tMuted}>All clear.</span>
-                  <span style={{ color: 'var(--muted)' }}> No machines match right now.</span>
-                </>
-              )}
-              {ticker && ranked.length > 0 && (
-                <>
-                  {ticker.newN > 0 && (
-                    <span>
-                      <span className={styles.tNew}>NEW</span> <span className={styles.tMuted}>{ticker.newN}</span>
-                    </span>
-                  )}
-                  {ticker.updN > 0 && (
-                    <span>
-                      <span className={styles.tUpd}>UPD</span> <span className={styles.tMuted}>{ticker.updN}</span>
-                    </span>
-                  )}
-                  <span className={styles.tMuted}>
-                    {ticker.total} machine{ticker.total === 1 ? '' : 's'}
-                  </span>
-                </>
-              )}
+          </>
+        }
+      >
+        <div className="opsPrepCompact">
+          <div className="opsPrepRow">
+            <div className="stitchOpsControls opsPrepControls">
+              <ComparePresetPicker value={compare} onChange={setComparePersist} />
             </div>
+            {compactOps ? (
+              <OpsViewToggle
+                ariaLabel="Red Flags layout"
+                value={redView}
+                onChange={(id) => setRedViewPersist(id as RedFlagsViewMode)}
+                options={[
+                  { id: 'cards', label: 'Cards' },
+                  { id: 'table', label: 'Table' },
+                ]}
+              />
+            ) : null}
           </div>
+          {tableViewActive ? (
+            <RedFlagsColumnPicker
+              compact
+              stored={columnStored}
+              visibleKeys={visibleColumns}
+              visibleCount={visibleColumns.length}
+              syncState={columnSyncState}
+              onChange={handleColumnsChange}
+            />
+          ) : null}
+          <p className="opsPrepSalesLine">
+            <strong>Sales</strong> — {salesComparisonNote}
+            {dailySalesQ.data?.asOfLocal ? ` · ${dailySalesQ.data.asOfLocal.replace('T', ' ')} KWT` : ''}
+          </p>
         </div>
 
+        {cleaningOverdueCount > 0 ? (
+          <div className="stitchOpsAlert stitchOpsAlertWarn opsAlertInline" role="status">
+            <strong>Cleaning overdue ({cleaningOverdueCount})</strong> — rows highlighted in red. Tap the{' '}
+            <strong>alert icon</strong> on Last clean for the operator message preview (Slack, Email, WhatsApp,
+            Workflow Received).
+            {notifyPerm !== 'granted' && notifyPerm !== 'unsupported' ? (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="linkGo"
+                  onClick={async () => {
+                    const p = await requestCleaningNotificationPermission();
+                    setNotifyPerm(p);
+                  }}
+                >
+                  Enable browser alerts
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        {!q.isFetched && !q.isError ? (
+          <p className="stitchOpsAlert stitchOpsAlertInfo opsAlertInline" role="status">
+            Loading snapshot…
+          </p>
+        ) : null}
+        {emptyClear ? (
+          <p className="stitchOpsAlert stitchOpsAlertInfo opsAlertInline" role="status">
+            All clear — no machines match right now.
+          </p>
+        ) : null}
         {q.isError ? (
-          <div className={styles.err} role="alert">
+          <div className="stitchOpsAlert opsAlertInline" role="alert">
             {(q.error as Error)?.message ?? 'Request failed'}
           </div>
         ) : null}
 
-        <div className={styles.body}>
-          {ranked.length > 0 && (
-            <div className={styles.tableScroll}>
-              <table className={styles.table}>
+        {ranked.length > 0 && compactOps && redView === 'cards' ? (
+          <section className="opsDashboardSection opsDashboardSection--data" aria-label="Flagged machines">
+            <div className="opsDashboardSectionBody opsDashboardSectionBody--data">
+          <RedFlagsCardList
+            ranked={displayRanked}
+            compare={compare}
+            compareMode={compareMode}
+            dailySales={dailySalesQ.data}
+            dailySalesOk={dailySalesQ.isSuccess}
+            dailyIncidents={dailyIncidentsQ.data}
+            dailyIncidentsOk={dailyIncidentsQ.isSuccess}
+            creditsByMachineId={creditsByMachineId}
+            vendonByMachineId={vendonSummaryQ.data?.byMachineId}
+            vendonSalesLabels={vendonSalesLabels}
+            workflowByMachineId={workflowAttendanceQ.data?.byMachineId}
+            workflowConfigured={workflowAttendanceQ.data?.configured !== false}
+            workflowLoaded={workflowAttendanceQ.isFetched}
+            liveCleaningByMachineId={liveCleaningByMachineId}
+            slackEmailMap={slackContact.map}
+            slackTeamId={slackContact.team}
+            onOpenDetail={openDetail}
+            onOpenSales={(machineName, machineId, row, strikeEmail, opName) =>
+              setSalesDetail({
+                machineName,
+                machineId,
+                row,
+                operatorName: opName,
+                strikeOperatorEmail: strikeEmail,
+              })
+            }
+            onOpenTrend={(machineName, machineId, row, snapTrend, freqCtx, strikeEmail, opName) =>
+              setTrendDetail({
+                machineName,
+                machineId,
+                row,
+                snapTrend,
+                scoreText: freqCtx.scoreText,
+                trendText: freqCtx.trendText,
+                gapDisplay: freqCtx.gapDisplay,
+                scoreExplain: freqCtx.scoreExplain,
+                trendExplain: freqCtx.trendExplain,
+                gapExplain: freqCtx.gapExplain,
+                operatorName: opName,
+                strikeOperatorEmail: strikeEmail,
+              })
+            }
+          />
+            </div>
+          </section>
+        ) : null}
+
+        {tableViewActive ? (
+          <section className="opsDashboardSection opsDashboardSection--data" aria-label="Live checklist">
+            <div className="opsDashboardSectionBody opsDashboardSectionBody--data">
+          <div className="opsTableLead">
+            <span className="opsTableLeadTitle">Checklist</span>
+            <span className="opsDashboardSectionBadge">
+              {ranked.length} rows · {visibleColumns.length} cols
+            </span>
+          </div>
+          <TableScrollControls>
+            <table className={`${styles.table} stitchOpsTable`}>
                 <thead>
-                  <tr>
-                    <th className={styles.th}>
-                      {RED_FLAGS_COLUMNS.vendingMachine.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.vendingMachine.sub}</span>
-                    </th>
-                    <th className={styles.th}>
-                      {RED_FLAGS_COLUMNS.alertType.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.alertType.sub}</span>
-                    </th>
-                    <th className={styles.th}>
-                      {RED_FLAGS_COLUMNS.operator.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.operator.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thFreq}`}>
-                      {freqHeading.title}
-                      <span className={styles.thSub}>{freqHeading.sub}</span>
-                    </th>
-                    <th className={styles.th}>
-                      {RED_FLAGS_COLUMNS.goCheck.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.goCheck.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.sendCredit.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.sendCredit.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.vendsResolved.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.vendsResolved.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.testCredits.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.testCredits.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.lastCleaning.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.lastCleaning.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.qaVisit.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.qaVisit.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.techVisit.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.techVisit.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.callOp.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.callOp.sub}</span>
-                    </th>
-                    <th className={`${styles.th} ${styles.thNarrow}`}>
-                      {RED_FLAGS_COLUMNS.callAm.title}
-                      <span className={styles.thSub}>{RED_FLAGS_COLUMNS.callAm.sub}</span>
-                    </th>
-                  </tr>
+                  <tr>{visibleColumns.map((key) => renderRedFlagsHeaderCell(key, headerCtx))}</tr>
                 </thead>
                 <tbody>
-                  {ranked.map((d, r) => {
+                  {displayRanked.map((d, r) => {
                     const row = d.row;
                     const machId = String(getMachineIdRaw(row) || '');
                     const cred = machId ? creditsByMachineId[machId] : undefined;
                     const creditsSentN = cred?.credits_sent != null ? Number(cred.credits_sent) : NaN;
                     const dispenseTestsN = cred?.dispense_tests != null ? Number(cred.dispense_tests) : NaN;
                     const vendsResolved = cred?.vends_resolved;
-                    const cleanIso = row.lastCleaningAt != null ? String(row.lastCleaningAt).trim() : '';
+                    const cleanIso = pickLastCleaningIso(row, liveByMachineId.get(machId)?.lastCleaningAt);
                     const cleanWins = cleaningWindowsFromAdmin(cred?.cleaning_windows);
                     const cleanStatus = cleanIso
                       ? lastCleanedStatus({ lastCleaningIso: cleanIso, cleaningWindows: cleanWins })
                       : null;
-                    const fq = freqSplit(row, compareMode);
-                    const todayHitsRaw = row.happensToday != null ? row.happensToday : row.frequency?.totalCriteriaHitsToday;
-                    const todayHits = todayHitsRaw != null ? Number(todayHitsRaw) : NaN;
-                    const scoreText =
-                      compareMode === 'week'
-                        ? fq.top
-                        : !Number.isNaN(todayHits)
-                          ? `${todayHits}/d`
-                          : fq.top;
-                    const trendText = fq.bottom;
-                    const trendIsGood = fq.bottomClass === 'down';
-                    const trendNeutral = fq.bottomClass === 'flat';
-                    const hitsForScore =
-                      compareMode === 'week'
-                        ? row.happensWeek != null
-                          ? row.happensWeek
-                          : row.frequency?.totalCriteriaHitsThisWeek
-                        : todayHitsRaw;
-                    const hitsN = hitsForScore != null ? Number(hitsForScore) : NaN;
+                    const incidentsRow = resolveIncidentsRow(
+                      row,
+                      incidentsElapsedForMachine(dailyIncidentsQ.data, machId, dailyIncidentsQ.isSuccess),
+                    );
+                    const freqCtx = buildFreqColumnContext(row, compareMode, incidentsRow);
+                    const fq = freqCtx.fq;
+                    const freqVisual = freqBoxVisuals(row, compareMode, incidentsRow);
+                    const scoreText = freqCtx.scoreText;
+                    const hitsN = (() => {
+                      const m = /^(\d+)\//.exec(scoreText);
+                      if (m) return Number(m[1]);
+                      return NaN;
+                    })();
                     const scoreKnown = !Number.isNaN(hitsN);
-                    const scoreGood = scoreKnown && hitsN <= 0;
-                    const gapRaw =
-                      compareMode === 'week'
-                        ? row.happensWeek != null
-                          ? row.happensWeek
-                          : row.frequency?.totalCriteriaHitsThisWeek
-                        : todayHitsRaw;
-                    const gapN =
-                      gapRaw == null
-                        ? NaN
-                        : (() => {
-                            const nn = Number(gapRaw);
-                            return Number.isNaN(nn) ? NaN : Math.max(0, nn);
-                          })();
-                    /** Green target = 0 combined incidents; ↓N = how far incidents must drop to get there. */
-                    const gapDisplay = Number.isNaN(gapN) ? '—' : gapN <= 0 ? '↓0' : `↓${gapN}`;
+                    const gapDisplay = freqCtx.gapDisplay;
+                    const gapN = (() => {
+                      const m = /^↓(\d+)$/.exec(gapDisplay);
+                      if (m) return Number(m[1]);
+                      if (gapDisplay === '↓0') return 0;
+                      return NaN;
+                    })();
                     const gapNeutral = Number.isNaN(gapN);
-                    const gapGood = !gapNeutral && gapN <= 0;
-                    const varianceTooltip = gapNeutral
-                      ? 'Gap to green unknown (missing incident count).'
-                      : gapN <= 0
-                        ? 'At green: zero combined incidents — no further reduction needed (↓0).'
-                        : `Not green yet: incidents must come down by ${gapN} (↓${gapN}) to reach green (0).`;
-                    const freqColumnTooltip = [
-                      fq.title,
-                      '',
-                      `Score ${scoreText}: combined incident load for this timespan (0 = good).`,
-                      `Trend ${trendText}: vs baseline (↓ better, ↑ worse for incidents).`,
-                      varianceTooltip,
-                    ].join('\n');
+                    const snapTrend = buildSnapTrend(row);
+                    const canOpenTrend = canOpenIncidentHistory(incidentsRow, snapTrend);
                     const pri = row.alertPriorityTier != null ? Number(row.alertPriorityTier) : 1;
                     const p2 = pri === 2 || !!row.duringScheduledCleaningNow;
-                    const hwN = rowHappensForSort(row, compareMode);
+                    const cleaningOverdue = !!row.cleaningOverdue15h;
+                    const hwN = rowHappensForSort(row, compareMode, incidentsRow);
                     const hot = hwN >= 10;
                     const rk = r === 0 ? 1 : Math.max(0, 0.58 - (r - 1) * 0.055);
+                    const strikeEmail = getStrikeOperatorEmail(row);
                     let goUrl = row.goCheckUrl || null;
-                    if (!goUrl && row.strikeOperatorEmail) {
-                      const emGo = String(row.strikeOperatorEmail).trim();
-                      if (emGo.includes('@')) {
-                        goUrl = `mailto:${emGo}?subject=${encodeURIComponent(`Red Flags — GO CHECK: ${row.machineName || machId}`)}`;
-                      }
+                    if (!goUrl && strikeEmail) {
+                      goUrl = `mailto:${strikeEmail}?subject=${encodeURIComponent(`Red Flags — GO CHECK: ${row.machineName || machId}`)}`;
                     }
                     const alertTypeText =
                       row.reasons && row.reasons.length
@@ -673,234 +1269,238 @@ export function RedFlagsPage() {
                         : '—';
                     const alertTypeShow =
                       alertTypeText.length > 140 ? `${alertTypeText.slice(0, 140)}…` : alertTypeText;
+                    const salesRow = salesElapsedForMachine(dailySalesQ.data, machId, dailySalesQ.isSuccess);
+                    const vendonSales = vendonSummaryQ.data?.byMachineId?.[machId];
+                    const salesPair = salesPairForPreset(
+                      compare.preset,
+                      salesRow,
+                      compare,
+                      vendonSales,
+                      vendonSalesLabels,
+                    );
+                    const targetKwd = targetKwdForPreset(salesPair);
+                    const qaVisit = qaVisitForMachineName(
+                      String(row.machineName || machId),
+                      qaSummaryQ.data?.byLocationKey,
+                      qaSummaryQ.data?.adminSummaryMtdByMachine,
+                      qaSummaryQ.data?.latestByMachine,
+                    );
+                    const techVisit = techVisitForMachineName(
+                      String(row.machineName || machId),
+                      qaSummaryQ.data?.byLocationKeyTech,
+                    );
+                    const qaFindings = qaFindingsForMachineName(
+                      String(row.machineName || machId),
+                      qaFindingsQ.data?.findings,
+                    );
+
+                    const bundle: RedFlagsRowBundle = {
+                      d,
+                      row,
+                      machId,
+                      r,
+                      cred,
+                      creditsSentN,
+                      dispenseTestsN,
+                      vendsResolved,
+                      cleanIso,
+                      cleanStatus,
+                      incidentsRow: incidentsRow ?? { todayHits: undefined },
+                      freqCtx,
+                      fq,
+                      freqVisual,
+                      scoreText,
+                      trendText: freqCtx.trendText,
+                      hitsN,
+                      scoreKnown,
+                      gapDisplay,
+                      gapN,
+                      gapNeutral,
+                      freqColumnTooltip: freqCtx.freqColumnTooltip,
+                      canOpenTrend,
+                      p2,
+                      alertTypeText,
+                      alertTypeShow,
+                      salesRow,
+                      salesPair,
+                      comparePreset: compare.preset,
+                      targetKwd,
+                      mtdSalesKwd: mtdVendonQ.data?.byMachineId?.[machId]?.aSalesKwd,
+                      mtdYoySalesKwd: mtdYoyVendonQ.data?.byMachineId?.[machId]?.aSalesKwd,
+                      mtdYoyLyKwd: mtdYoyVendonQ.data?.byMachineId?.[machId]?.bSalesKwd,
+                      mtdYoyTrendPct: mtdYoyVendonQ.data?.byMachineId?.[machId]?.trendPct,
+                      sxRow: sxQ.data?.byMachineId?.[machId] ?? null,
+                      qaVisit,
+                      techVisit,
+                      qaFindings,
+                      qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
+                      qaError: qaSummaryQ.data?.error || qaFindingsQ.data?.error || null,
+                      goUrl,
+                      slackEmailMap: slackContact.map,
+                      slackTeamId: slackContact.team,
+                      snapTime,
+                      vendonTxIso: vendonTxIsoFromEntry(vendonLastTxQ.data?.byMachineId?.[machId]),
+                      clockMs: clock.getTime(),
+                      areaOwnerName: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
+                      locationOwnerFull: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
+                      workflowAttendance: workflowAttendanceQ.data?.byMachineId?.[machId],
+                      workflowCleaning: workflowCleaningQ.data?.byMachineId?.[machId],
+                      workflowConfigured: workflowAttendanceQ.data?.configured !== false,
+                      workflowLoaded: workflowAttendanceQ.isFetched,
+                      onOpenTrend: () => {
+                        openTrendHistory(row, machId, incidentsRow);
+                      },
+                      onOpenSales: () => {
+                        const salesForModal =
+                          salesRow ??
+                          (salesPair.primary != null && Number.isFinite(salesPair.primary)
+                            ? {
+                                todayKwd: salesPair.primary,
+                                dailyElapsed: [],
+                                trendPct: salesPair.trendPct ?? null,
+                              }
+                            : null);
+                        if (salesForModal) {
+                          openSalesHistory(row, machId, salesForModal as SalesElapsedRow);
+                        }
+                      },
+                      onOpenTarget: () => {
+                        if (!machId) return;
+                        const elapsedToday = salesDayKwd(salesRow, 0);
+                        const elapsedYesterday = salesDayKwd(salesRow, 1);
+                        const ownerFull = resolveLocationOwnerForRow(machId, String(row.machineName || machId));
+                        setTargetDetail({
+                          machineName: String(row.machineName || machId),
+                          machineId: machId,
+                          todayKwd: targetKwd.todayKwd ?? elapsedToday ?? undefined,
+                          yesterdayKwd: targetKwd.yesterdayKwd ?? elapsedYesterday ?? undefined,
+                          dailyTargetKd: row.dailyTarget,
+                          locationOwnerName: ownerFull,
+                        });
+                      },
+                      onGoCheck: () => {
+                        setGoCheckDetail({
+                          machineId: machId,
+                          machineName: String(row.machineName || machId),
+                          alertType: alertTypeText,
+                        });
+                      },
+                    };
 
                     return (
                       <tr
                         key={machId || `${r}`}
-                        className={`${styles.tr} ${d.isNew ? styles.trNew : ''} ${d.isChanged ? styles.trUpdated : ''} ${hot ? styles.rowHot : ''} ${p2 ? styles.rowP2 : ''}`}
+                        className={`${styles.tr} ${d.isNew ? styles.trNew : ''} ${d.isChanged ? styles.trUpdated : ''} ${hot ? styles.rowHot : ''} ${p2 ? styles.rowP2 : ''} ${cleaningOverdue ? styles.rowCleaningOverdue : ''}`}
                         style={{ '--ra-rank-strength': rk.toFixed(3) } as CSSProperties}
                         tabIndex={0}
-                        onClick={() => openDetail(d)}
+                        onPointerDownCapture={(e) => {
+                          captureRowTapTarget(e.target, rowTapTargetRef);
+                        }}
+                        onClick={(e) => {
+                          handleRowClickActivate(e, rowTapTargetRef, () => openDetail(d));
+                        }}
                         onKeyDown={(ev) => {
                           if (ev.key === 'Enter' || ev.key === ' ') {
+                            if (isRowInteractiveTarget(ev.target)) return;
                             ev.preventDefault();
                             openDetail(d);
                           }
                         }}
                       >
-                        <td className={styles.td}>
-                          {d.isNew && <span className={`${styles.chip} ${styles.chipNew}`}>New</span>}
-                          {d.isChanged && !d.isNew && <span className={`${styles.chip} ${styles.chipUpd}`}>Updated</span>}
-                          {p2 && (
-                            <span className={`${styles.chip} ${styles.chipP2}`} title="Inside scheduled cleaning window">
-                              P2
-                            </span>
-                          )}
-                          <div className={styles.machineName}>{row.machineName || machId}</div>
-                          <div className={styles.machineId}>#{machId}</div>
-                          <LastTxLines row={row} snapshotGeneratedAt={snapTime ?? null} />
-                        </td>
-                        <td className={styles.td}>
-                          <div className={styles.alertTypeCell} title={row.reasons?.length ? row.reasons.join(' · ') : ''}>
-                            {alertTypeShow}
-                          </div>
-                        </td>
-                        <td className={styles.td}>{getOperatorDisplay(row)}</td>
-                        <td className={`${styles.td} ${styles.tdFreqTriple}`}>
-                          <div className={styles.freq3} title={freqColumnTooltip}>
-                            <div
-                              className={`${styles.freqBox} ${
-                                !scoreKnown ? styles.freqNeutral : scoreGood ? styles.freqGood : styles.freqBad
-                              }`}
-                            >
-                              <div className={styles.freqBoxHead}>
-                                <FreqIconScore />
-                                <span className={styles.freqBoxTop}>Score</span>
-                              </div>
-                              <div
-                                className={`${styles.freqBoxVal} ${
-                                  scoreKnown ? freqIncidentBurdenTone(Math.max(0, hitsN)) : styles.freqFlat
-                                }`}
-                              >
-                                {scoreText}
-                              </div>
-                            </div>
-                            <div
-                              className={`${styles.freqBox} ${
-                                trendNeutral ? styles.freqNeutral : trendIsGood ? styles.freqGood : styles.freqBad
-                              }`}
-                            >
-                              <div className={styles.freqBoxHead}>
-                                <FreqIconTrend />
-                                <span className={styles.freqBoxTop}>Trend</span>
-                              </div>
-                              <div className={`${styles.freqBoxVal} ${freqTrendValTone(fq)}`}>{trendText}</div>
-                            </div>
-                            <div
-                              className={`${styles.freqBox} ${
-                                gapNeutral ? styles.freqNeutral : gapGood ? styles.freqGood : styles.freqBad
-                              }`}
-                            >
-                              <div className={styles.freqBoxHead}>
-                                <FreqIconVariance />
-                                <span className={styles.freqBoxTop}>Gap</span>
-                              </div>
-                              <div
-                                className={`${styles.freqBoxVal} ${gapNeutral ? styles.freqFlat : freqIncidentBurdenTone(gapN)}`}
-                              >
-                                {gapDisplay}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className={styles.td}>
-                          {goUrl ? (
-                            <a
-                              href={goUrl}
-                              className={styles.linkGo}
-                              {...(goUrl.toLowerCase().startsWith('mailto:') ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              GO CHECK
-                            </a>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.sendCredit.placeholderNote}>
-                          {machId && cred?.credits_sent != null ? (
-                            <span className={sendCreditToneClass(creditsSentN)}>{String(cred.credits_sent ?? 0)}</span>
-                          ) : (
-                            <span className={styles.wireDash}>—</span>
-                          )}
-                        </td>
-                        <td
-                          className={styles.td}
-                          title={
-                            vendsResolved === 'green'
-                              ? 'Last vend fail today: remote credit within 5 minutes'
-                              : vendsResolved === 'red'
-                                ? 'Last vend fail today: no remote credit within 5 minutes'
-                                : vendsResolved === 'none'
-                                  ? 'No failed vend recorded today (Kuwait calendar)'
-                                  : RED_FLAGS_COLUMNS.vendsResolved.placeholderNote
-                          }
-                        >
-                          {vendsResolved ? (
-                            <span className={vendsResolvedToneClass(vendsResolved)}>{vendsResolvedLabel(vendsResolved)}</span>
-                          ) : (
-                            <span className={styles.metricUnknown}>—</span>
-                          )}
-                        </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.testCredits.placeholderNote}>
-                          {machId && cred?.dispense_tests != null ? (
-                            <span className={testCreditsToneClass(dispenseTestsN)}>{String(cred.dispense_tests ?? 0)}</span>
-                          ) : (
-                            <span className={styles.wireDash}>—</span>
-                          )}
-                        </td>
-                        <td
-                          className={styles.td}
-                          title={
-                            cleanStatus
-                              ? `${formatKuwaitTs(cleanIso)} · ${cleanStatus.label}`
-                              : RED_FLAGS_COLUMNS.lastCleaning.placeholderNote
-                          }
-                        >
-                          {!cleanIso ? (
-                            <span className={styles.metricBad}>—</span>
-                          ) : (
-                            <>
-                              <span className={cleaningToneClass(cleanStatus!.color)}>{formatKuwaitTs(cleanIso)}</span>
-                              <span className={`${styles.metricHint} ${cleaningToneClass(cleanStatus!.color)}`}>
-                                {cleanStatus!.label}
-                              </span>
-                            </>
-                          )}
-                        </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.qaVisit.placeholderNote}>
-                          <span className="fleetCellMissing">?</span>
-                        </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.techVisit.placeholderNote}>
-                          <span className="fleetCellMissing">?</span>
-                        </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.callOp.placeholderNote}>
-                          {(() => {
-                            const em = String(row.strikeOperatorEmail || '')
-                              .trim()
-                              .toLowerCase();
-                            const uid = em ? slackCfg.opMap[em] : '';
-                            if (slackCfg.team && uid) {
-                              return (
-                                <a
-                                  href={slackUserDmUrl(slackCfg.team, uid)}
-                                  className={styles.linkGo}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  Slack
-                                </a>
-                              );
-                            }
-                            if (em.includes('@')) {
-                              return (
-                                <a
-                                  href={`mailto:${em}?subject=${encodeURIComponent(`Red Flags — ${row.machineName || machId}`)}`}
-                                  className={styles.linkGo}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  Email
-                                </a>
-                              );
-                            }
-                            return <span className={styles.wireDash}>—</span>;
-                          })()}
-                        </td>
-                        <td className={styles.td} title={RED_FLAGS_COLUMNS.callAm.placeholderNote}>
-                          {(() => {
-                            const amKey = resolveAreaManagerFromMachineName(String(row.machineName || ''));
-                            const uid =
-                              amKey === 'ahmed'
-                                ? slackCfg.amAhmed
-                                : amKey === 'suhaib'
-                                  ? slackCfg.amSuhaib
-                                  : '';
-                            if (slackCfg.team && uid) {
-                              return (
-                                <a
-                                  href={slackUserDmUrl(slackCfg.team, uid)}
-                                  className={styles.linkGo}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {amKey === 'ahmed' ? 'Ahmed' : 'Suhaib'}
-                                </a>
-                              );
-                            }
-                            if (amKey) {
-                              return (
-                                <span
-                                  className={styles.tMuted}
-                                  title="Configure SLACK_TEAM_ID and SLACK_AM_AHMED_USER_ID / SLACK_AM_SUHAIB_USER_ID on the deployment."
-                                >
-                                  {amKey === 'ahmed' ? 'Ahmed' : 'Suhaib'}
-                                </span>
-                              );
-                            }
-                            return <span className={styles.wireDash}>—</span>;
-                          })()}
-                        </td>
+                        {visibleColumns.map((colKey) => {
+                          const cellProps = redFlagsBodyCellProps(colKey, bundle);
+                          return (
+                            <td key={colKey} className={redFlagsBodyCellClass(colKey)} {...cellProps}>
+                              {renderRedFlagsBodyCell(colKey, bundle)}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+          </TableScrollControls>
             </div>
-          )}
-        </div>
-      </div>
+          </section>
+        ) : null}
+      </StitchOpsPanel>
+
+      {ranked.length > 0 ? (
+        <OpsRevenueTotalsBar
+          totals={fleetRevenueTotals}
+          machineCount={fleetRevenueTotals.machineCount}
+          loading={fleetRevenueTotals.loading}
+          asOfLocal={dailySalesQ.data?.asOfLocal}
+          salesFreshnessNote={
+            dailySalesQ.isFetched
+              ? freshnessNotice('minute', dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal, {
+                  fetching: dailySalesQ.isFetching,
+                })
+              : null
+          }
+          yesterdayOverall={fleetYesterdayOverall}
+        />
+      ) : null}
 
       {detail
-        ? createPortal(<DetailModal payload={detail} onClose={() => setDetail(null)} />, document.body)
+        ? createPortal(<DetailModal view={detail} onClose={() => setDetail(null)} />, getAlertModalPortal())
         : null}
+
+      {trendDetail ? (
+        <TrendHistoryModal
+          machineName={trendDetail.machineName}
+          machineId={trendDetail.machineId}
+          row={trendDetail.row}
+          meta={dailyIncidentsQ.data}
+          compareMode={compareMode}
+          snapTrend={trendDetail.snapTrend}
+          scoreText={trendDetail.scoreText}
+          trendText={trendDetail.trendText}
+          gapDisplay={trendDetail.gapDisplay}
+          scoreExplain={trendDetail.scoreExplain}
+          trendExplain={trendDetail.trendExplain}
+          gapExplain={trendDetail.gapExplain}
+          operatorName={trendDetail.operatorName}
+          strikeOperatorEmail={trendDetail.strikeOperatorEmail}
+          attendanceSummary={trendDetail.attendanceSummary}
+          onClose={() => setTrendDetail(null)}
+        />
+      ) : null}
+
+      {salesDetail ? (
+        <SalesHistoryModal
+          machineName={salesDetail.machineName}
+          machineId={salesDetail.machineId}
+          row={salesDetail.row}
+          meta={dailySalesQ.data}
+          operatorName={salesDetail.operatorName}
+          strikeOperatorEmail={salesDetail.strikeOperatorEmail}
+          attendanceSummary={salesDetail.attendanceSummary}
+          onClose={() => setSalesDetail(null)}
+        />
+      ) : null}
+
+      {targetDetail ? (
+        <TargetDetailModal
+          machineName={targetDetail.machineName}
+          machineId={targetDetail.machineId}
+          todayKwd={targetDetail.todayKwd}
+          yesterdayKwd={targetDetail.yesterdayKwd}
+          dailyTargetKd={targetDetail.dailyTargetKd}
+          locationOwnerName={targetDetail.locationOwnerName}
+          onClose={() => setTargetDetail(null)}
+        />
+      ) : null}
+
+      {goCheckDetail ? (
+        <GoCheckWorkflowModal
+          machineId={goCheckDetail.machineId}
+          machineName={goCheckDetail.machineName}
+          alertType={goCheckDetail.alertType}
+          onClose={() => setGoCheckDetail(null)}
+        />
+      ) : null}
     </div>
   );
 }

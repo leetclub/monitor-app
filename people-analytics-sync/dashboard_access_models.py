@@ -29,6 +29,16 @@ class DashboardAccessUser(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class AlertUserUiPrefs(Base):
+    """Per-user Alert SPA preferences (column layouts, etc.)."""
+
+    __tablename__ = "alert_user_ui_prefs"
+
+    email = Column(Text, primary_key=True)
+    prefs = Column(JSONB, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class LiveMachineConfig(Base):
     """Per-machine thresholds and contacts for Live Ops board (monitoring-app-v2)."""
     __tablename__ = 'live_machine_config'
@@ -39,6 +49,8 @@ class LiveMachineConfig(Base):
     max_hours_without_qc = Column(Numeric(10, 2), nullable=True)
     strike_operator_email = Column(Text, nullable=True)
     daily_sales_target = Column(Numeric(14, 4), nullable=True)
+    sx_product_name = Column(Text, nullable=True)
+    daily_product_target = Column(Numeric(14, 4), nullable=True)
     expected_shift_start = Column(Text, nullable=True)
     shift_timezone = Column(Text, nullable=True)
     shift_grace_minutes = Column(Integer, nullable=False, default=15)
@@ -73,6 +85,20 @@ class AlertMachineProfile(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class QaManualSummary(Base):
+    """Operator-entered QA visit bullet summaries (Alert Admin → QA visit tab)."""
+
+    __tablename__ = "qa_manual_summary"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    machine_name = Column(Text, nullable=False)
+    summary_text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_by = Column(Text, nullable=True)
+
+    __table_args__ = (Index("idx_qa_manual_summary_machine_created", "machine_name", "created_at"),)
+
+
 class MachineCleaningSchedule(Base):
     """
     DC cleaning schedule: substring match on Vendon machine name (case-insensitive).
@@ -102,6 +128,29 @@ class RedAlertSnapshotCache(Base):
 
     id = Column(Integer, primary_key=True)
     payload_json = Column(JSONB, nullable=False)
+    generated_at = Column(DateTime(timezone=True), nullable=True)
+    compute_error = Column(Text, nullable=True)
+
+
+class AlertWorkflowAttendanceCache(Base):
+    """Precomputed Task Manager attendance map for Alert Live Op (id=1)."""
+
+    __tablename__ = "alert_workflow_attendance_cache"
+
+    id = Column(Integer, primary_key=True)
+    payload_json = Column(JSONB, nullable=False)
+    generated_at = Column(DateTime(timezone=True), nullable=True)
+    compute_error = Column(Text, nullable=True)
+
+
+class AlertDailySalesElapsedCache(Base):
+    """Precomputed /api/alert/overall/daily-sales-elapsed payload (id=1)."""
+
+    __tablename__ = "alert_daily_sales_elapsed_cache"
+
+    id = Column(Integer, primary_key=True)
+    payload_json = Column(JSONB, nullable=False)
+    cache_bucket = Column(Text, nullable=True)
     generated_at = Column(DateTime(timezone=True), nullable=True)
     compute_error = Column(Text, nullable=True)
 
@@ -177,3 +226,14 @@ def create_dashboard_engine_and_session():
     engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args, echo=False)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     return engine, SessionLocal
+
+
+_dashboard_db_session_factory = None
+
+
+def get_dashboard_db():
+    """SQLAlchemy session for DASHBOARD_DB_NAME (monitoring_dashboard)."""
+    global _dashboard_db_session_factory
+    if _dashboard_db_session_factory is None:
+        _, _dashboard_db_session_factory = create_dashboard_engine_and_session()
+    return _dashboard_db_session_factory()

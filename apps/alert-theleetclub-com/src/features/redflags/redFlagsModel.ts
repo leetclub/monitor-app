@@ -1,4 +1,10 @@
 import type { RedAlertCompareMode, RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
+import {
+  incidentsDayHits,
+  incidentsYesterdayVsDayBefore,
+  resolveIncidentTrendPct,
+  type IncidentsElapsedRow,
+} from '@/lib/incidentsDisplay';
 
 /** Substrings matched on machine name or id (parity with monitoring-app-v2 + API exclusion). */
 const EXCLUDED_NAME_MARKERS = ['869951037923178', '869951037920851'];
@@ -12,11 +18,61 @@ export function getMachineIdRaw(row: RedAlertRow): string {
   return '';
 }
 
+/** Red Alert snapshot ISO, then Live Dashboard config (mirrors Overall fleet). */
+export function pickLastCleaningIso(row: RedAlertRow, liveLastCleaningAt?: string | null): string {
+  const raw = row as RedAlertRow & { last_cleaning_at?: string | null };
+  const snap =
+    row.lastCleaningAt != null
+      ? String(row.lastCleaningAt).trim()
+      : raw.last_cleaning_at != null
+        ? String(raw.last_cleaning_at).trim()
+        : '';
+  if (snap) return snap;
+  return String(liveLastCleaningAt ?? '').trim();
+}
+
 export function getLiveOpsOperatorOnly(row: RedAlertRow): string {
   let o: string | null | undefined =
     row.operator ?? row.redAlertOperator ?? row.operatorName ?? row.red_alert_operator;
   const s = String(o ?? '').trim();
   return s || '—';
+}
+
+/** Task Manager name when set; else snapshot live ops label. */
+export function getOperatorDisplayName(
+  row: RedAlertRow,
+  attendance?: { operatorName?: string | null } | null,
+): string {
+  const wf = String(attendance?.operatorName ?? '').trim();
+  if (wf && wf !== '—') return wf;
+  const snap = getLiveOpsOperatorOnly(row);
+  return snap !== '—' ? snap : 'Operator';
+}
+
+export function resolveOperatorStrikeEmail(
+  row: RedAlertRow,
+  attendance?: { operatorEmail?: string | null } | null,
+): string | null {
+  return getStrikeOperatorEmail(row) || attendance?.operatorEmail?.trim() || null;
+}
+
+/** Best name for Vendon / contact API when live ops is missing (cleaning label, manual Red Alert op). */
+export function getContactOperatorName(row: RedAlertRow): string | null {
+  const live = getLiveOpsOperatorOnly(row);
+  if (live && live !== '—') return live;
+  const manual = String(row.redAlertOperator ?? row.red_alert_operator ?? '').trim();
+  if (manual && manual !== '—') return manual;
+  const cleaning = String(row.cleaningOperator ?? '').trim();
+  if (cleaning) return cleaning;
+  return null;
+}
+
+/** Strike email for operator contact (API field names differ). */
+export function getStrikeOperatorEmail(row: RedAlertRow): string | null {
+  const raw = row.strikeOperatorEmail ?? row.operatorEmail ?? null;
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim();
+  return s.includes('@') ? s : null;
 }
 
 export function getOperatorDisplay(row: RedAlertRow): string {
@@ -189,7 +245,18 @@ export type RankedRedAlertRow = {
   isChanged: boolean;
 };
 
-export function rowHappensForSort(row: RedAlertRow, mode: RedAlertCompareMode): number {
+export function rowHappensForSort(
+  row: RedAlertRow,
+  mode: RedAlertCompareMode,
+  incidents?: IncidentsElapsedRow,
+): number {
+  if (mode === 'yesterdayVsDayBefore') {
+    const y = incidentsDayHits(incidents, 1);
+    if (y != null) return y;
+    const snapY = row.happenedYesterdaySameElapsed ?? row.frequency?.totalCriteriaHitsYesterdaySameElapsed;
+    const n = Number(snapY ?? 0);
+    return Number.isNaN(n) ? 0 : n;
+  }
   const fq = row.frequency;
   if (mode === 'sameWeekdayLw' || mode === 'yesterday') {
     const n = Number(row.happensToday ?? fq?.totalCriteriaHitsToday ?? 0);
@@ -204,6 +271,7 @@ export function rankRows(
   rows: RedAlertRow[],
   prevReasonByMachine: Record<string, string>,
   mode: RedAlertCompareMode = 'week',
+  incidentsByMachine?: Record<string, IncidentsElapsedRow>,
 ): RankedRedAlertRow[] {
   const prev = prevReasonByMachine || {};
   const decorated: RankedRedAlertRow[] = [];
@@ -223,8 +291,12 @@ export function rankRows(
     if (Number.isNaN(pa)) pa = 1;
     if (Number.isNaN(pb)) pb = 1;
     if (pa !== pb) return pa - pb;
-    const faa = rowHappensForSort(a.row, mode);
-    const fbb = rowHappensForSort(b.row, mode);
+    const midA = getMachineIdRaw(a.row);
+    const midB = getMachineIdRaw(b.row);
+    const incA = midA ? incidentsByMachine?.[midA] : undefined;
+    const incB = midB ? incidentsByMachine?.[midB] : undefined;
+    const faa = rowHappensForSort(a.row, mode, incA);
+    const fbb = rowHappensForSort(b.row, mode, incB);
     if (fbb !== faa) return fbb - faa;
     if (a.tier !== b.tier) return a.tier - b.tier;
     return a.name.localeCompare(b.name);
@@ -241,11 +313,9 @@ export function buildDetailPayload(
 ): RedAlertDetailPayload {
   const fq = row.frequency || {};
   let goUrl = row.goCheckUrl || null;
-  if (!goUrl && row.strikeOperatorEmail) {
-    const emGo = String(row.strikeOperatorEmail).trim();
-    if (emGo.includes('@')) {
-      goUrl = `mailto:${emGo}?subject=${encodeURIComponent(`Red Alert — Go check: ${row.machineName || machId}`)}`;
-    }
+  const strikeEmail = getStrikeOperatorEmail(row);
+  if (!goUrl && strikeEmail) {
+    goUrl = `mailto:${strikeEmail}?subject=${encodeURIComponent(`Red Alert — Go check: ${row.machineName || machId}`)}`;
   }
   return {
     machineName: row.machineName,
@@ -275,9 +345,12 @@ export function buildDetailPayload(
     happenedYesterdaySameElapsed:
       row.happenedYesterdaySameElapsed ?? fq.totalCriteriaHitsYesterdaySameElapsed ?? null,
     happenedPctVsYesterdaySameElapsed: row.happenedPctVsYesterdaySameElapsed ?? null,
+    happenedDayBeforeSameElapsed:
+      row.happenedDayBeforeSameElapsed ?? fq.totalCriteriaHitsDayBeforeSameElapsed ?? null,
+    happenedPctVsDayBefore: row.happenedPctVsDayBefore ?? null,
     compareMode,
     goCheckUrl: goUrl,
-    strikeOperatorEmail: row.strikeOperatorEmail || null,
+    strikeOperatorEmail: getStrikeOperatorEmail(row),
     pfaExcludeCleaning: row.pfaExcludeCleaning === true ? true : row.pfaExcludeCleaning === false ? false : null,
     pfaExcludeCleaningAdmin:
       row.pfaExcludeCleaningAdmin === true ? true : row.pfaExcludeCleaningAdmin === false ? false : null,
@@ -296,34 +369,180 @@ export type FreqSplit = {
   title: string;
 };
 
+export type FreqTone = 'good' | 'bad' | 'neutral';
+
+/** Glow only when a metric needs attention — each slot has its own rhythm/color. */
+export type FreqGlowKey =
+  | 'quiet'
+  | 'score-soft'
+  | 'score-hot'
+  | 'trend-soft'
+  | 'trend-hot'
+  | 'gap-soft'
+  | 'gap-hot';
+
+export type FreqBoxSlotVisual = {
+  tone: FreqTone;
+  glow: FreqGlowKey;
+};
+
+export function incidentBurdenBand(n: number): 0 | 1 | 2 | 3 | 4 {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const mag = Math.max(0, n);
+  if (mag >= 10) return 4;
+  if (mag >= 5) return 3;
+  if (mag >= 2) return 2;
+  return 1;
+}
+
+function burdenGlowHot(band: 0 | 1 | 2 | 3 | 4): boolean {
+  return band >= 3;
+}
+
+export function freqBoxVisuals(
+  row: RedAlertRow,
+  mode: RedAlertCompareMode,
+  incidents?: IncidentsElapsedRow,
+): {
+  score: FreqBoxSlotVisual;
+  trend: FreqBoxSlotVisual;
+  gap: FreqBoxSlotVisual;
+  fq: FreqSplit;
+} {
+  const fq = freqSplit(row, mode, incidents);
+  const todayHitsRaw = row.happensToday != null ? row.happensToday : row.frequency?.totalCriteriaHitsToday;
+  const yHitsRaw =
+    mode === 'yesterdayVsDayBefore'
+      ? (() => {
+          const fromInc = incidentsDayHits(incidents, 1);
+          if (fromInc != null) return fromInc;
+          const snapY = row.happenedYesterdaySameElapsed ?? row.frequency?.totalCriteriaHitsYesterdaySameElapsed;
+          return snapY != null && Number.isFinite(Number(snapY)) ? Number(snapY) : null;
+        })()
+      : null;
+  const hitsForScore =
+    mode === 'week'
+      ? row.happensWeek != null
+        ? row.happensWeek
+        : row.frequency?.totalCriteriaHitsThisWeek
+      : mode === 'yesterdayVsDayBefore'
+        ? yHitsRaw
+        : todayHitsRaw;
+  const hitsN = hitsForScore != null ? Number(hitsForScore) : NaN;
+  const scoreKnown = !Number.isNaN(hitsN);
+  const scoreGood = scoreKnown && hitsN <= 0;
+  const scoreBand = scoreKnown ? incidentBurdenBand(Math.max(0, hitsN)) : 0;
+
+  const gapRaw =
+    mode === 'week'
+      ? row.happensWeek != null
+        ? row.happensWeek
+        : row.frequency?.totalCriteriaHitsThisWeek
+      : mode === 'yesterdayVsDayBefore'
+        ? yHitsRaw
+        : todayHitsRaw;
+  const gapN =
+    gapRaw == null
+      ? NaN
+      : (() => {
+          const nn = Number(gapRaw);
+          return Number.isNaN(nn) ? NaN : Math.max(0, nn);
+        })();
+  const gapNeutral = Number.isNaN(gapN);
+  const gapGood = !gapNeutral && gapN <= 0;
+  const gapBand = gapNeutral ? 0 : incidentBurdenBand(gapN);
+
+  const trendGood = fq.bottomClass === 'down';
+  const trendNeutral = fq.bottomClass === 'flat';
+  const trendBad = fq.bottomClass === 'up';
+
+  return {
+    fq,
+    score: {
+      tone: !scoreKnown ? 'neutral' : scoreGood ? 'good' : 'bad',
+      glow:
+        !scoreKnown || scoreGood
+          ? 'quiet'
+          : burdenGlowHot(scoreBand)
+            ? 'score-hot'
+            : 'score-soft',
+    },
+    trend: {
+      tone: trendNeutral ? 'neutral' : trendGood ? 'good' : 'bad',
+      glow: trendBad
+        ? (fq.upBand ?? 2) >= 3
+          ? 'trend-hot'
+          : 'trend-soft'
+        : 'quiet',
+    },
+    gap: {
+      tone: gapNeutral ? 'neutral' : gapGood ? 'good' : 'bad',
+      glow:
+        gapNeutral || gapGood ? 'quiet' : burdenGlowHot(gapBand) ? 'gap-hot' : 'gap-soft',
+    },
+  };
+}
+
 export function freqColumnHeading(mode: RedAlertCompareMode): { title: string; sub: string } {
   switch (mode) {
     case 'week':
       return {
-        title: 'Today / Trend',
-        sub: 'Score · trend % · gap ↓ to green (WTD vs baseline)',
+        title: 'Trend',
+        sub: 'Score · trend % · gap ↓ (WTD vs baseline)',
       };
     case 'sameWeekdayLw':
       return {
-        title: 'Today / Trend',
-        sub: 'Score · trend % · gap ↓ to green (today vs same weekday last week)',
+        title: 'Trend',
+        sub: 'Score · trend % · gap ↓ (today vs same weekday last week)',
       };
     case 'yesterday':
       return {
-        title: 'Today / Trend',
-        sub: 'Score · trend % · gap ↓ to green (today vs yesterday same elapsed)',
+        title: 'Trend',
+        sub: 'Score · trend % · gap ↓ (today vs yesterday same elapsed)',
+      };
+    case 'yesterdayVsDayBefore':
+      return {
+        title: 'Trend',
+        sub: 'Score · trend % · gap ↓ (yesterday vs day before)',
       };
     default:
-      return { title: 'Today / Trend', sub: 'Score · trend % · gap ↓ to green' };
+      return { title: 'Trend', sub: 'Score · trend % · gap ↓ to green' };
   }
 }
 
-export function freqSplit(row: RedAlertRow, mode: RedAlertCompareMode = 'week'): FreqSplit {
+export function freqSplit(
+  row: RedAlertRow,
+  mode: RedAlertCompareMode = 'week',
+  incidents?: IncidentsElapsedRow,
+): FreqSplit {
   const fq = row.frequency || {};
   let top: string;
   let pv: number | null | undefined;
   let tip: string;
-  if (mode === 'sameWeekdayLw') {
+  if (mode === 'yesterdayVsDayBefore') {
+    const fqRef = row.frequency || {};
+    const fromInc = incidentsYesterdayVsDayBefore(incidents);
+    let yesterdayHits = fromInc.yesterdayHits;
+    let dayBeforeHits = fromInc.dayBeforeHits;
+    if (yesterdayHits == null) {
+      const snapY = row.happenedYesterdaySameElapsed ?? fqRef.totalCriteriaHitsYesterdaySameElapsed;
+      yesterdayHits = snapY != null && Number.isFinite(Number(snapY)) ? Number(snapY) : null;
+    }
+    if (dayBeforeHits == null) {
+      const snapDb = row.happenedDayBeforeSameElapsed ?? fqRef.totalCriteriaHitsDayBeforeSameElapsed;
+      dayBeforeHits = snapDb != null && Number.isFinite(Number(snapDb)) ? Number(snapDb) : null;
+    }
+    const trendPct = resolveIncidentTrendPct(
+      fromInc.trendPct ?? row.happenedPctVsDayBefore,
+      yesterdayHits,
+      dayBeforeHits,
+    );
+    top = yesterdayHits != null ? `${yesterdayHits}/d` : '—/d';
+    pv = trendPct ?? undefined;
+    tip =
+      'Kuwait yesterday (same elapsed clock): combined A+B+C. % compares to the day before yesterday over the same window.';
+    if (dayBeforeHits != null) tip += ` Baseline was ${dayBeforeHits}.`;
+  } else if (mode === 'sameWeekdayLw') {
     let ht: number | null | undefined = row.happensToday != null ? row.happensToday : fq.totalCriteriaHitsToday;
     if (ht == null) ht = fq.totalCriteriaHits7d ?? undefined;
     top = ht != null ? `${ht}/d` : '—/d';

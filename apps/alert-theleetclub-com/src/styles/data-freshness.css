@@ -1,0 +1,23 @@
+.dataFreshnessNote {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #7a8a9e;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.dataFreshnessNote--minute {
+  color: #94a8b8;
+}
+
+.dataFreshnessNote--schedule {
+  color: #8a9a7a;
+}
+
+@media (min-width: 768px) {
+  .dataFreshnessNote {
+    font-size: 10px;
+  }
+}

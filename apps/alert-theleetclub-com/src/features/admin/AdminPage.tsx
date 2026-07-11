@@ -5,6 +5,8 @@ import { useAccess } from '@/context/AccessContext';
 import { getMonitorAppUrl } from '@/config/runtimeEnv';
 import { chipLabelForAccessKey, friendlyAccessSummary } from '@/lib/accessLabels';
 import { MachineProfileSection } from '@/features/admin/MachineProfileSection';
+import { AreaOwnerAdminSection } from '@/features/admin/AreaOwnerAdminSection';
+import { QaVisitAdminSection } from '@/features/admin/QaVisitAdminSection';
 import { AlertPeopleManager } from '@/features/admin/AlertPeopleManager';
 import { HelpTip } from '@/components/HelpTip';
 
@@ -20,7 +22,7 @@ type CleaningScheduleRow = {
 
 type CleaningScheduleListResponse = { rows: CleaningScheduleRow[] };
 
-type AdminTab = 'machines' | 'people' | 'account' | 'advanced';
+type AdminTab = 'machines' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
 
 export function AdminPage() {
   const ac = useAccess();
@@ -133,10 +135,20 @@ export function AdminPage() {
             'Per-machine profiles: cleaning windows, operators, tags, and related settings.',
           )}
           {navBtn(
+            'owners',
+            'Area owners',
+            'Assign Vendon users to machines and Areas login.',
+          )}
+          {navBtn(
             'people',
             'Who can use Alert',
             'Control who can open Red Flags, Overall, and this Admin area.',
             canEditOrgAccess,
+          )}
+          {navBtn(
+            'qa-visit',
+            'QA visit',
+            'Enter manual bullet summaries shown in the QA popup (resets monthly).',
           )}
           {navBtn('account', 'My access', 'What your signed-in account can do in Leet Alert.')}
           {navBtn(
@@ -148,6 +160,8 @@ export function AdminPage() {
 
         <main className="adminAppMain" id="admin-main-panel" tabIndex={-1}>
           {tab === 'machines' ? <MachineProfileSection /> : null}
+          {tab === 'owners' ? <AreaOwnerAdminSection /> : null}
+          {tab === 'qa-visit' ? <QaVisitAdminSection /> : null}
 
           {tab === 'account' ? (
             <div className="adminCard adminCardFlush">

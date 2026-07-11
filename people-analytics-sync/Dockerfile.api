@@ -6,4 +6,5 @@ COPY . .
 # Must match Kubernetes containerPort + probes (people-analytics-api uses 5000).
 ENV PORT=5000
 EXPOSE 5000
-CMD exec gunicorn --bind 0.0.0.0:${PORT} --workers 2 --threads 4 --timeout 120 "api_service:app"
+# Single worker: commercial footfall report cache is in-process (see COMMERCIAL_FOOTFALL_CACHE_TTL_SEC).
+CMD exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 12 --timeout 900 "api_service:app"

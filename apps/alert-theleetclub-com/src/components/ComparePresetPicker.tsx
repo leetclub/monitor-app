@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 export type ComparePresetId =
   | 'today_vs_yesterday'
+  | 'yesterday_vs_day_before'
   | 'today_vs_same_day_last_week'
   | 'wtd_vs_last_week'
   | 'mtd_vs_mtd'
@@ -66,6 +67,7 @@ export function ComparePresetPicker(props: {
   const labels: Record<ComparePresetId, string> = useMemo(
     () => ({
       today_vs_yesterday: 'Today VS Yesterday (default view)',
+      yesterday_vs_day_before: 'Yesterday VS Day Before',
       today_vs_same_day_last_week: 'Today VS Same Day Last Week',
       wtd_vs_last_week: 'WTD VS Last Week',
       mtd_vs_mtd: 'Month to date VS Month to date',
@@ -84,6 +86,18 @@ export function ComparePresetPicker(props: {
 
     if (preset === 'today_vs_yesterday') {
       props.onChange({ preset, a: { start: yyyyMmDd(t0), end: yyyyMmDd(t1) }, b: { start: yyyyMmDd(y0), end: yyyyMmDd(y1) } });
+      return;
+    }
+    if (preset === 'yesterday_vs_day_before') {
+      const y0 = addDays(t0, -1);
+      const y1 = t0;
+      const db0 = addDays(t0, -2);
+      const db1 = addDays(t0, -1);
+      props.onChange({
+        preset,
+        a: { start: yyyyMmDd(y0), end: yyyyMmDd(y1) },
+        b: { start: yyyyMmDd(db0), end: yyyyMmDd(db1) },
+      });
       return;
     }
     if (preset === 'today_vs_same_day_last_week') {

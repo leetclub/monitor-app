@@ -7,11 +7,14 @@ export const OVERALL_XLSX_ORDER = [
   'operatingHours',
   'vendingMachine',
   'operator',
+  'operatorActivity',
+  'lastTransaction',
   'attendance',
   'lastCleaned',
   'lastVendFailed',
-  'lastTransaction',
   'salesTrend',
+  'mtdSales',
+  'mtdYoySales',
   'targetAchieved',
   'peakHours',
   'promotion',
@@ -28,28 +31,50 @@ export const OVERALL_XLSX_ORDER = [
 
 export type OverallColumnKey = (typeof OVERALL_XLSX_ORDER)[number];
 
-/** Compact thead labels — full names stay in `title` tooltips. */
+/** iPad / compact — essential fleet metrics without wide horizontal scroll. */
+export const OVERALL_COMPACT_ORDER: OverallColumnKey[] = [
+  'vendingMachine',
+  'operator',
+  'operatorActivity',
+  'lastTransaction',
+  'salesTrend',
+  'mtdSales',
+  'mtdYoySales',
+  'lastCleaned',
+  'mostIssue',
+  'peopleCount',
+  'wastagePct',
+];
+
+export function overallHeaderLabel(key: OverallColumnKey): string {
+  return OVERALL_COLUMNS[key].title;
+}
+
+/** Compact thead labels — legacy; prefer overallHeaderLabel. */
 export const OVERALL_HEADER_SHORT: Record<OverallColumnKey, string> = {
-  operatingHours: 'Hours',
+  operatingHours: 'Op. hours',
   vendingMachine: 'Machine',
   operator: 'Operator',
-  attendance: 'Attend.',
-  lastCleaned: 'Cleaned',
-  lastVendFailed: 'Vend fail',
+  operatorActivity: 'Op. activity',
+  attendance: 'Attendance',
+  lastCleaned: 'Last cleaned',
+  lastVendFailed: 'Vend failed',
   lastTransaction: 'Last tx',
-  salesTrend: 'Trend',
+  salesTrend: 'Daily sales',
+  mtdSales: 'MTD sales',
+  mtdYoySales: 'MTD vs LY',
   targetAchieved: 'Target',
-  peakHours: 'Peak',
-  promotion: 'Promo',
-  highestProduct: 'Top SKU',
-  lowestProduct: 'Low SKU',
+  peakHours: 'Peak hours',
+  promotion: 'Promotion',
+  highestProduct: 'Top product',
+  lowestProduct: 'Low product',
   peopleCount: 'Footfall',
   customerCalls: 'Calls',
-  mostIssue: 'Issue',
-  lastQaCheck: 'QA',
-  lastTechCheck: 'Tech',
-  wastagePct: 'Waste %',
-  promotionRuns: 'Promos',
+  mostIssue: 'Most issue',
+  lastQaCheck: 'QA check',
+  lastTechCheck: 'Tech check',
+  wastagePct: 'Wastage %',
+  promotionRuns: 'Promo runs',
 };
 
 export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: string }> = {
@@ -60,7 +85,11 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   },
   vendingMachine: { title: 'Vending Machine' },
   operator: { title: 'Operator' },
-  attendance: { title: 'Attendance', note: 'Shift clock-in (not connected yet).' },
+  operatorActivity: {
+    title: 'Operator Activity',
+    note: 'Last operator WEB machine open (door access) from Red Alert snapshot when available.',
+  },
+  attendance: { title: 'Attendance', note: 'Task Manager schedule + punch status (tap for MTD detail).' },
   lastCleaned: {
     title: 'Last Cleaned',
     note: 'Red Alert snapshot lastCleaningAt when set (from operational feed / dashboard).',
@@ -70,12 +99,33 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
     note: 'Dispense fail counts from Red Alert snapshot frequency (today / WTD), not a single timestamp.',
   },
   lastTransaction: { title: 'Last Transaction' },
-  salesTrend: { title: 'Sales Trend', note: 'Today vs yesterday (not connected yet).' },
+  salesTrend: {
+    title: 'Daily sales',
+    note: 'Kuwait today so far (KD) vs yesterday until the same clock time when you opened the page. Tap header to sort today sales high→low.',
+  },
+  mtdSales: {
+    title: 'MTD sales',
+    note: 'Vendon month-to-date sales (KD). Tap header to sort MTD sales high→low.',
+  },
+  mtdYoySales: {
+    title: 'Month vs last year',
+    note:
+      'This month’s sales through today (Kuwait) vs the same calendar days last year, with % change up or down.',
+  },
   targetAchieved: { title: 'Target Achieved', note: 'Target % (not connected yet).' },
-  peakHours: { title: 'Peak Hours', note: 'Peak sales hours (not connected yet).' },
+  peakHours: {
+    title: 'Peak Hours',
+    note: 'Busiest sales hour today (Kuwait) from Vendon vends cache. Shows yesterday when today has no vends yet.',
+  },
   promotion: { title: 'Promotion', note: 'Promoted product / sales (not connected yet).' },
-  highestProduct: { title: 'Highest Product', note: 'Top product (not connected yet).' },
-  lowestProduct: { title: 'Lowest Product', note: 'Lowest product (not connected yet).' },
+  highestProduct: {
+    title: 'Highest Product',
+    note: 'Top-selling SKU today from Vendon daily revenue cache.',
+  },
+  lowestProduct: {
+    title: 'Lowest Product',
+    note: 'Lowest-selling SKU today from Vendon daily revenue cache.',
+  },
   peopleCount: {
     title: 'People Count',
     note: 'Videoloft footfall → people-api DB (people_in daily); same mapping as Monitor v1 peopleCameraToMachineMap.',
@@ -85,8 +135,8 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
     title: 'Most Issue',
     note: 'Latest Red Alert reason line when this machine is on the Red Flags board.',
   },
-  lastQaCheck: { title: 'Last QA Check', note: 'QA visit (not connected yet).' },
-  lastTechCheck: { title: 'Last Tech. Check', note: 'Technician visit (not connected yet).' },
+  lastQaCheck: { title: 'Last QA Check', note: 'Last QC inspection (Ismail / QC inspectors) from SafetyCulture.' },
+  lastTechCheck: { title: 'Last Tech. Check', note: 'Last technician inspection (Harout / tech inspectors) from SafetyCulture.' },
   wastagePct: { title: 'Wastage %', note: 'Wastage % (not connected yet).' },
   promotionRuns: { title: 'Promotion Runs', note: 'Promotion runs (not connected yet).' },
 };

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date, timezone
 from typing import Optional, List
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, text
 from sqlalchemy import func
 from zoneinfo import ZoneInfo
 from models import (
@@ -43,6 +43,28 @@ try:
     from attendance_snapshot_routes import attendance_snapshot_bp
 except ImportError:
     attendance_snapshot_bp = None
+try:
+    from commercial_footfall_routes import register_commercial_footfall_routes
+except ImportError:
+    register_commercial_footfall_routes = None
+
+try:
+    from target_site_routes import register_target_site_routes
+except ImportError:
+    register_target_site_routes = None
+try:
+    from target_area_routes import register_target_area_routes
+except ImportError:
+    register_target_area_routes = None
+try:
+    from promo_routes import register_target_promo_routes
+except ImportError:
+    register_target_promo_routes = None
+try:
+    from commercial_footfall_resolve import load_commercial_name_camera_map, resolve_commercial_uidds
+except ImportError:
+    load_commercial_name_camera_map = None
+    resolve_commercial_uidds = None
 
 # Configure logging
 logging.basicConfig(
@@ -62,6 +84,8 @@ def _cors_origins() -> List[str]:
     defaults = [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174',
         # Production SPAs (Alert + Monitor v2) — cookie-auth requires explicit origin allowlist.
         r'https://.*\.theleetclub\.com',
         r'https://.*\.googleusercontent\.com',
@@ -133,6 +157,11 @@ def get_db_session():
     return SessionLocal()
 
 
+def get_target_site_db_session():
+    """Target site tables (area owners, email admins) are in people_analytics."""
+    return get_db_session()
+
+
 if register_auth_routes:
     try:
         register_auth_routes(app)
@@ -182,6 +211,63 @@ if attendance_snapshot_bp:
     except Exception as e:
         logger.warning('Could not register attendance snapshot routes: %s', e)
 
+if register_target_site_routes:
+    try:
+        register_target_site_routes(app, get_target_site_db_session)
+        logger.info('Target site routes registered (/api/target-site/*)')
+    except Exception as e:
+        logger.warning('Could not register target site routes: %s', e)
+
+if register_commercial_footfall_routes:
+    try:
+        # Broader Videoloft↔Vendon name matching for Oxygen / Sultan Hamra / hospital sites.
+        os.environ.setdefault('ALERT_PEOPLE_FUZZY_MATCH', 'true')
+        from vendon_machine_helpers import vendon_fetch_machine_list, vendon_location_owner_tag
+        from alert_routes import (
+            _load_alert_people_camera_map,
+            _get_videoloft_cameras_cached,
+            _resolve_machine_people_uidds,
+            _vendon_get,
+        )
+        from vendon_proxy_routes import _fetch_vends_stats_window
+
+        def _commercial_machines():
+            rows, err = vendon_fetch_machine_list(_vendon_get)
+            if err:
+                logger.warning('commercial footfall: vendon machines: %s', err)
+            out = []
+            for m in rows or []:
+                if not isinstance(m, dict) or m.get('id') is None:
+                    continue
+                out.append({
+                    'id': str(m['id']),
+                    'name': m.get('name') or str(m['id']),
+                    'location_owner': vendon_location_owner_tag(m),
+                    'machine_raw': m,
+                })
+            return out
+
+        def _commercial_fetch_vends(from_ts, to_ts, machine_id):
+            return _fetch_vends_stats_window(from_ts, to_ts, machine_id)
+
+        register_commercial_footfall_routes(
+            app,
+            get_db_session,
+            _commercial_machines,
+            _commercial_fetch_vends,
+        )
+        logger.info('Commercial footfall routes registered (/api/commercial-footfall/*)')
+        if register_target_area_routes:
+            register_target_area_routes(app, get_target_site_db_session, _commercial_machines)
+            logger.info('Target area routes registered (/api/target-site/area-owners, vendon-users)')
+        if register_target_promo_routes:
+            register_target_promo_routes(
+                app, get_target_site_db_session, _commercial_machines, _commercial_fetch_vends
+            )
+            logger.info('Target promo routes registered (/api/target-site/promo/*)')
+    except Exception as e:
+        logger.warning('Could not register commercial footfall routes: %s', e)
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -201,6 +287,210 @@ def reasons_health():
         'reasons_routes': ['waste-reasons', 'remote-credit-reasons'],
         'timestamp': datetime.utcnow().isoformat()
     })
+
+
+def _fetch_deduped_hour_rows(
+    session,
+    uidds: Optional[List[str]],
+    start_utc: Optional[datetime],
+    end_utc: Optional[datetime],
+    tz_name: str,
+    limit: Optional[int] = None,
+) -> List:
+    """
+    Latest row per (uidd, hour in tz). Never SUM duplicate copies (that doubled counts vs Videoloft).
+    """
+    clauses = ["interval_type = 'hour'"]
+    params: dict = {"tz": tz_name}
+    if start_utc is not None:
+        clauses.append("first_timestamp >= :start_utc")
+        params["start_utc"] = start_utc
+    if end_utc is not None:
+        clauses.append("first_timestamp <= :end_utc")
+        params["end_utc"] = end_utc
+    if uidds:
+        clauses.append("uidd = ANY(:uidds)")
+        params["uidds"] = uidds
+    where_sql = " AND ".join(clauses)
+    limit_sql = "LIMIT :lim" if limit is not None else ""
+    if limit is not None:
+        params["lim"] = limit
+
+    sql = text(
+        f"""
+        SELECT DISTINCT ON (
+            uidd,
+            date_trunc('hour', timezone(:tz, timezone('UTC', first_timestamp)))
+        )
+            uidd,
+            device_id,
+            first_timestamp,
+            last_timestamp,
+            people_in,
+            people_out,
+            net_traffic,
+            total_traffic,
+            traffic_ratio,
+            traffic_pattern,
+            duration_hours,
+            event_count,
+            timezone
+        FROM people_analytics_records
+        WHERE {where_sql}
+        ORDER BY
+            uidd,
+            date_trunc('hour', timezone(:tz, timezone('UTC', first_timestamp))),
+            synced_at DESC NULLS LAST,
+            id DESC
+        {limit_sql}
+        """
+    )
+    return list(session.execute(sql, params).mappings().all())
+
+
+def _row_mapping_to_record(row, interval_type: str, tz_name: str) -> PeopleAnalyticsRecord:
+    people_in = int(row["people_in"] or 0)
+    people_out = int(row["people_out"] or 0)
+    net_traffic = people_in - people_out
+    total_traffic = people_in + people_out
+    traffic_ratio = (people_out / people_in) if people_in > 0 else 0
+    duration = float(row["duration_hours"] or 1.0)
+    if interval_type == "date":
+        duration = 24.0
+    return PeopleAnalyticsRecord(
+        uidd=row["uidd"],
+        device_id=row["device_id"],
+        first_timestamp=row["first_timestamp"],
+        last_timestamp=row["last_timestamp"],
+        interval_type=interval_type,
+        timezone=row["timezone"] or tz_name,
+        people_in=people_in,
+        people_out=people_out,
+        net_traffic=net_traffic,
+        total_traffic=total_traffic,
+        traffic_ratio=traffic_ratio,
+        traffic_pattern=row["traffic_pattern"] or "Normal",
+        duration_hours=duration,
+        event_count=int(row["event_count"] or 0),
+        raw_data=None,
+    )
+
+
+def _daily_records_from_hourly(
+    session,
+    uidds: Optional[List[str]],
+    start_utc: Optional[datetime],
+    end_utc: Optional[datetime],
+    tz_name: str,
+    limit: int,
+) -> List[PeopleAnalyticsRecord]:
+    """Sum deduped hour rows into calendar days (Kuwait by default)."""
+    from sqlalchemy import cast, Date
+
+    deduped_sql = text(
+        f"""
+        WITH deduped AS (
+            SELECT DISTINCT ON (
+                uidd,
+                date_trunc('hour', timezone(:tz, timezone('UTC', first_timestamp)))
+            )
+                uidd,
+                device_id,
+                first_timestamp,
+                last_timestamp,
+                people_in,
+                people_out,
+                timezone
+            FROM people_analytics_records
+            WHERE interval_type = 'hour'
+              {"AND first_timestamp >= :start_utc" if start_utc is not None else ""}
+              {"AND first_timestamp <= :end_utc" if end_utc is not None else ""}
+              {"AND uidd = ANY(:uidds)" if uidds else ""}
+            ORDER BY
+                uidd,
+                date_trunc('hour', timezone(:tz, timezone('UTC', first_timestamp))),
+                synced_at DESC NULLS LAST,
+                id DESC
+        )
+        SELECT
+            uidd,
+            device_id,
+            cast(
+                date_trunc(
+                    'day',
+                    timezone(:tz, timezone('UTC', first_timestamp))
+                ) AS date
+            ) AS day,
+            sum(people_in) AS people_in,
+            sum(people_out) AS people_out,
+            min(first_timestamp) AS first_ts,
+            max(last_timestamp) AS last_ts
+        FROM deduped
+        GROUP BY uidd, device_id, day
+        ORDER BY day DESC
+        LIMIT :lim
+        """
+    )
+    params: dict = {"tz": tz_name, "lim": limit}
+    if start_utc is not None:
+        params["start_utc"] = start_utc
+    if end_utc is not None:
+        params["end_utc"] = end_utc
+    if uidds:
+        params["uidds"] = uidds
+
+    agg_rows = session.execute(deduped_sql, params).mappings().all()
+    if not agg_rows:
+        return []
+
+    tz = ZoneInfo(tz_name)
+    synthetic: List[PeopleAnalyticsRecord] = []
+    for row in agg_rows:
+        day_key = row["day"].isoformat() if hasattr(row["day"], "isoformat") else str(row["day"])
+        day_start_local = datetime.strptime(day_key, "%Y-%m-%d").replace(tzinfo=tz)
+        day_end_local = day_start_local.replace(hour=23, minute=59, second=59)
+        first_naive = day_start_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+        last_naive = day_end_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+        people_in = int(row["people_in"] or 0)
+        people_out = int(row["people_out"] or 0)
+        net_traffic = people_in - people_out
+        total_traffic = people_in + people_out
+        traffic_ratio = (people_out / people_in) if people_in > 0 else 0
+        synthetic.append(
+            PeopleAnalyticsRecord(
+                uidd=row["uidd"],
+                device_id=row["device_id"],
+                first_timestamp=first_naive,
+                last_timestamp=last_naive,
+                interval_type="date",
+                timezone=tz_name,
+                people_in=people_in,
+                people_out=people_out,
+                net_traffic=net_traffic,
+                total_traffic=total_traffic,
+                traffic_ratio=traffic_ratio,
+                traffic_pattern="Normal",
+                duration_hours=24.0,
+                event_count=0,
+                raw_data=None,
+            )
+        )
+    return synthetic
+
+
+def _hourly_records_aggregated(
+    session,
+    uidds: Optional[List[str]],
+    start_utc: Optional[datetime],
+    end_utc: Optional[datetime],
+    tz_name: str,
+    limit: int,
+) -> List[PeopleAnalyticsRecord]:
+    """One row per (uidd, Kuwait hour) — latest sync only, never SUM duplicates."""
+    rows = _fetch_deduped_hour_rows(
+        session, uidds, start_utc, end_utc, tz_name, limit=limit
+    )
+    return [_row_mapping_to_record(r, "hour", tz_name) for r in rows]
 
 
 @app.route('/api/people-analytics', methods=['GET'])
@@ -223,7 +513,9 @@ def get_people_analytics():
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
         interval = request.args.get('interval', 'date')
-        limit = min(int(request.args.get('limit', 1000)), 10000)  # Max 10000
+        if interval in ('3600000', '3600'):
+            interval = 'hour'
+        limit = min(int(request.args.get('limit', 10000)), 10000)
         tz_name = request.args.get('timezone') or request.args.get('timeZone') or 'Asia/Kuwait'
         try:
             tzinfo = ZoneInfo(tz_name)
@@ -251,6 +543,9 @@ def get_people_analytics():
             query = query.filter(PeopleAnalyticsRecord.uidd.in_(uidds))
             logger.info(f"Filtering by {len(uidds)} device(s)")
         
+        start_utc = None
+        end_utc = None
+
         # Filter by date range (required for performance)
         # Filter by date range in the requested timezone, but stored timestamps are treated as UTC.
         # Convert local day boundaries to UTC before filtering so "2026-01-14" doesn't leak into 01/15.
@@ -271,25 +566,37 @@ def get_people_analytics():
                 logger.info(f"Filtering until {end_date_str} ({tz_name}) => UTC {end_utc}")
             except ValueError:
                 return jsonify({'error': 'Invalid end_date format. Use YYYY-MM-DD'}), 400
-        
-        # Filter by interval
-        # IMPORTANT: Do NOT mix granularities (e.g. 'date' with 'hour').
-        # If the UI asks for hourly data, returning daily rows will distort charts and totals.
-        if interval:
-            query = query.filter(PeopleAnalyticsRecord.interval_type == interval)
-            logger.info(f"Filtering by interval: {interval}")
-        
-        # Order by timestamp (newest first) - use indexed column
-        query = query.order_by(PeopleAnalyticsRecord.first_timestamp.desc())
-        
-        # Apply limit before fetching
-        query = query.limit(limit)
-        
-        logger.info("Executing database query...")
-        start_time = datetime.now()
-        records = query.all()
-        query_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"Query completed in {query_time:.2f}s, returned {len(records)} records")
+
+        records: List[PeopleAnalyticsRecord] = []
+
+        # Daily view: always sum hour buckets (live sync source). Never mix stored `date` + `hour`
+        # rows — that double-counts in Monitor charts and diverges from Videoloft.
+        if interval == 'date':
+            agg_limit = min(int(request.args.get('limit', 1000)), 10000)
+            logger.info("Daily interval: aggregating from hourly buckets only")
+            records = _daily_records_from_hourly(
+                session, uidds, start_utc, end_utc, tz_name, agg_limit
+            )
+            logger.info("Hourly→daily aggregation returned %s record(s)", len(records))
+        elif interval == "hour":
+            logger.info("Hourly interval: aggregating duplicate hour buckets in SQL")
+            records = _hourly_records_aggregated(
+                session, uidds, start_utc, end_utc, tz_name, limit
+            )
+            logger.info("Hourly aggregation returned %s record(s)", len(records))
+        else:
+            if interval:
+                query = query.filter(PeopleAnalyticsRecord.interval_type == interval)
+                logger.info(f"Filtering by interval: {interval}")
+
+            query = query.order_by(PeopleAnalyticsRecord.first_timestamp.desc())
+            query = query.limit(limit)
+
+            logger.info("Executing database query...")
+            start_time = datetime.now()
+            records = query.all()
+            query_time = (datetime.now() - start_time).total_seconds()
+            logger.info(f"Query completed in {query_time:.2f}s, returned {len(records)} records")
         
         # Convert to JSON
         data = []
@@ -352,7 +659,13 @@ def get_people_analytics():
             'data': data,
             'totalRecords': len(data),
             'summary': summary,
-            'availability': availability
+            'availability': availability,
+            'requestedRange': {
+                'startDate': start_date_str,
+                'endDate': end_date_str,
+                'interval': interval,
+                'timezone': tz_name,
+            },
         })
         
     except Exception as e:

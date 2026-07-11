@@ -1,0 +1,479 @@
+.opsViewToggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  background: var(--ops-surface-bg, #171c23);
+}
+
+.opsViewToggleBtn {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #ad8883;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.opsViewToggleBtn:hover {
+  color: #dee2ec;
+  background: #252a32;
+}
+
+.opsViewToggleBtnActive {
+  color: #dee2ec;
+  background: #30353d;
+  box-shadow: inset 0 0 0 1px #5d3f3b;
+}
+
+/* Red Flags — column composer (uses opsInset / opsSelectCard from ops-surfaces.css) */
+.rfColComposer {
+  margin-top: 0;
+}
+
+.rfColComposerHead {
+  margin-bottom: var(--ops-surface-gap, 10px);
+}
+
+.rfColPresetCards {
+  margin-bottom: var(--ops-surface-gap, 10px);
+}
+
+.rfColPresetCard {
+  min-height: 84px;
+}
+
+.rfColPresetCard:hover {
+  transform: none;
+}
+
+.rfColPresetPreview {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 28px;
+  padding: 4px 2px 0;
+}
+
+.rfColPresetBar {
+  flex: 1;
+  min-width: 3px;
+  height: 6px;
+  border-radius: 2px;
+  background: #2a3038;
+  opacity: 0.35;
+  transition: height 0.2s ease, opacity 0.2s ease;
+}
+
+.rfColPresetBar--lit {
+  opacity: 1;
+  height: 18px;
+}
+
+.rfColPresetBar--sales.rfColPresetBar--lit {
+  background: #3d9a8a;
+}
+.rfColPresetBar--people.rfColPresetBar--lit {
+  background: #7a6cb8;
+}
+.rfColPresetBar--alerts.rfColPresetBar--lit {
+  background: #c4845a;
+}
+.rfColPresetBar--action.rfColPresetBar--lit {
+  background: #c45c4a;
+}
+.rfColPresetBar--machine.rfColPresetBar--lit {
+  background: #8ab4f8;
+}
+
+/* Bundle switches */
+.rfColHelpers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #3a3330;
+}
+
+@media (max-width: 640px) {
+  .rfColHelpers {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rfColBundle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--ops-surface-radius, 8px);
+  background: var(--ops-surface-bg-hover, #1e1f25);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.rfColBundle--pulse {
+  border-color: #8ab4f8;
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.25);
+  animation: rfColPulse 1.2s ease-out 1;
+}
+
+@keyframes rfColPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(138, 180, 248, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(138, 180, 248, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(138, 180, 248, 0);
+  }
+}
+
+.rfColBundleTrack {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #3a3330;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.2s ease;
+}
+
+.rfColBundleTrack--on {
+  background: #3d7a6a;
+}
+
+.rfColBundleTrack--mix {
+  background: linear-gradient(90deg, #3d7a6a 50%, #3a3330 50%);
+}
+
+.rfColBundleKnob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eef1f6;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+.rfColBundleTrack--on .rfColBundleKnob,
+.rfColBundleTrack--mix .rfColBundleKnob {
+  transform: translateX(18px);
+}
+
+.rfColBundleMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rfColBundleName {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #dee2ec;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rfColBundleName:hover {
+  color: #8ab4f8;
+}
+
+.rfColBundleHelp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a9aab;
+  background: #252a32;
+}
+
+.rfColHelperActions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rfColHelperBtn {
+  flex: 1 1 140px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: var(--ops-surface-radius, 8px);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  background: var(--ops-surface-bg-hover, #1e1f25);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ops-title-color, #dee2ec);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.rfColHelperBtn:active {
+  transform: scale(0.98);
+}
+
+.rfColHelperBtn:hover {
+  background: #252a32;
+  border-color: #6a5040;
+}
+
+.rfColHelperBtn--sales {
+  border-left: 3px solid #3d9a8a;
+}
+
+.rfColHelperBtn--alerts {
+  border-left: 3px solid #c4845a;
+}
+
+/* Column ribbon */
+.rfColRibbonWrap {
+  min-width: 0;
+}
+
+.rfColRibbonHint {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6a7a8a;
+}
+
+.rfColRibbonScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+}
+
+.rfColRibbon {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: min-content;
+  padding: 4px 2px;
+}
+
+.rfColPill {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 52px;
+  min-height: 48px;
+  padding: 6px 8px 5px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.2, 0.64, 1),
+    opacity 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.rfColPillAbbr {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.rfColPillFull {
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.85;
+  line-height: 1.1;
+  max-width: 64px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rfColPillLock {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.rfColPill--off {
+  opacity: 0.38;
+  transform: scale(0.92);
+  border-style: dashed;
+  background: #1a1e24 !important;
+  color: #6a7580 !important;
+}
+
+.rfColPill--on {
+  opacity: 1;
+  transform: scale(1);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.rfColPill--on.rfColPill--sales {
+  background: linear-gradient(180deg, #2a4a44 0%, #1e3530 100%);
+  border-color: #3d9a8a;
+  color: #b8f0e4;
+}
+
+.rfColPill--on.rfColPill--people {
+  background: linear-gradient(180deg, #3a3450 0%, #2a2640 100%);
+  border-color: #7a6cb8;
+  color: #d4c8f8;
+}
+
+.rfColPill--on.rfColPill--alerts {
+  background: linear-gradient(180deg, #4a3828 0%, #352820 100%);
+  border-color: #c4845a;
+  color: #f0d4b8;
+}
+
+.rfColPill--on.rfColPill--action {
+  background: linear-gradient(180deg, #4a2828 0%, #351e1e 100%);
+  border-color: #c45c4a;
+  color: #f0c0b8;
+}
+
+.rfColPill--on.rfColPill--machine {
+  background: linear-gradient(180deg, #283848 0%, #1e2834 100%);
+  border-color: #8ab4f8;
+  color: #c8dcf8;
+}
+
+.rfColPill--pinned {
+  cursor: default;
+}
+
+.rfColPill:not(.rfColPill--pinned):hover {
+  transform: scale(1.04);
+}
+
+.rfColPill--pulse {
+  animation: rfColPillFlash 1.2s ease-out 1;
+}
+
+@keyframes rfColPillFlash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(138, 180, 248, 0);
+  }
+  40% {
+    box-shadow: 0 0 0 4px rgba(138, 180, 248, 0.45);
+  }
+}
+
+/* Collapsed column bar — one line above table */
+.rfColPickerBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
+  border-radius: var(--ops-surface-radius, 8px);
+  background: var(--ops-surface-bg-hover, #1e1f25);
+}
+
+.rfColPickerBarLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ops-label-color, #ad8883);
+}
+
+.rfColPickerBarCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a9aab;
+  font-variant-numeric: tabular-nums;
+}
+
+.rfColPickerBarSync {
+  font-size: 10px;
+  color: #7a8a9a;
+}
+
+.rfColPickerBarExpand {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid #4a4038;
+  border-radius: 6px;
+  background: #252a32;
+  color: #8ab4f8;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.rfColPickerBarExpand:hover {
+  background: #30353d;
+  border-color: #6a5040;
+}
+
+.rfColComposerCollapseRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rfColComposer--expanded {
+  margin-top: 0;
+}
+
+.stitchOpsControlsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--ops-surface-gap, 10px);
+  margin: 0;
+}
+
+.stitchOpsControlsRow .stitchOpsControls {
+  margin: 0;
+  flex: 1 1 220px;
+}

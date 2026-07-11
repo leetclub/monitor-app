@@ -1,0 +1,113 @@
+.infoTipWrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-left: 0;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.infoTipWrapInline {
+  display: inline;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.infoTipTrigger {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: help;
+  touch-action: manipulation;
+  text-align: inherit;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.infoTipTriggerText {
+  display: inline;
+  vertical-align: baseline;
+}
+
+.infoTipTrigger:hover,
+.infoTipTrigger:focus-visible {
+  text-decoration: underline dotted rgba(173, 136, 131, 0.85);
+  text-underline-offset: 2px;
+  outline: none;
+}
+
+.infoTipBtn {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #5d3f3b;
+  background: #252a32;
+  color: #ad8883;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.infoTipBtn:hover,
+.infoTipBtn:focus-visible {
+  border-color: #ad8883;
+  color: #e2e2e9;
+  outline: none;
+}
+
+.infoTipPopover {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #5d3f3b;
+  background: #1e1f25;
+  color: #e2e2e9;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.infoTipPopoverPortal {
+  max-width: min(280px, 92vw);
+}
+
+.alertTh .infoTipWrap {
+  margin-left: 0;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.alertTh .infoTipBtn {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  font-size: 10px;
+}
+
+.alertTh .alertThLabel {
+  display: inline;
+}
+
+@media (max-width: 1366px) {
+  .infoTipPopover {
+    max-width: min(300px, 85vw);
+    font-size: 13px;
+  }
+}
