@@ -1,4 +1,4 @@
-/** Alert UI theme: classic (current) vs pro (v2 command look). */
+/** Alert UI theme: classic (tactical Stitch) vs pro (bold dark command floor). */
 
 export type AlertUiThemeId = 'classic' | 'pro';
 
@@ -6,7 +6,7 @@ export const ALERT_UI_THEME_STORAGE_KEY = 'alert_ui_theme_v1';
 
 export const ALERT_UI_THEME_LABELS: Record<AlertUiThemeId, string> = {
   classic: 'Classic',
-  pro: 'Pro v2',
+  pro: 'Pro',
 };
 
 export function isAlertUiThemeId(v: unknown): v is AlertUiThemeId {
@@ -29,7 +29,7 @@ export function applyAlertUiTheme(theme: AlertUiThemeId): void {
   root.style.colorScheme = 'dark';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute('content', theme === 'pro' ? '#070b12' : '#0c0f14');
+    meta.setAttribute('content', theme === 'pro' ? '#050608' : '#0c0f14');
   }
 }
 

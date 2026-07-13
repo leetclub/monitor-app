@@ -6,7 +6,7 @@ import {
   type AlertUiThemeId,
 } from '@/lib/uiTheme';
 
-/** Switch Classic ↔ Pro v2 look (persisted). */
+/** Switch Classic ↔ Pro command-floor look (persisted). */
 export function ThemeToggle({ compact }: { compact?: boolean }) {
   const [theme, setTheme] = useState<AlertUiThemeId>(() => readAlertUiTheme());
 
@@ -28,7 +28,11 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
           className={`themeToggleBtn${theme === id ? ' themeToggleBtn--active' : ''}`}
           aria-pressed={theme === id}
           onClick={() => select(id)}
-          title={id === 'pro' ? 'Pro v2 — command-center look' : 'Classic — current tactical look'}
+          title={
+            id === 'pro'
+              ? 'Pro — bold dark command floor (sharp chrome, amber signal)'
+              : 'Classic — tactical Stitch look'
+          }
         >
           {compact ? (id === 'pro' ? 'Pro' : 'Classic') : ALERT_UI_THEME_LABELS[id]}
         </button>

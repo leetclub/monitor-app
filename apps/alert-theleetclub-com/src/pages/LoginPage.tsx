@@ -64,6 +64,17 @@ export function LoginPage() {
 
   return (
     <div className="loginShell">
+      <aside className="proOnly loginProAside" aria-hidden>
+        <div>
+          <p className="loginProAsideKicker">LEET // COMMAND</p>
+          <h1 className="loginProAsideTitle">Ops floor</h1>
+          <p className="loginProAsideLead">
+            Dense monitoring chrome for Red Flags, Overall, and QA — switch to Classic anytime from the control
+            above sign-in.
+          </p>
+        </div>
+        <p className="loginProAsideMeta">CHANNEL · SECURE</p>
+      </aside>
       <div className="loginCard panel">
         <div className="loginThemeRow">
           <ThemeToggle />

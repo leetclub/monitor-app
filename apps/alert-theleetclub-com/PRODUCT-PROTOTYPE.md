@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **Pro theme rebuilt (bold dark command):** Pro is no longer a teal skin — sharp 0-radius chrome, amber CMD strip + LIVE pulse, industrial nav (`CMD // OPS_FLOOR`), denser tables/KPI hairlines, split login console (Archivo + JetBrains Mono). Classic unchanged. Toggle still Classic · Pro. |
 | 2026-07-13 | **Fleet revenue labels:** Secondary strip shows **Yesterday full day** KD, **Day before (−2d) full day** KD, and **Change (yest. vs −2d)** — mirrors primary/baseline/change so −2d amount is visible (was % only). |
 | 2026-07-12 | **UI themes Classic / Pro v2:** Toggle in top bar + login (persisted). **Classic** = current tactical Stitch look. **Pro v2** = command-floor restyle (midnight steel, teal signal accents, Sora + IBM Plex Mono, glass top bar / fleet bar). Compare and pick; default remains Classic. |
 | 2026-07-10 | **Fleet revenue — Yest. full day:** On Today vs Yesterday, the secondary strip compares **full yesterday vs full day-before (−2d)** from the revenue cache (not vs partial today). Label **vs −2d**. Main bar still uses same-elapsed today vs yesterday. |

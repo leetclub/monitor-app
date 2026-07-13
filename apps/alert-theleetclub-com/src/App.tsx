@@ -128,6 +128,7 @@ function SideNav({
           </span>
         </h1>
         <p className="sideNavTagline">Operations</p>
+        <p className="proOnly sideNavCmdLine">CMD // OPS_FLOOR</p>
       </div>
       <div className="navList">
         <NavLink
@@ -292,7 +293,15 @@ function UserTopBar() {
   return (
     <header className="topBar">
       <div className="topBarStart">
+        <span className="proOnly topBarCmd" aria-hidden>
+          <span className="topBarCmdMark">CMD</span>
+          OPS
+        </span>
         <span className="topBarClock">{kuwaitClockLabel(clock)}</span>
+        <span className="proOnly topBarStatus">
+          <span className="statusDot statusDotLive" aria-hidden />
+          LIVE
+        </span>
       </div>
       <div className="topBarEnd">
         <ThemeToggle compact />
