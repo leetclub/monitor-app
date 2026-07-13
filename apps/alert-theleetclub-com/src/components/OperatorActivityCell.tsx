@@ -8,38 +8,51 @@ export type OperatorActivityTimes = {
   latestAt?: string | null;
 };
 
-const LINES: Array<{ key: keyof OperatorActivityTimes; label: string; title: string }> = [
-  {
-    key: 'cleaningAt',
-    label: 'Clean',
-    title: 'Last daily cleaning end (Monitor Attendance & Cleaning — power-interrupt pattern)',
-  },
-  {
-    key: 'refillAt',
-    label: 'Refill',
-    title: 'Last All Products refilled (Vendon event)',
-  },
-  {
-    key: 'remoteCreditAt',
-    label: 'Credit',
-    title: 'Last proven remote credit (Monitor attendance: credit + power proof)',
-  },
-  {
-    key: 'doorOpenAt',
-    label: 'Door',
-    title: 'Last door opened (Vendon door event)',
-  },
+const SOURCES: Array<{ key: keyof OperatorActivityTimes; label: string }> = [
+  { key: 'cleaningAt', label: 'Cleaning' },
+  { key: 'refillAt', label: 'Refill' },
+  { key: 'remoteCreditAt', label: 'Remote credit' },
+  { key: 'doorOpenAt', label: 'Door access' },
 ];
 
-function lineIso(activity: OperatorActivityTimes | null | undefined, key: keyof OperatorActivityTimes): string {
-  const raw = activity?.[key];
-  return raw != null ? String(raw).trim() : '';
+function parseMs(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : NaN;
 }
 
-/** Four last-touch lines: cleaning, refill, remote credit, door access. */
+/** Newest of cleaning / refill / remote credit / door (or legacy WEB access). */
+export function resolveLatestOperatorActivity(
+  activity?: OperatorActivityTimes | null,
+  legacyWebAccessAt?: string | null,
+): { iso: string; kind: string } | null {
+  let bestIso = '';
+  let bestMs = -1;
+  let bestKind = 'Activity';
+
+  const consider = (isoRaw: string | null | undefined, kind: string) => {
+    const iso = isoRaw != null ? String(isoRaw).trim() : '';
+    if (!iso) return;
+    const ms = parseMs(iso);
+    if (!Number.isFinite(ms)) return;
+    if (ms >= bestMs) {
+      bestMs = ms;
+      bestIso = iso;
+      bestKind = kind;
+    }
+  };
+
+  for (const s of SOURCES) {
+    consider(activity?.[s.key], s.label);
+  }
+  consider(legacyWebAccessAt, 'Remote credit');
+
+  if (!bestIso) return null;
+  return { iso: bestIso, kind: bestKind };
+}
+
+/** Single last operator touch: relative + Kuwait date. */
 export function OperatorActivityCell({
   activity,
-  /** @deprecated Prefer `activity.doorOpenAt` / full map — kept for older snapshot-only callers. */
   legacyWebAccessAt,
   nowMs,
 }: {
@@ -47,36 +60,21 @@ export function OperatorActivityCell({
   legacyWebAccessAt?: string | null;
   nowMs?: number;
 }) {
-  const merged: OperatorActivityTimes = {
-    ...(activity || {}),
-  };
-  // Until activity API loads, fall back WEB cashless timestamp only into Credit if empty.
-  if (!lineIso(merged, 'remoteCreditAt') && legacyWebAccessAt) {
-    merged.remoteCreditAt = String(legacyWebAccessAt).trim();
-  }
-
-  const any = LINES.some((l) => lineIso(merged, l.key));
-  if (!any) {
+  const latest = resolveLatestOperatorActivity(activity, legacyWebAccessAt);
+  if (!latest) {
     return <span className="operatorActivityMuted">—</span>;
   }
 
+  const rel = formatRelativeAgo(latest.iso, nowMs);
+  const exact = formatKuwaitDateTime(latest.iso);
+
   return (
-    <div className="operatorActivityStack" title="Operator activity (Monitor / Vendon)">
-      {LINES.map((line) => {
-        const iso = lineIso(merged, line.key);
-        const rel = iso ? formatRelativeAgo(iso, nowMs) : null;
-        const exact = iso ? formatKuwaitDateTime(iso) : '';
-        return (
-          <div
-            key={line.key}
-            className={`operatorActivityLine${iso ? '' : ' operatorActivityLine--empty'}`}
-            title={iso ? `${line.title}: ${exact}` : line.title}
-          >
-            <span className="operatorActivityTag">{line.label}</span>
-            <span className="operatorActivityRel">{iso ? rel || '—' : '—'}</span>
-          </div>
-        );
-      })}
-    </div>
+    <span
+      className="operatorActivityCell"
+      title={`Last operator activity (${latest.kind}): ${exact}`}
+    >
+      <span className="operatorActivityRel">{rel ?? '—'}</span>
+      <span className="operatorActivityExact">{exact || '—'}</span>
+    </span>
   );
 }

@@ -238,7 +238,7 @@ export function RedFlagsCardList({
               </div>
 
               <div className={cardStyles.operatorBlock}>
-                <span className={cardStyles.metricLabel}>Op. activity</span>
+                <span className={cardStyles.metricLabel}>Last activity</span>
                 <OperatorActivityCell
                   activity={operatorActivityByMachineId?.[machId]}
                   legacyWebAccessAt={row.operatorLastAccessAt}

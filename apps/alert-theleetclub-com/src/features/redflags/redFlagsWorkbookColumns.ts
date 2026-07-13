@@ -78,9 +78,9 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   operatorActivity: {
     title: 'Operator Activity',
-    sub: 'Clean · Refill · Credit · Door',
+    sub: 'Last touch · date',
     placeholderNote:
-      'Last cleaning (Attendance & Cleaning), last refill (Vendon), last proven remote credit, last door open. Relative times; hover for exact Kuwait time.',
+      'Most recent operator activity on the machine (cleaning, refill, remote credit, or door open from Monitor/Vendon). Shows relative time and Kuwait date/time.',
   },
   lastTransaction: {
     title: 'Last Transaction',
