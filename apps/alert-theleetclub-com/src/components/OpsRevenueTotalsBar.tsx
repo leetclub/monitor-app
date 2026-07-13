@@ -71,28 +71,25 @@ export function OpsRevenueTotalsBar({
             <>
               <div
                 className="opsRevenueTotalsMetric opsRevenueTotalsMetricDivider"
-                title="Full Kuwait calendar day yesterday (completed day, revenue cache)"
+                title="Completed Kuwait calendar day yesterday — fleet total from revenue cache"
               >
-                <span className="opsRevenueTotalsLabel">Yesterday</span>
-                <span className="opsRevenueTotalsSubLabel">full day</span>
+                <span className="opsRevenueTotalsLabel">Yest. full day</span>
                 <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">{val(yesterdayOverall.kwd)}</span>
               </div>
               <div
                 className="opsRevenueTotalsMetric"
-                title="Full Kuwait calendar day before yesterday (−2d)"
+                title="Completed Kuwait calendar day before yesterday (−2d) — fleet total from revenue cache"
               >
-                <span className="opsRevenueTotalsLabel">Day before</span>
-                <span className="opsRevenueTotalsSubLabel">full day (−2d)</span>
+                <span className="opsRevenueTotalsLabel">−2d full day</span>
                 <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">
                   {val(yesterdayOverall.dayBeforeKwd)}
                 </span>
               </div>
               <div
                 className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap"
-                title="Full yesterday vs full day before (−2d)"
+                title="Percent change: full yesterday vs full −2d"
               >
-                <span className="opsRevenueTotalsLabel">Change</span>
-                <span className="opsRevenueTotalsSubLabel">yest. vs −2d</span>
+                <span className="opsRevenueTotalsLabel">vs −2d</span>
                 {hasYoTrend ? (
                   <span
                     className={`opsRevenueTotalsTrend ${yoUp ? 'alertSalesUp' : yoDown ? 'alertSalesDown' : ''}`}

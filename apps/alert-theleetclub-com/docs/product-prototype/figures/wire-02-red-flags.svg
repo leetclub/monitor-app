@@ -56,6 +56,6 @@
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
     <text x="20" y="228" class="hint" font-size="8px">(more rows)</text>
     <text x="520" y="228" class="tiny">Swipe / drag · ◀ ▶ pan</text>
-    <text x="20" y="246" class="tiny">Workbook: Live operator (no sort) · Last / tx ↕ · Op. activity · Sales today ↕ · Target · Frequency · … Fixed fleet bar: Today · Yesterday · Change · Yesterday full · Day before (−2d) · Change. QA cell → history filters + score trend + PDF.</text>
+    <text x="20" y="246" class="tiny">Workbook: Live operator (no sort) · Last / tx ↕ · Op. activity · Sales today ↕ · Target · Frequency · … Fixed fleet bar: Today · Yest. same time · Change · Yest. full day · −2d full day · vs −2d. QA cell → history filters + score trend + PDF.</text>
   </g>
 </svg>
