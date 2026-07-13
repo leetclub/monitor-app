@@ -32,10 +32,10 @@ html[data-theme='pro'] {
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 16px;
-  --pro-header-h: 68px;
+  --pro-header-h: 60px;
   --pro-teal: #0f766e;
   --pro-teal-soft: rgba(15, 118, 110, 0.12);
-  --touch-min: 44px;
+  --touch-min: 48px;
 }
 
 html[data-theme='pro'] body {
@@ -100,57 +100,70 @@ html[data-theme='pro'] body {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 1px solid #cbd5e1;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   color: #0f172a;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.proAppNav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* Full-width tab strip — always visible on iPad; phones use hamburger */
+.proAppTabStripWrap {
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 8px clamp(12px, 2vw, 20px) 10px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
 }
 
-.proAppNav::-webkit-scrollbar {
-  display: none;
-}
-
-.proAppNav .navLink {
-  display: inline-flex;
-  align-items: center;
+.proAppTabStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  min-height: 44px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #475569;
-  font-size: 15px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  flex-shrink: 0;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.proAppNav .navLink:hover {
+.proAppTabStrip .navLink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 8px 6px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  text-align: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.proAppTabStrip .navLink .navGlyph {
+  width: 22px;
+  height: 22px;
+}
+
+.proAppTabStrip .navLink:hover {
   background: #f1f5f9;
   color: #0f172a;
 }
 
-.proAppNav .navLink.navLinkActive,
-.proAppNav a.navLink.navLinkActive {
+.proAppTabStrip .navLink.navLinkActive,
+.proAppTabStrip a.navLink.navLinkActive {
   background: var(--pro-teal-soft);
   color: var(--pro-teal);
-  border-color: rgba(15, 118, 110, 0.25);
+  border-color: rgba(15, 118, 110, 0.35);
   box-shadow: none;
 }
 
@@ -168,7 +181,7 @@ html[data-theme='pro'] body {
   font-weight: 600;
   color: #475569;
   padding: 8px 12px;
-  min-height: 44px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   border-radius: 12px;
@@ -180,7 +193,7 @@ html[data-theme='pro'] body {
   display: none;
   border-top: 1px solid #cbd5e1;
   background: #fff;
-  padding: 12px 14px 16px;
+  padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .proAppMobileNavList {
@@ -193,13 +206,13 @@ html[data-theme='pro'] body {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
+  min-height: 52px;
   padding: 12px 16px;
   border-radius: 14px;
   color: #0f172a;
   text-decoration: none;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .proAppMobileNavList .navLink.navLinkActive {
@@ -212,7 +225,9 @@ html[data-theme='pro'] body {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 18px clamp(14px, 2vw, 24px) 28px;
+  padding: 16px clamp(12px, 2vw, 20px) calc(28px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
   box-sizing: border-box;
 }
 
@@ -221,24 +236,25 @@ html[data-theme='pro'] .appShellPro .topBarSignedIn {
   font-weight: 600;
   color: #0f172a;
   padding: 8px 12px;
-  min-height: 44px;
+  min-height: 48px;
   border-radius: 999px;
   border: 1px solid #cbd5e1;
   background: #fff;
-  max-width: 200px;
+  max-width: 180px;
 }
 
 html[data-theme='pro'] .appShellPro .topBarSignOut {
-  min-height: 44px;
-  padding: 8px 16px;
+  min-height: 48px;
+  padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid #cbd5e1;
   background: #fff;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
+  touch-action: manipulation;
 }
 
 /* Theme toggle */
@@ -278,6 +294,12 @@ html[data-theme='pro'] .appShellPro .topBarSignOut {
 html[data-theme='pro'] .themeToggle {
   border-color: #cbd5e1;
   background: #fff;
+}
+
+html[data-theme='pro'] .themeToggleBtn {
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 12px;
 }
 
 html[data-theme='pro'] .themeToggleBtn--active {
@@ -359,23 +381,44 @@ html[data-theme='pro'] .appShellPro textarea {
   min-height: 44px;
 }
 
-@media (max-width: 767px) {
-  .proAppMenuBtn {
-    display: inline-flex;
-  }
-  .proAppNav {
+/* iPad / tablet: keep tab strip visible; tighten header chrome */
+@media (max-width: 1180px) {
+  html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
     display: none;
   }
-  .proAppMobileNav {
-    display: block;
-  }
-  .proAppClock {
-    display: none;
-  }
+
   .proAppBrandSub {
     display: none;
   }
-  html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
+
+  .proAppHeaderBar {
+    min-height: 56px;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .proAppTabStrip .navLink {
+    min-height: 60px;
+    font-size: 14px;
+  }
+}
+
+/* Phone only — hamburger; iPad portrait still shows 4 tabs */
+@media (max-width: 639px) {
+  .proAppMenuBtn {
+    display: inline-flex;
+  }
+
+  .proAppTabStripWrap {
+    display: none;
+  }
+
+  .proAppMobileNav {
+    display: block;
+  }
+
+  .proAppClock {
     display: none;
   }
 }

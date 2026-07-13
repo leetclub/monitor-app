@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CompareSelection } from '@/components/ComparePresetPicker';
-import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import { ProCompareChips } from '@/features/pro/ProCompareChips';
 import { SalesHistoryModal } from '@/components/SalesHistoryModal';
 import {
   formatKwd,
@@ -95,7 +95,7 @@ export function ProOverallView({
         </div>
 
         <div className="proToolbar">
-          <ComparePresetPicker value={compare} onChange={onCompareChange} />
+          <ProCompareChips value={compare} onChange={onCompareChange} />
           <p className="proToolbarNote">
             <strong>Sales</strong> — {salesNote}
             {asOfLocal ? ` · ${asOfLocal.replace('T', ' ')} KWT` : ''}

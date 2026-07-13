@@ -6,6 +6,8 @@
       .boxHi { fill: #1e3a5f; stroke: #3b82f6; stroke-width: 1.2; }
       .boxMain { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
       .boxAccent { fill: #fef2f2; stroke: #f87171; stroke-width: 1.2; }
+      .tab { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1; }
+      .tabOn { fill: #ccfbf1; stroke: #0f766e; stroke-width: 1.2; }
       .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
       .labelInv { fill: #e2e8f0; font-size: 10px; font-weight: 600; }
       .hint { fill: #64748b; font-size: 9px; }
@@ -13,10 +15,9 @@
       .title { fill: #0f172a; font-size: 14px; font-weight: 700; }
       .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
       .kicker { fill: #64748b; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-      .btn { fill: #ecfdf5; stroke: #22c55e; stroke-width: 1; }
     ]]></style>
   </defs>
-  <text x="8" y="18" class="cap">FIGURE 1 - CLASSIC SIDEBAR vs PRO TOP APP BAR (TOGGLE)</text>
+  <text x="8" y="18" class="cap">FIGURE 1 - CLASSIC SIDEBAR vs PRO iPAD TAB STRIP</text>
   <g transform="translate(8, 28)">
     <rect class="box" x="0" y="0" width="120" height="384" rx="6" fill="#0f172a"/>
     <text x="10" y="26" class="labelInv" font-size="12px">Leet Alert</text>
@@ -31,38 +32,48 @@
     <text x="14" y="190" class="labelInv" font-size="9px">Admin</text>
     <text x="8" y="372" class="hintInv">Dark tactical sidebar</text>
 
-    <rect class="boxMain" x="132" y="0" width="652" height="48" rx="6"/>
-    <text x="144" y="18" class="label" font-size="11px">Leet Alert</text>
-    <text x="144" y="34" class="hint" font-size="8px">Pro shell — top app bar (no sidebar)</text>
-    <text x="280" y="28" class="label" font-size="9px">Red Flags</text>
-    <text x="360" y="28" class="label" font-size="9px">Overall</text>
-    <text x="420" y="28" class="label" font-size="9px">QA Visit</text>
-    <text x="490" y="28" class="hint" font-size="8px">Classic · Pro</text>
-    <text x="580" y="28" class="hint" font-size="8px">user@ · Sign out</text>
+    <!-- Pro: brand row -->
+    <rect class="boxMain" x="132" y="0" width="652" height="44" rx="6"/>
+    <text x="144" y="20" class="label" font-size="12px">Leet Alert</text>
+    <text x="144" y="36" class="hint" font-size="8px">Pro — iPad ops</text>
+    <text x="430" y="28" class="hint" font-size="8px">Classic · Pro</text>
+    <text x="530" y="28" class="hint" font-size="8px">KW time</text>
+    <text x="600" y="28" class="hint" font-size="8px">Sign out</text>
 
-    <rect class="boxMain" x="132" y="56" width="652" height="328" rx="8"/>
-    <text x="148" y="88" class="kicker">Light workspace</text>
-    <text x="148" y="114" class="title">Soft cards · horizontal nav</text>
-    <text x="148" y="138" class="hint" font-size="9px">Pro uses a different React shell: top product bar + white cards. Classic keeps the dark sidebar Stitch look.</text>
+    <!-- Pro: full-width tab strip -->
+    <rect fill="#f8fafc" stroke="#e2e8f0" x="132" y="48" width="652" height="56" rx="0"/>
+    <rect class="tabOn" x="144" y="56" width="148" height="40" rx="8"/>
+    <text x="176" y="80" class="label" font-size="10px" fill="#0f766e">Red Flags</text>
+    <rect class="tab" x="300" y="56" width="148" height="40" rx="8"/>
+    <text x="344" y="80" class="label" font-size="10px">Overall</text>
+    <rect class="tab" x="456" y="56" width="148" height="40" rx="8"/>
+    <text x="498" y="80" class="label" font-size="10px">QA Visit</text>
+    <rect class="tab" x="612" y="56" width="148" height="40" rx="8"/>
+    <text x="662" y="80" class="label" font-size="10px">Admin</text>
 
-    <rect class="boxAccent" x="148" y="160" width="188" height="120" rx="10"/>
-    <text x="164" y="184" class="kicker">Priority</text>
-    <text x="164" y="208" class="label" font-size="12px">Red Flags</text>
-    <text x="164" y="228" class="hint" font-size="8px">Machines failing checks - start here.</text>
-    <text x="164" y="258" class="label" font-size="9px" fill="#b91c1c">Continue</text>
+    <rect class="boxMain" x="132" y="112" width="652" height="272" rx="8"/>
+    <text x="148" y="140" class="kicker">iPad-native Pro</text>
+    <text x="148" y="166" class="title">Tab strip · compare chips · cards</text>
+    <text x="148" y="188" class="hint" font-size="9px">48px targets; tabs stay visible on iPad (hamburger only on phone). Compare = large chips, not a select.</text>
 
-    <rect class="boxMain" x="352" y="160" width="188" height="120" rx="10"/>
-    <text x="368" y="184" class="kicker">Fleet</text>
-    <text x="368" y="208" class="label" font-size="12px">Overall</text>
-    <text x="368" y="228" class="hint" font-size="8px">All machines &amp; roll-up KPIs.</text>
-    <text x="368" y="258" class="label" font-size="9px">Continue</text>
+    <rect class="boxAccent" x="148" y="210" width="188" height="110" rx="10"/>
+    <text x="164" y="234" class="kicker">Machine card</text>
+    <text x="164" y="258" class="label" font-size="12px">Jaber · flag reason</text>
+    <text x="164" y="280" class="hint" font-size="8px">2-col grid on landscape</text>
+    <text x="164" y="300" class="label" font-size="9px" fill="#b91c1c">Open detail</text>
 
-    <rect class="boxMain" x="556" y="160" width="188" height="120" rx="10" stroke-dasharray="4 3"/>
-    <text x="572" y="184" class="kicker">Configuration</text>
-    <text x="572" y="208" class="label" font-size="12px">Admin</text>
-    <text x="572" y="228" class="hint" font-size="8px">If role allows - machines, access.</text>
-    <text x="572" y="258" class="label" font-size="9px">Continue</text>
+    <rect class="boxMain" x="352" y="210" width="188" height="110" rx="10"/>
+    <text x="368" y="234" class="kicker">Compare chips</text>
+    <text x="368" y="258" class="label" font-size="11px">Today · Yest · WTD</text>
+    <text x="368" y="278" class="hint" font-size="8px">Min-height 52px taps</text>
+    <text x="368" y="300" class="label" font-size="9px">MTD · Same day</text>
 
-    <text x="148" y="320" class="hint" font-size="8px">Toggle Classic · Pro in the top bar / login. Choice persists in localStorage.</text>
+    <rect class="boxMain" x="556" y="210" width="188" height="110" rx="10"/>
+    <text x="572" y="234" class="kicker">Fleet bar</text>
+    <text x="572" y="258" class="label" font-size="11px">Sticky + safe area</text>
+    <text x="572" y="278" class="hint" font-size="8px">Home indicator padding</text>
+    <text x="572" y="300" class="label" font-size="9px">Roll-up KPIs</text>
+
+    <text x="148" y="360" class="hint" font-size="8px">Toggle Classic · Pro persists in localStorage. Classic tables/modals unchanged.</text>
   </g>
 </svg>

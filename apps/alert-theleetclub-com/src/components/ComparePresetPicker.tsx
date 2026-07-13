@@ -60,6 +60,59 @@ export function createDefaultCompareSelection(): CompareSelection {
   };
 }
 
+/** Resolve ranges for a preset (shared by Classic select + Pro touch chips). */
+export function applyComparePreset(preset: ComparePresetId, current: CompareSelection): CompareSelection {
+  const t0 = todayLocal();
+  const t1 = addDays(t0, 1);
+  const y0 = addDays(t0, -1);
+  const y1 = t0;
+  const lw0 = addDays(t0, -7);
+  const lw1 = addDays(t1, -7);
+
+  if (preset === 'today_vs_yesterday') {
+    return { preset, a: { start: yyyyMmDd(t0), end: yyyyMmDd(t1) }, b: { start: yyyyMmDd(y0), end: yyyyMmDd(y1) } };
+  }
+  if (preset === 'yesterday_vs_day_before') {
+    const day0 = addDays(t0, -1);
+    const day1 = t0;
+    const db0 = addDays(t0, -2);
+    const db1 = addDays(t0, -1);
+    return {
+      preset,
+      a: { start: yyyyMmDd(day0), end: yyyyMmDd(day1) },
+      b: { start: yyyyMmDd(db0), end: yyyyMmDd(db1) },
+    };
+  }
+  if (preset === 'today_vs_same_day_last_week') {
+    return { preset, a: { start: yyyyMmDd(t0), end: yyyyMmDd(t1) }, b: { start: yyyyMmDd(lw0), end: yyyyMmDd(lw1) } };
+  }
+  if (preset === 'wtd_vs_last_week') {
+    const ws0 = startOfWeekSunday(t0);
+    const elapsedDays = Math.max(1, Math.round((t1.getTime() - ws0.getTime()) / 86400000));
+    const lastWs0 = addDays(ws0, -7);
+    const lastWs1 = addDays(lastWs0, 7);
+    const lastSlice1 = addDays(lastWs0, elapsedDays);
+    const sliceEnd = lastSlice1.getTime() <= lastWs1.getTime() ? lastSlice1 : lastWs1;
+    return {
+      preset,
+      a: { start: yyyyMmDd(ws0), end: yyyyMmDd(t1) },
+      b: { start: yyyyMmDd(lastWs0), end: yyyyMmDd(sliceEnd) },
+    };
+  }
+  if (preset === 'mtd_vs_mtd') {
+    const m0 = startOfMonth(t0);
+    const prevM0 = new Date(m0.getFullYear(), m0.getMonth() - 1, 1);
+    const dayOfMonth = t0.getDate();
+    const prevSliceEnd = new Date(prevM0.getFullYear(), prevM0.getMonth(), dayOfMonth + 1);
+    return {
+      preset,
+      a: { start: yyyyMmDd(m0), end: yyyyMmDd(t1) },
+      b: { start: yyyyMmDd(prevM0), end: yyyyMmDd(prevSliceEnd) },
+    };
+  }
+  return { preset, a: current.a, b: current.b };
+}
+
 export function ComparePresetPicker(props: {
   value: CompareSelection;
   onChange: (next: CompareSelection) => void;
@@ -77,60 +130,7 @@ export function ComparePresetPicker(props: {
   );
 
   function setPreset(preset: ComparePresetId) {
-    const t0 = todayLocal();
-    const t1 = addDays(t0, 1);
-    const y0 = addDays(t0, -1);
-    const y1 = t0;
-    const lw0 = addDays(t0, -7);
-    const lw1 = addDays(t1, -7);
-
-    if (preset === 'today_vs_yesterday') {
-      props.onChange({ preset, a: { start: yyyyMmDd(t0), end: yyyyMmDd(t1) }, b: { start: yyyyMmDd(y0), end: yyyyMmDd(y1) } });
-      return;
-    }
-    if (preset === 'yesterday_vs_day_before') {
-      const y0 = addDays(t0, -1);
-      const y1 = t0;
-      const db0 = addDays(t0, -2);
-      const db1 = addDays(t0, -1);
-      props.onChange({
-        preset,
-        a: { start: yyyyMmDd(y0), end: yyyyMmDd(y1) },
-        b: { start: yyyyMmDd(db0), end: yyyyMmDd(db1) },
-      });
-      return;
-    }
-    if (preset === 'today_vs_same_day_last_week') {
-      props.onChange({ preset, a: { start: yyyyMmDd(t0), end: yyyyMmDd(t1) }, b: { start: yyyyMmDd(lw0), end: yyyyMmDd(lw1) } });
-      return;
-    }
-    if (preset === 'wtd_vs_last_week') {
-      const ws0 = startOfWeekSunday(t0);
-      const elapsedDays = Math.max(1, Math.round((t1.getTime() - ws0.getTime()) / 86400000));
-      const lastWs0 = addDays(ws0, -7);
-      const lastWs1 = addDays(lastWs0, 7);
-      const lastSlice1 = addDays(lastWs0, elapsedDays);
-      const sliceEnd = lastSlice1.getTime() <= lastWs1.getTime() ? lastSlice1 : lastWs1;
-      props.onChange({
-        preset,
-        a: { start: yyyyMmDd(ws0), end: yyyyMmDd(t1) },
-        b: { start: yyyyMmDd(lastWs0), end: yyyyMmDd(sliceEnd) },
-      });
-      return;
-    }
-    if (preset === 'mtd_vs_mtd') {
-      const m0 = startOfMonth(t0);
-      const prevM0 = new Date(m0.getFullYear(), m0.getMonth() - 1, 1);
-      const dayOfMonth = t0.getDate();
-      const prevSliceEnd = new Date(prevM0.getFullYear(), prevM0.getMonth(), dayOfMonth + 1);
-      props.onChange({
-        preset,
-        a: { start: yyyyMmDd(m0), end: yyyyMmDd(t1) },
-        b: { start: yyyyMmDd(prevM0), end: yyyyMmDd(prevSliceEnd) },
-      });
-      return;
-    }
-    props.onChange({ preset, a: props.value.a, b: props.value.b });
+    props.onChange(applyComparePreset(preset, props.value));
   }
 
   return (

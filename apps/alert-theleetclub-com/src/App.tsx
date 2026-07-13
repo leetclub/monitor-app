@@ -289,11 +289,9 @@ function ProAppHeader({
           </button>
           <div className="proAppBrandText">
             <p className="proAppBrandName">Leet Alert</p>
-            <p className="proAppBrandSub">Operations workspace</p>
+            <p className="proAppBrandSub">iPad ops</p>
           </div>
         </div>
-
-        <NavLinks className="proAppNav" onNavigate={onNavigate} />
 
         <div className="proAppHeaderEnd">
           <span className="proAppClock" title="Kuwait time">
@@ -301,6 +299,10 @@ function ProAppHeader({
           </span>
           <UserSessionControls />
         </div>
+      </div>
+
+      <div className="proAppTabStripWrap">
+        <NavLinks className="proAppTabStrip" onNavigate={onNavigate} />
       </div>
 
       {menuOpen ? (

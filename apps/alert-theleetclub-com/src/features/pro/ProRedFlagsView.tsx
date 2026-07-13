@@ -1,5 +1,5 @@
 import type { CompareSelection } from '@/components/ComparePresetPicker';
-import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import { ProCompareChips } from '@/features/pro/ProCompareChips';
 import type { DailySalesElapsedResponse } from '@/lib/salesDisplay';
 import { formatKwd, formatSalesTrendPct, salesElapsedForMachine } from '@/lib/salesDisplay';
 import {
@@ -151,7 +151,7 @@ export function ProRedFlagsView({
         </div>
 
         <div className="proToolbar">
-          <ComparePresetPicker value={compare} onChange={onCompareChange} />
+          <ProCompareChips value={compare} onChange={onCompareChange} />
           <p className="proToolbarNote">
             <strong>Sales</strong> — {salesNote}
             {asOfLocal ? ` · ${asOfLocal.replace('T', ' ')} KWT` : ''}
