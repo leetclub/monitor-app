@@ -48,6 +48,8 @@
   line-height: 1.2;
   width: 100%;
   box-sizing: border-box;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .salesStackBoxToday {
@@ -105,16 +107,23 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: #e2e8f0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .salesStackTrend {
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   font-weight: 800;
   line-height: 1.15;
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stitchOpsTable .opsColSales,

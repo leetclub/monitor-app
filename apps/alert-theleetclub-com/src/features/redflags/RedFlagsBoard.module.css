@@ -721,18 +721,18 @@
 .tdFreqTriple {
   padding: 2px 4px !important;
   vertical-align: middle !important;
-  min-width: calc(var(--ops-stack-box-w, 4.25rem) * 3 + var(--ops-stack-gap, 4px) * 2 + 0.35rem);
+  min-width: calc(var(--ops-stack-box-w, 4.5rem) * 3 + var(--ops-stack-gap, 4px) * 2 + 0.35rem);
   max-width: none;
-  overflow: visible;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
 .freq3 {
   display: grid;
-  grid-template-columns: repeat(3, minmax(var(--ops-stack-box-w, 4.25rem), 1fr));
+  grid-template-columns: repeat(3, minmax(var(--ops-stack-box-w, 4.5rem), 1fr));
   gap: var(--ops-stack-gap, 4px);
   width: 100%;
-  min-width: calc(var(--ops-stack-box-w, 4.25rem) * 3 + var(--ops-stack-gap, 4px) * 2);
+  min-width: calc(var(--ops-stack-box-w, 4.5rem) * 3 + var(--ops-stack-gap, 4px) * 2);
   align-items: stretch;
 }
 
@@ -745,7 +745,7 @@
   min-height: var(--ops-cell-box-h, 64px);
   height: var(--ops-cell-box-h, 64px);
   max-height: var(--ops-cell-box-h, 64px);
-  min-width: var(--ops-stack-box-w, 4.25rem);
+  min-width: var(--ops-stack-box-w, 4.5rem);
   padding: 4px 5px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.32);
@@ -754,7 +754,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 1px 4px rgba(0, 0, 0, 0.2);
   cursor: help;
-  overflow: visible;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -847,21 +847,23 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-width: 0;
-  max-width: none;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .freqBoxTrend .freqBoxVal,
 .freqTrendOpen .freqBoxVal,
 .freqScoreOpen .freqBoxVal,
 .freqGapOpen .freqBoxVal {
-  overflow: visible;
-  text-overflow: clip;
-  font-size: clamp(10px, 0.72vw + 7px, 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(9px, 0.65vw + 7px, 11px);
   line-height: 1.15;
-  max-width: none;
+  max-width: 100%;
   letter-spacing: -0.02em;
 }
 

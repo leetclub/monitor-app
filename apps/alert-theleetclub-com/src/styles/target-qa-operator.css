@@ -551,6 +551,10 @@ html[data-theme='pro'] .operatorActivityMuted {
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   letter-spacing: -0.01em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sxToneFlat {
@@ -561,6 +565,7 @@ html[data-theme='pro'] .operatorActivityMuted {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 3px;
+  min-width: 0;
 }
 
 .sxBox {
@@ -573,6 +578,8 @@ html[data-theme='pro'] .operatorActivityMuted {
   border: 1px solid rgba(93, 63, 59, 0.85);
   background: #1e1f25;
   min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .sxBoxLabel {
@@ -593,6 +600,9 @@ html[data-theme='pro'] .operatorActivityMuted {
   line-height: 1.15;
   color: inherit;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .qaVisitCellBtn {
