@@ -1528,6 +1528,54 @@ def register_alert_routes(app) -> None:
         finally:
             db.close()
 
+    @app.route("/api/alert/operator-activity", methods=["GET", "OPTIONS"])
+    def alert_operator_activity():
+        """
+        Last operator touch times for Alert Operator Activity column:
+        cleaning (Attendance & Cleaning cache), remote credit (proven attendance),
+        door open + refill (Vendon /event).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        try:
+            history_days = 14
+            try:
+                history_days = max(3, min(30, int(request.args.get("days") or 14)))
+            except (TypeError, ValueError):
+                history_days = 14
+            raw_ids = (request.args.get("machines") or "").strip()
+            requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
+            if len(requested) > 500:
+                requested = requested[:500]
+
+            cache_key = f"op-act:v1:{history_days}:{','.join(sorted(requested)) if requested else 'all'}"
+            cached = _alert_cache_get(cache_key, 90)
+            if cached is not None:
+                return jsonify(cached)
+
+            from alert_operator_activity_lib import compute_operator_activity
+
+            allowed = requested
+            if not allowed:
+                rows, list_err = vendon_fetch_machine_list(_vendon_get)
+                if list_err:
+                    return jsonify({"error": list_err, "byMachineId": {}}), 502
+                allowed = [str(r.get("id") or "").strip() for r in (rows or []) if str(r.get("id") or "").strip()]
+
+            payload = compute_operator_activity(
+                _vendon_get,
+                history_days=history_days,
+                allowed_machine_ids=allowed,
+            )
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
+        except Exception as ex:
+            logger.exception("alert_operator_activity")
+            return jsonify({"error": str(ex), "byMachineId": {}}), 500
+
     @app.route("/api/alert/remote-credits/today-totals", methods=["GET", "OPTIONS"])
     def alert_remote_credits_today_totals():
         """

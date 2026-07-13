@@ -88,6 +88,7 @@ export function RedFlagsCardList({
   workflowConfigured,
   workflowLoaded,
   liveCleaningByMachineId,
+  operatorActivityByMachineId,
   onOpenDetail,
   onOpenSales,
   onOpenTrend,
@@ -108,6 +109,10 @@ export function RedFlagsCardList({
   workflowConfigured?: boolean;
   workflowLoaded?: boolean;
   liveCleaningByMachineId?: Record<string, string | null | undefined>;
+  operatorActivityByMachineId?: Record<
+    string,
+    import('@/components/OperatorActivityCell').OperatorActivityTimes
+  >;
   onOpenDetail: (row: RankedRedAlertRow) => void;
   onOpenSales: (
     machineName: string,
@@ -233,8 +238,11 @@ export function RedFlagsCardList({
               </div>
 
               <div className={cardStyles.operatorBlock}>
-                <span className={cardStyles.metricLabel}>Last open</span>
-                <OperatorActivityCell row={row} />
+                <span className={cardStyles.metricLabel}>Op. activity</span>
+                <OperatorActivityCell
+                  activity={operatorActivityByMachineId?.[machId]}
+                  legacyWebAccessAt={row.operatorLastAccessAt}
+                />
               </div>
 
               <div className={cardStyles.operatorBlock}>

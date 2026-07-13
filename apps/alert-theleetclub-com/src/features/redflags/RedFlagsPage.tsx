@@ -478,6 +478,25 @@ export function RedFlagsPage() {
     staleTime: 2 * 60_000,
   });
 
+  const operatorActivityQ = useQuery({
+    queryKey: ['alert-operator-activity', creditsMachineIdsKey],
+    queryFn: async () => {
+      const base = '/api/alert/operator-activity';
+      const ids = creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!ids.length) {
+        return apiGet<{
+          byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
+        }>(base);
+      }
+      return apiGet<{
+        byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
+      }>(`${base}?machines=${encodeURIComponent(ids.join(','))}`);
+    },
+    enabled: q.isFetched && Boolean(creditsMachineIdsKey),
+    refetchInterval: 3 * 60_000,
+    staleTime: 90_000,
+  });
+
   const dailySalesQ = useQuery({
     queryKey: ['alert-daily-sales-elapsed', compare.preset],
     queryFn: () => apiGet<DailySalesElapsedResponse>('/api/alert/overall/daily-sales-elapsed'),
@@ -915,6 +934,7 @@ export function RedFlagsPage() {
       lastTxByMachine: vendonLastTxQ.data?.byMachineId,
       sxByMachine: sxQ.data?.byMachineId,
       sxReady: sxQ.isSuccess && Boolean(sxQ.data?.byMachineId),
+      operatorActivityByMachine: operatorActivityQ.data?.byMachineId,
     }),
     [
       compareMode,
@@ -934,6 +954,7 @@ export function RedFlagsPage() {
       vendonLastTxQ.data?.byMachineId,
       sxQ.data?.byMachineId,
       sxQ.isSuccess,
+      operatorActivityQ.data?.byMachineId,
     ],
   );
 
@@ -1288,6 +1309,7 @@ export function RedFlagsPage() {
             workflowConfigured={workflowAttendanceQ.data?.configured !== false}
             workflowLoaded={workflowAttendanceQ.isFetched}
             liveCleaningByMachineId={liveCleaningByMachineId}
+            operatorActivityByMachineId={operatorActivityQ.data?.byMachineId}
             slackEmailMap={slackContact.map}
             slackTeamId={slackContact.team}
             onOpenDetail={openDetail}
@@ -1463,6 +1485,7 @@ export function RedFlagsPage() {
                       snapTime,
                       vendonTxIso: vendonTxIsoFromEntry(vendonLastTxQ.data?.byMachineId?.[machId]),
                       clockMs: clock.getTime(),
+                      operatorActivity: operatorActivityQ.data?.byMachineId?.[machId] ?? null,
                       areaOwnerName: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
                       locationOwnerFull: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
                       workflowAttendance: workflowAttendanceQ.data?.byMachineId?.[machId],

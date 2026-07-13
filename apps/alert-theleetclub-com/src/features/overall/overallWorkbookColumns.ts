@@ -87,7 +87,7 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   operator: { title: 'Operator' },
   operatorActivity: {
     title: 'Operator Activity',
-    note: 'Last operator WEB machine open (door access) from Red Alert snapshot when available.',
+    note: 'Last cleaning, refill, remote credit, and door open (Monitor Attendance & Cleaning + Vendon events).',
   },
   attendance: { title: 'Attendance', note: 'Task Manager schedule + punch status (tap for MTD detail).' },
   lastCleaned: {

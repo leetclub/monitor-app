@@ -105,6 +105,7 @@ export type FleetRowBundle = {
   qaFindings?: QaFindingRow[];
   qaLoading?: boolean;
   qaError?: string | null;
+  operatorActivity?: import('@/components/OperatorActivityCell').OperatorActivityTimes | null;
   comparePreset?: ComparePresetId;
   snapTime?: string | null;
   dailyTargetKd?: number | null;
@@ -254,8 +255,11 @@ function renderOverallColumn(
       );
     }
     case 'operatorActivity':
-      return b.snap ? (
-        <OperatorActivityCell row={b.snap} />
+      return b.snap || b.operatorActivity ? (
+        <OperatorActivityCell
+          activity={b.operatorActivity}
+          legacyWebAccessAt={b.snap?.operatorLastAccessAt}
+        />
       ) : (
         <span className="opsCellMuted">—</span>
       );

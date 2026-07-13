@@ -77,6 +77,7 @@ export type RedFlagsSortContext = {
   lastTxByMachine?: Record<string, { timestamp: number }>;
   sxByMachine?: Record<string, { location?: { sxPct?: number | null } | null }>;
   sxReady?: boolean;
+  operatorActivityByMachine?: Record<string, { latestAt?: string | null }>;
 };
 
 function compareRedFlagsRow(
@@ -99,8 +100,10 @@ function compareRedFlagsRow(
     case 'operator':
       return compareStrings(getLiveOpsOperatorOnly(a.row), getLiveOpsOperatorOnly(b.row), dir);
     case 'operatorActivity': {
-      const ta = parseTimestampMs(String(a.row.operatorLastAccessAt ?? ''));
-      const tb = parseTimestampMs(String(b.row.operatorLastAccessAt ?? ''));
+      const actA = ctx.operatorActivityByMachine?.[idA]?.latestAt;
+      const actB = ctx.operatorActivityByMachine?.[idB]?.latestAt;
+      const ta = parseTimestampMs(String(actA || a.row.operatorLastAccessAt || ''));
+      const tb = parseTimestampMs(String(actB || b.row.operatorLastAccessAt || ''));
       return compareNumbers(Number.isNaN(ta) ? null : ta, Number.isNaN(tb) ? null : tb, dir);
     }
     case 'lastTransaction': {

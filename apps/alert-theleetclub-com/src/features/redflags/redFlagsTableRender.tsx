@@ -110,6 +110,7 @@ export type RedFlagsRowBundle = {
   snapTime?: string | null;
   vendonTxIso?: string | null;
   clockMs: number;
+  operatorActivity?: import('@/components/OperatorActivityCell').OperatorActivityTimes | null;
   areaOwnerName?: string | null;
   locationOwnerFull?: string | null;
   workflowAttendance?: import('@/lib/leetWorkflowApi').MachineAttendanceSummary;
@@ -435,7 +436,13 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
         />
       );
     case 'operatorActivity':
-      return <OperatorActivityCell row={row} nowMs={b.clockMs} />;
+      return (
+        <OperatorActivityCell
+          activity={b.operatorActivity}
+          legacyWebAccessAt={row.operatorLastAccessAt}
+          nowMs={b.clockMs}
+        />
+      );
     case 'lastTransaction':
       return (
         <LastTxLines

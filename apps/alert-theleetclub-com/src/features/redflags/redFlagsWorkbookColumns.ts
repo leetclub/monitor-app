@@ -78,9 +78,9 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   operatorActivity: {
     title: 'Operator Activity',
-    sub: 'Last WEB machine open (door access)',
+    sub: 'Clean · Refill · Credit · Door',
     placeholderNote:
-      'Relative time since the operator last opened this machine via WEB cashless (door access). Exact Kuwait timestamp on hover.',
+      'Last cleaning (Attendance & Cleaning), last refill (Vendon), last proven remote credit, last door open. Relative times; hover for exact Kuwait time.',
   },
   lastTransaction: {
     title: 'Last Transaction',

@@ -109,6 +109,7 @@ export type OverallSortContext = {
     }
   >;
   qaSummary?: QaSummaryResponse;
+  operatorActivityByMachine?: Record<string, { latestAt?: string | null }>;
 };
 
 function operatorName(m: FleetMachine, ctx: OverallSortContext): string {
@@ -139,8 +140,10 @@ function compareFleetMachine(
     case 'operator':
       return compareStrings(operatorName(a, ctx), operatorName(b, ctx), dir);
     case 'operatorActivity': {
-      const ta = parseTimestampMs(String(snapA?.operatorLastAccessAt ?? ''));
-      const tb = parseTimestampMs(String(snapB?.operatorLastAccessAt ?? ''));
+      const actA = ctx.operatorActivityByMachine?.[a.id]?.latestAt;
+      const actB = ctx.operatorActivityByMachine?.[b.id]?.latestAt;
+      const ta = parseTimestampMs(String(actA || snapA?.operatorLastAccessAt || ''));
+      const tb = parseTimestampMs(String(actB || snapB?.operatorLastAccessAt || ''));
       return compareNumbers(Number.isNaN(ta) ? null : ta, Number.isNaN(tb) ? null : tb, dir);
     }
     case 'lastCleaned': {

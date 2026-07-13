@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **Operator Activity — four last-touch lines:** Clean (Attendance & Cleaning end), Refill (Vendon All Products refilled), Credit (proven remote credit), Door (door opened). API `GET /api/alert/operator-activity`. Sort by newest of the four. |
 | 2026-07-13 | **Pro fills the iPad (not a phone column):** Removed centered `1100px` shell. Full-bleed header/tabs/main on tablet. 4 KPI cols + 2–3 card cols from 768px up. Horizontal tab labels. Email hidden on tablet so Sign out never clips. Classic unchanged. |
 | 2026-07-13 | **Pro iPad-native shell:** Full-width **tab strip** under brand (visible on iPad portrait/landscape; hamburger only &lt;640px). **48px** touch targets, safe-area insets, **ProCompareChips** (large preset buttons), 2-col card grid on tablet, full-width card actions in portrait, sticky fleet bar with home-indicator padding. Classic unchanged. |
 | 2026-07-13 | **Pro = dedicated iPad workspace (real refactor):** New `features/pro/` UI — card pages for Red Flags + Overall (not Classic Stitch chrome). Shared data/queries; Pro-only layout, KPIs, metrics, fleet bar. Shell stays top app bar. Classic unchanged. |

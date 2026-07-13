@@ -469,6 +469,21 @@ export function OverallPage() {
     refetchInterval: 3 * 60_000,
   });
 
+  const operatorActivityQ = useQuery({
+    queryKey: ['alert-operator-activity', fleetMachineIdsKey],
+    queryFn: () =>
+      apiGet<{
+        byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
+      }>(
+        fleetMachineIdsKey
+          ? `/api/alert/operator-activity?machines=${encodeURIComponent(fleetMachineIdsKey)}`
+          : '/api/alert/operator-activity',
+      ),
+    enabled: fleetMachines.length > 0,
+    staleTime: 90_000,
+    refetchInterval: 3 * 60_000,
+  });
+
   const loadingFleetTable =
     fleetMachines.length === 0 && (machinesQ.isLoading || (machines.length === 0 && snapQ.isLoading));
 
@@ -522,6 +537,7 @@ export function OverallPage() {
       wasteByMachine: wasteByMachineQ.data?.byMachineId,
       footfallByMachine: peopleFootfallQ.data?.byMachineId,
       qaSummary: qaSummaryQ.data,
+      operatorActivityByMachine: operatorActivityQ.data?.byMachineId,
     }),
     [
       compare,
@@ -539,6 +555,7 @@ export function OverallPage() {
       wasteByMachineQ.data?.byMachineId,
       peopleFootfallQ.data?.byMachineId,
       qaSummaryQ.data,
+      operatorActivityQ.data?.byMachineId,
     ],
   );
 
@@ -1013,6 +1030,7 @@ export function OverallPage() {
                   qaFindings,
                   qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
                   qaError: qaSummaryQ.data?.error || qaFindingsQ.data?.error || null,
+                  operatorActivity: operatorActivityQ.data?.byMachineId?.[m.id] ?? null,
                   comparePreset: compare.preset,
                   snapTime: snapQ.data?.generatedAt ?? snapQ.data?.cacheGeneratedAt ?? null,
                   dailyTargetKd,
