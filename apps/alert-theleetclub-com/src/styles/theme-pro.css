@@ -1,7 +1,7 @@
 /**
- * Pro — light professional operations workspace.
- * Distinct product shell from Classic (sidebar + dark tactical Stitch).
- * Applied when html[data-theme="pro"] and React mounts .appShellPro.
+ * Pro — iPad-first professional light workspace.
+ * Must override Classic dark cell/sales/freq chrome for readable contrast.
+ * Activated with html[data-theme="pro"] + .appShellPro.
  */
 
 .srOnly {
@@ -16,99 +16,113 @@
   border: 0;
 }
 
+/* —— Tokens (WCAG-friendly on light) —— */
 html[data-theme='pro'] {
   color-scheme: light;
+  font-size: 16px;
 
-  --bg: #f1f5f9;
+  --bg: #e8edf3;
   --bg-elevated: #ffffff;
   --panel: #ffffff;
-  --panel2: #f8fafc;
-  --surface-container-low: #f8fafc;
-  --surface-container-high: #eef2f7;
-  --surface-variant: #e2e8f0;
-  --text: #0f172a;
-  --muted: #64748b;
-  --on-surface-variant: #475569;
-  --border: #e2e8f0;
-  --border-soft: rgba(226, 232, 240, 0.95);
-  --outline-variant: #cbd5e1;
-  --accent: #0f766e;
-  --accent-blue: #2563eb;
-  --primary-salmon: #c2410c;
-  --danger: #dc2626;
-  --warn: #d97706;
+  --panel2: #f4f7fb;
+  --surface-container-low: #f4f7fb;
+  --surface-container-high: #e4eaf2;
+  --surface-variant: #d7dee8;
+  --text: #121a26;
+  --muted: #3d4d5f;
+  --on-surface-variant: #2a3a4c;
+  --border: #c5ceda;
+  --border-soft: #d5dde8;
+  --outline-variant: #b0bbc9;
+  --accent: #0f6b63;
+  --accent-blue: #1d4ed8;
+  --primary-salmon: #b45309;
+  --danger: #b91c1c;
+  --warn: #b45309;
   --link: #1d4ed8;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.06);
-  --font-sans: 'Manrope', 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px rgba(18, 26, 38, 0.06), 0 10px 28px rgba(18, 26, 38, 0.07);
+  --font-sans: 'Source Sans 3', system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
 
   --ops-surface-bg: #ffffff;
-  --ops-surface-bg-hover: #f8fafc;
-  --ops-surface-border: #e2e8f0;
-  --ops-surface-radius: 12px;
+  --ops-surface-bg-hover: #f4f7fb;
+  --ops-surface-border: #c5ceda;
+  --ops-surface-radius: 14px;
   --ops-surface-pad-y: 14px;
   --ops-surface-pad-x: 16px;
   --ops-surface-gap: 12px;
   --ops-inset-x: 16px;
-  --ops-accent: #0f766e;
-  --ops-label-color: #64748b;
-  --ops-title-color: #0f172a;
+  --ops-accent: #0f6b63;
+  --ops-label-color: #3d4d5f;
+  --ops-title-color: #121a26;
+  --ops-cell-box-h: 72px;
+  --ops-stack-box-w: 4.75rem;
 
-  --pro-ink: #0f172a;
-  --pro-teal: #0f766e;
-  --pro-teal-soft: rgba(15, 118, 110, 0.1);
-  --pro-header-h: 64px;
+  --pro-ink: #121a26;
+  --pro-teal: #0f6b63;
+  --pro-teal-soft: rgba(15, 107, 99, 0.12);
+  --pro-header-h: 68px;
+  --touch-min: 44px;
 }
 
 html[data-theme='pro'] body {
-  background:
-    radial-gradient(900px 420px at 12% -8%, rgba(15, 118, 110, 0.07), transparent 55%),
-    radial-gradient(700px 360px at 100% 0%, rgba(37, 99, 235, 0.05), transparent 50%),
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
   color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
   letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html[data-theme='pro'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
 html[data-theme='pro'] ::-webkit-scrollbar-track {
-  background: #e2e8f0;
+  background: #d7dee8;
 }
 
 html[data-theme='pro'] ::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 4px;
+  background: #8a97a8;
+  border-radius: 8px;
 }
 
-/* —— Pro app shell (no Classic sidebar) —— */
+html[data-theme='pro'] .muted,
+html[data-theme='pro'] .mutedSmall {
+  color: var(--muted) !important;
+}
+
+/* —— App shell —— */
 .appShellPro {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
   min-width: 0;
-  background: transparent;
+  background: var(--bg);
 }
 
 .proAppHeader {
   position: sticky;
   top: 0;
   z-index: 60;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #ffffff;
   border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 24px rgba(18, 26, 38, 0.04);
 }
 
 .proAppHeaderBar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 14px;
   min-height: var(--pro-header-h);
-  padding: 0 clamp(16px, 2.5vw, 28px);
-  max-width: 1440px;
+  padding: 8px clamp(14px, 2vw, 24px);
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -119,17 +133,11 @@ html[data-theme='pro'] ::-webkit-scrollbar-thumb {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
-  min-width: 0;
-}
-
-.proAppBrandText {
-  min-width: 0;
 }
 
 .proAppBrandName {
   margin: 0;
-  font-family: var(--font-sans);
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--pro-ink);
@@ -138,61 +146,63 @@ html[data-theme='pro'] ::-webkit-scrollbar-thumb {
 
 .proAppBrandSub {
   margin: 2px 0 0;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--muted);
-  letter-spacing: 0.02em;
 }
 
 .proAppMenuBtn {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   color: var(--text);
   cursor: pointer;
-  flex-shrink: 0;
-}
-
-.proAppMenuBtn:hover {
-  background: var(--panel2);
-  border-color: #cbd5e1;
 }
 
 .proAppNav {
   display: flex;
-  align-items: stretch;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   flex: 1;
   min-width: 0;
-  justify-content: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.proAppNav::-webkit-scrollbar {
+  display: none;
 }
 
 .proAppNav .navLink {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 8px 14px;
+  min-height: 44px;
+  padding: 10px 16px;
   border-radius: 999px;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
   text-decoration: none;
-  box-shadow: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .proAppNav .navLink:hover {
-  background: var(--surface-container-high);
+  background: var(--panel2);
   color: var(--text);
 }
 
@@ -200,8 +210,8 @@ html[data-theme='pro'] ::-webkit-scrollbar-thumb {
 .proAppNav a.navLink.navLinkActive {
   background: var(--pro-teal-soft);
   color: var(--pro-teal);
+  border-color: rgba(15, 107, 99, 0.25);
   box-shadow: none;
-  border: 0;
 }
 
 .proAppNav .navLink.navLinkActive .navGlyph {
@@ -211,18 +221,21 @@ html[data-theme='pro'] ::-webkit-scrollbar-thumb {
 .proAppHeaderEnd {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
   margin-left: auto;
 }
 
 .proAppClock {
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--muted);
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 12px;
   background: var(--panel2);
   border: 1px solid var(--border);
 }
@@ -231,26 +244,26 @@ html[data-theme='pro'] ::-webkit-scrollbar-thumb {
   display: none;
   border-top: 1px solid var(--border);
   background: #fff;
-  padding: 12px 16px 16px;
+  padding: 12px 14px 16px;
 }
 
 .proAppMobileNavList {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .proAppMobileNavList .navLink {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 10px 14px;
-  border-radius: 12px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 14px;
   color: var(--text);
   text-decoration: none;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .proAppMobileNavList .navLink.navLinkActive {
@@ -261,44 +274,34 @@ html[data-theme='pro'] ::-webkit-scrollbar-thumb {
 .appShellPro .proAppMain {
   flex: 1;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 20px clamp(16px, 2.5vw, 28px) 32px;
+  padding: 18px clamp(14px, 2vw, 24px) 100px;
   box-sizing: border-box;
-}
-
-.appShellPro .proNavBackdrop {
-  z-index: 55;
 }
 
 html[data-theme='pro'] .appShellPro .topBarSignedIn {
   font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--on-surface-variant);
-  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 8px 12px;
+  min-height: 44px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: #fff;
-  max-width: 220px;
-}
-
-html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 html[data-theme='pro'] .appShellPro .topBarSignOut {
-  min-height: 36px;
-  padding: 6px 14px;
+  min-height: 44px;
+  padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -306,11 +309,10 @@ html[data-theme='pro'] .appShellPro .topBarSignOut {
 
 html[data-theme='pro'] .appShellPro .topBarSignOut:hover {
   background: var(--panel2);
-  border-color: #cbd5e1;
   color: var(--text);
 }
 
-/* —— Page panels / KPI —— */
+/* —— Panels / page chrome —— */
 html[data-theme='pro'] .panel,
 html[data-theme='pro'] .opsInset,
 html[data-theme='pro'] .opsDashboardSection,
@@ -318,28 +320,25 @@ html[data-theme='pro'] .stitchDataPanel,
 html[data-theme='pro'] .stitchKpiCard,
 html[data-theme='pro'] .stitchOpsPanel {
   border-radius: var(--radius-lg) !important;
-  border: 1px solid var(--border);
-  background: #fff;
+  border: 1px solid var(--border) !important;
+  background: #ffffff !important;
   box-shadow: var(--shadow-sm);
-}
-
-html[data-theme='pro'] .stitchOpsPanel {
-  overflow: hidden;
+  color: var(--text);
 }
 
 html[data-theme='pro'] .stitchOpsHead {
-  padding: 18px 20px 14px;
+  padding: 16px 18px 14px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  background: #fafbfc !important;
 }
 
 html[data-theme='pro'] .stitchDataPanelTitle {
-  font-family: var(--font-sans);
-  font-size: 1.35rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  text-transform: none;
-  color: var(--text);
+  font-family: var(--font-sans) !important;
+  font-size: 1.45rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none !important;
+  color: var(--text) !important;
 }
 
 html[data-theme='pro'] .stitchDataPanelTitle .navGlyph {
@@ -352,23 +351,31 @@ html[data-theme='pro'] .stitchOpsBadge {
   color: var(--pro-teal);
   border: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 13px;
   letter-spacing: 0;
   text-transform: none;
-  font-size: 12px;
-  padding: 4px 10px;
+  padding: 6px 12px;
+}
+
+html[data-theme='pro'] .stitchOpsMetaInline,
+html[data-theme='pro'] .stitchOpsSubtitle {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+  font-weight: 600;
 }
 
 html[data-theme='pro'] .stitchOpsLive {
   border-radius: 999px;
-  border: 1px solid #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
+  border: 1px solid #86efac;
+  background: #ecfdf5;
+  color: #166534 !important;
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 13px;
   letter-spacing: 0;
   text-transform: none;
-  font-size: 12px;
+  min-height: 36px;
 }
 
 html[data-theme='pro'] .stitchOpsRefresh {
@@ -376,7 +383,9 @@ html[data-theme='pro'] .stitchOpsRefresh {
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 8px 16px;
 }
 
 html[data-theme='pro'] .opsDashboardSectionTitle,
@@ -384,155 +393,320 @@ html[data-theme='pro'] .stitchOpsPanelTitle,
 html[data-theme='pro'] .opsRevenueTotalsEyebrow,
 html[data-theme='pro'] .opsSectionTitle,
 html[data-theme='pro'] .stitchKpiLabel {
-  font-family: var(--font-sans);
+  font-family: var(--font-sans) !important;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-html[data-theme='pro'] .stitchDataPanelHead,
-html[data-theme='pro'] .stitchTablePanelHead,
-html[data-theme='pro'] .opsDashboardSectionHead {
-  border-radius: 0 !important;
-  background: #f8fafc !important;
-  border-color: var(--border);
-}
-
-html[data-theme='pro'] .stitchKpiCard {
-  position: relative;
-  padding: 14px 16px;
-  border-radius: 14px !important;
-}
-
-html[data-theme='pro'] .stitchKpiCard::before {
-  content: none;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--muted) !important;
 }
 
 html[data-theme='pro'] .stitchKpiVal,
 html[data-theme='pro'] .stitchKpiInlineVal {
   font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--text);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text) !important;
 }
 
 html[data-theme='pro'] .stitchKpiInlineItem {
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: #fff;
-  padding: 8px 12px;
+  padding: 10px 14px;
+  min-height: 52px;
 }
 
-html[data-theme='pro'] .opsPrepCompact,
-html[data-theme='pro'] .opsPrepRow {
-  gap: 12px;
+html[data-theme='pro'] .stitchKpiInlineLabel {
+  color: var(--muted) !important;
+  font-weight: 600;
+  font-size: 12px;
 }
 
 html[data-theme='pro'] .opsPrepSalesLine {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+html[data-theme='pro'] .opsPrepSalesLine strong {
+  color: var(--text);
+}
+
+html[data-theme='pro'] .stitchOpsAlert {
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+html[data-theme='pro'] .stitchOpsAlertWarn {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+}
+
+html[data-theme='pro'] .stitchOpsAlertInfo {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  color: #1e3a8a;
 }
 
 /* —— Tables —— */
+html[data-theme='pro'] .stitchOpsTable,
+html[data-theme='pro'] .opsFleetTable,
+html[data-theme='pro'] .alertTable {
+  color: var(--text);
+  background: #fff;
+}
+
 html[data-theme='pro'] .stitchOpsTable thead th,
 html[data-theme='pro'] .opsFleetTable thead th,
-html[data-theme='pro'] .alertTable thead th {
-  font-family: var(--font-sans);
+html[data-theme='pro'] .alertTable thead th,
+html[data-theme='pro'] th {
+  font-family: var(--font-sans) !important;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  background: #f8fafc !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--muted) !important;
+  background: #f4f7fb !important;
   border-bottom: 1px solid var(--border) !important;
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
 }
 
 html[data-theme='pro'] .stitchOpsTable tbody td,
 html[data-theme='pro'] .opsFleetTable tbody td {
   font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--text);
-  border-bottom-color: #eef2f7;
-  background: #fff;
+  font-size: 14px !important;
+  font-weight: 550;
+  color: var(--text) !important;
+  border-bottom-color: #e4eaf2 !important;
+  background: #ffffff !important;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 html[data-theme='pro'] .stitchOpsTable tbody tr:hover,
 html[data-theme='pro'] .opsFleetTable tbody tr:hover {
-  background: rgba(15, 118, 110, 0.04);
+  background: rgba(15, 107, 99, 0.05) !important;
 }
 
+html[data-theme='pro'] .stitchOpsTable tbody tr:hover td {
+  background: transparent !important;
+}
+
+/* —— Metric / sales / freq boxes (Classic dark → Pro light) —— */
 html[data-theme='pro'] .opsMetricBox,
-html[data-theme='pro'] .opsCellBox {
-  border-radius: 10px !important;
-  border-color: var(--border);
-  background: #f8fafc;
-  box-shadow: none;
+html[data-theme='pro'] .opsCellBox,
+html[data-theme='pro'] .salesStackBox,
+html[data-theme='pro'] .stitchOpsTable .salesStackBox,
+html[data-theme='pro'] .stitchOpsTable .lastTxBox,
+html[data-theme='pro'] .stitchOpsTable .freqBox,
+html[data-theme='pro'] .mtdYoyCell,
+html[data-theme='pro'] .sxCell {
+  border-radius: 12px !important;
+  border: 1px solid var(--border) !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  color: var(--text) !important;
 }
 
+html[data-theme='pro'] .salesStackLabel,
+html[data-theme='pro'] .stitchOpsTable .salesStackLabel,
+html[data-theme='pro'] .stitchOpsTable .lastTxLineWd {
+  color: var(--muted) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+}
+
+html[data-theme='pro'] .salesStackVal,
+html[data-theme='pro'] .stitchOpsTable .salesStackVal,
+html[data-theme='pro'] .stitchOpsTable .lastTxLineDate,
+html[data-theme='pro'] .stitchOpsTable .lastTxLineTime,
+html[data-theme='pro'] .stitchOpsTable .lastTxBoxVal,
+html[data-theme='pro'] .stitchOpsTable .freqBoxVal,
+html[data-theme='pro'] .salesStackTrend {
+  color: var(--text) !important;
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+}
+
+html[data-theme='pro'] .salesStackBoxUp,
+html[data-theme='pro'] .stitchOpsTable .salesStackBoxUp {
+  border-color: #86efac !important;
+  background: #ecfdf5 !important;
+}
+
+html[data-theme='pro'] .salesStackBoxUp .salesStackVal,
+html[data-theme='pro'] .salesStackBoxUp .salesStackTrend {
+  color: #166534 !important;
+}
+
+html[data-theme='pro'] .salesStackBoxDown,
+html[data-theme='pro'] .stitchOpsTable .salesStackBoxDown {
+  border-color: #fca5a5 !important;
+  background: #fef2f2 !important;
+}
+
+html[data-theme='pro'] .salesStackBoxDown .salesStackVal,
+html[data-theme='pro'] .salesStackBoxDown .salesStackTrend {
+  color: #991b1b !important;
+}
+
+html[data-theme='pro'] .salesStackBoxOwner,
+html[data-theme='pro'] .stitchOpsTable .salesStackBoxOwner {
+  border-color: #c4b5fd !important;
+  background: #f5f3ff !important;
+}
+
+html[data-theme='pro'] .salesStackBoxOwner .salesStackVal {
+  color: #5b21b6 !important;
+}
+
+html[data-theme='pro'] .salesStackEmpty {
+  color: var(--muted) !important;
+}
+
+html[data-theme='pro'] .fleetCellMissing {
+  color: var(--muted) !important;
+}
+
+html[data-theme='pro'] .linkGo {
+  color: var(--link) !important;
+  font-weight: 700;
+  min-height: 44px;
+}
+
+/* Column picker / ops view toggle */
 html[data-theme='pro'] .opsViewToggle {
   border-radius: 999px;
   border: 1px solid var(--border);
   background: #fff;
-  padding: 3px;
-  gap: 2px;
+  padding: 4px;
+  gap: 4px;
 }
 
 html[data-theme='pro'] .opsViewToggleBtn {
-  border-radius: 999px;
-  border: 0;
+  border-radius: 999px !important;
+  border: 0 !important;
+  min-height: 40px;
+  padding: 8px 14px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: var(--muted) !important;
+  background: transparent !important;
+}
+
+html[data-theme='pro'] .opsViewToggleBtnActive,
+html[data-theme='pro'] .opsViewToggleBtn.opsViewToggleBtnActive {
+  background: var(--pro-teal) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme='pro'] .opsColChip,
+html[data-theme='pro'] .opsSelectCard,
+html[data-theme='pro'] .opsStatusPill {
+  background: #f4f7fb !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
   font-weight: 600;
 }
 
-html[data-theme='pro'] .opsViewToggleBtnActive {
-  background: var(--pro-teal);
-  color: #fff;
-  border-color: var(--pro-teal);
+html[data-theme='pro'] .opsSelectCardHint {
+  color: var(--muted) !important;
 }
 
-/* —— Fleet revenue bar —— */
-html[data-theme='pro'] .opsRevenueTotalsBar {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.94);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.06);
+html[data-theme='pro'] .opsColChipActive,
+html[data-theme='pro'] button.opsColChipActive {
+  background: var(--pro-teal-soft) !important;
+  color: var(--pro-teal) !important;
+  border-color: rgba(15, 107, 99, 0.35) !important;
 }
 
-html[data-theme='pro'] .opsRevenueTotalsVal,
-html[data-theme='pro'] .opsRevenueTotalsTrend {
-  font-family: var(--font-mono);
+/* Compare preset */
+html[data-theme='pro'] .comparePresetPicker,
+html[data-theme='pro'] .stitchOpsControls,
+html[data-theme='pro'] .opsPrepCompact {
   color: var(--text);
 }
 
-/* —— Buttons —— */
+html[data-theme='pro'] select,
+html[data-theme='pro'] input,
+html[data-theme='pro'] textarea {
+  background: #ffffff !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  min-height: 44px;
+  font-size: 15px !important;
+  font-weight: 550;
+}
+
+html[data-theme='pro'] select:focus,
+html[data-theme='pro'] input:focus,
+html[data-theme='pro'] textarea:focus {
+  outline: 2px solid rgba(15, 107, 99, 0.35);
+  outline-offset: 1px;
+  border-color: var(--pro-teal) !important;
+}
+
+/* Revenue bar */
+html[data-theme='pro'] .opsRevenueTotalsBar {
+  background: #ffffff !important;
+  border-top: 1px solid var(--border) !important;
+  box-shadow: 0 -10px 32px rgba(18, 26, 38, 0.08);
+  backdrop-filter: none;
+}
+
+html[data-theme='pro'] .opsRevenueTotalsLabel,
+html[data-theme='pro'] .opsRevenueTotalsSubLabel,
+html[data-theme='pro'] .opsRevenueTotalsAsOf,
+html[data-theme='pro'] .opsRevenueTotalsEyebrow {
+  color: var(--muted) !important;
+}
+
+html[data-theme='pro'] .opsRevenueTotalsVal,
+html[data-theme='pro'] .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal,
+html[data-theme='pro'] .opsRevenueTotalsValMuted,
+html[data-theme='pro'] .opsRevenueTotalsTrend {
+  color: var(--text) !important;
+}
+
+html[data-theme='pro'] .opsRevenueTotalsTrendMuted {
+  color: var(--muted) !important;
+}
+
+/* Buttons */
 html[data-theme='pro'] .primary,
 html[data-theme='pro'] button.primary {
   background: var(--pro-teal);
-  color: #fff;
+  color: #fff !important;
   border: 1px solid var(--pro-teal);
   border-radius: 999px;
   font-family: var(--font-sans);
   font-weight: 700;
+  font-size: 15px;
   letter-spacing: 0;
   text-transform: none;
-  font-size: 13px;
-  padding: 10px 18px;
+  min-height: 48px;
+  padding: 12px 20px;
 }
 
 html[data-theme='pro'] .primary:hover,
 html[data-theme='pro'] button.primary:hover {
   background: #0d9488;
   border-color: #0d9488;
+  color: #fff !important;
   filter: none;
-  color: #fff;
 }
 
-/* —— Theme toggle —— */
+/* Theme toggle */
 .themeToggle {
   display: inline-flex;
   align-items: center;
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
   border-radius: 999px;
   border: 1px solid var(--border-soft);
@@ -546,15 +720,16 @@ html[data-theme='pro'] button.primary:hover {
   margin: 0;
   cursor: pointer;
   font: inherit;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 5px 9px;
+  padding: 8px 12px;
   border-radius: 999px;
   color: var(--muted);
   background: transparent;
   line-height: 1.2;
+  min-height: 36px;
 }
 
 .themeToggleBtn:hover {
@@ -567,8 +742,8 @@ html[data-theme='pro'] button.primary:hover {
 }
 
 .themeToggle--compact .themeToggleBtn {
-  padding: 4px 7px;
-  font-size: 9px;
+  padding: 8px 10px;
+  font-size: 11px;
 }
 
 .loginThemeRow {
@@ -578,9 +753,12 @@ html[data-theme='pro'] button.primary:hover {
 }
 
 html[data-theme='pro'] .themeToggle {
-  border-radius: 999px;
   border: 1px solid var(--border);
   background: #fff;
+}
+
+html[data-theme='pro'] .themeToggleBtn {
+  color: var(--muted);
 }
 
 html[data-theme='pro'] .themeToggleBtn--active {
@@ -588,42 +766,38 @@ html[data-theme='pro'] .themeToggleBtn--active {
   color: #fff;
 }
 
-/* —— Login —— */
+/* Login */
 html[data-theme='pro'] .loginShell {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 24px 16px;
-  background:
-    radial-gradient(800px 420px at 50% -10%, rgba(15, 118, 110, 0.12), transparent 55%),
-    radial-gradient(600px 360px at 90% 100%, rgba(37, 99, 235, 0.08), transparent 50%),
-    #f1f5f9;
+  padding: 28px 20px;
+  background: linear-gradient(180deg, #dfe7f0 0%, #e8edf3 45%, #eef2f6 100%);
 }
 
 html[data-theme='pro'] .loginCard {
   width: 100%;
-  max-width: 420px;
-  border-radius: 20px;
+  max-width: 440px;
+  border-radius: 22px;
   border: 1px solid var(--border);
   background: #fff;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 24px 56px rgba(18, 26, 38, 0.1);
   padding: 28px 28px 32px;
 }
 
 html[data-theme='pro'] .loginBrand {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 16px;
-  margin-bottom: 22px;
-  padding-bottom: 0;
-  border-bottom: 0;
+  margin-bottom: 24px;
 }
 
 html[data-theme='pro'] .loginLogo {
-  border-radius: 14px;
-  width: 56px;
-  height: 56px;
+  border-radius: 16px;
+  width: 64px;
+  height: 64px;
 }
 
 html[data-theme='pro'] .loginTitle {
@@ -631,75 +805,75 @@ html[data-theme='pro'] .loginTitle {
   font-weight: 700;
   letter-spacing: -0.02em;
   text-transform: none;
-  font-size: 1.45rem;
+  font-size: 1.55rem;
   color: var(--text);
 }
 
 html[data-theme='pro'] .loginSubtitle {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
   color: var(--muted);
 }
 
-/* Admin / misc surfaces under Pro */
+/* Modals under Pro — light readable panels */
 html[data-theme='pro'] .modalPanel,
 html[data-theme='pro'] .alertModalPanel,
+html[data-theme='pro'] .salesHistoryModal,
 html[data-theme='pro'] [class*='Modal'] .panel {
-  border-radius: 16px;
-  background: #fff;
-  border-color: var(--border);
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: 0 24px 64px rgba(18, 26, 38, 0.18);
+}
+
+html[data-theme='pro'] .salesHistoryBackdrop,
+html[data-theme='pro'] .backdrop {
+  background: rgba(18, 26, 38, 0.45) !important;
+}
+
+/* Admin */
+html[data-theme='pro'] .adminTab,
+html[data-theme='pro'] .adminCard,
+html[data-theme='pro'] .adminLead {
   color: var(--text);
 }
 
-html[data-theme='pro'] input,
-html[data-theme='pro'] select,
-html[data-theme='pro'] textarea {
-  background: #fff;
-  color: var(--text);
-  border-color: var(--border);
-  border-radius: 10px;
+/* iPad / tablet (primary Pro target) */
+@media (max-width: 1180px) {
+  html[data-theme='pro'] {
+    font-size: 17px;
+  }
+
+  .proAppBrandSub {
+    display: none;
+  }
+
+  .appShellPro .proAppMain {
+    padding: 16px 14px 120px;
+  }
+
+  html[data-theme='pro'] .stitchDataPanelTitle {
+    font-size: 1.55rem !important;
+  }
+
+  html[data-theme='pro'] .stitchOpsTable tbody td,
+  html[data-theme='pro'] .opsFleetTable tbody td {
+    font-size: 15px !important;
+  }
+
+  html[data-theme='pro'] .salesStackVal,
+  html[data-theme='pro'] .stitchOpsTable .salesStackVal,
+  html[data-theme='pro'] .stitchOpsTable .freqBoxVal {
+    font-size: 0.95rem !important;
+  }
 }
 
-html[data-theme='pro'] .muted {
-  color: var(--muted);
-}
-
-html[data-theme='pro'] th {
-  background: #f8fafc;
-  color: var(--muted);
-}
-
-/* Hardcoded dark chips in shared ops surfaces */
-html[data-theme='pro'] .opsDashboardSectionBody,
-html[data-theme='pro'] .stitchOpsBody {
-  color: var(--text);
-}
-
-html[data-theme='pro'] .opsInset,
-html[data-theme='pro'] .opsChip,
-html[data-theme='pro'] .stitchOpsControls,
-html[data-theme='pro'] .comparePresetPicker,
-html[data-theme='pro'] .opsPrepCompact {
-  color: var(--text);
-}
-
-html[data-theme='pro'] .stitchOpsControls select,
-html[data-theme='pro'] .opsPrepCompact select,
-html[data-theme='pro'] .comparePresetPicker select {
-  background: #fff;
-  color: var(--text);
-  border-color: var(--border);
-}
-
-/* Card list (iPad) — lighten dark gradients */
-html[data-theme='pro'] .appShellPro [class*='cardHead'],
-html[data-theme='pro'] .appShellPro [class*='Card'] {
-  color: var(--text);
-}
-
-@media (max-width: 960px) {
+/* Phone: collapse top tabs into menu */
+@media (max-width: 767px) {
   .proAppMenuBtn {
     display: inline-flex;
   }
@@ -712,10 +886,6 @@ html[data-theme='pro'] .appShellPro [class*='Card'] {
     display: block;
   }
 
-  .proAppBrandSub {
-    display: none;
-  }
-
   .proAppClock {
     display: none;
   }
@@ -723,15 +893,9 @@ html[data-theme='pro'] .appShellPro [class*='Card'] {
   html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
     display: none;
   }
-}
-
-@media (max-width: 640px) {
-  .appShellPro .proAppMain {
-    padding: 14px 12px 24px;
-  }
 
   .proAppHeaderBar {
-    padding: 0 12px;
-    min-height: 56px;
+    min-height: 60px;
+    padding: 8px 12px;
   }
 }

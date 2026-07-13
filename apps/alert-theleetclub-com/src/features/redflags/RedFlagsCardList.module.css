@@ -274,3 +274,74 @@
 .goBtn:hover {
   background: rgba(185, 28, 28, 0.4);
 }
+
+/* Pro light — readable card copy (Classic keeps dark colors above) */
+:global(html[data-theme='pro']) .card {
+  color: #121a26;
+  box-shadow: 0 8px 24px rgba(18, 26, 38, 0.06);
+}
+
+:global(html[data-theme='pro']) .machineName {
+  color: #121a26;
+  font-size: 1.1rem;
+}
+
+:global(html[data-theme='pro']) .machineId,
+:global(html[data-theme='pro']) .metricLabel,
+:global(html[data-theme='pro']) .freqPillLabel {
+  color: #3d4d5f;
+}
+
+:global(html[data-theme='pro']) .alertLead {
+  color: #991b1b;
+}
+
+:global(html[data-theme='pro']) .metricVal,
+:global(html[data-theme='pro']) .freqPillVal {
+  color: #121a26;
+  font-size: 0.95rem;
+}
+
+:global(html[data-theme='pro']) .freqPill {
+  background: #f4f7fb;
+  border: 1px solid #c5ceda;
+  min-height: 52px;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+:global(html[data-theme='pro']) .chipNew {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+:global(html[data-theme='pro']) .chipUpd {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+:global(html[data-theme='pro']) .chipP2 {
+  color: #3d4d5f;
+  border-color: #c5ceda;
+  background: #f4f7fb;
+}
+
+:global(html[data-theme='pro']) .goBtn {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fca5a5;
+  border-radius: 12px;
+  min-height: 44px;
+  font-size: 0.9rem;
+}
+
+:global(html[data-theme='pro']) .goBtn:hover {
+  background: #fee2e2;
+}
+
+:global(html[data-theme='pro']) .list {
+  gap: 14px;
+  padding: 14px;
+}

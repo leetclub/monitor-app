@@ -31,7 +31,7 @@ export function applyAlertUiTheme(theme: AlertUiThemeId): void {
   root.style.colorScheme = theme === 'pro' ? 'light' : 'dark';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute('content', theme === 'pro' ? '#f1f5f9' : '#0c0f14');
+    meta.setAttribute('content', theme === 'pro' ? '#e8edf3' : '#0c0f14');
   }
 }
 

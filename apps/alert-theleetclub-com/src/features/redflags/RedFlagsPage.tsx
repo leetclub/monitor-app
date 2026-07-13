@@ -101,11 +101,12 @@ import styles from './RedFlagsBoard.module.css';
 const RED_FLAGS_VIEW_KEY = 'alert_redflags_view';
 type RedFlagsViewMode = 'cards' | 'table';
 
-function initialRedFlagsView(_compact: boolean): RedFlagsViewMode {
+function initialRedFlagsView(compact: boolean): RedFlagsViewMode {
   if (typeof window === 'undefined') return 'table';
   const saved = localStorage.getItem(RED_FLAGS_VIEW_KEY);
   if (saved === 'cards' || saved === 'table') return saved;
-  return 'table';
+  /* Pro/iPad compact: cards first for readability on touch. */
+  return compact ? 'cards' : 'table';
 }
 
 type Snapshot = {
