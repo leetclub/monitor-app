@@ -21,6 +21,8 @@ export type ProOverallCard = {
   salesCaption: string;
   lastTx: string;
   lastClean: string;
+  activityKind: string;
+  activityWhen: string;
   flagged: boolean;
   salesRow: SalesElapsedRow | null;
 };
@@ -169,12 +171,14 @@ export function ProOverallView({
                         <span className="proMetricHint">{c.salesCaption}</span>
                       </div>
                       <div className="proMetric">
-                        <span className="proMetricLabel">Last TX</span>
-                        <span className="proMetricValue">{c.lastTx}</span>
+                        <span className="proMetricLabel">Op. activity</span>
+                        <span className="proMetricValue">{c.activityKind}</span>
+                        <span className="proMetricHint">{c.activityWhen}</span>
                       </div>
                       <div className="proMetric">
                         <span className="proMetricLabel">Last clean</span>
                         <span className="proMetricValue">{c.lastClean}</span>
+                        <span className="proMetricHint">TX {c.lastTx}</span>
                       </div>
                     </div>
                     <div className="proCardFoot">

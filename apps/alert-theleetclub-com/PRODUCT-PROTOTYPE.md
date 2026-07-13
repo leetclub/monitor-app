@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **Operator Activity — kind visible:** Last-touch cell shows **Clean / Refill / Credit / Door** on the cell (not hover-only), plus relative time + Kuwait date. Pro Red Flags + Overall cards show the same kind. |
 | 2026-07-13 | **Operator Activity — single last touch:** Column shows only the **most recent** op activity (from cleaning / refill / remote credit / door) as relative time + Kuwait date. Hover shows which type. |
 | 2026-07-13 | **Operator Activity — four last-touch lines:** Clean (Attendance & Cleaning end), Refill (Vendon All Products refilled), Credit (proven remote credit), Door (door opened). API `GET /api/alert/operator-activity`. Sort by newest of the four. |
 | 2026-07-13 | **Pro fills the iPad (not a phone column):** Removed centered `1100px` shell. Full-bleed header/tabs/main on tablet. 4 KPI cols + 2–3 card cols from 768px up. Horizontal tab labels. Email hidden on tablet so Sign out never clips. Classic unchanged. |

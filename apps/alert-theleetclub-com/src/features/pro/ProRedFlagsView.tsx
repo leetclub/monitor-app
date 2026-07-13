@@ -23,6 +23,11 @@ import {
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
 import { bindStopRowClick } from '@/lib/stopRowClick';
 import type { StitchKpi } from '@/components/StitchKpiStrip';
+import {
+  resolveLatestOperatorActivity,
+  type OperatorActivityTimes,
+} from '@/components/OperatorActivityCell';
+import { formatRelativeAgo } from '@/lib/formatKuwait';
 import './pro.css';
 
 type CreditsMap = Record<
@@ -69,6 +74,7 @@ export function ProRedFlagsView({
   vendonByMachineId,
   vendonSalesLabels,
   liveCleaningByMachineId,
+  operatorActivityByMachineId,
   fleetPrimaryKwd,
   fleetBaselineKwd,
   fleetTrendPct,
@@ -101,6 +107,7 @@ export function ProRedFlagsView({
   vendonByMachineId?: Record<string, VendonPresetSalesRow>;
   vendonSalesLabels?: { primary?: string; baseline?: string };
   liveCleaningByMachineId?: Record<string, string | null | undefined>;
+  operatorActivityByMachineId?: Record<string, OperatorActivityTimes | null | undefined>;
   fleetPrimaryKwd?: number | null;
   fleetBaselineKwd?: number | null;
   fleetTrendPct?: number | null;
@@ -234,6 +241,10 @@ export function ProRedFlagsView({
                   : '—';
               const txIso = pickLastTransactionTs(row, snapTime);
               const lastTx = txIso ? formatLastTxCompact(txIso) : '—';
+              const latestOp = resolveLatestOperatorActivity(
+                operatorActivityByMachineId?.[machId],
+                row.operatorLastAccessAt,
+              );
               const salesTone =
                 salesPair.trendPct != null && Number.isFinite(salesPair.trendPct)
                   ? salesPair.trendPct >= 0
@@ -286,14 +297,22 @@ export function ProRedFlagsView({
                         <span className="proMetricHint">{freqCtx.trendText || 'incidents'}</span>
                       </div>
                       <div className="proMetric">
-                        <span className="proMetricLabel">Last TX</span>
-                        <span className="proMetricValue">{lastTx}</span>
-                        <span className="proMetricHint">Operator: {opName || '—'}</span>
+                        <span className="proMetricLabel">Op. activity</span>
+                        <span className="proMetricValue">
+                          {latestOp ? latestOp.kindShort : '—'}
+                        </span>
+                        <span className="proMetricHint">
+                          {latestOp
+                            ? `${formatRelativeAgo(latestOp.iso) || formatLastTxCompact(latestOp.iso)} · ${opName || '—'}`
+                            : `Operator: ${opName || '—'}`}
+                        </span>
                       </div>
                       <div className="proMetric">
                         <span className="proMetricLabel">Last clean</span>
                         <span className="proMetricValue">{cleanStatus?.label || '—'}</span>
-                        <span className="proMetricHint">{cleanIso ? formatLastTxCompact(cleanIso) : 'No recent clean'}</span>
+                        <span className="proMetricHint">
+                          {cleanIso ? formatLastTxCompact(cleanIso) : lastTx !== '—' ? `TX ${lastTx}` : 'No recent clean'}
+                        </span>
                       </div>
                     </div>
 

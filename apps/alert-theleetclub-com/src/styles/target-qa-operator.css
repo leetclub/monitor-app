@@ -392,6 +392,14 @@
   line-height: 1.2;
 }
 
+.operatorActivityKind {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
 .operatorActivityRel {
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -409,6 +417,23 @@
 .operatorActivityMuted {
   color: #64748b;
   font-size: 0.72rem;
+}
+
+/* Pro light surfaces — activity kind must stay readable */
+html[data-theme='pro'] .operatorActivityKind {
+  color: #0f766e;
+}
+
+html[data-theme='pro'] .operatorActivityRel {
+  color: #0f172a;
+}
+
+html[data-theme='pro'] .operatorActivityExact {
+  color: #475569;
+}
+
+html[data-theme='pro'] .operatorActivityMuted {
+  color: #64748b;
 }
 
 .attendanceWorkflowBtn {

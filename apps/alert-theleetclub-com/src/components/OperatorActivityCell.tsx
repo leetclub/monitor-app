@@ -8,11 +8,11 @@ export type OperatorActivityTimes = {
   latestAt?: string | null;
 };
 
-const SOURCES: Array<{ key: keyof OperatorActivityTimes; label: string }> = [
-  { key: 'cleaningAt', label: 'Cleaning' },
-  { key: 'refillAt', label: 'Refill' },
-  { key: 'remoteCreditAt', label: 'Remote credit' },
-  { key: 'doorOpenAt', label: 'Door access' },
+const SOURCES: Array<{ key: keyof OperatorActivityTimes; label: string; short: string }> = [
+  { key: 'cleaningAt', label: 'Cleaning', short: 'Clean' },
+  { key: 'refillAt', label: 'Refill', short: 'Refill' },
+  { key: 'remoteCreditAt', label: 'Remote credit', short: 'Credit' },
+  { key: 'doorOpenAt', label: 'Door access', short: 'Door' },
 ];
 
 function parseMs(iso: string): number {
@@ -24,12 +24,13 @@ function parseMs(iso: string): number {
 export function resolveLatestOperatorActivity(
   activity?: OperatorActivityTimes | null,
   legacyWebAccessAt?: string | null,
-): { iso: string; kind: string } | null {
+): { iso: string; kind: string; kindShort: string } | null {
   let bestIso = '';
   let bestMs = -1;
   let bestKind = 'Activity';
+  let bestShort = 'Activity';
 
-  const consider = (isoRaw: string | null | undefined, kind: string) => {
+  const consider = (isoRaw: string | null | undefined, kind: string, kindShort: string) => {
     const iso = isoRaw != null ? String(isoRaw).trim() : '';
     if (!iso) return;
     const ms = parseMs(iso);
@@ -38,19 +39,20 @@ export function resolveLatestOperatorActivity(
       bestMs = ms;
       bestIso = iso;
       bestKind = kind;
+      bestShort = kindShort;
     }
   };
 
   for (const s of SOURCES) {
-    consider(activity?.[s.key], s.label);
+    consider(activity?.[s.key], s.label, s.short);
   }
-  consider(legacyWebAccessAt, 'Remote credit');
+  consider(legacyWebAccessAt, 'Remote credit', 'Credit');
 
   if (!bestIso) return null;
-  return { iso: bestIso, kind: bestKind };
+  return { iso: bestIso, kind: bestKind, kindShort: bestShort };
 }
 
-/** Single last operator touch: relative + Kuwait date. */
+/** Last operator touch: kind + relative time + Kuwait date (kind is visible, not hover-only). */
 export function OperatorActivityCell({
   activity,
   legacyWebAccessAt,
@@ -73,6 +75,7 @@ export function OperatorActivityCell({
       className="operatorActivityCell"
       title={`Last operator activity (${latest.kind}): ${exact}`}
     >
+      <span className="operatorActivityKind">{latest.kindShort}</span>
       <span className="operatorActivityRel">{rel ?? '—'}</span>
       <span className="operatorActivityExact">{exact || '—'}</span>
     </span>

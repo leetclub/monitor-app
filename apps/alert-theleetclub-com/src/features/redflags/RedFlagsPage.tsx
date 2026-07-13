@@ -1101,6 +1101,7 @@ export function RedFlagsPage() {
           vendonByMachineId={vendonSummaryQ.data?.byMachineId}
           vendonSalesLabels={vendonSalesLabels}
           liveCleaningByMachineId={liveCleaningByMachineId}
+          operatorActivityByMachineId={operatorActivityQ.data?.byMachineId}
           fleetPrimaryKwd={fleetRevenueTotals.primary}
           fleetBaselineKwd={fleetRevenueTotals.baseline}
           fleetTrendPct={fleetRevenueTotals.trendPct}

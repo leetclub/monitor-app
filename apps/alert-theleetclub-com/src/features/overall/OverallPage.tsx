@@ -25,6 +25,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
 import { ProOverallView, type ProOverallCard } from '@/features/pro/ProOverallView';
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
+import { resolveLatestOperatorActivity } from '@/components/OperatorActivityCell';
+import { formatRelativeAgo } from '@/lib/formatKuwait';
 import { useOverallColumnPrefs } from '@/lib/useOverallColumnPrefs';
 import { visibleOverallColumns } from './overallColumnVisibility';
 import { OverallColumnPicker } from './OverallColumnPicker';
@@ -726,6 +728,10 @@ export function OverallPage() {
       const cleanStatus = cleanIso
         ? lastCleanedStatus({ lastCleaningIso: cleanIso, cleaningWindows: cleanWins })
         : null;
+      const latestOp = resolveLatestOperatorActivity(
+        operatorActivityQ.data?.byMachineId?.[m.id],
+        snap?.operatorLastAccessAt != null ? String(snap.operatorLastAccessAt) : null,
+      );
       return {
         id: m.id,
         name: m.name || m.id,
@@ -736,6 +742,10 @@ export function OverallPage() {
         salesCaption: salesPair.caption,
         lastTx: lastTxIso ? formatLastTxCompact(lastTxIso) : '—',
         lastClean: cleanStatus?.label || (cleanIso ? formatLastTxCompact(cleanIso) : '—'),
+        activityKind: latestOp?.kindShort || '—',
+        activityWhen: latestOp
+          ? formatRelativeAgo(latestOp.iso) || formatLastTxCompact(latestOp.iso)
+          : '—',
         flagged: snapshotByMachineId.has(m.id),
         salesRow: salesElapsed ?? null,
       };
@@ -752,6 +762,7 @@ export function OverallPage() {
     compare,
     vendonSalesLabels,
     vendonLastTxQ.data?.byMachineId,
+    operatorActivityQ.data?.byMachineId,
   ]);
 
   if (uiTheme === 'pro') {
