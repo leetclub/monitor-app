@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **Table sticky Call OP/AM:** Fixed Call OP clipped under Call AM while mid-scroll — sticky widths + `right` offset matched (fits Suhaib/Ahmed); AM paints above OP. Contained Op. activity / sticky label overflow with ellipsis. |
 | 2026-07-13 | **Operator Activity — kind visible:** Last-touch cell shows **Clean / Refill / Credit / Door** on the cell (not hover-only), plus relative time + Kuwait date. Pro Red Flags + Overall cards show the same kind. |
 | 2026-07-13 | **Operator Activity — single last touch:** Column shows only the **most recent** op activity (from cleaning / refill / remote credit / door) as relative time + Kuwait date. Hover shows which type. |
 | 2026-07-13 | **Operator Activity — four last-touch lines:** Clean (Attendance & Cleaning end), Refill (Vendon All Products refilled), Credit (proven remote credit), Door (door opened). API `GET /api/alert/operator-activity`. Sort by newest of the four. |

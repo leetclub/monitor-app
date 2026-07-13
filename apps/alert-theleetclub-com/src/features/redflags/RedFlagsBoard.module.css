@@ -350,8 +350,10 @@
 }
 
 .thActionSticky {
-  width: 4.75rem;
-  min-width: 4.75rem;
+  width: var(--ops-sticky-action-w, 5.75rem);
+  min-width: var(--ops-sticky-action-w, 5.75rem);
+  max-width: var(--ops-sticky-action-w, 5.75rem);
+  box-sizing: border-box;
 }
 
 .thSales {
@@ -388,8 +390,10 @@
 }
 
 .thAction {
-  width: 4.5rem;
-  min-width: 4.5rem;
+  width: var(--ops-sticky-action-w, 5.75rem);
+  min-width: var(--ops-sticky-action-w, 5.75rem);
+  max-width: var(--ops-sticky-action-w, 5.75rem);
+  box-sizing: border-box;
 }
 
 .thMetric {
@@ -1060,9 +1064,15 @@
   }
 
   .thMetric,
-  .thNarrow,
-  .thAction {
+  .thNarrow {
     min-width: 4.25rem;
+  }
+
+  .thAction,
+  .thActionSticky {
+    width: var(--ops-sticky-action-w, 5.75rem);
+    min-width: var(--ops-sticky-action-w, 5.75rem);
+    max-width: var(--ops-sticky-action-w, 5.75rem);
   }
 
   .freq3 {
@@ -2027,8 +2037,8 @@
 }
 
 .tdCallOp {
-  padding: 4px 5px !important;
+  padding: 4px 4px !important;
   vertical-align: middle;
   white-space: nowrap;
-  width: 1%;
+  overflow: hidden;
 }

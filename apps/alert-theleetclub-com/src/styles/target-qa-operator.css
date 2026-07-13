@@ -389,7 +389,9 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  max-width: 100%;
   line-height: 1.2;
+  overflow: hidden;
 }
 
 .operatorActivityKind {
@@ -398,6 +400,9 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .operatorActivityRel {
@@ -405,13 +410,19 @@
   font-size: 0.72rem;
   font-weight: 700;
   color: #d1d5db;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .operatorActivityExact {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   color: #9a9aa8;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .operatorActivityMuted {

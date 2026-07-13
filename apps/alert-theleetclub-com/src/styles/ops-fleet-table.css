@@ -92,27 +92,49 @@
   background: #21262d;
 }
 
-/* Sticky Call OP / Call AM while scrolling wide Red Flags checklist */
+/* Sticky Call OP / Call AM while scrolling wide Red Flags checklist.
+   Width must match `right` offset exactly — AM names like "Suhaib" used to
+   grow the AM column past 4.75rem and paint over Call OP until fully scrolled. */
+.stitchOpsTable {
+  --ops-sticky-action-w: 5.75rem;
+}
+
 .stitchOpsTable .opsStickyColRight {
   position: sticky;
   z-index: 3;
   background: #1a1b21;
   box-shadow: -4px 0 8px rgba(0, 0, 0, 0.28);
+  box-sizing: border-box;
+  width: var(--ops-sticky-action-w);
+  min-width: var(--ops-sticky-action-w);
+  max-width: var(--ops-sticky-action-w);
+  overflow: hidden;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  text-align: center;
+  vertical-align: middle;
 }
 
 .stitchOpsTable .opsStickyColRightAm {
   right: 0;
-  min-width: 4.75rem;
+  z-index: 4;
 }
 
 .stitchOpsTable .opsStickyColRightOp {
-  right: 4.75rem;
-  min-width: 4.75rem;
+  right: var(--ops-sticky-action-w);
+  z-index: 3;
 }
 
 .stitchOpsTable thead .opsStickyColRight {
-  z-index: 5;
   background: #171c23;
+}
+
+.stitchOpsTable thead .opsStickyColRightAm {
+  z-index: 6;
+}
+
+.stitchOpsTable thead .opsStickyColRightOp {
+  z-index: 5;
 }
 
 .stitchOpsTable tbody tr:nth-child(even) .opsStickyColRight {
@@ -121,6 +143,25 @@
 
 .stitchOpsTable tbody tr:hover .opsStickyColRight {
   background: #21262d;
+}
+
+/* Keep Call AM labels (Suhaib / Ahmed) inside the sticky box */
+.stitchOpsTable .opsStickyColRightAm .linkGo,
+.stitchOpsTable .opsStickyColRightAm .linkGo--noSlack,
+.stitchOpsTable .opsStickyColRightAm .wireDash {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.stitchOpsTable .opsStickyColRightOp .linkGoStack {
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .stitchTableScrollHint {
