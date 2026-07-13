@@ -17,63 +17,56 @@
       .kicker { fill: #64748b; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
     ]]></style>
   </defs>
-  <text x="8" y="18" class="cap">FIGURE 1 - CLASSIC SIDEBAR vs PRO iPAD TAB STRIP</text>
+  <text x="8" y="18" class="cap">FIGURE 1 - CLASSIC SIDEBAR vs PRO FULL-BLEED iPAD</text>
   <g transform="translate(8, 28)">
-    <rect class="box" x="0" y="0" width="120" height="384" rx="6" fill="#0f172a"/>
-    <text x="10" y="26" class="labelInv" font-size="12px">Leet Alert</text>
-    <text x="10" y="42" class="hintInv">Classic shell</text>
-    <rect class="boxHi" x="8" y="52" width="104" height="36" rx="4"/>
-    <text x="14" y="74" class="labelInv" font-size="9px">Red Flags</text>
-    <rect class="box" x="8" y="94" width="104" height="32" rx="4"/>
-    <text x="14" y="114" class="labelInv" font-size="9px">Overall</text>
-    <rect class="box" x="8" y="132" width="104" height="32" rx="4"/>
-    <text x="14" y="152" class="labelInv" font-size="9px">QA Visit</text>
-    <rect class="box" x="8" y="170" width="104" height="32" rx="4"/>
-    <text x="14" y="190" class="labelInv" font-size="9px">Admin</text>
-    <text x="8" y="372" class="hintInv">Dark tactical sidebar</text>
+    <rect class="box" x="0" y="0" width="100" height="384" rx="6" fill="#0f172a"/>
+    <text x="8" y="26" class="labelInv" font-size="11px">Classic</text>
+    <rect class="boxHi" x="6" y="48" width="88" height="28" rx="4"/>
+    <text x="12" y="66" class="labelInv" font-size="8px">Red Flags</text>
+    <rect class="box" x="6" y="82" width="88" height="24" rx="4"/>
+    <text x="12" y="98" class="labelInv" font-size="8px">Overall</text>
+    <text x="6" y="372" class="hintInv">Sidebar</text>
 
-    <!-- Pro: brand row -->
-    <rect class="boxMain" x="132" y="0" width="652" height="44" rx="6"/>
-    <text x="144" y="20" class="label" font-size="12px">Leet Alert</text>
-    <text x="144" y="36" class="hint" font-size="8px">Pro — iPad ops</text>
-    <text x="430" y="28" class="hint" font-size="8px">Classic · Pro</text>
-    <text x="530" y="28" class="hint" font-size="8px">KW time</text>
-    <text x="600" y="28" class="hint" font-size="8px">Sign out</text>
+    <!-- Pro fills remaining width -->
+    <rect class="boxMain" x="112" y="0" width="672" height="40" rx="4"/>
+    <text x="124" y="26" class="label" font-size="12px">Leet Alert · Pro (full width)</text>
+    <text x="520" y="26" class="hint" font-size="8px">Classic · Pro</text>
+    <text x="620" y="26" class="hint" font-size="8px">Sign out</text>
 
-    <!-- Pro: full-width tab strip -->
-    <rect fill="#f8fafc" stroke="#e2e8f0" x="132" y="48" width="652" height="56" rx="0"/>
-    <rect class="tabOn" x="144" y="56" width="148" height="40" rx="8"/>
-    <text x="176" y="80" class="label" font-size="10px" fill="#0f766e">Red Flags</text>
-    <rect class="tab" x="300" y="56" width="148" height="40" rx="8"/>
-    <text x="344" y="80" class="label" font-size="10px">Overall</text>
-    <rect class="tab" x="456" y="56" width="148" height="40" rx="8"/>
-    <text x="498" y="80" class="label" font-size="10px">QA Visit</text>
-    <rect class="tab" x="612" y="56" width="148" height="40" rx="8"/>
-    <text x="662" y="80" class="label" font-size="10px">Admin</text>
+    <rect fill="#f8fafc" stroke="#e2e8f0" x="112" y="44" width="672" height="44" rx="0"/>
+    <rect class="tabOn" x="120" y="50" width="158" height="32" rx="8"/>
+    <text x="158" y="70" class="label" font-size="10px" fill="#0f766e">Red Flags</text>
+    <rect class="tab" x="286" y="50" width="158" height="32" rx="8"/>
+    <text x="336" y="70" class="label" font-size="10px">Overall</text>
+    <rect class="tab" x="452" y="50" width="158" height="32" rx="8"/>
+    <text x="498" y="70" class="label" font-size="10px">QA Visit</text>
+    <rect class="tab" x="618" y="50" width="158" height="32" rx="8"/>
+    <text x="670" y="70" class="label" font-size="10px">Admin</text>
 
-    <rect class="boxMain" x="132" y="112" width="652" height="272" rx="8"/>
-    <text x="148" y="140" class="kicker">iPad-native Pro</text>
-    <text x="148" y="166" class="title">Tab strip · compare chips · cards</text>
-    <text x="148" y="188" class="hint" font-size="9px">48px targets; tabs stay visible on iPad (hamburger only on phone). Compare = large chips, not a select.</text>
+    <rect class="boxMain" x="112" y="96" width="672" height="288" rx="6"/>
+    <text x="124" y="120" class="kicker">Uses entire iPad canvas</text>
+    <text x="124" y="144" class="title">No centered phone column</text>
+    <text x="124" y="164" class="hint" font-size="9px">4 KPI tiles · 2–3 machine cards across · compare chips in one row</text>
 
-    <rect class="boxAccent" x="148" y="210" width="188" height="110" rx="10"/>
-    <text x="164" y="234" class="kicker">Machine card</text>
-    <text x="164" y="258" class="label" font-size="12px">Jaber · flag reason</text>
-    <text x="164" y="280" class="hint" font-size="8px">2-col grid on landscape</text>
-    <text x="164" y="300" class="label" font-size="9px" fill="#b91c1c">Open detail</text>
+    <rect class="boxMain" x="124" y="180" width="150" height="56" rx="8"/>
+    <text x="136" y="214" class="label" font-size="10px">KPI</text>
+    <rect class="boxMain" x="284" y="180" width="150" height="56" rx="8"/>
+    <text x="296" y="214" class="label" font-size="10px">KPI</text>
+    <rect class="boxMain" x="444" y="180" width="150" height="56" rx="8"/>
+    <text x="456" y="214" class="label" font-size="10px">KPI</text>
+    <rect class="boxMain" x="604" y="180" width="160" height="56" rx="8"/>
+    <text x="616" y="214" class="label" font-size="10px">KPI</text>
 
-    <rect class="boxMain" x="352" y="210" width="188" height="110" rx="10"/>
-    <text x="368" y="234" class="kicker">Compare chips</text>
-    <text x="368" y="258" class="label" font-size="11px">Today · Yest · WTD</text>
-    <text x="368" y="278" class="hint" font-size="8px">Min-height 52px taps</text>
-    <text x="368" y="300" class="label" font-size="9px">MTD · Same day</text>
+    <rect class="boxAccent" x="124" y="250" width="210" height="100" rx="10"/>
+    <text x="140" y="280" class="label" font-size="11px">Machine card</text>
+    <text x="140" y="300" class="hint" font-size="8px">Col 1 of 3</text>
+    <rect class="boxMain" x="348" y="250" width="210" height="100" rx="10"/>
+    <text x="364" y="280" class="label" font-size="11px">Machine card</text>
+    <text x="364" y="300" class="hint" font-size="8px">Col 2 of 3</text>
+    <rect class="boxMain" x="572" y="250" width="192" height="100" rx="10"/>
+    <text x="588" y="280" class="label" font-size="11px">Machine card</text>
+    <text x="588" y="300" class="hint" font-size="8px">Col 3 of 3</text>
 
-    <rect class="boxMain" x="556" y="210" width="188" height="110" rx="10"/>
-    <text x="572" y="234" class="kicker">Fleet bar</text>
-    <text x="572" y="258" class="label" font-size="11px">Sticky + safe area</text>
-    <text x="572" y="278" class="hint" font-size="8px">Home indicator padding</text>
-    <text x="572" y="300" class="label" font-size="9px">Roll-up KPIs</text>
-
-    <text x="148" y="360" class="hint" font-size="8px">Toggle Classic · Pro persists in localStorage. Classic tables/modals unchanged.</text>
+    <text x="124" y="372" class="hint" font-size="8px">Hard rule: on iPad Pro (1366) Pro must edge-to-edge fill — never a narrow column with gutters.</text>
   </g>
 </svg>

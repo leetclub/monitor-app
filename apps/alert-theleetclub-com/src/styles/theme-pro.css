@@ -1,6 +1,6 @@
 /**
- * Pro shell only — page UIs live in features/pro/pro.css (.proWorkspace).
- * Classic Stitch chrome is not restyled here.
+ * Pro shell — full-bleed iPad/tablet app chrome (not a centered phone column).
+ * Page UIs: features/pro/pro.css (.proWorkspace). Classic Stitch untouched.
  */
 
 .srOnly {
@@ -32,45 +32,60 @@ html[data-theme='pro'] {
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 16px;
-  --pro-header-h: 60px;
+  --pro-header-h: 52px;
   --pro-teal: #0f766e;
   --pro-teal-soft: rgba(15, 118, 110, 0.12);
   --touch-min: 48px;
+  --pro-gutter: clamp(16px, 2.2vw, 28px);
+  background: #e9eef4;
+  width: 100%;
 }
 
-html[data-theme='pro'] body {
+html[data-theme='pro'] body,
+html[data-theme='pro'] #root {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
   background: #e9eef4;
   color: #0f172a;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* —— Top app bar (App.tsx ProShell) —— */
+/* —— Full-bleed shell (fills iPad viewport edge-to-edge) —— */
 .appShellPro {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: none;
   min-height: 100dvh;
+  min-height: 100vh;
   background: #e9eef4;
+  box-sizing: border-box;
 }
 
 .proAppHeader {
   position: sticky;
   top: 0;
   z-index: 60;
+  width: 100%;
   background: #fff;
   border-bottom: 1px solid #cbd5e1;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
 }
 
 .proAppHeaderBar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-height: var(--pro-header-h);
-  padding: 8px clamp(14px, 2vw, 24px);
-  max-width: 1100px;
-  margin: 0 auto;
   width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: max(6px, env(safe-area-inset-top, 0px)) var(--pro-gutter) 6px;
+  padding-left: max(var(--pro-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--pro-gutter), env(safe-area-inset-right, 0px));
   box-sizing: border-box;
 }
 
@@ -83,7 +98,7 @@ html[data-theme='pro'] body {
 
 .proAppBrandName {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: #0f172a;
@@ -111,47 +126,51 @@ html[data-theme='pro'] body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Full-width tab strip — always visible on iPad; phones use hamburger */
 .proAppTabStripWrap {
+  width: 100%;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
-  padding: 8px clamp(12px, 2vw, 20px) 10px;
-  padding-left: max(12px, env(safe-area-inset-left, 0px));
-  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  padding: 8px var(--pro-gutter) 10px;
+  padding-left: max(var(--pro-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--pro-gutter), env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
 }
 
 .proAppTabStrip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  max-width: 1100px;
-  margin: 0 auto;
+  gap: 10px;
   width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
+/* Tablet+: icon + label in a row — uses width, not phone-stack tiles */
 .proAppTabStrip .navLink {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 56px;
-  padding: 8px 6px;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
   border-radius: 14px;
   border: 1px solid #cbd5e1;
   background: #fff;
   color: #475569;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   text-decoration: none;
   text-align: center;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
 }
 
 .proAppTabStrip .navLink .navGlyph {
   width: 22px;
   height: 22px;
+  flex-shrink: 0;
 }
 
 .proAppTabStrip .navLink:hover {
@@ -163,7 +182,7 @@ html[data-theme='pro'] body {
 .proAppTabStrip a.navLink.navLinkActive {
   background: var(--pro-teal-soft);
   color: var(--pro-teal);
-  border-color: rgba(15, 118, 110, 0.35);
+  border-color: rgba(15, 118, 110, 0.4);
   box-shadow: none;
 }
 
@@ -173,6 +192,7 @@ html[data-theme='pro'] body {
   gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .proAppClock {
@@ -181,12 +201,13 @@ html[data-theme='pro'] body {
   font-weight: 600;
   color: #475569;
   padding: 8px 12px;
-  min-height: 48px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   border-radius: 12px;
   background: #f8fafc;
   border: 1px solid #cbd5e1;
+  flex-shrink: 0;
 }
 
 .proAppMobileNav {
@@ -220,32 +241,29 @@ html[data-theme='pro'] body {
   color: var(--pro-teal);
 }
 
-.appShellPro .proAppMain {
+/* Main: FULL WIDTH — no centered 1100px column on tablet */
+.appShellPro .proAppMain,
+.appShellPro.mainColumn,
+html[data-theme='pro'] .appShellPro .content.contentMain.appMain.proAppMain {
   flex: 1;
   width: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 16px clamp(12px, 2vw, 20px) calc(28px + env(safe-area-inset-bottom, 0px));
-  padding-left: max(12px, env(safe-area-inset-left, 0px));
-  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  max-width: none;
+  margin: 0;
+  padding: 16px var(--pro-gutter) calc(24px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(var(--pro-gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--pro-gutter), env(safe-area-inset-right, 0px));
   box-sizing: border-box;
+  background: #e9eef4;
+  min-width: 0;
 }
 
 html[data-theme='pro'] .appShellPro .topBarSignedIn {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-  padding: 8px 12px;
-  min-height: 48px;
-  border-radius: 999px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  max-width: 180px;
+  display: none; /* tablet: email wastes space and clips Sign out */
 }
 
 html[data-theme='pro'] .appShellPro .topBarSignOut {
-  min-height: 48px;
-  padding: 10px 16px;
+  min-height: 44px;
+  padding: 10px 18px;
   border-radius: 999px;
   border: 1px solid #cbd5e1;
   background: #fff;
@@ -255,6 +273,8 @@ html[data-theme='pro'] .appShellPro .topBarSignOut {
   text-transform: none;
   letter-spacing: 0;
   touch-action: manipulation;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Theme toggle */
@@ -297,8 +317,8 @@ html[data-theme='pro'] .themeToggle {
 }
 
 html[data-theme='pro'] .themeToggleBtn {
-  min-height: 44px;
-  padding: 10px 14px;
+  min-height: 40px;
+  padding: 8px 12px;
   font-size: 12px;
 }
 
@@ -358,7 +378,6 @@ html[data-theme='pro'] button.primary {
   letter-spacing: 0;
 }
 
-/* Admin / QA under Pro shell — basic light readability */
 html[data-theme='pro'] .appShellPro .panel,
 html[data-theme='pro'] .appShellPro .adminCard {
   background: #fff;
@@ -381,30 +400,7 @@ html[data-theme='pro'] .appShellPro textarea {
   min-height: 44px;
 }
 
-/* iPad / tablet: keep tab strip visible; tighten header chrome */
-@media (max-width: 1180px) {
-  html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
-    display: none;
-  }
-
-  .proAppBrandSub {
-    display: none;
-  }
-
-  .proAppHeaderBar {
-    min-height: 56px;
-    padding-top: max(8px, env(safe-area-inset-top, 0px));
-    padding-left: max(12px, env(safe-area-inset-left, 0px));
-    padding-right: max(12px, env(safe-area-inset-right, 0px));
-  }
-
-  .proAppTabStrip .navLink {
-    min-height: 60px;
-    font-size: 14px;
-  }
-}
-
-/* Phone only — hamburger; iPad portrait still shows 4 tabs */
+/* Narrow phone only */
 @media (max-width: 639px) {
   .proAppMenuBtn {
     display: inline-flex;
@@ -420,5 +416,42 @@ html[data-theme='pro'] .appShellPro textarea {
 
   .proAppClock {
     display: none;
+  }
+
+  .proAppBrandSub {
+    display: none;
+  }
+
+  .proAppTabStrip .navLink {
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+  }
+}
+
+/* Very wide desktop: soft readable measure (still wider than old 1100) */
+@media (min-width: 1600px) {
+  .proAppTabStrip,
+  .appShellPro .proAppMain .proPage {
+    max-width: 1520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* Show email only on large desktop */
+@media (min-width: 1280px) {
+  html[data-theme='pro'] .appShellPro .topBarSignedIn {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 8px 12px;
+    min-height: 44px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    max-width: 220px;
   }
 }

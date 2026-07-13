@@ -35,7 +35,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![1 Shell + Home](docs/product-prototype/figures/wire-01-shell-home.svg)
 
-*Figure 1 — **Classic:** dark sidebar + Stitch tables. **Pro:** sticky top bar + **4-tab strip** (always on iPad; phone hamburger) + card workspace with large compare chips. Toggle Classic · Pro.*
+*Figure 1 — **Classic:** dark sidebar. **Pro:** full-bleed iPad shell (tabs + cards use the whole width — not a centered phone column). Toggle Classic · Pro.*
 
 ![2 Red Flags](docs/product-prototype/figures/wire-02-red-flags.svg)
 
@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **Pro fills the iPad (not a phone column):** Removed centered `1100px` shell. Full-bleed header/tabs/main on tablet. 4 KPI cols + 2–3 card cols from 768px up. Horizontal tab labels. Email hidden on tablet so Sign out never clips. Classic unchanged. |
 | 2026-07-13 | **Pro iPad-native shell:** Full-width **tab strip** under brand (visible on iPad portrait/landscape; hamburger only &lt;640px). **48px** touch targets, safe-area insets, **ProCompareChips** (large preset buttons), 2-col card grid on tablet, full-width card actions in portrait, sticky fleet bar with home-indicator padding. Classic unchanged. |
 | 2026-07-13 | **Pro = dedicated iPad workspace (real refactor):** New `features/pro/` UI — card pages for Red Flags + Overall (not Classic Stitch chrome). Shared data/queries; Pro-only layout, KPIs, metrics, fleet bar. Shell stays top app bar. Classic unchanged. |
 | 2026-07-13 | **Pro iPad readability:** High-contrast light tokens… *(superseded same day by dedicated Pro pages above)*. |

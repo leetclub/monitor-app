@@ -34,8 +34,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 1100px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .proPageHead {
@@ -139,10 +140,11 @@
 .proKpiRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
-@media (min-width: 700px) {
+/* iPad portrait and up: use the width */
+@media (min-width: 768px) {
   .proKpiRow {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -243,9 +245,24 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  width: 100%;
+}
+
+/* iPad portrait (~768+): 2 columns across the full screen */
+@media (min-width: 768px) {
+  .proCardList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* iPad landscape / large tablet: 3 columns */
+@media (min-width: 1100px) {
+  .proCardList {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .proCard {
@@ -436,15 +453,22 @@
   gap: 8px;
 }
 
-@media (min-width: 700px) {
-  .proCompareChips {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .proCompareChips {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .proCompareChipLong {
+    display: none;
+  }
+
+  .proCompareChip {
+    align-items: center;
+    text-align: center;
+  }
+
+  .proCompareChipShort {
+    font-size: 14px;
   }
 }
 
@@ -544,8 +568,8 @@
   color: var(--pro-ink);
 }
 
-/* iPad portrait: stack card actions full-width */
-@media (max-width: 834px) {
+/* iPad portrait: stack card actions full-width only on narrow phones */
+@media (max-width: 639px) {
   .proCardFoot {
     flex-direction: column;
   }
@@ -565,12 +589,30 @@
   }
 }
 
-/* iPad landscape / large tablet: 2-column machine cards */
-@media (min-width: 900px) and (max-width: 1180px) {
-  .proCardList {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+@media (pointer: coarse) and (min-width: 768px) {
+  .proMetric {
+    min-height: 76px;
+    padding: 12px 14px;
+  }
+
+  .proMetricValue {
+    font-size: 1.05rem;
+  }
+
+  .proKpi {
+    padding: 14px 16px;
+  }
+
+  .proKpiValue {
+    font-size: 1.45rem;
+  }
+
+  .proCardMain {
+    padding: 16px 16px 12px;
+  }
+
+  .proCardName {
+    font-size: 1.1rem;
   }
 
   .proMetricGrid {
@@ -578,38 +620,8 @@
   }
 }
 
-@media (min-width: 1181px) {
-  .proCardList {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-  }
-}
-
-/* Coarse pointer (finger): bump metrics + KPI tap comfort */
-@media (pointer: coarse) {
-  .proMetric {
-    min-height: 84px;
-    padding: 12px 14px;
-  }
-
-  .proMetricValue {
-    font-size: 1.1rem;
-  }
-
-  .proKpi {
-    padding: 16px 18px;
-  }
-
-  .proKpiValue {
-    font-size: 1.7rem;
-  }
-
-  .proCardMain {
-    padding: 18px 18px 14px;
-  }
-
-  .proCardName {
-    font-size: 1.25rem;
+@media (pointer: coarse) and (min-width: 1100px) {
+  .proMetricGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
