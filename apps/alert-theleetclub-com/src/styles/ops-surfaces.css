@@ -164,6 +164,12 @@
   white-space: nowrap;
 }
 
+html[data-theme='pro'] .opsStatusPill {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
 .opsStatusPill--ok {
   color: #7cb896;
   border-color: rgba(124, 184, 150, 0.35);

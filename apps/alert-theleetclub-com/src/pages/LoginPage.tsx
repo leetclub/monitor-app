@@ -64,26 +64,15 @@ export function LoginPage() {
 
   return (
     <div className="loginShell">
-      <aside className="proOnly loginProAside" aria-hidden>
-        <div>
-          <p className="loginProAsideKicker">LEET // COMMAND</p>
-          <h1 className="loginProAsideTitle">Ops floor</h1>
-          <p className="loginProAsideLead">
-            Dense monitoring chrome for Red Flags, Overall, and QA — switch to Classic anytime from the control
-            above sign-in.
-          </p>
-        </div>
-        <p className="loginProAsideMeta">CHANNEL · SECURE</p>
-      </aside>
       <div className="loginCard panel">
         <div className="loginThemeRow">
           <ThemeToggle />
         </div>
         <div className="loginBrand">
-          <img src="/leet.png" alt="" width={72} height={72} className="loginLogo" />
+          <img src="/leet.png" alt="" width={64} height={64} className="loginLogo" />
           <div>
             <div className="loginTitle">Leet Alert</div>
-            <div className="muted loginSubtitle">Operational alerts — sign in to continue</div>
+            <div className="muted loginSubtitle">Sign in to your operations workspace</div>
           </div>
         </div>
 

@@ -35,7 +35,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![1 Shell + Home](docs/product-prototype/figures/wire-01-shell-home.svg)
 
-*Figure 1 — Sidebar **Operations** (off-canvas **Menu** on phone + iPad / touch); desktop always shows icon rail or labeled sidebar (**Icons** / **Labels** toggle only — no full hide). Nav Home · Admin · Red Flags · Overall; Home hero + cards (Priority / Fleet / Configuration).*
+*Figure 1 — **Classic:** dark sidebar rail (Icons/Labels). **Pro:** separate light shell with top app bar (brand + horizontal tabs, no sidebar). Toggle Classic · Pro; Home cards unchanged.*
 
 ![2 Red Flags](docs/product-prototype/figures/wire-02-red-flags.svg)
 
@@ -81,7 +81,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-07-13 | **Pro theme rebuilt (bold dark command):** Pro is no longer a teal skin — sharp 0-radius chrome, amber CMD strip + LIVE pulse, industrial nav (`CMD // OPS_FLOOR`), denser tables/KPI hairlines, split login console (Archivo + JetBrains Mono). Classic unchanged. Toggle still Classic · Pro. |
+| 2026-07-13 | **Pro = light professional workspace (real layout):** Separate React shell — **top app bar** with brand + horizontal tabs (no sidebar), soft white cards, teal accents, Manrope. Classic keeps dark tactical sidebar Stitch. Toggle Classic · Pro. |
+| 2026-07-13 | ~~Pro bold dark command~~ superseded same day — was still perceived as a skin; replaced by light professional shell above. |
 | 2026-07-13 | **Fleet revenue labels (clarity):** Secondary strip labels **Yest. full day** (KD), **−2d full day** (KD amount for day-before-yesterday), **vs −2d** (%). Dropped stacked sub-labels that read like “no amount for −2d”. |
 | 2026-07-13 | **Fleet revenue labels:** Secondary strip shows **Yesterday full day** KD, **Day before (−2d) full day** KD, and **Change (yest. vs −2d)** — mirrors primary/baseline/change so −2d amount is visible (was % only). |
 | 2026-07-12 | **UI themes Classic / Pro v2:** Toggle in top bar + login (persisted). **Classic** = current tactical Stitch look. **Pro v2** = command-floor restyle (midnight steel, teal signal accents, Sora + IBM Plex Mono, glass top bar / fleet bar). Compare and pick; default remains Classic. |

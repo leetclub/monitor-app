@@ -10,6 +10,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { NoAccessPage } from '@/pages/NoAccessPage';
 import { NavIcon } from '@/components/NavIcon';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
 import {
   navDrawerMediaQuery,
   persistNavExpandedPreference,
@@ -75,6 +76,61 @@ function useNavLayout(): {
   return { layout, expanded: expandedPref === true, toggleExpanded, isRail: layout === 'rail' };
 }
 
+function useKuwaitClock(): string {
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return kuwaitClockLabel(clock);
+}
+
+function NavLinks({ onNavigate, className }: { onNavigate?: () => void; className?: string }) {
+  const { canSeeTab } = useAccess();
+  return (
+    <nav className={className ?? 'navList'} aria-label="Primary">
+      <NavLink
+        to="/red-flags"
+        title="Red Flags"
+        className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
+        onClick={onNavigate}
+      >
+        <NavIcon name="red_flags" />
+        <span className="navLinkTitle">Red Flags</span>
+      </NavLink>
+      <NavLink
+        to="/overall"
+        title="Overall"
+        className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
+        onClick={onNavigate}
+      >
+        <NavIcon name="overall" />
+        <span className="navLinkTitle">Overall</span>
+      </NavLink>
+      <NavLink
+        to="/qa-visit"
+        title="QA Visit"
+        className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
+        onClick={onNavigate}
+      >
+        <NavIcon name="qa_visit" />
+        <span className="navLinkTitle">QA Visit</span>
+      </NavLink>
+      {canSeeTab('leetAlertAdmin') ? (
+        <NavLink
+          to="/admin"
+          title="Admin"
+          className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
+          onClick={onNavigate}
+        >
+          <NavIcon name="admin" />
+          <span className="navLinkTitle">Admin</span>
+        </NavLink>
+      ) : null}
+    </nav>
+  );
+}
+
 function SideNav({
   open,
   onNavigate,
@@ -88,7 +144,6 @@ function SideNav({
   onNavToggle: () => void;
   navToggleTitle: string;
 }) {
-  const { canSeeTab } = useAccess();
   const { user } = useAuth();
   const email = user?.email ?? '';
   const isDrawer = layout === 'drawer';
@@ -128,48 +183,8 @@ function SideNav({
           </span>
         </h1>
         <p className="sideNavTagline">Operations</p>
-        <p className="proOnly sideNavCmdLine">CMD // OPS_FLOOR</p>
       </div>
-      <div className="navList">
-        <NavLink
-          to="/red-flags"
-          title="Red Flags"
-          className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
-          onClick={onNavigate}
-        >
-          <NavIcon name="red_flags" />
-          <span className="navLinkTitle">Red Flags</span>
-        </NavLink>
-        <NavLink
-          to="/overall"
-          title="Overall"
-          className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
-          onClick={onNavigate}
-        >
-          <NavIcon name="overall" />
-          <span className="navLinkTitle">Overall</span>
-        </NavLink>
-        <NavLink
-          to="/qa-visit"
-          title="QA Visit"
-          className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
-          onClick={onNavigate}
-        >
-          <NavIcon name="qa_visit" />
-          <span className="navLinkTitle">QA Visit</span>
-        </NavLink>
-        {canSeeTab('leetAlertAdmin') ? (
-          <NavLink
-            to="/admin"
-            title="Admin"
-            className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
-            onClick={onNavigate}
-          >
-            <NavIcon name="admin" />
-            <span className="navLinkTitle">Admin</span>
-          </NavLink>
-        ) : null}
-      </div>
+      <NavLinks onNavigate={onNavigate} />
       <div className="sideNavUser">
         <div className="sideNavAvatar" aria-hidden>
           <NavIcon name="account_circle" />
@@ -188,8 +203,116 @@ function DefaultRedirect() {
   return <Navigate to="/red-flags" replace />;
 }
 
-function ProtectedShell() {
-  const access = useAccess();
+function AppRoutesOutlet() {
+  return (
+    <Routes>
+      <Route path="/" element={<DefaultRedirect />} />
+      <Route path="/home" element={<DefaultRedirect />} />
+      <Route path="/admin" element={<AdminPage />} />
+      <Route path="/red-flags" element={<RedFlagsPage />} />
+      <Route path="/overall" element={<OverallPage />} />
+      <Route path="/qa-visit" element={<QaVisitPage />} />
+      <Route path="*" element={<DefaultRedirect />} />
+    </Routes>
+  );
+}
+
+function UserSessionControls() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  if (!user?.email) return null;
+  return (
+    <>
+      <ThemeToggle compact />
+      <span className="topBarSignedIn">
+        <NavIcon name="account_circle" />
+        <strong>{user.email}</strong>
+      </span>
+      <button
+        type="button"
+        className="topBarSignOut"
+        onClick={async () => {
+          await signOut();
+          navigate('/login', { replace: true });
+        }}
+      >
+        Sign out
+      </button>
+    </>
+  );
+}
+
+/** Classic: sticky clock strip above content. */
+function ClassicTopBar() {
+  const clock = useKuwaitClock();
+  return (
+    <header className="topBar">
+      <div className="topBarStart">
+        <span className="topBarClock">{clock}</span>
+      </div>
+      <div className="topBarEnd">
+        <UserSessionControls />
+      </div>
+    </header>
+  );
+}
+
+/**
+ * Pro: product app bar — brand + horizontal tabs + session.
+ * Different IA from Classic sidebar shell.
+ */
+function ProAppHeader({
+  menuOpen,
+  onMenuToggle,
+  onNavigate,
+}: {
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+  onNavigate: () => void;
+}) {
+  const clock = useKuwaitClock();
+
+  return (
+    <header className="proAppHeader">
+      <div className="proAppHeaderBar">
+        <div className="proAppHeaderBrand">
+          <button
+            type="button"
+            className="proAppMenuBtn"
+            onClick={onMenuToggle}
+            aria-expanded={menuOpen}
+            aria-controls="pro-app-nav"
+            title={menuOpen ? 'Close menu' : 'Open menu'}
+          >
+            <NavIcon name={menuOpen ? 'panel_close' : 'menu'} />
+            <span className="srOnly">{menuOpen ? 'Close menu' : 'Open menu'}</span>
+          </button>
+          <div className="proAppBrandText">
+            <p className="proAppBrandName">Leet Alert</p>
+            <p className="proAppBrandSub">Operations workspace</p>
+          </div>
+        </div>
+
+        <NavLinks className="proAppNav" onNavigate={onNavigate} />
+
+        <div className="proAppHeaderEnd">
+          <span className="proAppClock" title="Kuwait time">
+            {clock}
+          </span>
+          <UserSessionControls />
+        </div>
+      </div>
+
+      {menuOpen ? (
+        <div id="pro-app-nav" className="proAppMobileNav">
+          <NavLinks onNavigate={onNavigate} className="proAppMobileNavList" />
+        </div>
+      ) : null}
+    </header>
+  );
+}
+
+function ClassicShell() {
   const { layout, toggleExpanded, isRail } = useNavLayout();
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
@@ -207,27 +330,6 @@ function ProtectedShell() {
       document.body.style.overflow = prev;
     };
   }, [isDrawer, navOpen]);
-
-  if (access.isLoading) {
-    return (
-      <div className="panel" style={{ margin: 24 }}>
-        Loading permissions…
-      </div>
-    );
-  }
-
-  if (access.error) {
-    return (
-      <div className="panel" style={{ margin: 24 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Permission lookup failed</div>
-        <div className="muted">{(access.error as Error).message}</div>
-      </div>
-    );
-  }
-
-  if (!access.canSeeTab('leetAlert') && !access.canSeeTab('redAlert')) {
-    return <NoAccessPage email={access.email} />;
-  }
 
   return (
     <div
@@ -261,67 +363,75 @@ function ProtectedShell() {
         />
       </div>
       <div className="mainColumn">
-        <UserTopBar />
+        <ClassicTopBar />
         <main className="content contentMain appMain">
-          <Routes>
-            <Route path="/" element={<DefaultRedirect />} />
-            <Route path="/home" element={<DefaultRedirect />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/red-flags" element={<RedFlagsPage />} />
-            <Route path="/overall" element={<OverallPage />} />
-            <Route path="/qa-visit" element={<QaVisitPage />} />
-            <Route path="*" element={<DefaultRedirect />} />
-          </Routes>
+          <AppRoutesOutlet />
         </main>
       </div>
     </div>
   );
 }
 
-function UserTopBar() {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
-  const [clock, setClock] = useState(() => new Date());
+function ProShell() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
-    const id = window.setInterval(() => setClock(new Date()), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
+    setMenuOpen(false);
+  }, [location.pathname]);
 
-  if (!user?.email) return null;
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
 
   return (
-    <header className="topBar">
-      <div className="topBarStart">
-        <span className="proOnly topBarCmd" aria-hidden>
-          <span className="topBarCmdMark">CMD</span>
-          OPS
-        </span>
-        <span className="topBarClock">{kuwaitClockLabel(clock)}</span>
-        <span className="proOnly topBarStatus">
-          <span className="statusDot statusDotLive" aria-hidden />
-          LIVE
-        </span>
-      </div>
-      <div className="topBarEnd">
-        <ThemeToggle compact />
-        <span className="topBarSignedIn">
-          <NavIcon name="account_circle" />
-          <strong>{user.email}</strong>
-        </span>
-        <button
-          type="button"
-          className="topBarSignOut"
-          onClick={async () => {
-            await signOut();
-            navigate('/login', { replace: true });
-          }}
-        >
-          Sign out
-        </button>
-      </div>
-    </header>
+    <div className="appShell appShellPro">
+      {menuOpen ? (
+        <button type="button" className="navBackdrop proNavBackdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
+      ) : null}
+      <ProAppHeader
+        menuOpen={menuOpen}
+        onMenuToggle={() => setMenuOpen((v) => !v)}
+        onNavigate={() => setMenuOpen(false)}
+      />
+      <main className="content contentMain appMain proAppMain">
+        <AppRoutesOutlet />
+      </main>
+    </div>
   );
+}
+
+function ProtectedShell() {
+  const access = useAccess();
+  const theme = useAlertUiTheme();
+
+  if (access.isLoading) {
+    return (
+      <div className="panel" style={{ margin: 24 }}>
+        Loading permissions…
+      </div>
+    );
+  }
+
+  if (access.error) {
+    return (
+      <div className="panel" style={{ margin: 24 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Permission lookup failed</div>
+        <div className="muted">{(access.error as Error).message}</div>
+      </div>
+    );
+  }
+
+  if (!access.canSeeTab('leetAlert') && !access.canSeeTab('redAlert')) {
+    return <NoAccessPage email={access.email} />;
+  }
+
+  return theme === 'pro' ? <ProShell /> : <ClassicShell />;
 }
 
 function AppRoutes() {

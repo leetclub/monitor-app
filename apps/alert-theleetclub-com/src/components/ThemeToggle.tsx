@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ALERT_UI_THEME_LABELS,
   persistAlertUiTheme,
   readAlertUiTheme,
+  subscribeAlertUiTheme,
   type AlertUiThemeId,
 } from '@/lib/uiTheme';
 
-/** Switch Classic ↔ Pro command-floor look (persisted). */
+/** Switch Classic ↔ Pro professional workspace (persisted). */
 export function ThemeToggle({ compact }: { compact?: boolean }) {
   const [theme, setTheme] = useState<AlertUiThemeId>(() => readAlertUiTheme());
+
+  useEffect(() => subscribeAlertUiTheme(() => setTheme(readAlertUiTheme())), []);
 
   const select = (next: AlertUiThemeId) => {
     setTheme(next);
@@ -30,7 +33,7 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
           onClick={() => select(id)}
           title={
             id === 'pro'
-              ? 'Pro — bold dark command floor (sharp chrome, amber signal)'
+              ? 'Pro — light professional workspace (top nav, airy cards)'
               : 'Classic — tactical Stitch look'
           }
         >
