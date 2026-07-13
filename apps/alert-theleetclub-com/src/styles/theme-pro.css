@@ -1,7 +1,6 @@
 /**
- * Pro — iPad-first professional light workspace.
- * Must override Classic dark cell/sales/freq chrome for readable contrast.
- * Activated with html[data-theme="pro"] + .appShellPro.
+ * Pro shell only — page UIs live in features/pro/pro.css (.proWorkspace).
+ * Classic Stitch chrome is not restyled here.
  */
 
 .srOnly {
@@ -16,104 +15,51 @@
   border: 0;
 }
 
-/* —— Tokens (WCAG-friendly on light) —— */
 html[data-theme='pro'] {
   color-scheme: light;
-  font-size: 16px;
-
-  --bg: #e8edf3;
+  --bg: #e9eef4;
   --bg-elevated: #ffffff;
   --panel: #ffffff;
-  --panel2: #f4f7fb;
-  --surface-container-low: #f4f7fb;
-  --surface-container-high: #e4eaf2;
-  --surface-variant: #d7dee8;
-  --text: #121a26;
-  --muted: #3d4d5f;
-  --on-surface-variant: #2a3a4c;
-  --border: #c5ceda;
-  --border-soft: #d5dde8;
-  --outline-variant: #b0bbc9;
-  --accent: #0f6b63;
-  --accent-blue: #1d4ed8;
-  --primary-salmon: #b45309;
-  --danger: #b91c1c;
-  --warn: #b45309;
+  --panel2: #f8fafc;
+  --text: #0f172a;
+  --muted: #475569;
+  --border: #cbd5e1;
+  --border-soft: #e2e8f0;
+  --accent: #0f766e;
   --link: #1d4ed8;
+  --font-sans: 'Source Sans 3', system-ui, -apple-system, 'SF Pro Text', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --radius-sm: 10px;
   --radius-md: 14px;
-  --radius-lg: 18px;
-  --shadow-sm: 0 1px 2px rgba(18, 26, 38, 0.06), 0 10px 28px rgba(18, 26, 38, 0.07);
-  --font-sans: 'Source Sans 3', system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
-
-  --ops-surface-bg: #ffffff;
-  --ops-surface-bg-hover: #f4f7fb;
-  --ops-surface-border: #c5ceda;
-  --ops-surface-radius: 14px;
-  --ops-surface-pad-y: 14px;
-  --ops-surface-pad-x: 16px;
-  --ops-surface-gap: 12px;
-  --ops-inset-x: 16px;
-  --ops-accent: #0f6b63;
-  --ops-label-color: #3d4d5f;
-  --ops-title-color: #121a26;
-  --ops-cell-box-h: 72px;
-  --ops-stack-box-w: 4.75rem;
-
-  --pro-ink: #121a26;
-  --pro-teal: #0f6b63;
-  --pro-teal-soft: rgba(15, 107, 99, 0.12);
+  --radius-lg: 16px;
   --pro-header-h: 68px;
+  --pro-teal: #0f766e;
+  --pro-teal-soft: rgba(15, 118, 110, 0.12);
   --touch-min: 44px;
 }
 
 html[data-theme='pro'] body {
-  background: var(--bg);
-  color: var(--text);
+  background: #e9eef4;
+  color: #0f172a;
   font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-html[data-theme='pro'] ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-html[data-theme='pro'] ::-webkit-scrollbar-track {
-  background: #d7dee8;
-}
-
-html[data-theme='pro'] ::-webkit-scrollbar-thumb {
-  background: #8a97a8;
-  border-radius: 8px;
-}
-
-html[data-theme='pro'] .muted,
-html[data-theme='pro'] .mutedSmall {
-  color: var(--muted) !important;
-}
-
-/* —— App shell —— */
+/* —— Top app bar (App.tsx ProShell) —— */
 .appShellPro {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
-  min-width: 0;
-  background: var(--bg);
+  background: #e9eef4;
 }
 
 .proAppHeader {
   position: sticky;
   top: 0;
   z-index: 60;
-  background: #ffffff;
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 24px rgba(18, 26, 38, 0.04);
+  background: #fff;
+  border-bottom: 1px solid #cbd5e1;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
 .proAppHeaderBar {
@@ -122,7 +68,7 @@ html[data-theme='pro'] .mutedSmall {
   gap: 14px;
   min-height: var(--pro-header-h);
   padding: 8px clamp(14px, 2vw, 24px);
-  max-width: 1400px;
+  max-width: 1100px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -140,15 +86,14 @@ html[data-theme='pro'] .mutedSmall {
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--pro-ink);
-  line-height: 1.15;
+  color: #0f172a;
 }
 
 .proAppBrandSub {
   margin: 2px 0 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--muted);
+  color: #475569;
 }
 
 .proAppMenuBtn {
@@ -157,10 +102,10 @@ html[data-theme='pro'] .mutedSmall {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--border);
+  border: 1px solid #cbd5e1;
   border-radius: 12px;
   background: #fff;
-  color: var(--text);
+  color: #0f172a;
   cursor: pointer;
 }
 
@@ -173,7 +118,6 @@ html[data-theme='pro'] .mutedSmall {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding: 2px 0;
 }
 
 .proAppNav::-webkit-scrollbar {
@@ -183,66 +127,58 @@ html[data-theme='pro'] .mutedSmall {
 .proAppNav .navLink {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
   min-height: 44px;
   padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--muted);
-  font-family: var(--font-sans);
+  color: #475569;
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
   text-decoration: none;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .proAppNav .navLink:hover {
-  background: var(--panel2);
-  color: var(--text);
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .proAppNav .navLink.navLinkActive,
 .proAppNav a.navLink.navLinkActive {
   background: var(--pro-teal-soft);
   color: var(--pro-teal);
-  border-color: rgba(15, 107, 99, 0.25);
+  border-color: rgba(15, 118, 110, 0.25);
   box-shadow: none;
-}
-
-.proAppNav .navLink.navLinkActive .navGlyph {
-  color: var(--pro-teal);
 }
 
 .proAppHeaderEnd {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .proAppClock {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
-  color: var(--muted);
+  color: #475569;
   padding: 8px 12px;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
   border-radius: 12px;
-  background: var(--panel2);
-  border: 1px solid var(--border);
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
 }
 
 .proAppMobileNav {
   display: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid #cbd5e1;
   background: #fff;
   padding: 12px 14px 16px;
 }
@@ -260,7 +196,7 @@ html[data-theme='pro'] .mutedSmall {
   min-height: 48px;
   padding: 12px 16px;
   border-radius: 14px;
-  color: var(--text);
+  color: #0f172a;
   text-decoration: none;
   font-weight: 600;
   font-size: 16px;
@@ -274,21 +210,20 @@ html[data-theme='pro'] .mutedSmall {
 .appShellPro .proAppMain {
   flex: 1;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 18px clamp(14px, 2vw, 24px) 100px;
+  padding: 18px clamp(14px, 2vw, 24px) 28px;
   box-sizing: border-box;
 }
 
 html[data-theme='pro'] .appShellPro .topBarSignedIn {
-  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
-  color: var(--text);
+  color: #0f172a;
   padding: 8px 12px;
   min-height: 44px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid #cbd5e1;
   background: #fff;
   max-width: 200px;
 }
@@ -297,409 +232,13 @@ html[data-theme='pro'] .appShellPro .topBarSignOut {
   min-height: 44px;
   padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid #cbd5e1;
   background: #fff;
-  color: var(--text);
-  font-family: var(--font-sans);
+  color: #0f172a;
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0;
   text-transform: none;
-}
-
-html[data-theme='pro'] .appShellPro .topBarSignOut:hover {
-  background: var(--panel2);
-  color: var(--text);
-}
-
-/* —— Panels / page chrome —— */
-html[data-theme='pro'] .panel,
-html[data-theme='pro'] .opsInset,
-html[data-theme='pro'] .opsDashboardSection,
-html[data-theme='pro'] .stitchDataPanel,
-html[data-theme='pro'] .stitchKpiCard,
-html[data-theme='pro'] .stitchOpsPanel {
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid var(--border) !important;
-  background: #ffffff !important;
-  box-shadow: var(--shadow-sm);
-  color: var(--text);
-}
-
-html[data-theme='pro'] .stitchOpsHead {
-  padding: 16px 18px 14px;
-  border-bottom: 1px solid var(--border);
-  background: #fafbfc !important;
-}
-
-html[data-theme='pro'] .stitchDataPanelTitle {
-  font-family: var(--font-sans) !important;
-  font-size: 1.45rem !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em !important;
-  text-transform: none !important;
-  color: var(--text) !important;
-}
-
-html[data-theme='pro'] .stitchDataPanelTitle .navGlyph {
-  color: var(--pro-teal);
-}
-
-html[data-theme='pro'] .stitchOpsBadge {
-  border-radius: 999px;
-  background: var(--pro-teal-soft);
-  color: var(--pro-teal);
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 13px;
   letter-spacing: 0;
-  text-transform: none;
-  padding: 6px 12px;
-}
-
-html[data-theme='pro'] .stitchOpsMetaInline,
-html[data-theme='pro'] .stitchOpsSubtitle {
-  color: var(--muted) !important;
-  font-size: 13px !important;
-  font-weight: 600;
-}
-
-html[data-theme='pro'] .stitchOpsLive {
-  border-radius: 999px;
-  border: 1px solid #86efac;
-  background: #ecfdf5;
-  color: #166534 !important;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0;
-  text-transform: none;
-  min-height: 36px;
-}
-
-html[data-theme='pro'] .stitchOpsRefresh {
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text);
-  font-weight: 700;
-  min-height: 44px;
-  padding: 8px 16px;
-}
-
-html[data-theme='pro'] .opsDashboardSectionTitle,
-html[data-theme='pro'] .stitchOpsPanelTitle,
-html[data-theme='pro'] .opsRevenueTotalsEyebrow,
-html[data-theme='pro'] .opsSectionTitle,
-html[data-theme='pro'] .stitchKpiLabel {
-  font-family: var(--font-sans) !important;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  color: var(--muted) !important;
-}
-
-html[data-theme='pro'] .stitchKpiVal,
-html[data-theme='pro'] .stitchKpiInlineVal {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: var(--text) !important;
-}
-
-html[data-theme='pro'] .stitchKpiInlineItem {
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: #fff;
-  padding: 10px 14px;
-  min-height: 52px;
-}
-
-html[data-theme='pro'] .stitchKpiInlineLabel {
-  color: var(--muted) !important;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-html[data-theme='pro'] .opsPrepSalesLine {
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-html[data-theme='pro'] .opsPrepSalesLine strong {
-  color: var(--text);
-}
-
-html[data-theme='pro'] .stitchOpsAlert {
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-html[data-theme='pro'] .stitchOpsAlertWarn {
-  background: #fff7ed;
-  border: 1px solid #fdba74;
-  color: #9a3412;
-}
-
-html[data-theme='pro'] .stitchOpsAlertInfo {
-  background: #eff6ff;
-  border: 1px solid #93c5fd;
-  color: #1e3a8a;
-}
-
-/* —— Tables —— */
-html[data-theme='pro'] .stitchOpsTable,
-html[data-theme='pro'] .opsFleetTable,
-html[data-theme='pro'] .alertTable {
-  color: var(--text);
-  background: #fff;
-}
-
-html[data-theme='pro'] .stitchOpsTable thead th,
-html[data-theme='pro'] .opsFleetTable thead th,
-html[data-theme='pro'] .alertTable thead th,
-html[data-theme='pro'] th {
-  font-family: var(--font-sans) !important;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  color: var(--muted) !important;
-  background: #f4f7fb !important;
-  border-bottom: 1px solid var(--border) !important;
-  padding-top: 12px !important;
-  padding-bottom: 12px !important;
-}
-
-html[data-theme='pro'] .stitchOpsTable tbody td,
-html[data-theme='pro'] .opsFleetTable tbody td {
-  font-family: var(--font-sans);
-  font-size: 14px !important;
-  font-weight: 550;
-  color: var(--text) !important;
-  border-bottom-color: #e4eaf2 !important;
-  background: #ffffff !important;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
-html[data-theme='pro'] .stitchOpsTable tbody tr:hover,
-html[data-theme='pro'] .opsFleetTable tbody tr:hover {
-  background: rgba(15, 107, 99, 0.05) !important;
-}
-
-html[data-theme='pro'] .stitchOpsTable tbody tr:hover td {
-  background: transparent !important;
-}
-
-/* —— Metric / sales / freq boxes (Classic dark → Pro light) —— */
-html[data-theme='pro'] .opsMetricBox,
-html[data-theme='pro'] .opsCellBox,
-html[data-theme='pro'] .salesStackBox,
-html[data-theme='pro'] .stitchOpsTable .salesStackBox,
-html[data-theme='pro'] .stitchOpsTable .lastTxBox,
-html[data-theme='pro'] .stitchOpsTable .freqBox,
-html[data-theme='pro'] .mtdYoyCell,
-html[data-theme='pro'] .sxCell {
-  border-radius: 12px !important;
-  border: 1px solid var(--border) !important;
-  background: #ffffff !important;
-  box-shadow: none !important;
-  color: var(--text) !important;
-}
-
-html[data-theme='pro'] .salesStackLabel,
-html[data-theme='pro'] .stitchOpsTable .salesStackLabel,
-html[data-theme='pro'] .stitchOpsTable .lastTxLineWd {
-  color: var(--muted) !important;
-  font-size: 10px !important;
-  font-weight: 700 !important;
-}
-
-html[data-theme='pro'] .salesStackVal,
-html[data-theme='pro'] .stitchOpsTable .salesStackVal,
-html[data-theme='pro'] .stitchOpsTable .lastTxLineDate,
-html[data-theme='pro'] .stitchOpsTable .lastTxLineTime,
-html[data-theme='pro'] .stitchOpsTable .lastTxBoxVal,
-html[data-theme='pro'] .stitchOpsTable .freqBoxVal,
-html[data-theme='pro'] .salesStackTrend {
-  color: var(--text) !important;
-  font-size: 0.9rem !important;
-  font-weight: 700 !important;
-}
-
-html[data-theme='pro'] .salesStackBoxUp,
-html[data-theme='pro'] .stitchOpsTable .salesStackBoxUp {
-  border-color: #86efac !important;
-  background: #ecfdf5 !important;
-}
-
-html[data-theme='pro'] .salesStackBoxUp .salesStackVal,
-html[data-theme='pro'] .salesStackBoxUp .salesStackTrend {
-  color: #166534 !important;
-}
-
-html[data-theme='pro'] .salesStackBoxDown,
-html[data-theme='pro'] .stitchOpsTable .salesStackBoxDown {
-  border-color: #fca5a5 !important;
-  background: #fef2f2 !important;
-}
-
-html[data-theme='pro'] .salesStackBoxDown .salesStackVal,
-html[data-theme='pro'] .salesStackBoxDown .salesStackTrend {
-  color: #991b1b !important;
-}
-
-html[data-theme='pro'] .salesStackBoxOwner,
-html[data-theme='pro'] .stitchOpsTable .salesStackBoxOwner {
-  border-color: #c4b5fd !important;
-  background: #f5f3ff !important;
-}
-
-html[data-theme='pro'] .salesStackBoxOwner .salesStackVal {
-  color: #5b21b6 !important;
-}
-
-html[data-theme='pro'] .salesStackEmpty {
-  color: var(--muted) !important;
-}
-
-html[data-theme='pro'] .fleetCellMissing {
-  color: var(--muted) !important;
-}
-
-html[data-theme='pro'] .linkGo {
-  color: var(--link) !important;
-  font-weight: 700;
-  min-height: 44px;
-}
-
-/* Column picker / ops view toggle */
-html[data-theme='pro'] .opsViewToggle {
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: #fff;
-  padding: 4px;
-  gap: 4px;
-}
-
-html[data-theme='pro'] .opsViewToggleBtn {
-  border-radius: 999px !important;
-  border: 0 !important;
-  min-height: 40px;
-  padding: 8px 14px !important;
-  font-size: 14px !important;
-  font-weight: 700 !important;
-  color: var(--muted) !important;
-  background: transparent !important;
-}
-
-html[data-theme='pro'] .opsViewToggleBtnActive,
-html[data-theme='pro'] .opsViewToggleBtn.opsViewToggleBtnActive {
-  background: var(--pro-teal) !important;
-  color: #ffffff !important;
-}
-
-html[data-theme='pro'] .opsColChip,
-html[data-theme='pro'] .opsSelectCard,
-html[data-theme='pro'] .opsStatusPill {
-  background: #f4f7fb !important;
-  color: var(--text) !important;
-  border-color: var(--border) !important;
-  font-weight: 600;
-}
-
-html[data-theme='pro'] .opsSelectCardHint {
-  color: var(--muted) !important;
-}
-
-html[data-theme='pro'] .opsColChipActive,
-html[data-theme='pro'] button.opsColChipActive {
-  background: var(--pro-teal-soft) !important;
-  color: var(--pro-teal) !important;
-  border-color: rgba(15, 107, 99, 0.35) !important;
-}
-
-/* Compare preset */
-html[data-theme='pro'] .comparePresetPicker,
-html[data-theme='pro'] .stitchOpsControls,
-html[data-theme='pro'] .opsPrepCompact {
-  color: var(--text);
-}
-
-html[data-theme='pro'] select,
-html[data-theme='pro'] input,
-html[data-theme='pro'] textarea {
-  background: #ffffff !important;
-  color: var(--text) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 12px !important;
-  min-height: 44px;
-  font-size: 15px !important;
-  font-weight: 550;
-}
-
-html[data-theme='pro'] select:focus,
-html[data-theme='pro'] input:focus,
-html[data-theme='pro'] textarea:focus {
-  outline: 2px solid rgba(15, 107, 99, 0.35);
-  outline-offset: 1px;
-  border-color: var(--pro-teal) !important;
-}
-
-/* Revenue bar */
-html[data-theme='pro'] .opsRevenueTotalsBar {
-  background: #ffffff !important;
-  border-top: 1px solid var(--border) !important;
-  box-shadow: 0 -10px 32px rgba(18, 26, 38, 0.08);
-  backdrop-filter: none;
-}
-
-html[data-theme='pro'] .opsRevenueTotalsLabel,
-html[data-theme='pro'] .opsRevenueTotalsSubLabel,
-html[data-theme='pro'] .opsRevenueTotalsAsOf,
-html[data-theme='pro'] .opsRevenueTotalsEyebrow {
-  color: var(--muted) !important;
-}
-
-html[data-theme='pro'] .opsRevenueTotalsVal,
-html[data-theme='pro'] .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal,
-html[data-theme='pro'] .opsRevenueTotalsValMuted,
-html[data-theme='pro'] .opsRevenueTotalsTrend {
-  color: var(--text) !important;
-}
-
-html[data-theme='pro'] .opsRevenueTotalsTrendMuted {
-  color: var(--muted) !important;
-}
-
-/* Buttons */
-html[data-theme='pro'] .primary,
-html[data-theme='pro'] button.primary {
-  background: var(--pro-teal);
-  color: #fff !important;
-  border: 1px solid var(--pro-teal);
-  border-radius: 999px;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0;
-  text-transform: none;
-  min-height: 48px;
-  padding: 12px 20px;
-}
-
-html[data-theme='pro'] .primary:hover,
-html[data-theme='pro'] button.primary:hover {
-  background: #0d9488;
-  border-color: #0d9488;
-  color: #fff !important;
-  filter: none;
 }
 
 /* Theme toggle */
@@ -709,8 +248,8 @@ html[data-theme='pro'] button.primary:hover {
   padding: 3px;
   gap: 2px;
   border-radius: 999px;
-  border: 1px solid var(--border-soft);
-  background: var(--panel2);
+  border: 1px solid var(--border-soft, #e2e8f0);
+  background: var(--panel2, #f8fafc);
   flex-shrink: 0;
 }
 
@@ -726,24 +265,24 @@ html[data-theme='pro'] button.primary:hover {
   text-transform: uppercase;
   padding: 8px 12px;
   border-radius: 999px;
-  color: var(--muted);
+  color: var(--muted, #64748b);
   background: transparent;
-  line-height: 1.2;
   min-height: 36px;
 }
 
-.themeToggleBtn:hover {
-  color: var(--text);
-}
-
 .themeToggleBtn--active {
-  background: var(--surface-variant);
-  color: var(--text);
+  background: var(--surface-variant, #e2e8f0);
+  color: var(--text, #0f172a);
 }
 
-.themeToggle--compact .themeToggleBtn {
-  padding: 8px 10px;
-  font-size: 11px;
+html[data-theme='pro'] .themeToggle {
+  border-color: #cbd5e1;
+  background: #fff;
+}
+
+html[data-theme='pro'] .themeToggleBtn--active {
+  background: #0f766e;
+  color: #fff;
 }
 
 .loginThemeRow {
@@ -752,150 +291,91 @@ html[data-theme='pro'] button.primary:hover {
   margin-bottom: 14px;
 }
 
-html[data-theme='pro'] .themeToggle {
-  border: 1px solid var(--border);
-  background: #fff;
-}
-
-html[data-theme='pro'] .themeToggleBtn {
-  color: var(--muted);
-}
-
-html[data-theme='pro'] .themeToggleBtn--active {
-  background: var(--pro-teal);
-  color: #fff;
-}
-
 /* Login */
 html[data-theme='pro'] .loginShell {
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
   padding: 28px 20px;
-  background: linear-gradient(180deg, #dfe7f0 0%, #e8edf3 45%, #eef2f6 100%);
+  background: linear-gradient(180deg, #dfe7f0 0%, #e9eef4 100%);
 }
 
 html[data-theme='pro'] .loginCard {
   width: 100%;
   max-width: 440px;
   border-radius: 22px;
-  border: 1px solid var(--border);
+  border: 1px solid #cbd5e1;
   background: #fff;
-  box-shadow: 0 24px 56px rgba(18, 26, 38, 0.1);
-  padding: 28px 28px 32px;
-}
-
-html[data-theme='pro'] .loginBrand {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-html[data-theme='pro'] .loginLogo {
-  border-radius: 16px;
-  width: 64px;
-  height: 64px;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.1);
+  padding: 28px;
 }
 
 html[data-theme='pro'] .loginTitle {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  text-transform: none;
   font-size: 1.55rem;
-  color: var(--text);
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 html[data-theme='pro'] .loginSubtitle {
-  font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0;
+  color: #475569;
+}
+
+html[data-theme='pro'] .primary,
+html[data-theme='pro'] button.primary {
+  background: #0f766e;
+  border: 1px solid #0f766e;
+  color: #fff;
+  border-radius: 999px;
+  min-height: 48px;
+  font-weight: 700;
   text-transform: none;
-  color: var(--muted);
+  letter-spacing: 0;
 }
 
-/* Modals under Pro — light readable panels */
-html[data-theme='pro'] .modalPanel,
-html[data-theme='pro'] .alertModalPanel,
-html[data-theme='pro'] .salesHistoryModal,
-html[data-theme='pro'] [class*='Modal'] .panel {
-  border-radius: 18px !important;
-  background: #ffffff !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text) !important;
-  box-shadow: 0 24px 64px rgba(18, 26, 38, 0.18);
+/* Admin / QA under Pro shell — basic light readability */
+html[data-theme='pro'] .appShellPro .panel,
+html[data-theme='pro'] .appShellPro .adminCard {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 16px;
 }
 
-html[data-theme='pro'] .salesHistoryBackdrop,
-html[data-theme='pro'] .backdrop {
-  background: rgba(18, 26, 38, 0.45) !important;
+html[data-theme='pro'] .appShellPro .muted {
+  color: #475569;
 }
 
-/* Admin */
-html[data-theme='pro'] .adminTab,
-html[data-theme='pro'] .adminCard,
-html[data-theme='pro'] .adminLead {
-  color: var(--text);
+html[data-theme='pro'] .appShellPro input,
+html[data-theme='pro'] .appShellPro select,
+html[data-theme='pro'] .appShellPro textarea {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  min-height: 44px;
 }
 
-/* iPad / tablet (primary Pro target) */
-@media (max-width: 1180px) {
-  html[data-theme='pro'] {
-    font-size: 17px;
-  }
-
-  .proAppBrandSub {
-    display: none;
-  }
-
-  .appShellPro .proAppMain {
-    padding: 16px 14px 120px;
-  }
-
-  html[data-theme='pro'] .stitchDataPanelTitle {
-    font-size: 1.55rem !important;
-  }
-
-  html[data-theme='pro'] .stitchOpsTable tbody td,
-  html[data-theme='pro'] .opsFleetTable tbody td {
-    font-size: 15px !important;
-  }
-
-  html[data-theme='pro'] .salesStackVal,
-  html[data-theme='pro'] .stitchOpsTable .salesStackVal,
-  html[data-theme='pro'] .stitchOpsTable .freqBoxVal {
-    font-size: 0.95rem !important;
-  }
-}
-
-/* Phone: collapse top tabs into menu */
 @media (max-width: 767px) {
   .proAppMenuBtn {
     display: inline-flex;
   }
-
   .proAppNav {
     display: none;
   }
-
   .proAppMobileNav {
     display: block;
   }
-
   .proAppClock {
     display: none;
   }
-
-  html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
+  .proAppBrandSub {
     display: none;
   }
-
-  .proAppHeaderBar {
-    min-height: 60px;
-    padding: 8px 12px;
+  html[data-theme='pro'] .appShellPro .topBarSignedIn strong {
+    display: none;
   }
 }

@@ -35,7 +35,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![1 Shell + Home](docs/product-prototype/figures/wire-01-shell-home.svg)
 
-*Figure 1 — **Classic:** dark sidebar rail. **Pro (iPad-first):** top app bar + light high-contrast cards; compact/cards through tablet landscape. Toggle Classic · Pro.*
+*Figure 1 — **Classic:** dark sidebar + Stitch tables. **Pro:** top app bar + dedicated card workspace (`features/pro/`). Toggle Classic · Pro.*
 
 ![2 Red Flags](docs/product-prototype/figures/wire-02-red-flags.svg)
 
@@ -81,7 +81,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-07-13 | **Pro iPad readability:** High-contrast light tokens, Source Sans 3, force-overrides for sales/freq/table/card dark chrome. Pro compact (cards + essential) through **1180px** / coarse pointer; Red Flags defaults to **Cards**. 44px touch targets. Classic unchanged. |
+| 2026-07-13 | **Pro = dedicated iPad workspace (real refactor):** New `features/pro/` UI — card pages for Red Flags + Overall (not Classic Stitch chrome). Shared data/queries; Pro-only layout, KPIs, metrics, fleet bar. Shell stays top app bar. Classic unchanged. |
+| 2026-07-13 | **Pro iPad readability:** High-contrast light tokens… *(superseded same day by dedicated Pro pages above)*. |
 | 2026-07-13 | **Pro = light professional workspace (real layout):** Separate React shell — **top app bar** with brand + horizontal tabs (no sidebar), soft white cards, teal accents, Manrope. Classic keeps dark tactical sidebar Stitch. Toggle Classic · Pro. |
 | 2026-07-13 | ~~Pro bold dark command~~ superseded same day — was still perceived as a skin; replaced by light professional shell above. |
 | 2026-07-13 | **Fleet revenue labels (clarity):** Secondary strip labels **Yest. full day** (KD), **−2d full day** (KD amount for day-before-yesterday), **vs −2d** (%). Dropped stacked sub-labels that read like “no amount for −2d”. |

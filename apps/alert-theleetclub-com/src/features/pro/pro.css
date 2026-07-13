@@ -1,0 +1,482 @@
+/**
+ * Pro workspace — dedicated iPad-first UI (not Classic Stitch chrome).
+ * Scoped under .proWorkspace; Classic styles do not apply.
+ */
+
+.proWorkspace {
+  --pro-bg: #e9eef4;
+  --pro-card: #ffffff;
+  --pro-ink: #0f172a;
+  --pro-muted: #475569;
+  --pro-line: #cbd5e1;
+  --pro-accent: #0f766e;
+  --pro-accent-soft: #ccfbf1;
+  --pro-warn: #b45309;
+  --pro-warn-soft: #ffedd5;
+  --pro-danger: #b91c1c;
+  --pro-danger-soft: #fee2e2;
+  --pro-good: #15803d;
+  --pro-good-soft: #dcfce7;
+  --pro-radius: 16px;
+  --pro-font: 'Source Sans 3', system-ui, -apple-system, 'SF Pro Text', sans-serif;
+  --pro-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --pro-touch: 44px;
+
+  font-family: var(--pro-font);
+  color: var(--pro-ink);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.proPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.proPageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 4px 2px 0;
+}
+
+.proPageTitleBlock {
+  min-width: 0;
+}
+
+.proPageEyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pro-muted);
+}
+
+.proPageTitle {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.5vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--pro-ink);
+  line-height: 1.15;
+}
+
+.proPageMeta {
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pro-muted);
+}
+
+.proPageActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.proBtn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--pro-touch);
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--pro-line);
+  background: var(--pro-card);
+  color: var(--pro-ink);
+  font-family: var(--pro-font);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.proBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.proBtnPrimary {
+  background: var(--pro-accent);
+  border-color: var(--pro-accent);
+  color: #fff;
+}
+
+.proBtnGhost {
+  background: transparent;
+}
+
+.proLivePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--pro-good-soft);
+  color: var(--pro-good);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.proLiveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pro-good);
+}
+
+.proKpiRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 700px) {
+  .proKpiRow {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.proKpi {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-line);
+  border-radius: var(--pro-radius);
+  padding: 14px 16px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.proKpiLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pro-muted);
+  margin-bottom: 6px;
+}
+
+.proKpiValue {
+  display: block;
+  font-family: var(--pro-mono);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--pro-ink);
+  line-height: 1.1;
+}
+
+.proKpiValueWarn {
+  color: var(--pro-warn);
+}
+
+.proKpiValueGood {
+  color: var(--pro-good);
+}
+
+.proKpiSub {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pro-muted);
+}
+
+.proToolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--pro-card);
+  border: 1px solid var(--pro-line);
+  border-radius: var(--pro-radius);
+  padding: 14px 16px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.proToolbarNote {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pro-muted);
+}
+
+.proToolbarNote strong {
+  color: var(--pro-ink);
+}
+
+.proBanner {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.proBannerWarn {
+  background: var(--pro-warn-soft);
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+
+.proBannerInfo {
+  background: #eff6ff;
+  color: #1e3a8a;
+  border: 1px solid #93c5fd;
+}
+
+.proBannerDanger {
+  background: var(--pro-danger-soft);
+  color: var(--pro-danger);
+  border: 1px solid #fca5a5;
+}
+
+.proCardList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.proCard {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-line);
+  border-radius: var(--pro-radius);
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.proCardWarn {
+  border-color: #fdba74;
+  box-shadow: inset 4px 0 0 var(--pro-warn);
+}
+
+.proCardDanger {
+  border-color: #fca5a5;
+  box-shadow: inset 4px 0 0 var(--pro-danger);
+}
+
+.proCardMain {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 16px 16px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.proCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.proCardName {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--pro-ink);
+  line-height: 1.25;
+}
+
+.proCardId {
+  margin: 4px 0 0;
+  font-family: var(--pro-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pro-muted);
+}
+
+.proChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.proChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.proChipNew {
+  background: var(--pro-danger-soft);
+  color: var(--pro-danger);
+}
+
+.proChipUpd {
+  background: var(--pro-warn-soft);
+  color: var(--pro-warn);
+}
+
+.proChipTag {
+  background: #f1f5f9;
+  color: var(--pro-muted);
+}
+
+.proCardReason {
+  margin: 12px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #7f1d1d;
+  line-height: 1.4;
+}
+
+.proMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+
+@media (min-width: 640px) {
+  .proMetricGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.proMetric {
+  background: #f8fafc;
+  border: 1px solid var(--pro-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 72px;
+}
+
+.proMetricLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pro-muted);
+  margin-bottom: 4px;
+}
+
+.proMetricValue {
+  display: block;
+  font-family: var(--pro-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pro-ink);
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.proMetricValueUp {
+  color: var(--pro-good);
+}
+
+.proMetricValueDown {
+  color: var(--pro-danger);
+}
+
+.proMetricHint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pro-muted);
+}
+
+.proCardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.proCardFoot .proBtn {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+/* Compare picker inside Pro toolbar — force readable light controls */
+.proWorkspace .comparePresetPicker,
+.proWorkspace .comparePresetPicker label,
+.proWorkspace .comparePresetPicker span {
+  color: var(--pro-ink) !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.proWorkspace .comparePresetPicker select,
+.proWorkspace .comparePresetPicker input {
+  min-height: var(--pro-touch) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--pro-line) !important;
+  background: #fff !important;
+  color: var(--pro-ink) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+
+.proEmpty {
+  text-align: center;
+  padding: 48px 20px;
+  background: var(--pro-card);
+  border: 1px dashed var(--pro-line);
+  border-radius: var(--pro-radius);
+  color: var(--pro-muted);
+  font-weight: 600;
+}
+
+.proEmptyTitle {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--pro-ink);
+}
+
+.proFleetBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  margin: 8px -4px 0;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--pro-line);
+  border-radius: var(--pro-radius) var(--pro-radius) 0 0;
+  box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: baseline;
+}
+
+.proFleetBarLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pro-muted);
+}
+
+.proFleetBarVal {
+  font-family: var(--pro-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--pro-ink);
+}

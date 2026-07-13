@@ -92,6 +92,8 @@ import {
 import type { StitchKpi } from '@/components/StitchKpiStrip';
 import { OpsViewToggle } from '@/components/OpsViewToggle';
 import { useCompactOpsLayout } from '@/lib/compactOpsLayout';
+import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
+import { ProRedFlagsView } from '@/features/pro/ProRedFlagsView';
 import { RedFlagsCardList } from './RedFlagsCardList';
 import type { RedFlagsColumnKey } from './redFlagsWorkbookColumns';
 import { cycleColumnSort, type ColumnSortState } from '@/lib/tableColumnSort';
@@ -1045,6 +1047,124 @@ export function RedFlagsPage() {
       },
     ];
   }, [ticker, generatedAt, snapTime, q.isFetched]);
+
+  const uiTheme = useAlertUiTheme();
+
+  if (uiTheme === 'pro') {
+    return (
+      <>
+        <ProRedFlagsView
+          ranked={displayRanked}
+          kpis={redKpis}
+          compare={compare}
+          onCompareChange={setComparePersist}
+          compareMode={compareMode}
+          salesNote={salesComparisonNote}
+          asOfLocal={dailySalesQ.data?.asOfLocal}
+          generatedAt={generatedAt}
+          fetching={q.isFetching}
+          loading={!q.isFetched && !q.isError}
+          error={q.isError ? ((q.error as Error)?.message ?? 'Request failed') : null}
+          emptyClear={emptyClear}
+          cleaningOverdueCount={cleaningOverdueCount}
+          notifyNeedsPermission={notifyPerm !== 'granted' && notifyPerm !== 'unsupported'}
+          onEnableNotifications={async () => {
+            const p = await requestCleaningNotificationPermission();
+            setNotifyPerm(p);
+          }}
+          dailySales={dailySalesQ.data}
+          dailySalesOk={dailySalesQ.isSuccess}
+          dailyIncidents={dailyIncidentsQ.data}
+          dailyIncidentsOk={dailyIncidentsQ.isSuccess}
+          creditsByMachineId={creditsByMachineId}
+          vendonByMachineId={vendonSummaryQ.data?.byMachineId}
+          vendonSalesLabels={vendonSalesLabels}
+          liveCleaningByMachineId={liveCleaningByMachineId}
+          fleetPrimaryKwd={fleetRevenueTotals.primary}
+          fleetBaselineKwd={fleetRevenueTotals.baseline}
+          fleetTrendPct={fleetRevenueTotals.trendPct}
+          snapTime={snapTime}
+          onRefresh={() => void q.refetch()}
+          onOpenDetail={openDetail}
+          onOpenSales={(d) => {
+            const row = d.row;
+            const machId = String(getMachineIdRaw(row) || '');
+            const salesRow = salesElapsedForMachine(dailySalesQ.data, machId, dailySalesQ.isSuccess);
+            const vendonSales = vendonSummaryQ.data?.byMachineId?.[machId];
+            const salesPair = salesPairForPreset(compare.preset, salesRow, compare, vendonSales, vendonSalesLabels);
+            const salesForModal =
+              salesRow ??
+              (salesPair.primary != null && Number.isFinite(salesPair.primary)
+                ? {
+                    todayKwd: salesPair.primary,
+                    dailyElapsed: [],
+                    trendPct: salesPair.trendPct ?? null,
+                  }
+                : null);
+            if (salesForModal) openSalesHistory(row, machId, salesForModal as SalesElapsedRow);
+          }}
+          onOpenTrend={(d) => {
+            const machId = String(getMachineIdRaw(d.row) || '');
+            openTrendHistory(d.row, machId);
+          }}
+        />
+        {detail
+          ? createPortal(<DetailModal view={detail} onClose={() => setDetail(null)} />, getAlertModalPortal())
+          : null}
+        {trendDetail ? (
+          <TrendHistoryModal
+            machineName={trendDetail.machineName}
+            machineId={trendDetail.machineId}
+            row={trendDetail.row}
+            meta={dailyIncidentsQ.data}
+            compareMode={compareMode}
+            snapTrend={trendDetail.snapTrend}
+            scoreText={trendDetail.scoreText}
+            trendText={trendDetail.trendText}
+            gapDisplay={trendDetail.gapDisplay}
+            scoreExplain={trendDetail.scoreExplain}
+            trendExplain={trendDetail.trendExplain}
+            gapExplain={trendDetail.gapExplain}
+            operatorName={trendDetail.operatorName}
+            strikeOperatorEmail={trendDetail.strikeOperatorEmail}
+            attendanceSummary={trendDetail.attendanceSummary}
+            onClose={() => setTrendDetail(null)}
+          />
+        ) : null}
+        {salesDetail ? (
+          <SalesHistoryModal
+            machineName={salesDetail.machineName}
+            machineId={salesDetail.machineId}
+            row={salesDetail.row}
+            meta={dailySalesQ.data}
+            operatorName={salesDetail.operatorName}
+            strikeOperatorEmail={salesDetail.strikeOperatorEmail}
+            attendanceSummary={salesDetail.attendanceSummary}
+            onClose={() => setSalesDetail(null)}
+          />
+        ) : null}
+        {targetDetail ? (
+          <TargetDetailModal
+            machineName={targetDetail.machineName}
+            machineId={targetDetail.machineId}
+            todayKwd={targetDetail.todayKwd}
+            yesterdayKwd={targetDetail.yesterdayKwd}
+            dailyTargetKd={targetDetail.dailyTargetKd}
+            locationOwnerName={targetDetail.locationOwnerName}
+            onClose={() => setTargetDetail(null)}
+          />
+        ) : null}
+        {goCheckDetail ? (
+          <GoCheckWorkflowModal
+            machineId={goCheckDetail.machineId}
+            machineName={goCheckDetail.machineName}
+            alertType={goCheckDetail.alertType}
+            onClose={() => setGoCheckDetail(null)}
+          />
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <div className={styles.root}>

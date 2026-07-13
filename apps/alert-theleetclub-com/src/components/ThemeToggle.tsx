@@ -33,7 +33,7 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
           onClick={() => select(id)}
           title={
             id === 'pro'
-              ? 'Pro — iPad-first light workspace (readable cards & tables)'
+              ? 'Pro — dedicated iPad card workspace (not Classic tables)'
               : 'Classic — tactical Stitch look'
           }
         >

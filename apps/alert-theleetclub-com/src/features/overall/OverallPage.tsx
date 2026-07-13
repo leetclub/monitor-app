@@ -22,6 +22,9 @@ import { AlertTableHeader } from '@/components/AlertTableHeader';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import type { StitchKpi } from '@/components/StitchKpiStrip';
 import { useAuth } from '@/context/AuthContext';
+import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
+import { ProOverallView, type ProOverallCard } from '@/features/pro/ProOverallView';
+import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
 import { useOverallColumnPrefs } from '@/lib/useOverallColumnPrefs';
 import { visibleOverallColumns } from './overallColumnVisibility';
 import { OverallColumnPicker } from './OverallColumnPicker';
@@ -670,6 +673,104 @@ export function OverallPage() {
       { label: 'Compare', value: presetShort, sub: 'timespan' },
     ];
   }, [fleetMachines.length, snapshotMachineCount, profileByMachineId.size, compare.preset]);
+
+  const uiTheme = useAlertUiTheme();
+
+  const proCards = useMemo((): ProOverallCard[] => {
+    if (uiTheme !== 'pro') return [];
+    return sortedFleetMachines.map((m) => {
+      const snap = snapshotByMachineId.get(m.id);
+      const live = liveByMachineId.get(m.id);
+      const prof = profileByMachineId.get(m.id);
+      const vendon = vendonSummaryQ.data?.byMachineId?.[m.id];
+      const salesElapsed = salesElapsedForMachine(dailySalesQ.data, m.id, dailySalesQ.isSuccess);
+      const salesPair = salesPairForPreset(compare.preset, salesElapsed, compare, vendon, vendonSalesLabels);
+      const operator =
+        String(prof?.operator_name ?? '').trim() ||
+        String(snap?.operator ?? snap?.operatorName ?? snap?.redAlertOperator ?? '').trim() ||
+        '—';
+      const txRaw =
+        snap?.lastTransactionAtUtc ??
+        snap?.last_transaction_at_utc ??
+        snap?.lastSaleAtUtc ??
+        snap?.last_sale_at_utc ??
+        snap?.lastTransactionAt ??
+        snap?.last_transaction_at ??
+        null;
+      const vendonTx = vendonLastTxQ.data?.byMachineId?.[m.id];
+      const vendonTxIso =
+        vendonTx?.timestamp != null && Number(vendonTx.timestamp) > 0
+          ? new Date(Number(vendonTx.timestamp) * 1000).toISOString()
+          : '';
+      const lastTxIso = txRaw ? String(txRaw) : vendonTxIso;
+      const lastCleanedIso = snap?.lastCleaningAt != null ? String(snap.lastCleaningAt).trim() : '';
+      const cleanIso = lastCleanedIso || String(live?.lastCleaningAt ?? '').trim();
+      const cleanWins = cleaningWindowsFromAdmin(prof?.cleaning_windows);
+      const cleanStatus = cleanIso
+        ? lastCleanedStatus({ lastCleaningIso: cleanIso, cleaningWindows: cleanWins })
+        : null;
+      return {
+        id: m.id,
+        name: m.name || m.id,
+        operator,
+        salesPrimary: salesPair.primary,
+        salesBaseline: salesPair.baseline,
+        salesTrendPct: salesPair.trendPct,
+        salesCaption: salesPair.caption,
+        lastTx: lastTxIso ? formatLastTxCompact(lastTxIso) : '—',
+        lastClean: cleanStatus?.label || (cleanIso ? formatLastTxCompact(cleanIso) : '—'),
+        flagged: snapshotByMachineId.has(m.id),
+        salesRow: salesElapsed ?? null,
+      };
+    });
+  }, [
+    uiTheme,
+    sortedFleetMachines,
+    snapshotByMachineId,
+    liveByMachineId,
+    profileByMachineId,
+    vendonSummaryQ.data?.byMachineId,
+    dailySalesQ.data,
+    dailySalesQ.isSuccess,
+    compare,
+    vendonSalesLabels,
+    vendonLastTxQ.data?.byMachineId,
+  ]);
+
+  if (uiTheme === 'pro') {
+    const salesComparisonNote = presetLabels(compare.preset).caption;
+    return (
+      <ProOverallView
+        cards={proCards}
+        kpis={overallKpis}
+        compare={compare}
+        onCompareChange={setComparePersist}
+        salesNote={salesComparisonNote}
+        asOfLocal={dailySalesQ.data?.asOfLocal}
+        salesMeta={dailySalesQ.data}
+        loading={loadingFleetTable}
+        error={
+          machinesQ.isError
+            ? `${(machinesQ.error as Error).message}${
+                fleetFromSnapshotFallback
+                  ? ' — Rows use the Red Alert snapshot so you still see machines from Red Flags.'
+                  : ''
+              }`
+            : null
+        }
+        info={
+          fleetFromSnapshotFallback
+            ? 'Fleet list built from the Red Alert snapshot (Vendon list unavailable).'
+            : null
+        }
+        fetching={isRefreshing}
+        fleetPrimaryKwd={fleetRevenueTotals.primary}
+        fleetBaselineKwd={fleetRevenueTotals.baseline}
+        fleetTrendPct={fleetRevenueTotals.trendPct}
+        onRefresh={refetchAll}
+      />
+    );
+  }
 
   return (
     <div className="pageShellWide">
