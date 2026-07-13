@@ -1,0 +1,193 @@
+.perfPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.perfToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  margin-bottom: 8px;
+}
+
+.perfField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.perfField select {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.perfBackLink {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--link);
+  text-decoration: none;
+}
+
+.perfMuted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.perfError {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.perfKpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 12px 0 18px;
+}
+
+.perfKpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+}
+
+.perfKpiLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.perfKpi strong {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+}
+
+.perfSection {
+  margin-bottom: 22px;
+}
+
+.perfSectionTitle {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.perfSectionHint {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.perfChartScroll {
+  overflow-x: auto;
+  padding: 8px 0 4px;
+}
+
+.perfChartSvg {
+  min-width: 320px;
+  max-width: 100%;
+  height: auto;
+}
+
+.perfBarActual {
+  fill: #2dd4bf;
+}
+
+.perfBarTarget {
+  fill: rgba(148, 163, 184, 0.18);
+  stroke: rgba(148, 163, 184, 0.45);
+  stroke-width: 1;
+}
+
+.perfBarRemain {
+  fill: rgba(100, 116, 139, 0.35);
+}
+
+.perfBarLabel {
+  fill: var(--muted);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+
+.perfChartLegend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.perfDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.perfDotActual {
+  background: #2dd4bf;
+}
+
+.perfDotRemain {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+.perfTableWrap {
+  overflow-x: auto;
+}
+
+.perfTable th,
+.perfTable td {
+  white-space: nowrap;
+}
+
+.sxCellBtn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  border-radius: 6px;
+}
+
+.sxCellBtn:hover {
+  background: rgba(45, 212, 191, 0.08);
+}
+
+.sxCellEmpty {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sxBoxSub {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  opacity: 0.85;
+  line-height: 1.1;
+}

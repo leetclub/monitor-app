@@ -51,6 +51,7 @@ class LiveMachineConfig(Base):
     daily_sales_target = Column(Numeric(14, 4), nullable=True)
     sx_product_name = Column(Text, nullable=True)
     daily_product_target = Column(Numeric(14, 4), nullable=True)
+    sx_target_period = Column(Text, nullable=True)  # daily | weekly | monthly
     expected_shift_start = Column(Text, nullable=True)
     shift_timezone = Column(Text, nullable=True)
     shift_grace_minutes = Column(Integer, nullable=False, default=15)

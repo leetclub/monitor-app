@@ -116,7 +116,7 @@ export const RED_FLAGS_COLUMNS: Record<
     title: 'Sales Acceleration',
     sub: 'SX Loc · Prod — follows compare preset',
     placeholderNote:
-      'SX = current growth − previous growth. Growth = (cur − prev) / prev. Loc uses location KD sales; Prod uses cups for the Admin-linked product. Same compare preset as Sales/Target.',
+      'SX = current growth − previous growth. Growth = (cur − prev) / prev. Loc shows KD + SX pts; Prod shows cups for Admin product (default Americano Max). Tap opens Performance for this location.',
   },
   frequency: {
     title: 'Frequency',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
 import {
@@ -333,6 +334,7 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
 }
 
 export function RedFlagsPage() {
+  const navigate = useNavigate();
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const compareMode = useMemo(() => comparePresetToRedAlertMode(compare.preset), [compare.preset]);
   const setComparePersist = useCallback((next: CompareSelection) => {
@@ -1523,6 +1525,10 @@ export function RedFlagsPage() {
                           dailyTargetKd: row.dailyTarget,
                           locationOwnerName: ownerFull,
                         });
+                      },
+                      onOpenPerformance: () => {
+                        if (!machId) return;
+                        navigate(`/performance?machineId=${encodeURIComponent(machId)}`);
                       },
                       onGoCheck: () => {
                         setGoCheckDetail({

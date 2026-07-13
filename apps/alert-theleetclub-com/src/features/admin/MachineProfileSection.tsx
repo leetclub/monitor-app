@@ -52,6 +52,7 @@ type ProfileRow = {
   daily_sales_target?: number | null;
   sx_product_name?: string | null;
   daily_product_target?: number | null;
+  sx_target_period?: string | null;
   /** From linked Red Alert cleaning schedule row (higher = wins on overlap) */
   priority?: number;
   updated_at?: string | null;
@@ -355,6 +356,7 @@ export function MachineProfileSection() {
   const [dailySalesTarget, setDailySalesTarget] = useState('');
   const [sxProductName, setSxProductName] = useState('');
   const [dailyProductTarget, setDailyProductTarget] = useState('');
+  const [sxTargetPeriod, setSxTargetPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [formErr, setFormErr] = useState<string | null>(null);
 
   const machines = machinesQ.data?.machines ?? [];
@@ -401,12 +403,14 @@ export function MachineProfileSection() {
         ? String(p.daily_sales_target)
         : '',
     );
-    setSxProductName((p.sx_product_name || '').trim());
+    setSxProductName((p.sx_product_name || '').trim() || 'Americano Max');
     setDailyProductTarget(
       p.daily_product_target != null && Number.isFinite(Number(p.daily_product_target))
         ? String(p.daily_product_target)
         : '',
     );
+    const per = String(p.sx_target_period || 'daily').toLowerCase();
+    setSxTargetPeriod(per === 'weekly' || per === 'monthly' ? per : 'daily');
     setFormErr(null);
   },
   [machines],
@@ -478,8 +482,9 @@ export function MachineProfileSection() {
         timezone,
         priority,
         daily_sales_target: dailySalesTarget.trim() === '' ? null : Number(dailySalesTarget),
-        sx_product_name: sxProductName.trim() || null,
+        sx_product_name: sxProductName.trim() || 'Americano Max',
         daily_product_target: dailyProductTarget.trim() === '' ? null : Number(dailyProductTarget),
+        sx_target_period: sxTargetPeriod,
       });
     },
     onSuccess: async () => {
@@ -601,17 +606,30 @@ export function MachineProfileSection() {
               />
             </div>
             <div className="adminFieldCell">
-              <span className="adminFieldCaption">Product target (cups/day)</span>
+              <span className="adminFieldCaption">Product target (cups)</span>
               <input
                 type="number"
                 min={0}
                 step={1}
                 name="daily_product_target"
-                title="Daily cup target for the linked SX product"
+                title="Cup target for the linked SX product (interpreted by period below)"
                 value={dailyProductTarget}
                 onChange={(e) => setDailyProductTarget(e.target.value)}
                 placeholder="e.g. 80"
               />
+            </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Target period</span>
+              <select
+                name="sx_target_period"
+                title="How location/product targets apply for Performance + SX"
+                value={sxTargetPeriod}
+                onChange={(e) => setSxTargetPeriod(e.target.value as 'daily' | 'weekly' | 'monthly')}
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
             </div>
             <div className="adminFieldCell">
               <span className="adminFieldCaption">Location hours</span>

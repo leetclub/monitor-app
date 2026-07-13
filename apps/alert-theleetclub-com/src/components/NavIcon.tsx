@@ -29,6 +29,12 @@ const ICONS: Record<string, JSX.Element> = {
       <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm-2 6h10v2H7V9zm0 4h10v2H7v-2zm0 4h7v2H7v-2zM5 7h14v12H5V7z" />
     </svg>
   ),
+  /** Performance — revenue trajectory bars */
+  performance: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M3 19h18v2H3v-2zm2-2h2V9H5v8zm4 0h2V5H9v12zm4 0h2v-6h-2v6zm4 0h2V7h-2v10z" />
+    </svg>
+  ),
   /** Admin — shield with check */
   admin: (
     <svg viewBox="0 0 24 24" aria-hidden>

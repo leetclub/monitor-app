@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Overview sheet: each panel is maintained in docs/product-prototype/figures/wire-*.svg -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="1940" viewBox="0 0 800 1940" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="2280" viewBox="0 0 800 2280" font-family="Segoe UI, Helvetica, Arial, sans-serif">
   <defs>
     <style><![CDATA[
       .banner { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
@@ -8,11 +8,12 @@
     ]]></style>
   </defs>
   <text x="8" y="20" class="banner">LEET ALERT — VISUAL REFERENCE (DOCS ONLY; NOT LIVE PIXELS)</text>
-  <text x="8" y="38" class="note">Source panels: docs/product-prototype/figures/wire-00 … wire-05.svg — edit those files, then npm run doc:pdf.</text>
+  <text x="8" y="38" class="note">Source panels: docs/product-prototype/figures/wire-00 … wire-06.svg — edit those files, then npm run doc:pdf.</text>
   <image xlink:href="figures/wire-00-login.svg" x="0" y="48" width="800" height="160" preserveAspectRatio="xMidYMin meet"/>
   <image xlink:href="figures/wire-01-shell-home.svg" x="0" y="216" width="800" height="420" preserveAspectRatio="xMidYMin meet"/>
   <image xlink:href="figures/wire-02-red-flags.svg" x="0" y="646" width="800" height="300" preserveAspectRatio="xMidYMin meet"/>
   <image xlink:href="figures/wire-03-overall.svg" x="0" y="954" width="800" height="260" preserveAspectRatio="xMidYMin meet"/>
   <image xlink:href="figures/wire-04-admin.svg" x="0" y="1224" width="800" height="440" preserveAspectRatio="xMidYMin meet"/>
   <image xlink:href="figures/wire-05-qa-visit.svg" x="0" y="1674" width="800" height="320" preserveAspectRatio="xMidYMin meet"/>
+  <image xlink:href="figures/wire-06-performance.svg" x="0" y="2004" width="800" height="260" preserveAspectRatio="xMidYMin meet"/>
 </svg>

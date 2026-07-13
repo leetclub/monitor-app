@@ -1770,6 +1770,7 @@ def register_alert_routes(app) -> None:
                         "daily_product_target": (
                             float(lmc.daily_product_target) if lmc.daily_product_target is not None else None
                         ),
+                        "sx_target_period": (lmc.sx_target_period or "daily"),
                     }
                 for r in rows:
                     pat = (r.machine_name or r.machine_id or "").strip()
@@ -1799,6 +1800,7 @@ def register_alert_routes(app) -> None:
                             "daily_sales_target": lmc_fields.get("daily_sales_target"),
                             "sx_product_name": lmc_fields.get("sx_product_name"),
                             "daily_product_target": lmc_fields.get("daily_product_target"),
+                            "sx_target_period": lmc_fields.get("sx_target_period") or "daily",
                             "updated_by": r.updated_by,
                             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                         }
@@ -1834,6 +1836,7 @@ def register_alert_routes(app) -> None:
             daily_target_raw = body.get("daily_sales_target")
             sx_product_name_raw = body.get("sx_product_name")
             daily_product_target_raw = body.get("daily_product_target")
+            sx_target_period_raw = body.get("sx_target_period")
 
             now = datetime.now(timezone.utc)
             row = db.query(AlertMachineProfile).filter(AlertMachineProfile.machine_id == mid).first()
@@ -1880,6 +1883,7 @@ def register_alert_routes(app) -> None:
                 "daily_sales_target" in body
                 or "sx_product_name" in body
                 or "daily_product_target" in body
+                or "sx_target_period" in body
             ):
                 lmc = db.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
                 if not lmc:
@@ -1892,6 +1896,11 @@ def register_alert_routes(app) -> None:
                     lmc.sx_product_name = pname
                 if "daily_product_target" in body:
                     lmc.daily_product_target = _decimal_or_none(daily_product_target_raw)
+                if "sx_target_period" in body:
+                    per = (str(sx_target_period_raw or "").strip().lower() if sx_target_period_raw is not None else "")
+                    if per not in ("daily", "weekly", "monthly"):
+                        per = "daily"
+                    lmc.sx_target_period = per
             db.commit()
             db.refresh(row)
             return jsonify({"ok": True, "machine_id": row.machine_id, "updated_by": email})
@@ -2385,6 +2394,13 @@ def register_alert_routes(app) -> None:
         fetch_lo = min(a_lo, b_lo, c_lo)
         fetch_hi = max(a_hi, b_hi, c_hi)
 
+        # Seed completed-day revenue cache for Loc KD (same pattern as vendon-sales-summary).
+        seed_day = fetch_lo
+        while seed_day < fetch_hi:
+            if seed_day < today:
+                _maybe_seed_vendon_revenue_cache(seed_day)
+            seed_day += timedelta(days=1)
+
         db = _pa_session()
         try:
             cache_rows = (
@@ -2459,6 +2475,118 @@ def register_alert_routes(app) -> None:
         except Exception as ex:
             logger.exception("alert overall sales acceleration")
             return jsonify({"error": "failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/performance/machine-detail", methods=["GET", "OPTIONS"])
+    def alert_performance_machine_detail():
+        """
+        Performance tab: Revenue Trajectory daily KD/cups vs targets for one machine.
+        Query: machineId (required), days=14
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        mid = (request.args.get("machineId") or request.args.get("machine_id") or "").strip()
+        if not mid:
+            return jsonify({"error": "machineId_required"}), 400
+        try:
+            history_days = max(7, min(45, int(request.args.get("days") or 14)))
+        except (TypeError, ValueError):
+            history_days = 14
+
+        cache_key = f"perf:v1:{mid}:{history_days}"
+        cached = _alert_cache_get(cache_key, 90)
+        if cached is not None:
+            return jsonify(cached)
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+        fetch_lo = today - timedelta(days=history_days - 1)
+
+        seed = fetch_lo
+        while seed < today:
+            _maybe_seed_vendon_revenue_cache(seed)
+            seed += timedelta(days=1)
+
+        fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
+        if fleet_err:
+            return jsonify({"error": fleet_err}), 502
+        machine_name = mid
+        for m in fleet_rows or []:
+            if str(m.get("id") or "") == mid:
+                machine_name = str(m.get("name") or mid).strip() or mid
+                break
+
+        dash = _dash_session()
+        try:
+            lmc = dash.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
+            prof = dash.query(AlertMachineProfile).filter(AlertMachineProfile.machine_id == mid).first()
+            loc_target = float(lmc.daily_sales_target) if lmc and lmc.daily_sales_target is not None else None
+            pname = (lmc.sx_product_name if lmc else None) or None
+            prod_target = float(lmc.daily_product_target) if lmc and lmc.daily_product_target is not None else None
+            period = (lmc.sx_target_period if lmc and lmc.sx_target_period else None) or "daily"
+            owner = (prof.location_owner if prof else None) or None
+            if loc_target is None:
+                try:
+                    from week_revenue_target_lib import daily_target_kd_from_week
+
+                    loc_target = daily_target_kd_from_week(machine_name, owner)
+                except Exception:
+                    loc_target = None
+        finally:
+            dash.close()
+
+        db = _pa_session()
+        try:
+            cache_rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.machine_id == mid,
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date <= today,
+                )
+                .all()
+            )
+            kwd_by_day: Dict[date, float] = {}
+            for r in cache_rows:
+                if r.cache_date is None:
+                    continue
+                kwd_by_day[r.cache_date] = float(r.total_sales_kwd or 0)
+
+            elapsed_payload = _load_daily_sales_elapsed_db_cache()
+            by_e = (elapsed_payload or {}).get("byMachineId") or {}
+            ent = by_e.get(mid) if isinstance(by_e, dict) else None
+            if isinstance(ent, dict) and ent.get("todayKwd") is not None:
+                kwd_by_day[today] = float(ent["todayKwd"])
+
+            from alert_performance_lib import build_machine_performance
+            from alert_sx_lib import DEFAULT_SX_PRODUCT
+
+            def _fetch_vends(from_ts: int, to_ts: int, machine_id: str = mid):
+                return _fetch_vends_machine_day(machine_id, from_ts, to_ts)
+
+            payload = build_machine_performance(
+                machine_id=mid,
+                machine_name=machine_name,
+                kwd_by_day=kwd_by_day,
+                product_name=(pname or DEFAULT_SX_PRODUCT),
+                location_target_kd=loc_target,
+                product_target_cups=prod_target,
+                target_period=period,
+                history_days=history_days,
+                today=today,
+                now_local=now_local,
+                fetch_vends_fn=_fetch_vends,
+            )
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
+        except Exception as ex:
+            logger.exception("alert_performance_machine_detail")
+            return jsonify({"error": str(ex)}), 500
         finally:
             db.close()
 

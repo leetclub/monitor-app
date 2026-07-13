@@ -120,6 +120,7 @@ export type RedFlagsRowBundle = {
   onOpenTrend: () => void;
   onOpenSales: () => void;
   onOpenTarget: () => void;
+  onOpenPerformance: () => void;
   onGoCheck: () => void;
 };
 
@@ -494,6 +495,8 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
         <SxAccelerationCell
           row={b.sxRow}
           title={RED_FLAGS_COLUMNS.salesAcceleration.placeholderNote}
+          interactive={Boolean(machId)}
+          onOpenDetail={b.onOpenPerformance}
         />
       );
     case 'frequency': {

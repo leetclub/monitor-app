@@ -15,6 +15,22 @@ _PRODUCT_CUPS_CACHE: Dict[str, Tuple[float, int]] = {}
 _PRODUCT_CUPS_CACHE_SEC = 600
 
 
+def _sum_kwd_in_range(
+    rows_by_day: Dict[date, float],
+    start_incl: date,
+    end_excl: date,
+) -> Optional[float]:
+    """Sum KD for [start, end). Missing calendar days count as 0 when the machine has any cached days."""
+    if not rows_by_day:
+        return None
+    total = 0.0
+    d = start_incl
+    while d < end_excl:
+        total += float(rows_by_day.get(d) or 0)
+        d += timedelta(days=1)
+    return total
+
+
 def growth_rate(current: Optional[float], previous: Optional[float]) -> Optional[float]:
     """(current - previous) / previous as a ratio (×100 for display %)."""
     if current is None or previous is None:
@@ -25,8 +41,15 @@ def growth_rate(current: Optional[float], previous: Optional[float]) -> Optional
     except (TypeError, ValueError):
         return None
     if prev == 0:
+        if cur > 0:
+            return 1.0
+        if cur == 0:
+            return 0.0
         return None
     return (cur - prev) / prev
+
+
+DEFAULT_SX_PRODUCT = "Americano Max"
 
 
 def sales_acceleration(
@@ -57,22 +80,6 @@ def pct_points(ratio: Optional[float]) -> Optional[float]:
     if ratio is None:
         return None
     return round(float(ratio) * 10000) / 100
-
-
-def _sum_kwd_in_range(
-    rows_by_day: Dict[date, float],
-    start_incl: date,
-    end_excl: date,
-) -> Optional[float]:
-    total = 0.0
-    hit = False
-    d = start_incl
-    while d < end_excl:
-        if d in rows_by_day:
-            total += float(rows_by_day[d])
-            hit = True
-        d += timedelta(days=1)
-    return total if hit else None
 
 
 def _product_cups_cached(
@@ -209,7 +216,7 @@ def compute_fleet_sx(
     product_jobs: List[Tuple[str, str]] = []
     for mid in machine_ids:
         cfg = cfg_by_mid.get(mid) or {}
-        pname = (cfg.get("sx_product_name") or "").strip()
+        pname = (cfg.get("sx_product_name") or "").strip() or DEFAULT_SX_PRODUCT
         if pname and fetch_vends_fn:
             product_jobs.append((mid, pname))
 
@@ -252,7 +259,7 @@ def compute_fleet_sx(
         loc_target = cfg.get("daily_sales_target")
         if loc_target is None and daily_target_fallback_fn:
             loc_target = daily_target_fallback_fn(machine_names.get(mid) or mid, cfg.get("location_owner"))
-        pname = (cfg.get("sx_product_name") or "").strip() or None
+        pname = (cfg.get("sx_product_name") or "").strip() or DEFAULT_SX_PRODUCT
         prod_target = cfg.get("daily_product_target")
         prod_triple = product_triples.get(mid, (None, None, None))
         by_machine[mid] = build_sx_row(
