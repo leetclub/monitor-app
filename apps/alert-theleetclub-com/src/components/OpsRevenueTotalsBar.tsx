@@ -2,8 +2,11 @@ import { formatKwd, formatSalesTrendPct, resolveSalesTrendPct } from '@/lib/sale
 import type { CompareMetricPair } from '@/lib/presetComparison';
 
 export type YesterdayOverallFleet = {
+  /** Full Kuwait calendar day yesterday (revenue cache). */
   kwd: number | null;
-  /** Full yesterday vs full day-before (−2d), not vs partial today. */
+  /** Full Kuwait calendar day day-before-yesterday (−2d). */
+  dayBeforeKwd: number | null;
+  /** Full yesterday vs full −2d. */
   trendVsDayBeforePct: number | null;
 };
 
@@ -18,7 +21,7 @@ export function OpsRevenueTotalsBar({
   totals: CompareMetricPair;
   machineCount: number;
   asOfLocal?: string | null;
-  /** Full-calendar yesterday fleet total + trend vs full day-before (today_vs_yesterday preset). */
+  /** Full-calendar yesterday + −2d fleet totals (today_vs_yesterday preset). */
   yesterdayOverall?: YesterdayOverallFleet | null;
   /** Wait for elapsed sales API — avoids misleading partial totals on load. */
   loading?: boolean;
@@ -66,12 +69,30 @@ export function OpsRevenueTotalsBar({
           </div>
           {yesterdayOverall ? (
             <>
-              <div className="opsRevenueTotalsMetric opsRevenueTotalsMetricDivider">
-                <span className="opsRevenueTotalsLabel">Yest. full day</span>
+              <div
+                className="opsRevenueTotalsMetric opsRevenueTotalsMetricDivider"
+                title="Full Kuwait calendar day yesterday (completed day, revenue cache)"
+              >
+                <span className="opsRevenueTotalsLabel">Yesterday</span>
+                <span className="opsRevenueTotalsSubLabel">full day</span>
                 <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">{val(yesterdayOverall.kwd)}</span>
               </div>
-              <div className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap">
-                <span className="opsRevenueTotalsLabel">vs −2d</span>
+              <div
+                className="opsRevenueTotalsMetric"
+                title="Full Kuwait calendar day before yesterday (−2d)"
+              >
+                <span className="opsRevenueTotalsLabel">Day before</span>
+                <span className="opsRevenueTotalsSubLabel">full day (−2d)</span>
+                <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">
+                  {val(yesterdayOverall.dayBeforeKwd)}
+                </span>
+              </div>
+              <div
+                className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap"
+                title="Full yesterday vs full day before (−2d)"
+              >
+                <span className="opsRevenueTotalsLabel">Change</span>
+                <span className="opsRevenueTotalsSubLabel">yest. vs −2d</span>
                 {hasYoTrend ? (
                   <span
                     className={`opsRevenueTotalsTrend ${yoUp ? 'alertSalesUp' : yoDown ? 'alertSalesDown' : ''}`}

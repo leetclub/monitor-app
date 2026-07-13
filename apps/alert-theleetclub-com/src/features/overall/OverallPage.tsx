@@ -585,6 +585,7 @@ export function OverallPage() {
     const dayBefore = fleetDayBeforeFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
     return {
       kwd,
+      dayBeforeKwd: dayBefore,
       trendVsDayBeforePct: resolveSalesTrendPct(null, kwd, dayBefore),
     };
   }, [compare, fleetMachines, dailySalesQ.data]);

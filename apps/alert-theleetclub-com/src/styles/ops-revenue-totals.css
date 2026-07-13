@@ -127,6 +127,17 @@
   overflow: visible;
 }
 
+.opsRevenueTotalsSubLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #94a3b8;
+  line-height: 1.1;
+  white-space: nowrap;
+  margin-top: -4px;
+}
+
 .opsRevenueTotalsVal {
   font-family: var(--font-mono);
   font-size: 1.05rem;
