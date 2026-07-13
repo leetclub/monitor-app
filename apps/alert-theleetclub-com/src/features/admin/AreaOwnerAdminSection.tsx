@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
 import { HelpTip } from '@/components/HelpTip';
@@ -17,6 +17,8 @@ type AreaOwnerRow = {
 
 type MachineRow = { id: string; name: string };
 
+const DEFAULT_INSTRUMENT_NAMES = 'Promo A\nPromo B\nPromo C';
+
 export function AreaOwnerAdminSection() {
   const qc = useQueryClient();
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -24,6 +26,7 @@ export function AreaOwnerAdminSection() {
   const [selectedMachines, setSelectedMachines] = useState<Set<string>>(new Set());
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [instrumentNames, setInstrumentNames] = useState(DEFAULT_INSTRUMENT_NAMES);
 
   const usersQ = useQuery({
     queryKey: ['alert-admin-vendon-users'],
@@ -37,6 +40,21 @@ export function AreaOwnerAdminSection() {
     queryKey: ['alert-admin-area-owners'],
     queryFn: () => apiGet<{ rows: AreaOwnerRow[] }>('/api/alert/admin/area-owners'),
   });
+
+  const instrumentsQ = useQuery({
+    queryKey: ['alert-promo-instruments', selectedUserId],
+    queryFn: () =>
+      apiGet<{ instruments?: { id: number; name: string }[] }>(
+        `/api/alert/promo/instruments?vendonUserId=${encodeURIComponent(selectedUserId)}`,
+      ),
+    enabled: Boolean(selectedUserId),
+  });
+
+  useEffect(() => {
+    const names = (instrumentsQ.data?.instruments || []).map((i) => i.name).filter(Boolean);
+    if (names.length) setInstrumentNames(names.join('\n'));
+    else if (selectedUserId && instrumentsQ.isFetched) setInstrumentNames(DEFAULT_INSTRUMENT_NAMES);
+  }, [instrumentsQ.data, instrumentsQ.isFetched, selectedUserId]);
 
   const users = usersQ.data?.users ?? [];
   const machines = machinesQ.data?.machines ?? [];
@@ -90,6 +108,23 @@ export function AreaOwnerAdminSection() {
       setSelectedMachines(new Set());
       setPassword('');
       await qc.invalidateQueries({ queryKey: ['alert-admin-area-owners'] });
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  const instrumentsMut = useMutation({
+    mutationFn: async () => {
+      if (!selectedUserId) throw new Error('Choose an area owner');
+      const names = instrumentNames
+        .split(/\r?\n/)
+        .map((n) => n.trim())
+        .filter(Boolean);
+      if (!names.length) throw new Error('Enter at least one promo instrument name');
+      return apiJson('/api/alert/promo/instruments', { vendonUserId: selectedUserId, names });
+    },
+    onSuccess: async () => {
+      setMessage('Promo instruments saved.');
+      await qc.invalidateQueries({ queryKey: ['alert-promo-instruments', selectedUserId] });
     },
     onError: (e: Error) => setMessage(e.message),
   });
@@ -194,6 +229,27 @@ export function AreaOwnerAdminSection() {
                 Remove
               </button>
             ) : null}
+          </div>
+
+          <div className="adminFieldCell" style={{ marginTop: 22 }}>
+            <span className="adminFieldCaption">Promo swipe instruments (one per line)</span>
+            <HelpTip text="Names appear on Performance as a swipe deck for this owner. Logging captures product cups Δ vs same time yesterday." />
+            <textarea
+              rows={4}
+              value={instrumentNames}
+              onChange={(e) => setInstrumentNames(e.target.value)}
+              placeholder={DEFAULT_INSTRUMENT_NAMES}
+              style={{ width: '100%', marginTop: 6, fontFamily: 'inherit' }}
+            />
+            <button
+              type="button"
+              className="primary"
+              style={{ marginTop: 8 }}
+              disabled={instrumentsMut.isPending}
+              onClick={() => void instrumentsMut.mutate()}
+            >
+              {instrumentsMut.isPending ? 'Saving instruments…' : 'Save promo instruments'}
+            </button>
           </div>
         </>
       ) : null}

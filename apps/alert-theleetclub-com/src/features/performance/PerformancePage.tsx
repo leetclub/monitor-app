@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import { MachineSearchSelect } from '@/components/MachineSearchSelect';
+import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
 
 type PerfDay = {
   date: string;
@@ -28,11 +29,14 @@ type PerfPayload = {
   productTargetCups?: number | null;
   locationSxPct?: number | null;
   productSxPct?: number | null;
+  vendonUserId?: string | null;
+  vendonUserName?: string | null;
   days?: PerfDay[];
   error?: string;
 };
 
 type MachineRow = { id: string; name: string };
+type Snapshot = { rows?: Array<{ machineId?: string; machine_id?: string; machineName?: string }> };
 
 function RevenueTrajectoryChart({
   days,
@@ -68,32 +72,11 @@ function RevenueTrajectoryChart({
           return (
             <g key={d.date}>
               {targetH > 0 ? (
-                <rect
-                  x={x}
-                  y={h - targetH}
-                  width={barW}
-                  height={targetH}
-                  rx={3}
-                  className="perfBarTarget"
-                />
+                <rect x={x} y={h - targetH} width={barW} height={targetH} rx={3} className="perfBarTarget" />
               ) : null}
-              <rect
-                x={x}
-                y={h - actualH}
-                width={barW}
-                height={actualH}
-                rx={3}
-                className="perfBarActual"
-              />
+              <rect x={x} y={h - actualH} width={barW} height={actualH} rx={3} className="perfBarActual" />
               {remH > 0 ? (
-                <rect
-                  x={x}
-                  y={h - targetH}
-                  width={barW}
-                  height={remH}
-                  rx={3}
-                  className="perfBarRemain"
-                />
+                <rect x={x} y={h - targetH} width={barW} height={remH} rx={3} className="perfBarRemain" />
               ) : null}
               <text x={x + barW / 2} y={h + 12} textAnchor="middle" className="perfBarLabel">
                 {(d.weekday || d.date.slice(5)).slice(0, 3)}
@@ -118,20 +101,45 @@ export function PerformancePage() {
   const [params, setParams] = useSearchParams();
   const machineId = (params.get('machineId') || params.get('machine') || '').trim();
   const [days, setDays] = useState(14);
+  const qc = useQueryClient();
 
   const machinesQ = useQuery({
-    queryKey: ['alert-machines-perf'],
+    queryKey: ['alert-machines'],
     queryFn: () => apiGet<{ machines?: MachineRow[]; rows?: MachineRow[] }>('/api/alert/machines'),
     staleTime: 5 * 60_000,
+    retry: 2,
   });
 
-  const machineRows = useMemo(() => {
+  const snapQ = useQuery({
+    queryKey: ['red-flags-snapshot'],
+    queryFn: () => apiGet<Snapshot>('/api/alert/red-flags/snapshot'),
+    staleTime: 60_000,
+  });
+
+  const apiMachines = useMemo(() => {
     const raw = machinesQ.data?.machines || machinesQ.data?.rows || [];
     return raw
       .map((m) => ({ id: String(m.id), name: String(m.name || m.id) }))
       .filter((m) => m.id);
   }, [machinesQ.data]);
 
+  const machineRows = useMemo(() => {
+    if (apiMachines.length > 0) return apiMachines;
+    const rows = snapQ.data?.rows;
+    if (!Array.isArray(rows) || !rows.length) return [];
+    const seen = new Set<string>();
+    const out: MachineRow[] = [];
+    for (const r of rows) {
+      const id = String(r.machineId ?? r.machine_id ?? '').trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name: String(r.machineName || id) });
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+  }, [apiMachines, snapQ.data?.rows]);
+
+  const fromSnapshot = machineRows.length > 0 && apiMachines.length === 0;
   const machineNames = useMemo(() => machineRows.map((m) => m.name), [machineRows]);
   const idByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -156,12 +164,13 @@ export function PerformancePage() {
 
   const data = perfQ.data;
   const dayRows = data?.days || [];
+  const machinesLoading = machinesQ.isLoading && snapQ.isLoading;
 
   return (
     <div className="perfPage">
       <StitchOpsPanel
         title="Performance"
-        subtitle="Location + product sales vs targets · Revenue Trajectory · Sales Acceleration"
+        subtitle="Location + product sales vs targets · Revenue Trajectory · Promo instruments"
         iconName="performance"
       >
         <div className="perfToolbar">
@@ -169,7 +178,7 @@ export function PerformancePage() {
             label="Location"
             machines={machineNames}
             value={selectedName}
-            disabled={machinesQ.isLoading}
+            disabled={machinesLoading}
             onSelect={(name) => {
               const id = idByName.get(name) || '';
               const next = new URLSearchParams(params);
@@ -177,7 +186,7 @@ export function PerformancePage() {
               else next.delete('machineId');
               setParams(next, { replace: true });
             }}
-            placeholder="Search machine…"
+            placeholder={machinesLoading ? 'Loading machines…' : 'Search machine…'}
           />
           <label className="perfField">
             <span>Days</span>
@@ -191,6 +200,20 @@ export function PerformancePage() {
             ← Red Flags
           </Link>
         </div>
+
+        {machinesQ.isError && !machineRows.length ? (
+          <p className="perfError">
+            Could not load machines: {(machinesQ.error as Error).message}. Try Refresh on Red Flags, then reopen
+            Performance.
+          </p>
+        ) : null}
+        {fromSnapshot ? (
+          <p className="perfMuted">Machine list from Red Flags snapshot (Vendon fleet list empty).</p>
+        ) : null}
+        {!machinesLoading && !machineRows.length ? (
+          <p className="perfError">No machines available. Open Red Flags once so the snapshot can seed the list.</p>
+        ) : null}
+        {machinesLoading ? <p className="perfMuted">Loading machine list…</p> : null}
 
         {!machineId ? (
           <p className="perfMuted">Select a location (or tap SX on Red Flags) to open Performance.</p>
@@ -220,13 +243,17 @@ export function PerformancePage() {
               <div className="perfKpi">
                 <span className="perfKpiLabel">Loc SX</span>
                 <strong className={Number(data.locationSxPct) >= 0 ? 'alertSalesUp' : 'alertSalesDown'}>
-                  {data.locationSxPct != null ? formatSalesTrendPct(Number(data.locationSxPct)).replace(/%$/, ' pts') : '—'}
+                  {data.locationSxPct != null
+                    ? formatSalesTrendPct(Number(data.locationSxPct)).replace(/%$/, ' pts')
+                    : '—'}
                 </strong>
               </div>
               <div className="perfKpi">
                 <span className="perfKpiLabel">Prod SX</span>
                 <strong className={Number(data.productSxPct) >= 0 ? 'alertSalesUp' : 'alertSalesDown'}>
-                  {data.productSxPct != null ? formatSalesTrendPct(Number(data.productSxPct)).replace(/%$/, ' pts') : '—'}
+                  {data.productSxPct != null
+                    ? formatSalesTrendPct(Number(data.productSxPct)).replace(/%$/, ' pts')
+                    : '—'}
                 </strong>
               </div>
               <div className="perfKpi">
@@ -241,9 +268,28 @@ export function PerformancePage() {
               </div>
             </div>
 
+            {data.vendonUserId ? (
+              <PromoSwipeDeck
+                vendonUserId={data.vendonUserId}
+                vendonUserName={data.vendonUserName}
+                machineId={data.machineId}
+                machineName={data.machineName}
+                productName={data.productName || 'Americano Max'}
+                onLogged={() => {
+                  void qc.invalidateQueries({ queryKey: ['alert-promo-swipe-events'] });
+                }}
+              />
+            ) : (
+              <p className="perfMuted">
+                Promo instruments need an area owner on this machine (Admin → Area owners).
+              </p>
+            )}
+
             <section className="perfSection" aria-label="Revenue Trajectory">
               <h3 className="perfSectionTitle">Revenue Trajectory</h3>
-              <p className="perfSectionHint">Daily location KD — filled = achieved, hollow grey = remaining to daily target.</p>
+              <p className="perfSectionHint">
+                Daily location KD — filled = achieved, hollow grey = remaining to daily target.
+              </p>
               <RevenueTrajectoryChart days={dayRows} mode="location" />
             </section>
 

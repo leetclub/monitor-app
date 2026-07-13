@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="description" content="Leet Alert — operational alerts dashboard for The Leet Club." />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#0c0f14" />
@@ -13,18 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Mono:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
     />
     <title>Leet Alert</title>
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem('alert_ui_theme_v1');
-          if (t !== 'classic' && t !== 'pro') t = 'classic';
-          document.documentElement.setAttribute('data-theme', t);
-          document.documentElement.style.colorScheme = t === 'pro' ? 'light' : 'dark';
-          var m = document.querySelector('meta[name="theme-color"]');
-          if (m) m.setAttribute('content', t === 'pro' ? '#e8edf3' : '#0c0f14');
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

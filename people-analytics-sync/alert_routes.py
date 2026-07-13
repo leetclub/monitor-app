@@ -2497,7 +2497,7 @@ def register_alert_routes(app) -> None:
         except (TypeError, ValueError):
             history_days = 14
 
-        cache_key = f"perf:v1:{mid}:{history_days}"
+        cache_key = f"perf:v2:{mid}:{history_days}"
         cached = _alert_cache_get(cache_key, 90)
         if cached is not None:
             return jsonify(cached)
@@ -2582,11 +2582,213 @@ def register_alert_routes(app) -> None:
                 now_local=now_local,
                 fetch_vends_fn=_fetch_vends,
             )
+            # Attach area-owner (vendon_user_id) for promo swipe deck.
+            try:
+                from promo_lib import _load_owner_by_machine
+
+                owner_map = _load_owner_by_machine(db)
+                payload["vendonUserId"] = owner_map.get(mid)
+                if payload.get("vendonUserId"):
+                    own = db.execute(
+                        text(
+                            "SELECT vendon_user_name FROM target_area_owner WHERE vendon_user_id = :id"
+                        ),
+                        {"id": payload["vendonUserId"]},
+                    ).mappings().first()
+                    payload["vendonUserName"] = (own or {}).get("vendon_user_name")
+            except Exception:
+                payload["vendonUserId"] = None
+
             _alert_cache_set(cache_key, payload)
             return jsonify(payload)
         except Exception as ex:
             logger.exception("alert_performance_machine_detail")
             return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/instruments", methods=["GET", "POST", "OPTIONS"])
+    def alert_promo_instruments():
+        """Promo swipe instruments keyed by area-owner vendon_user_id (Alert auth)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        if request.method == "GET":
+            _, denied = _require_alert_read()
+            if denied:
+                return denied
+            vendon_user_id = (request.args.get("vendon_user_id") or request.args.get("vendonUserId") or "").strip()
+            if not vendon_user_id:
+                return jsonify({"ok": False, "error": "vendonUserId required", "instruments": []}), 400
+            db = _pa_session()
+            try:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT id, vendon_user_id, name, sort_order, active, updated_at
+                        FROM target_promo_instrument
+                        WHERE active = TRUE AND vendon_user_id = :uid
+                        ORDER BY sort_order, id
+                        """
+                    ),
+                    {"uid": vendon_user_id},
+                ).mappings().all()
+                out = []
+                for r in rows:
+                    d = dict(r)
+                    if d.get("updated_at") is not None:
+                        d["updated_at"] = str(d["updated_at"])
+                    out.append(d)
+                return jsonify({"ok": True, "instruments": out})
+            except Exception as ex:
+                logger.exception("alert_promo_instruments GET")
+                return jsonify({"ok": False, "error": str(ex), "instruments": []}), 500
+            finally:
+                db.close()
+
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        body = request.get_json(silent=True) or {}
+        vendon_user_id = str(body.get("vendonUserId") or body.get("vendon_user_id") or "").strip()
+        names = body.get("names") or body.get("instruments") or []
+        if not vendon_user_id:
+            return jsonify({"ok": False, "error": "vendonUserId required"}), 400
+        clean_names = [str(n).strip() for n in names if str(n).strip()]
+        if not clean_names:
+            return jsonify({"ok": False, "error": "names required"}), 400
+        db = _pa_session()
+        try:
+            db.execute(
+                text("UPDATE target_promo_instrument SET active = FALSE WHERE vendon_user_id = :uid"),
+                {"uid": vendon_user_id},
+            )
+            for i, name in enumerate(clean_names):
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO target_promo_instrument (vendon_user_id, name, sort_order, active, updated_at)
+                        VALUES (:uid, :name, :ord, TRUE, NOW())
+                        """
+                    ),
+                    {"uid": vendon_user_id, "name": name, "ord": i},
+                )
+            db.commit()
+            return jsonify({"ok": True, "count": len(clean_names), "updatedBy": email})
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_promo_instruments POST")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/swipe", methods=["POST", "OPTIONS"])
+    def alert_promo_swipe():
+        """Log promo instrument swipe: Δ cups today vs same clock yesterday (Kuwait)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        body = request.get_json(silent=True) or {}
+        instrument_id = body.get("instrumentId") or body.get("instrument_id")
+        machine_id = str(body.get("machineId") or body.get("machine_id") or "").strip()
+        product_name = str(body.get("productName") or body.get("product_name") or "Americano Max").strip()
+        vendon_user_id = str(body.get("vendonUserId") or body.get("vendon_user_id") or "").strip()
+        try:
+            instrument_id = int(instrument_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "instrumentId required"}), 400
+        if not machine_id:
+            return jsonify({"ok": False, "error": "machineId required"}), 400
+        if not vendon_user_id:
+            return jsonify({"ok": False, "error": "vendonUserId required"}), 400
+
+        from promo_lib import product_cups_partial_day_compare
+
+        def _fetch_vends(from_ts: int, to_ts: int, mid: str = machine_id):
+            return _fetch_vends_machine_day(mid, from_ts, to_ts)
+
+        today_cups, yesterday_cups = product_cups_partial_day_compare(
+            machine_id, product_name, _fetch_vends
+        )
+        delta = today_cups - yesterday_cups
+        db = _pa_session()
+        try:
+            ins = db.execute(
+                text(
+                    """
+                    INSERT INTO target_promo_swipe_event
+                      (instrument_id, machine_id, vendon_user_id, swiped_at,
+                       product_cups_now, product_cups_yesterday_same_time, delta_cups, note)
+                    VALUES (:iid, :mid, :uid, NOW(), :now_c, :y_c, :delta, :note)
+                    RETURNING id, swiped_at
+                    """
+                ),
+                {
+                    "iid": instrument_id,
+                    "mid": machine_id,
+                    "uid": vendon_user_id,
+                    "now_c": today_cups,
+                    "y_c": yesterday_cups,
+                    "delta": delta,
+                    "note": str(body.get("note") or "").strip() or None,
+                },
+            ).mappings().first()
+            db.commit()
+            return jsonify(
+                {
+                    "ok": True,
+                    "eventId": ins.get("id") if ins else None,
+                    "productCupsNow": today_cups,
+                    "productCupsYesterdaySameTime": yesterday_cups,
+                    "deltaCups": delta,
+                    "swipedAt": str(ins.get("swiped_at")) if ins else None,
+                }
+            )
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_promo_swipe")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/swipe-events", methods=["GET", "OPTIONS"])
+    def alert_promo_swipe_events():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        vendon_user_id = (request.args.get("vendon_user_id") or request.args.get("vendonUserId") or "").strip()
+        machine_id = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        db = _pa_session()
+        try:
+            q = """
+                SELECT e.id, e.instrument_id, i.name AS instrument_name, e.machine_id, e.vendon_user_id,
+                       e.swiped_at, e.product_cups_now, e.product_cups_yesterday_same_time, e.delta_cups, e.note
+                FROM target_promo_swipe_event e
+                JOIN target_promo_instrument i ON i.id = e.instrument_id
+                WHERE 1=1
+            """
+            params: Dict[str, Any] = {}
+            if vendon_user_id:
+                q += " AND e.vendon_user_id = :uid"
+                params["uid"] = vendon_user_id
+            if machine_id:
+                q += " AND e.machine_id = :mid"
+                params["mid"] = machine_id
+            q += " ORDER BY e.swiped_at DESC LIMIT 50"
+            rows = db.execute(text(q), params).mappings().all()
+            out = []
+            for r in rows:
+                d = dict(r)
+                if d.get("swiped_at") is not None:
+                    d["swiped_at"] = str(d["swiped_at"])
+                out.append(d)
+            return jsonify({"ok": True, "events": out})
+        except Exception as ex:
+            logger.exception("alert_promo_swipe_events")
+            return jsonify({"ok": False, "error": str(ex), "events": []}), 500
         finally:
             db.close()
 
@@ -3043,7 +3245,7 @@ def register_alert_routes(app) -> None:
         _, denied = _require_alert_admin()
         if denied:
             return denied
-        db = _dash_session()
+        db = _pa_session()
         try:
             rows = db.execute(
                 text(
@@ -3099,7 +3301,8 @@ def register_alert_routes(app) -> None:
         uid = (vendon_user_id or "").strip()
         if not uid:
             return jsonify({"error": "vendon_user_id required"}), 400
-        db = _dash_session()
+        # target_area_owner lives in people_analytics (same as target-site / promo tables).
+        db = _pa_session()
         try:
             if request.method == "DELETE":
                 db.execute(text("DELETE FROM target_area_owner WHERE vendon_user_id = :id"), {"id": uid})

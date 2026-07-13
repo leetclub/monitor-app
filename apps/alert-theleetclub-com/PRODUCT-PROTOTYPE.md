@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; **Live operator** — Task Manager name in metric box + attendance badge (Late / Absent / Missing); column **not sortable**; **one tap** → schedule + **icon-only** contacts (no email/phone in table or modal body). **Last / tx** — weekday + date + time (3 lines; sortable via Vendon timestamp). Sales / Target / Trend / QA popups; fleet bar on Today vs Yesterday adds **Yest. full day** KD + **−2d full day** KD + **vs −2d** %. Last clean + tech visit use snapshot/SafetyCulture. |
 | `/overall` | Overall | Workbook columns; **sortable headers** (⇅/▼/▲) on all columns with real data; **Operator Activity** column; **Attendance** from Task Manager (`GET /api/alert/workflow/machine-attendance-map` + tap → `operator-schedule` modal); **Sales** uses `GET /api/alert/overall/daily-sales-elapsed` — **Today vs Yesterday** or **Yesterday vs Day Before** per compare preset; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | Location + promoted product vs Admin targets. **Revenue Trajectory** bars (achieved vs remaining), product cups trajectory, day growth table, Loc/Prod SX. Open from nav or by tapping **SX** on Red Flags (`?machineId=`). |
+| `/performance` | Performance | Location + promoted product vs Admin targets. **Revenue Trajectory**, product cups, day growth, Loc/Prod SX. **Promo instruments** swipe deck (Δ cups vs yesterday same clock). Open from nav or **SX** (`?machineId=`). |
 | `/admin` | Admin | User-entered data **not on Vendon** (schedules, cleaning, access). **Machines** (profiles, Vendon readout, **SX product** default Americano Max + cup target + **daily/weekly/monthly** period), **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
@@ -90,6 +90,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **CSP + Performance machines + Promo swipe:** Theme boot moved to `/theme-boot.js` (no inline script). Performance machine list falls back to Red Flags snapshot. **Promo instruments** on Performance (swipe deck + cup Δ vs yesterday); Admin → Area owners configures names. Area-owner/promo tables queried from people_analytics. |
 | 2026-07-13 | **Performance + SX fix:** New **`/performance`** tab — Revenue Trajectory (Loc KD + product cups vs targets), growth table, SX KPIs. SX cell shows Loc/Prod amounts + pts; tap opens Performance for that machine. Admin: **target period** daily/weekly/monthly; default product **Americano Max**. API `GET /api/alert/performance/machine-detail`. |
 | 2026-07-13 | **Op. activity compact + no metric ellipsis:** Stamp is `06 July 26 12:48` (Kuwait); column narrowed (~7.5rem). Metric % values no longer force `…` truncation (wider boxes). |
 | 2026-07-13 | **Metric boxes contain text:** Frequency / Sales trend / YoY / SX no longer spill past box borders (`overflow: hidden` + ellipsis). Slightly wider stack boxes (4.5rem). Full value still on hover `title` where set. |
