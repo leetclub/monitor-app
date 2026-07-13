@@ -81,6 +81,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-13 | **Op. activity compact + no metric ellipsis:** Stamp is `06 July 26 12:48` (Kuwait); column narrowed (~7.5rem). Metric % values no longer force `…` truncation (wider boxes). |
 | 2026-07-13 | **Metric boxes contain text:** Frequency / Sales trend / YoY / SX no longer spill past box borders (`overflow: hidden` + ellipsis). Slightly wider stack boxes (4.5rem). Full value still on hover `title` where set. |
 | 2026-07-13 | **Table sticky Call OP/AM:** Fixed Call OP clipped under Call AM while mid-scroll — sticky widths + `right` offset matched (fits Suhaib/Ahmed); AM paints above OP. Contained Op. activity / sticky label overflow with ellipsis. |
 | 2026-07-13 | **Operator Activity — kind visible:** Last-touch cell shows **Clean / Refill / Credit / Door** on the cell (not hover-only), plus relative time + Kuwait date. Pro Red Flags + Overall cards show the same kind. |

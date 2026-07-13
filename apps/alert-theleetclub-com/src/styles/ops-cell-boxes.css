@@ -4,7 +4,7 @@
   --stitch-nav-w-rail: 64px;
   --stitch-nav-w-expanded: 196px;
   --ops-cell-box-h: 64px;
-  --ops-stack-box-w: 4.5rem;
+  --ops-stack-box-w: 4.75rem;
   --ops-stack-gap: 4px;
   --ops-cell-box-min-w: var(--ops-stack-box-w);
 }
@@ -223,7 +223,7 @@
   display: block;
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: clamp(0.58rem, 2vw, 0.7rem);
+  font-size: clamp(0.6rem, 2vw, 0.72rem);
   font-weight: 800;
   line-height: 1.05;
   margin-top: 1px;
@@ -231,8 +231,7 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .stitchOpsTable .salesStackTrendMuted {
@@ -275,18 +274,17 @@
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.22);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .stitchOpsTable .mtdYoyTrend {
-  font-size: clamp(0.62rem, 0.45rem + 0.3vw, 0.8rem);
+  font-size: clamp(0.64rem, 0.45rem + 0.3vw, 0.82rem);
   font-weight: 800;
   line-height: 1.1;
-  max-width: 100%;
+  max-width: none;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .stitchOpsTable .mtdYoyPrimary {
@@ -473,15 +471,14 @@
   min-width: var(--ops-stack-box-w);
   justify-content: center;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .stitchOpsTable .freqBoxVal {
   display: block;
   width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  overflow: visible;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;

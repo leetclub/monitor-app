@@ -130,9 +130,10 @@ export function redFlagsHeaderClass(key: RedFlagsColumnKey): string {
     case 'alertType':
       return styles.thAlert;
     case 'operator':
-    case 'operatorActivity':
     case 'lastTransaction':
       return styles.thOp;
+    case 'operatorActivity':
+      return styles.thActivity;
     case 'dailySales':
     case 'mtdSales':
     case 'dailyTarget':
@@ -165,6 +166,8 @@ export function redFlagsBodyCellClass(key: RedFlagsColumnKey): string {
   switch (key) {
     case 'vendingMachine':
       return `${styles.td} opsStickyCol`;
+    case 'operatorActivity':
+      return `${styles.td} ${styles.tdActivity}`;
     case 'dailySales':
     case 'mtdSales':
     case 'dailyTarget':

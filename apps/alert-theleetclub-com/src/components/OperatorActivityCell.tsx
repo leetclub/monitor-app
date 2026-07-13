@@ -1,4 +1,4 @@
-import { formatKuwaitDateTime, formatRelativeAgo } from '@/lib/formatKuwait';
+import { formatKuwaitActivityStamp, formatKuwaitDateTime, formatRelativeAgo } from '@/lib/formatKuwait';
 
 export type OperatorActivityTimes = {
   cleaningAt?: string | null;
@@ -52,7 +52,7 @@ export function resolveLatestOperatorActivity(
   return { iso: bestIso, kind: bestKind, kindShort: bestShort };
 }
 
-/** Last operator touch: kind + relative time + Kuwait date (kind is visible, not hover-only). */
+/** Kind + compact Kuwait stamp (`06 July 26 12:48`). */
 export function OperatorActivityCell({
   activity,
   legacyWebAccessAt,
@@ -67,17 +67,17 @@ export function OperatorActivityCell({
     return <span className="operatorActivityMuted">—</span>;
   }
 
+  const stamp = formatKuwaitActivityStamp(latest.iso);
   const rel = formatRelativeAgo(latest.iso, nowMs);
-  const exact = formatKuwaitDateTime(latest.iso);
+  const full = formatKuwaitDateTime(latest.iso);
 
   return (
     <span
       className="operatorActivityCell"
-      title={`Last operator activity (${latest.kind}): ${exact}`}
+      title={`Last operator activity (${latest.kind})${rel ? ` · ${rel}` : ''}: ${full}`}
     >
       <span className="operatorActivityKind">{latest.kindShort}</span>
-      <span className="operatorActivityRel">{rel ?? '—'}</span>
-      <span className="operatorActivityExact">{exact || '—'}</span>
+      <span className="operatorActivityExact">{stamp}</span>
     </span>
   );
 }

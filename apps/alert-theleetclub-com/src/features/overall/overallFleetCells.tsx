@@ -150,6 +150,8 @@ export function overallBodyCellClass(key: OverallColumnKey): string {
   switch (key) {
     case 'vendingMachine':
       return `${rfStyles.td} opsStickyCol`;
+    case 'operatorActivity':
+      return `${rfStyles.td} ${rfStyles.tdActivity}`;
     case 'salesTrend':
     case 'mtdSales':
     case 'targetAchieved':
@@ -175,9 +177,10 @@ export function overallHeaderClass(key: OverallColumnKey): string {
     case 'vendingMachine':
       return `${rfStyles.thMachine} opsStickyCol`;
     case 'operator':
-    case 'operatorActivity':
     case 'lastTransaction':
       return rfStyles.thOp;
+    case 'operatorActivity':
+      return rfStyles.thActivity;
     case 'salesTrend':
     case 'mtdSales':
     case 'targetAchieved':

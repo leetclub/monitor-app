@@ -58,6 +58,27 @@ export function formatKuwaitDateTime(iso: string | null | undefined): string {
   }
 }
 
+/** Compact Op. activity stamp: `06 July 26 12:48` (Kuwait). */
+export function formatKuwaitActivityStamp(iso: string | null | undefined): string {
+  const ms = parseTimestampMs(String(iso ?? ''));
+  if (Number.isNaN(ms)) return iso ? String(iso) : '—';
+  try {
+    const d = new Date(ms);
+    const day = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kuwait', day: '2-digit' });
+    const month = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kuwait', month: 'long' });
+    const year = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kuwait', year: '2-digit' });
+    const time = d.toLocaleTimeString('en-GB', {
+      timeZone: 'Asia/Kuwait',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return `${day} ${month} ${year} ${time}`;
+  } catch {
+    return String(iso);
+  }
+}
+
 /** Relative time for operator last machine access (e.g. "5 min ago"). */
 export function formatRelativeAgo(iso: string | null | undefined, nowMs: number = Date.now()): string | null {
   const ms = parseTimestampMs(String(iso ?? ''));

@@ -26,7 +26,7 @@ import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
 import { ProOverallView, type ProOverallCard } from '@/features/pro/ProOverallView';
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
 import { resolveLatestOperatorActivity } from '@/components/OperatorActivityCell';
-import { formatRelativeAgo } from '@/lib/formatKuwait';
+import { formatKuwaitActivityStamp } from '@/lib/formatKuwait';
 import { useOverallColumnPrefs } from '@/lib/useOverallColumnPrefs';
 import { visibleOverallColumns } from './overallColumnVisibility';
 import { OverallColumnPicker } from './OverallColumnPicker';
@@ -743,9 +743,7 @@ export function OverallPage() {
         lastTx: lastTxIso ? formatLastTxCompact(lastTxIso) : '—',
         lastClean: cleanStatus?.label || (cleanIso ? formatLastTxCompact(cleanIso) : '—'),
         activityKind: latestOp?.kindShort || '—',
-        activityWhen: latestOp
-          ? formatRelativeAgo(latestOp.iso) || formatLastTxCompact(latestOp.iso)
-          : '—',
+        activityWhen: latestOp ? formatKuwaitActivityStamp(latestOp.iso) : '—',
         flagged: snapshotByMachineId.has(m.id),
         salesRow: salesElapsed ?? null,
       };

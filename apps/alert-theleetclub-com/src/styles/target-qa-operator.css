@@ -387,42 +387,31 @@
 .operatorActivityCell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
   max-width: 100%;
-  line-height: 1.2;
-  overflow: hidden;
+  line-height: 1.15;
 }
 
 .operatorActivityKind {
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #94a3b8;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operatorActivityRel {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #d1d5db;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .operatorActivityExact {
   font-family: var(--font-mono);
   font-size: 0.58rem;
-  color: #9a9aa8;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
+  max-width: 7.25rem;
 }
 
 .operatorActivityMuted {
@@ -435,12 +424,9 @@ html[data-theme='pro'] .operatorActivityKind {
   color: #0f766e;
 }
 
-html[data-theme='pro'] .operatorActivityRel {
-  color: #0f172a;
-}
-
 html[data-theme='pro'] .operatorActivityExact {
-  color: #475569;
+  color: #0f172a;
+  max-width: none;
 }
 
 html[data-theme='pro'] .operatorActivityMuted {
@@ -551,9 +537,6 @@ html[data-theme='pro'] .operatorActivityMuted {
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   letter-spacing: -0.01em;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -578,7 +561,7 @@ html[data-theme='pro'] .operatorActivityMuted {
   border: 1px solid rgba(93, 63, 59, 0.85);
   background: #1e1f25;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -600,9 +583,6 @@ html[data-theme='pro'] .operatorActivityMuted {
   line-height: 1.15;
   color: inherit;
   white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .qaVisitCellBtn {

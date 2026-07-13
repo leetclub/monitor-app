@@ -27,7 +27,7 @@ import {
   resolveLatestOperatorActivity,
   type OperatorActivityTimes,
 } from '@/components/OperatorActivityCell';
-import { formatRelativeAgo } from '@/lib/formatKuwait';
+import { formatKuwaitActivityStamp } from '@/lib/formatKuwait';
 import './pro.css';
 
 type CreditsMap = Record<
@@ -303,7 +303,7 @@ export function ProRedFlagsView({
                         </span>
                         <span className="proMetricHint">
                           {latestOp
-                            ? `${formatRelativeAgo(latestOp.iso) || formatLastTxCompact(latestOp.iso)} · ${opName || '—'}`
+                            ? `${formatKuwaitActivityStamp(latestOp.iso)} · ${opName || '—'}`
                             : `Operator: ${opName || '—'}`}
                         </span>
                       </div>
