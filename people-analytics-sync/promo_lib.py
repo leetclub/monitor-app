@@ -45,7 +45,9 @@ def product_cups_for_machine_day(
         return 0
     start_utc, end_utc = _local_day_bounds_utc(day)
     if until_local is not None:
-        cap = until_local.astimezone(timezone.utc)
+        # _local_day_bounds_utc returns naive UTC; strip tz so the compare is valid.
+        aware = until_local if until_local.tzinfo is not None else until_local.replace(tzinfo=_KWT)
+        cap = aware.astimezone(timezone.utc).replace(tzinfo=None)
         if cap < end_utc:
             end_utc = cap
     from_ts = int(start_utc.replace(tzinfo=timezone.utc).timestamp())
