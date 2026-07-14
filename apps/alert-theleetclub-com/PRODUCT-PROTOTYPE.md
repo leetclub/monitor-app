@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; **Live operator** — Task Manager name in metric box + attendance badge (Late / Absent / Missing); column **not sortable**; **one tap** → schedule + **icon-only** contacts (no email/phone in table or modal body). **Last / tx** — weekday + date + time (3 lines; sortable via Vendon timestamp). Sales / Target / Trend / QA popups; fleet bar on Today vs Yesterday adds **Yest. full day** KD + **−2d full day** KD + **vs −2d** %. Last clean + tech visit use snapshot/SafetyCulture. |
 | `/overall` | Overall | Workbook columns; **sortable headers** (⇅/▼/▲) on all columns with real data; **Operator Activity** column; **Attendance** from Task Manager (`GET /api/alert/workflow/machine-attendance-map` + tap → `operator-schedule` modal); **Sales** uses `GET /api/alert/overall/daily-sales-elapsed` — **Today vs Yesterday** or **Yesterday vs Day Before** per compare preset; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | Location + promoted product vs Admin targets. **Revenue Trajectory**, product cups, day growth, Loc/Prod SX. **Promo instruments** swipe deck (Δ cups vs yesterday same clock). Open from nav or **SX** (`?machineId=`). |
+| `/performance` | Performance | Multi-select (Targets Areas style): location **KD** + promoted-product **cups** — target vs actual, ranking, daily + cumulative, PNG export. Single machine also shows product trajectory, SX, promo swipe. Open from nav or **SX** (`?machineId=`). |
 | `/admin` | Admin | User-entered data **not on Vendon** (schedules, cleaning, access). **Machines** (profiles, Vendon readout, **SX product** default Americano Max + cup target + **daily/weekly/monthly** period), **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
@@ -56,7 +56,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
-*Figure 6 — Performance: Revenue Trajectory + Loc/Prod SX KPIs.*
+*Figure 6 — Performance: multi-select location KD + product cups charts (Targets Areas style).*
 
 **Composite SVG (all panels):** `docs/product-prototype/visual-prototype.svg`
 
@@ -93,6 +93,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 | 2026-07-14 | **QA Visit KU CBA / recent visits:** SC short site labels (e.g. `CBA` → `KU CBA`) now match. Scored location inspections count as QC even when officer ≠ Ismail. Alias map `config/qa_machine_aliases.json`. Busts QA caches. Fixes Alert showing 1 Jul while SC shows 14 Jul. |
 | 2026-07-14 | **QA Visit freshness + matching:** SafetyCulture search now **globally sorts newest-first** before capping; last **14 days** of audits are fully processed (no truncating). Richer location keys (site + machine header fields), softer QC detect for scored inspections, shorter caches (~2–3 min). Fixes missing same-day / same-site reports and stale 2–3 day lag. |
 | 2026-07-14 | **QA Visit freshness + same-site matching:** Visit timestamps prefer completed/modified over created (fixes “2–3 days old”). Date filters use **Asia/Kuwait** day bounds. SC search widens by `modified_at` pad so late finishes appear. Sibling machines at one site: exclusive best-match (no shared stolen visits). Shorter QA caches (~90s) + quicker client refetch. |
+| 2026-07-14 | **Performance product multi charts:** Fleet API loads promoted-product cups; multi-select shows cups target vs actual, product ranking, daily + cumulative cups alongside location KD. |
+| 2026-07-14 | **Performance graphs (Targets Areas parity):** Always-on multi chart grid — target vs actual, ranking, daily + cumulative · PNG export. Filter → KPIs → charts. |
 | 2026-07-14 | **Performance multi-select graphs (Targets Areas style):** Location checkbox filter · Ranking / Compare / Aggregate chart modes · `GET /api/alert/performance/fleet`. Single machine still opens detail (product trajectory, SX, promo). |
 | 2026-07-14 | **Performance charts (ECharts):** Replaced crude SVG bars with professional **Revenue Trajectory**, **Product Trajectory**, and **Day growth rates** charts (tooltips, stacked achieved/remaining, target line, dual growth lines). |
 | 2026-07-13 | **CSP + Performance machines + Promo swipe:** Theme boot moved to `/theme-boot.js` (no inline script). Performance machine list falls back to Red Flags snapshot. **Promo instruments** on Performance (swipe deck + cup Δ vs yesterday); Admin → Area owners configures names. Area-owner/promo tables queried from people_analytics. |

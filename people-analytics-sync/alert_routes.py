@@ -2618,7 +2618,7 @@ def register_alert_routes(app) -> None:
         Multi-machine Performance graphs (Areas-style).
         Query: machineIds=id1,id2 (max 24) OR empty = top revenue machines from cache window
                days=14
-        Location KD only (fast); product cups stay on single-machine detail.
+        Location KD + promoted-product cups (parallel vend fetch; cached ~90s).
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2634,7 +2634,7 @@ def register_alert_routes(app) -> None:
         if len(requested) > 24:
             requested = requested[:24]
 
-        cache_key = f"perf:fleet:v1:{','.join(sorted(requested)) or 'auto'}:{history_days}"
+        cache_key = f"perf:fleet:v2:{','.join(sorted(requested)) or 'auto'}:{history_days}"
         cached = _alert_cache_get(cache_key, 90)
         if cached is not None:
             return jsonify(cached)
@@ -2743,6 +2743,8 @@ def register_alert_routes(app) -> None:
             finally:
                 dash.close()
 
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
             from alert_performance_lib import (
                 aggregate_fleet_days,
                 build_machine_performance,
@@ -2750,9 +2752,12 @@ def register_alert_routes(app) -> None:
             )
             from alert_sx_lib import DEFAULT_SX_PRODUCT
 
-            machines_out: List[Dict[str, Any]] = []
-            for mid in requested:
+            def _build_one(mid: str) -> Dict[str, Any]:
                 c = cfg.get(mid) or {}
+
+                def _fetch_vends(from_ts: int, to_ts: int, machine_id: str = mid):
+                    return _fetch_vends_machine_day(machine_id, from_ts, to_ts)
+
                 payload = build_machine_performance(
                     machine_id=mid,
                     machine_name=c.get("name") or name_by_id.get(mid) or mid,
@@ -2764,9 +2769,20 @@ def register_alert_routes(app) -> None:
                     history_days=history_days,
                     today=today,
                     now_local=now_local,
-                    fetch_vends_fn=None,  # fleet = location KD only (fast)
+                    fetch_vends_fn=_fetch_vends,
                 )
-                machines_out.append(summarize_machine_period(payload))
+                return summarize_machine_period(payload)
+
+            machines_out: List[Dict[str, Any]] = []
+            workers = min(6, max(1, len(requested)))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futs = {pool.submit(_build_one, mid): mid for mid in requested}
+                for fut in as_completed(futs):
+                    mid = futs[fut]
+                    try:
+                        machines_out.append(fut.result())
+                    except Exception:
+                        logger.exception("alert_performance_fleet machine %s", mid)
 
             # Rank by period achievement then revenue
             machines_out.sort(
@@ -2776,10 +2792,19 @@ def register_alert_routes(app) -> None:
                 )
             )
             aggregate_days = aggregate_fleet_days(machines_out)
+            product_names = sorted(
+                {
+                    str(m.get("productName") or "").strip()
+                    for m in machines_out
+                    if str(m.get("productName") or "").strip()
+                }
+            )
             body = {
                 "historyDays": history_days,
                 "asOf": now_local.replace(microsecond=0).isoformat(),
                 "machineCount": len(machines_out),
+                "productName": product_names[0] if len(product_names) == 1 else None,
+                "productNames": product_names,
                 "machines": machines_out,
                 "aggregateDays": aggregate_days,
             }

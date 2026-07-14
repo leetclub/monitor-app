@@ -16,16 +16,23 @@ export type PerfDay = {
 export type FleetMachine = {
   machineId: string;
   machineName: string;
+  productName?: string | null;
   totalLocationKwd: number;
   periodTargetKd?: number | null;
   periodPctOfTarget?: number | null;
+  totalProductCups?: number | null;
+  periodProductTargetCups?: number | null;
+  periodProductPctOfTarget?: number | null;
   locationSxPct?: number | null;
+  productSxPct?: number | null;
   days: PerfDay[];
 };
 
 export type FleetPayload = {
   historyDays?: number;
   machineCount?: number;
+  productName?: string | null;
+  productNames?: string[];
   machines?: FleetMachine[];
   aggregateDays?: PerfDay[];
   error?: string;

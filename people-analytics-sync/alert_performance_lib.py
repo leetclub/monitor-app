@@ -128,29 +128,49 @@ def build_machine_performance(
 
 
 def summarize_machine_period(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Period totals + % of target for ranking charts."""
+    """Period totals + % of target for ranking charts (location KD + product cups)."""
     days = payload.get("days") or []
     total_kwd = sum(float(d.get("locationKwd") or 0) for d in days)
+    total_cups = sum(float(d.get("productCups") or 0) for d in days)
     daily_tgt = None
+    daily_prod_tgt = None
     for d in days:
-        if d.get("locationTargetKd") is not None:
+        if daily_tgt is None and d.get("locationTargetKd") is not None:
             daily_tgt = float(d["locationTargetKd"])
+        if daily_prod_tgt is None and d.get("productTargetCups") is not None:
+            daily_prod_tgt = float(d["productTargetCups"])
+        if daily_tgt is not None and daily_prod_tgt is not None:
             break
     period_tgt = (daily_tgt * len(days)) if daily_tgt and daily_tgt > 0 else None
+    period_prod_tgt = (
+        (daily_prod_tgt * len(days)) if daily_prod_tgt and daily_prod_tgt > 0 else None
+    )
     pct = round((total_kwd / period_tgt) * 100, 1) if period_tgt and period_tgt > 0 else None
+    prod_pct = (
+        round((total_cups / period_prod_tgt) * 100, 1)
+        if period_prod_tgt and period_prod_tgt > 0
+        else None
+    )
     return {
         "machineId": payload.get("machineId"),
         "machineName": payload.get("machineName"),
+        "productName": payload.get("productName"),
         "totalLocationKwd": round(total_kwd, 4),
         "periodTargetKd": round(period_tgt, 4) if period_tgt is not None else None,
         "periodPctOfTarget": pct,
+        "totalProductCups": int(round(total_cups)),
+        "periodProductTargetCups": (
+            round(period_prod_tgt, 2) if period_prod_tgt is not None else None
+        ),
+        "periodProductPctOfTarget": prod_pct,
         "locationSxPct": payload.get("locationSxPct"),
+        "productSxPct": payload.get("productSxPct"),
         "days": payload.get("days") or [],
     }
 
 
 def aggregate_fleet_days(machines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Sum daily KD across machines; average daily target when present."""
+    """Sum daily KD + product cups across machines; sum daily targets when present."""
     by_date: Dict[str, Dict[str, Any]] = {}
     for m in machines:
         for d in m.get("days") or []:
@@ -165,37 +185,55 @@ def aggregate_fleet_days(machines: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                     "locationKwd": 0.0,
                     "targetSum": 0.0,
                     "targetN": 0,
-                    "productCups": 0,
+                    "productCups": 0.0,
+                    "prodTargetSum": 0.0,
+                    "prodTargetN": 0,
                 },
             )
             slot["locationKwd"] += float(d.get("locationKwd") or 0)
+            slot["productCups"] += float(d.get("productCups") or 0)
             tgt = d.get("locationTargetKd")
             if tgt is not None and float(tgt) > 0:
                 slot["targetSum"] += float(tgt)
                 slot["targetN"] += 1
+            pt = d.get("productTargetCups")
+            if pt is not None and float(pt) > 0:
+                slot["prodTargetSum"] += float(pt)
+                slot["prodTargetN"] += 1
     out: List[Dict[str, Any]] = []
     prev: Optional[float] = None
+    prev_cups: Optional[float] = None
     for key in sorted(by_date.keys()):
         slot = by_date[key]
         kwd = float(slot["locationKwd"])
+        cups = float(slot["productCups"])
         # For aggregate, sum targets (fleet target) not average
         fleet_tgt = float(slot["targetSum"]) if slot["targetN"] else None
+        fleet_prod_tgt = float(slot["prodTargetSum"]) if slot["prodTargetN"] else None
         g = pct_points(growth_rate(kwd, prev)) if prev is not None else None
+        g_prod = pct_points(growth_rate(cups, prev_cups)) if prev_cups is not None else None
         out.append(
             {
                 "date": slot["date"],
                 "weekday": slot["weekday"],
                 "locationKwd": round(kwd, 4),
-                "productCups": 0,
+                "productCups": int(round(cups)),
                 "locationTargetKd": round(fleet_tgt, 4) if fleet_tgt is not None else None,
-                "productTargetCups": None,
+                "productTargetCups": (
+                    round(fleet_prod_tgt, 2) if fleet_prod_tgt is not None else None
+                ),
                 "locationGrowthPct": g,
-                "productGrowthPct": None,
+                "productGrowthPct": g_prod,
                 "locationPctOfTarget": (
                     round((kwd / fleet_tgt) * 100, 1) if fleet_tgt and fleet_tgt > 0 else None
                 ),
-                "productPctOfTarget": None,
+                "productPctOfTarget": (
+                    round((cups / fleet_prod_tgt) * 100, 1)
+                    if fleet_prod_tgt and fleet_prod_tgt > 0
+                    else None
+                ),
             }
         )
         prev = kwd
+        prev_cups = cups
     return out

@@ -148,10 +148,21 @@ export function PerformancePage() {
   const multi = selectedIds.length !== 1;
   const periodKd = fleetMachines.reduce((s, m) => s + (m.totalLocationKwd || 0), 0);
   const periodTarget = fleetMachines.reduce((s, m) => s + (m.periodTargetKd || 0), 0);
+  const periodCups = fleetMachines.reduce((s, m) => s + (m.totalProductCups || 0), 0);
+  const periodCupTarget = fleetMachines.reduce((s, m) => s + (m.periodProductTargetCups || 0), 0);
   const avgPct =
     fleetMachines.length && periodTarget > 0
       ? Math.round((periodKd / periodTarget) * 1000) / 10
       : null;
+  const avgProductPct =
+    fleetMachines.length && periodCupTarget > 0
+      ? Math.round((periodCups / periodCupTarget) * 1000) / 10
+      : null;
+  const productLabel =
+    fleetQ.data?.productName ||
+    (fleetQ.data?.productNames?.length === 1 ? fleetQ.data.productNames[0] : undefined) ||
+    (fleetMachines.find((m) => m.productName)?.productName ?? undefined) ||
+    undefined;
 
   return (
     <div className="perfPage">
@@ -215,8 +226,16 @@ export function PerformancePage() {
                     <strong>{periodTarget > 0 ? formatKwd(periodTarget) : '—'}</strong>
                   </div>
                   <div className="perfKpi">
-                    <span className="perfKpiLabel">Achievement</span>
+                    <span className="perfKpiLabel">Loc achieve</span>
                     <strong>{avgPct != null ? `${avgPct}%` : '—'}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Product cups</span>
+                    <strong>{periodCups > 0 ? Math.round(periodCups) : '—'}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Prod achieve</span>
+                    <strong>{avgProductPct != null ? `${avgProductPct}%` : '—'}</strong>
                   </div>
                   <div className="perfKpi">
                     <span className="perfKpiLabel">Window</span>
@@ -224,7 +243,11 @@ export function PerformancePage() {
                   </div>
                 </div>
 
-                <FleetPerformanceOverview machines={fleetMachines} aggregateDays={aggregateDays} />
+                <FleetPerformanceOverview
+                  machines={fleetMachines}
+                  aggregateDays={aggregateDays}
+                  productLabel={productLabel}
+                />
 
                 {showCompare ? (
                   <section className="perfSection">
