@@ -6,19 +6,12 @@ import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import { MachineSearchSelect } from '@/components/MachineSearchSelect';
 import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
-
-type PerfDay = {
-  date: string;
-  weekday?: string;
-  locationKwd: number;
-  productCups: number;
-  locationTargetKd?: number | null;
-  productTargetCups?: number | null;
-  locationGrowthPct?: number | null;
-  productGrowthPct?: number | null;
-  locationPctOfTarget?: number | null;
-  productPctOfTarget?: number | null;
-};
+import {
+  GrowthRateChart,
+  ProductTrajectoryChart,
+  RevenueTrajectoryChart,
+  type PerfDay,
+} from '@/features/performance/PerformanceCharts';
 
 type PerfPayload = {
   machineId: string;
@@ -37,65 +30,6 @@ type PerfPayload = {
 
 type MachineRow = { id: string; name: string };
 type Snapshot = { rows?: Array<{ machineId?: string; machine_id?: string; machineName?: string }> };
-
-function RevenueTrajectoryChart({
-  days,
-  mode,
-}: {
-  days: PerfDay[];
-  mode: 'location' | 'product';
-}) {
-  if (!days.length) return <p className="perfMuted">No days in range.</p>;
-  const maxVal = Math.max(
-    1,
-    ...days.map((d) =>
-      mode === 'location'
-        ? Math.max(d.locationKwd, Number(d.locationTargetKd) || 0)
-        : Math.max(d.productCups, Number(d.productTargetCups) || 0),
-    ),
-  );
-  const h = 120;
-  const gap = 4;
-  const barW = Math.max(10, Math.min(28, Math.floor(560 / days.length) - gap));
-
-  return (
-    <div className="perfChartScroll" role="img" aria-label={mode === 'location' ? 'Revenue Trajectory' : 'Product cups trajectory'}>
-      <svg className="perfChartSvg" viewBox={`0 0 ${days.length * (barW + gap) + 8} ${h + 28}`} width="100%">
-        {days.map((d, i) => {
-          const x = 4 + i * (barW + gap);
-          const actual = mode === 'location' ? d.locationKwd : d.productCups;
-          const target =
-            mode === 'location' ? Number(d.locationTargetKd) || 0 : Number(d.productTargetCups) || 0;
-          const actualH = Math.round((actual / maxVal) * h);
-          const targetH = target > 0 ? Math.round((target / maxVal) * h) : 0;
-          const remH = Math.max(0, targetH - actualH);
-          return (
-            <g key={d.date}>
-              {targetH > 0 ? (
-                <rect x={x} y={h - targetH} width={barW} height={targetH} rx={3} className="perfBarTarget" />
-              ) : null}
-              <rect x={x} y={h - actualH} width={barW} height={actualH} rx={3} className="perfBarActual" />
-              {remH > 0 ? (
-                <rect x={x} y={h - targetH} width={barW} height={remH} rx={3} className="perfBarRemain" />
-              ) : null}
-              <text x={x + barW / 2} y={h + 12} textAnchor="middle" className="perfBarLabel">
-                {(d.weekday || d.date.slice(5)).slice(0, 3)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="perfChartLegend">
-        <span>
-          <i className="perfDot perfDotActual" /> Achieved
-        </span>
-        <span>
-          <i className="perfDot perfDotRemain" /> To target
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export function PerformancePage() {
   const [params, setParams] = useSearchParams();
@@ -288,19 +222,28 @@ export function PerformancePage() {
             <section className="perfSection" aria-label="Revenue Trajectory">
               <h3 className="perfSectionTitle">Revenue Trajectory</h3>
               <p className="perfSectionHint">
-                Daily location KD — filled = achieved, hollow grey = remaining to daily target.
+                Daily location KD — teal bars = achieved, hollow stack = remaining to daily target, amber dashed =
+                target line.
               </p>
-              <RevenueTrajectoryChart days={dayRows} mode="location" />
+              <RevenueTrajectoryChart days={dayRows} />
             </section>
 
             <section className="perfSection" aria-label="Product trajectory">
               <h3 className="perfSectionTitle">Product Trajectory · {data.productName}</h3>
               <p className="perfSectionHint">Daily cups for the promoted product vs product target.</p>
-              <RevenueTrajectoryChart days={dayRows} mode="product" />
+              <ProductTrajectoryChart days={dayRows} productName={data.productName || 'Americano Max'} />
+            </section>
+
+            <section className="perfSection" aria-label="Growth rates">
+              <h3 className="perfSectionTitle">Day growth rates</h3>
+              <p className="perfSectionHint">
+                Location vs product day-over-day growth % — zero line = flat; used with SX (acceleration).
+              </p>
+              <GrowthRateChart days={dayRows} />
             </section>
 
             <section className="perfSection" aria-label="Growth table">
-              <h3 className="perfSectionTitle">Day growth rates</h3>
+              <h3 className="perfSectionTitle">Day detail</h3>
               <div className="perfTableWrap">
                 <table className="stitchOpsTable opsFleetTable perfTable">
                   <thead>

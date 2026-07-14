@@ -99,6 +99,18 @@
   padding: 8px 0 4px;
 }
 
+.perfEchart {
+  width: 100%;
+  height: 320px;
+  min-height: 280px;
+}
+
+@media (max-width: 720px) {
+  .perfEchart {
+    height: 280px;
+  }
+}
+
 .perfChartSvg {
   min-width: 320px;
   max-width: 100%;
