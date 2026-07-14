@@ -4,14 +4,21 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
-import { MachineSearchSelect } from '@/components/MachineSearchSelect';
 import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
+import { PerfMachineFilter } from '@/features/performance/PerfMachineFilter';
 import {
+  FleetCompareChart,
+  FleetRankingChart,
   GrowthRateChart,
   ProductTrajectoryChart,
   RevenueTrajectoryChart,
-  type PerfDay,
 } from '@/features/performance/PerformanceCharts';
+import type {
+  ChartMode,
+  FleetPayload,
+  MachineRow,
+  PerfDay,
+} from '@/features/performance/perfTypes';
 
 type PerfPayload = {
   machineId: string;
@@ -28,13 +35,26 @@ type PerfPayload = {
   error?: string;
 };
 
-type MachineRow = { id: string; name: string };
 type Snapshot = { rows?: Array<{ machineId?: string; machine_id?: string; machineName?: string }> };
+
+function parseIds(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
 
 export function PerformancePage() {
   const [params, setParams] = useSearchParams();
-  const machineId = (params.get('machineId') || params.get('machine') || '').trim();
+  const focusId = (params.get('machineId') || params.get('machine') || '').trim();
+  const urlIds = parseIds(params.get('machineIds'));
   const [days, setDays] = useState(14);
+  const [chartMode, setChartMode] = useState<ChartMode>('ranking');
+  const [selected, setSelected] = useState<Set<string> | null>(() =>
+    urlIds.length ? new Set(urlIds) : focusId ? new Set([focusId]) : null,
+  );
   const qc = useQueryClient();
 
   const machinesQ = useQuery({
@@ -73,55 +93,72 @@ export function PerformancePage() {
     return out;
   }, [apiMachines, snapQ.data?.rows]);
 
-  const fromSnapshot = machineRows.length > 0 && apiMachines.length === 0;
-  const machineNames = useMemo(() => machineRows.map((m) => m.name), [machineRows]);
-  const idByName = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const m of machineRows) map.set(m.name, m.id);
-    return map;
-  }, [machineRows]);
-  const selectedName = useMemo(
-    () => machineRows.find((m) => m.id === machineId)?.name || '',
-    [machineRows, machineId],
-  );
+  const selectedIds = useMemo(() => {
+    if (selected === null) return machineRows.slice(0, 12).map((m) => m.id);
+    return [...selected].slice(0, 24);
+  }, [selected, machineRows]);
 
-  const perfQ = useQuery({
-    queryKey: ['alert-performance', machineId, days],
-    queryFn: () =>
-      apiGet<PerfPayload>(
-        `/api/alert/performance/machine-detail?machineId=${encodeURIComponent(machineId)}&days=${days}`,
-      ),
-    enabled: Boolean(machineId),
+  const selectedKey = selectedIds.slice().sort().join(',');
+
+  const syncUrl = (next: Set<string> | null) => {
+    setSelected(next);
+    const p = new URLSearchParams(params);
+    if (next === null) {
+      p.delete('machineIds');
+      p.delete('machineId');
+    } else if (next.size === 1) {
+      const only = [...next][0];
+      p.set('machineId', only);
+      p.delete('machineIds');
+    } else if (next.size > 1) {
+      p.set('machineIds', [...next].join(','));
+      p.delete('machineId');
+    } else {
+      p.delete('machineIds');
+      p.delete('machineId');
+    }
+    setParams(p, { replace: true });
+  };
+
+  const fleetQ = useQuery({
+    queryKey: ['alert-performance-fleet', selectedKey || 'auto', days],
+    queryFn: () => {
+      const q =
+        selected === null
+          ? `/api/alert/performance/fleet?days=${days}`
+          : `/api/alert/performance/fleet?days=${days}&machineIds=${encodeURIComponent(selectedKey)}`;
+      return apiGet<FleetPayload>(q);
+    },
+    enabled: selected === null || selectedIds.length > 0,
     staleTime: 60_000,
     refetchInterval: 3 * 60_000,
   });
 
-  const data = perfQ.data;
-  const dayRows = data?.days || [];
-  const machinesLoading = machinesQ.isLoading && snapQ.isLoading;
+  const singleId = selectedIds.length === 1 ? selectedIds[0] : focusId && selectedIds.includes(focusId) ? focusId : '';
+
+  const detailQ = useQuery({
+    queryKey: ['alert-performance', singleId, days],
+    queryFn: () =>
+      apiGet<PerfPayload>(
+        `/api/alert/performance/machine-detail?machineId=${encodeURIComponent(singleId)}&days=${days}`,
+      ),
+    enabled: Boolean(singleId),
+    staleTime: 60_000,
+  });
+
+  const fleetMachines = fleetQ.data?.machines || [];
+  const aggregateDays = fleetQ.data?.aggregateDays || [];
+  const detail = detailQ.data;
+  const multi = selectedIds.length !== 1;
 
   return (
     <div className="perfPage">
       <StitchOpsPanel
         title="Performance"
-        subtitle="Location + product sales vs targets · Revenue Trajectory · Promo instruments"
+        subtitle="Multi-location Revenue Trajectory · Ranking · Compare · SX / Promo"
         iconName="performance"
       >
         <div className="perfToolbar">
-          <MachineSearchSelect
-            label="Location"
-            machines={machineNames}
-            value={selectedName}
-            disabled={machinesLoading}
-            onSelect={(name) => {
-              const id = idByName.get(name) || '';
-              const next = new URLSearchParams(params);
-              if (id) next.set('machineId', id);
-              else next.delete('machineId');
-              setParams(next, { replace: true });
-            }}
-            placeholder={machinesLoading ? 'Loading machines…' : 'Search machine…'}
-          />
           <label className="perfField">
             <span>Days</span>
             <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
@@ -130,161 +167,164 @@ export function PerformancePage() {
               <option value={30}>30</option>
             </select>
           </label>
+          <div className="perfModePills" role="tablist" aria-label="Chart mode">
+            {(
+              [
+                ['ranking', 'Ranking'],
+                ['compare', 'Compare'],
+                ['aggregate', 'Aggregate'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={chartMode === id}
+                className={`perfSegPill ${chartMode === id ? 'active' : ''}`}
+                onClick={() => setChartMode(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <Link className="perfBackLink" to="/red-flags">
             ← Red Flags
           </Link>
         </div>
 
         {machinesQ.isError && !machineRows.length ? (
-          <p className="perfError">
-            Could not load machines: {(machinesQ.error as Error).message}. Try Refresh on Red Flags, then reopen
-            Performance.
-          </p>
-        ) : null}
-        {fromSnapshot ? (
-          <p className="perfMuted">Machine list from Red Flags snapshot (Vendon fleet list empty).</p>
-        ) : null}
-        {!machinesLoading && !machineRows.length ? (
-          <p className="perfError">No machines available. Open Red Flags once so the snapshot can seed the list.</p>
-        ) : null}
-        {machinesLoading ? <p className="perfMuted">Loading machine list…</p> : null}
-
-        {!machineId ? (
-          <p className="perfMuted">Select a location (or tap SX on Red Flags) to open Performance.</p>
+          <p className="perfError">Could not load machines: {(machinesQ.error as Error).message}</p>
         ) : null}
 
-        {machineId && perfQ.isLoading ? <p className="perfMuted">Loading trajectory…</p> : null}
-        {machineId && perfQ.isError ? (
-          <p className="perfError">{(perfQ.error as Error).message}</p>
-        ) : null}
-        {data?.error ? <p className="perfError">{data.error}</p> : null}
+        <div className="perfLayout">
+          <PerfMachineFilter machines={machineRows} selected={selected} onChange={syncUrl} />
 
-        {data && !data.error ? (
-          <>
-            <div className="perfKpiRow">
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Location</span>
-                <strong>{data.machineName}</strong>
-              </div>
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Product</span>
-                <strong>{data.productName || 'Americano Max'}</strong>
-              </div>
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Period</span>
-                <strong>{data.targetPeriod || 'daily'}</strong>
-              </div>
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Loc SX</span>
-                <strong className={Number(data.locationSxPct) >= 0 ? 'alertSalesUp' : 'alertSalesDown'}>
-                  {data.locationSxPct != null
-                    ? formatSalesTrendPct(Number(data.locationSxPct)).replace(/%$/, ' pts')
-                    : '—'}
-                </strong>
-              </div>
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Prod SX</span>
-                <strong className={Number(data.productSxPct) >= 0 ? 'alertSalesUp' : 'alertSalesDown'}>
-                  {data.productSxPct != null
-                    ? formatSalesTrendPct(Number(data.productSxPct)).replace(/%$/, ' pts')
-                    : '—'}
-                </strong>
-              </div>
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Loc target</span>
-                <strong>{data.locationTargetKd != null ? formatKwd(Number(data.locationTargetKd)) : '—'}</strong>
-              </div>
-              <div className="perfKpi">
-                <span className="perfKpiLabel">Prod target</span>
-                <strong>
-                  {data.productTargetCups != null ? `${Math.round(Number(data.productTargetCups))} cups` : '—'}
-                </strong>
-              </div>
-            </div>
+          <div className="perfMain">
+            {selected !== null && selected.size === 0 ? (
+              <p className="perfMuted">Select one or more locations to plot.</p>
+            ) : null}
 
-            {data.vendonUserId ? (
-              <PromoSwipeDeck
-                vendonUserId={data.vendonUserId}
-                vendonUserName={data.vendonUserName}
-                machineId={data.machineId}
-                machineName={data.machineName}
-                productName={data.productName || 'Americano Max'}
-                onLogged={() => {
-                  void qc.invalidateQueries({ queryKey: ['alert-promo-swipe-events'] });
-                }}
-              />
-            ) : (
-              <p className="perfMuted">
-                Promo instruments need an area owner on this machine (Admin → Area owners).
-              </p>
-            )}
+            {fleetQ.isLoading ? <p className="perfMuted">Loading fleet graphs…</p> : null}
+            {fleetQ.isError ? <p className="perfError">{(fleetQ.error as Error).message}</p> : null}
+            {fleetQ.data?.error ? <p className="perfError">{fleetQ.data.error}</p> : null}
 
-            <section className="perfSection" aria-label="Revenue Trajectory">
-              <h3 className="perfSectionTitle">Revenue Trajectory</h3>
-              <p className="perfSectionHint">
-                Daily location KD — teal bars = achieved, hollow stack = remaining to daily target, amber dashed =
-                target line.
-              </p>
-              <RevenueTrajectoryChart days={dayRows} />
-            </section>
+            {fleetMachines.length ? (
+              <>
+                <div className="perfKpiRow">
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Locations</span>
+                    <strong>{fleetMachines.length}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Period KD</span>
+                    <strong>
+                      {formatKwd(fleetMachines.reduce((s, m) => s + (m.totalLocationKwd || 0), 0))}
+                    </strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Window</span>
+                    <strong>{days}d</strong>
+                  </div>
+                </div>
 
-            <section className="perfSection" aria-label="Product trajectory">
-              <h3 className="perfSectionTitle">Product Trajectory · {data.productName}</h3>
-              <p className="perfSectionHint">Daily cups for the promoted product vs product target.</p>
-              <ProductTrajectoryChart days={dayRows} productName={data.productName || 'Americano Max'} />
-            </section>
+                {chartMode === 'ranking' ? (
+                  <section className="perfSection">
+                    <h3 className="perfSectionTitle">Achievement ranking</h3>
+                    <p className="perfSectionHint">
+                      Period location KD vs target — same ranking style as Targets Areas (100% dashed line).
+                    </p>
+                    <FleetRankingChart machines={fleetMachines} />
+                  </section>
+                ) : null}
 
-            <section className="perfSection" aria-label="Growth rates">
-              <h3 className="perfSectionTitle">Day growth rates</h3>
-              <p className="perfSectionHint">
-                Location vs product day-over-day growth % — zero line = flat; used with SX (acceleration).
-              </p>
-              <GrowthRateChart days={dayRows} />
-            </section>
+                {chartMode === 'compare' ? (
+                  <section className="perfSection">
+                    <h3 className="perfSectionTitle">Revenue compare</h3>
+                    <p className="perfSectionHint">
+                      Daily location KD for each selected machine (up to 12 series). Scroll legend to toggle.
+                    </p>
+                    <FleetCompareChart machines={fleetMachines} />
+                  </section>
+                ) : null}
 
-            <section className="perfSection" aria-label="Growth table">
-              <h3 className="perfSectionTitle">Day detail</h3>
-              <div className="perfTableWrap">
-                <table className="stitchOpsTable opsFleetTable perfTable">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Loc KD</th>
-                      <th>Loc G%</th>
-                      <th>vs target</th>
-                      <th>Prod cups</th>
-                      <th>Prod G%</th>
-                      <th>vs target</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...dayRows].reverse().map((d) => (
-                      <tr key={d.date}>
-                        <td data-mono="true">
-                          {d.weekday} {d.date}
-                        </td>
-                        <td data-mono="true">{formatKwd(d.locationKwd)}</td>
-                        <td data-mono="true">
-                          {d.locationGrowthPct != null ? formatSalesTrendPct(d.locationGrowthPct) : '—'}
-                        </td>
-                        <td data-mono="true">
-                          {d.locationPctOfTarget != null ? `${d.locationPctOfTarget}%` : '—'}
-                        </td>
-                        <td data-mono="true">{d.productCups}</td>
-                        <td data-mono="true">
-                          {d.productGrowthPct != null ? formatSalesTrendPct(d.productGrowthPct) : '—'}
-                        </td>
-                        <td data-mono="true">
-                          {d.productPctOfTarget != null ? `${d.productPctOfTarget}%` : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </>
-        ) : null}
+                {chartMode === 'aggregate' ? (
+                  <section className="perfSection">
+                    <h3 className="perfSectionTitle">Fleet Revenue Trajectory</h3>
+                    <p className="perfSectionHint">
+                      Sum of selected locations — teal = achieved, hollow = remaining to summed daily targets.
+                    </p>
+                    <RevenueTrajectoryChart days={aggregateDays} title="Selected locations (sum)" />
+                  </section>
+                ) : null}
+              </>
+            ) : null}
+
+            {!multi && detail && !detail.error ? (
+              <>
+                <div className="perfKpiRow">
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Location</span>
+                    <strong>{detail.machineName}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Product</span>
+                    <strong>{detail.productName || 'Americano Max'}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Loc SX</span>
+                    <strong className={Number(detail.locationSxPct) >= 0 ? 'alertSalesUp' : 'alertSalesDown'}>
+                      {detail.locationSxPct != null
+                        ? formatSalesTrendPct(Number(detail.locationSxPct)).replace(/%$/, ' pts')
+                        : '—'}
+                    </strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Prod SX</span>
+                    <strong className={Number(detail.productSxPct) >= 0 ? 'alertSalesUp' : 'alertSalesDown'}>
+                      {detail.productSxPct != null
+                        ? formatSalesTrendPct(Number(detail.productSxPct)).replace(/%$/, ' pts')
+                        : '—'}
+                    </strong>
+                  </div>
+                </div>
+
+                {detail.vendonUserId ? (
+                  <PromoSwipeDeck
+                    vendonUserId={detail.vendonUserId}
+                    vendonUserName={detail.vendonUserName}
+                    machineId={detail.machineId}
+                    machineName={detail.machineName}
+                    productName={detail.productName || 'Americano Max'}
+                    onLogged={() => {
+                      void qc.invalidateQueries({ queryKey: ['alert-promo-swipe-events'] });
+                    }}
+                  />
+                ) : null}
+
+                <section className="perfSection">
+                  <h3 className="perfSectionTitle">Revenue Trajectory</h3>
+                  <RevenueTrajectoryChart days={detail.days || []} />
+                </section>
+                <section className="perfSection">
+                  <h3 className="perfSectionTitle">Product Trajectory · {detail.productName}</h3>
+                  <ProductTrajectoryChart
+                    days={detail.days || []}
+                    productName={detail.productName || 'Americano Max'}
+                  />
+                </section>
+                <section className="perfSection">
+                  <h3 className="perfSectionTitle">Day growth rates</h3>
+                  <GrowthRateChart days={detail.days || []} />
+                </section>
+              </>
+            ) : null}
+
+            {!multi && detailQ.isLoading ? <p className="perfMuted">Loading location detail…</p> : null}
+            {!multi && detailQ.isError ? (
+              <p className="perfError">{(detailQ.error as Error).message}</p>
+            ) : null}
+          </div>
+        </div>
       </StitchOpsPanel>
     </div>
   );

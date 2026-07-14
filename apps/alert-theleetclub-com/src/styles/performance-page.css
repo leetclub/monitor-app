@@ -13,6 +13,134 @@
   margin-bottom: 8px;
 }
 
+.perfModePills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.perfSegPill {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.perfSegPill.active {
+  background: rgba(45, 212, 191, 0.16);
+  border-color: rgba(45, 212, 191, 0.55);
+  color: var(--text);
+}
+
+.perfLayout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .perfLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.perfMachineFilter {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--panel2);
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.perfMachineFilterHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.perfMachineFilterTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.perfMachineFilterCount {
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: auto;
+}
+
+.perfMachineFilterActions {
+  display: flex;
+  gap: 4px;
+}
+
+.perfMachineList {
+  max-height: 420px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.perfMachineRow {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.perfMachineRow:hover {
+  background: rgba(45, 212, 191, 0.07);
+}
+
+.perfMachineRowName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.perfMachineRowId {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.perfMain {
+  min-width: 0;
+}
+
+.perfEchart {
+  width: 100%;
+  height: 340px;
+  min-height: 280px;
+}
+
+.perfEchartRank {
+  min-height: 220px;
+}
+
+@media (max-width: 720px) {
+  .perfEchart {
+    height: 300px;
+  }
+}
+
 .perfField {
   display: flex;
   flex-direction: column;
@@ -97,18 +225,6 @@
 .perfChartScroll {
   overflow-x: auto;
   padding: 8px 0 4px;
-}
-
-.perfEchart {
-  width: 100%;
-  height: 320px;
-  min-height: 280px;
-}
-
-@media (max-width: 720px) {
-  .perfEchart {
-    height: 280px;
-  }
 }
 
 .perfChartSvg {

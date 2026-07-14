@@ -2612,6 +2612,185 @@ def register_alert_routes(app) -> None:
         finally:
             db.close()
 
+    @app.route("/api/alert/performance/fleet", methods=["GET", "OPTIONS"])
+    def alert_performance_fleet():
+        """
+        Multi-machine Performance graphs (Areas-style).
+        Query: machineIds=id1,id2 (max 24) OR empty = top revenue machines from cache window
+               days=14
+        Location KD only (fast); product cups stay on single-machine detail.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        try:
+            history_days = max(7, min(45, int(request.args.get("days") or 14)))
+        except (TypeError, ValueError):
+            history_days = 14
+        raw_ids = (request.args.get("machineIds") or request.args.get("machine_ids") or "").strip()
+        requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
+        if len(requested) > 24:
+            requested = requested[:24]
+
+        cache_key = f"perf:fleet:v1:{','.join(sorted(requested)) or 'auto'}:{history_days}"
+        cached = _alert_cache_get(cache_key, 90)
+        if cached is not None:
+            return jsonify(cached)
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+        fetch_lo = today - timedelta(days=history_days - 1)
+
+        seed = fetch_lo
+        while seed < today:
+            _maybe_seed_vendon_revenue_cache(seed)
+            seed += timedelta(days=1)
+
+        fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
+        if fleet_err:
+            return jsonify({"error": fleet_err, "machines": []}), 502
+        name_by_id: Dict[str, str] = {}
+        for m in fleet_rows or []:
+            mid = str(m.get("id") or "").strip()
+            if mid:
+                name_by_id[mid] = str(m.get("name") or mid).strip() or mid
+
+        db = _pa_session()
+        try:
+            if not requested:
+                # Auto: top 12 machines by recent revenue in window
+                rows = (
+                    db.query(
+                        VendonDailyMachineRevenueCache.machine_id,
+                        func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).label("tot"),
+                    )
+                    .filter(
+                        VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                        VendonDailyMachineRevenueCache.cache_date <= today,
+                    )
+                    .group_by(VendonDailyMachineRevenueCache.machine_id)
+                    .order_by(func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).desc())
+                    .limit(12)
+                    .all()
+                )
+                requested = [str(r.machine_id) for r in rows if r.machine_id]
+                requested = [mid for mid in requested if mid in name_by_id] or list(name_by_id.keys())[:12]
+
+            cache_rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.machine_id.in_(requested),
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date <= today,
+                )
+                .all()
+            )
+            kwd_map: Dict[str, Dict[date, float]] = {mid: {} for mid in requested}
+            for r in cache_rows:
+                mid = str(r.machine_id or "").strip()
+                if mid not in kwd_map or r.cache_date is None:
+                    continue
+                kwd_map[mid][r.cache_date] = float(r.total_sales_kwd or 0)
+
+            elapsed_payload = _load_daily_sales_elapsed_db_cache()
+            by_e = (elapsed_payload or {}).get("byMachineId") or {}
+            for mid in requested:
+                ent = by_e.get(mid) if isinstance(by_e, dict) else None
+                if isinstance(ent, dict) and ent.get("todayKwd") is not None:
+                    kwd_map.setdefault(mid, {})[today] = float(ent["todayKwd"])
+
+            dash = _dash_session()
+            cfg: Dict[str, Dict[str, Any]] = {}
+            try:
+                from week_revenue_target_lib import daily_target_kd_from_week
+                from alert_sx_lib import DEFAULT_SX_PRODUCT
+
+                lmcs = {
+                    str(r.machine_id): r
+                    for r in dash.query(LiveMachineConfig)
+                    .filter(LiveMachineConfig.machine_id.in_(requested))
+                    .all()
+                }
+                profs = {
+                    str(r.machine_id): r
+                    for r in dash.query(AlertMachineProfile)
+                    .filter(AlertMachineProfile.machine_id.in_(requested))
+                    .all()
+                }
+                for mid in requested:
+                    lmc = lmcs.get(mid)
+                    prof = profs.get(mid)
+                    mname = name_by_id.get(mid) or mid
+                    loc_target = float(lmc.daily_sales_target) if lmc and lmc.daily_sales_target is not None else None
+                    owner = (prof.location_owner if prof else None) or None
+                    if loc_target is None:
+                        try:
+                            loc_target = daily_target_kd_from_week(mname, owner)
+                        except Exception:
+                            loc_target = None
+                    cfg[mid] = {
+                        "name": mname,
+                        "loc_target": loc_target,
+                        "prod_target": float(lmc.daily_product_target)
+                        if lmc and lmc.daily_product_target is not None
+                        else None,
+                        "pname": (lmc.sx_product_name if lmc else None) or DEFAULT_SX_PRODUCT,
+                        "period": (lmc.sx_target_period if lmc and lmc.sx_target_period else None) or "daily",
+                    }
+            finally:
+                dash.close()
+
+            from alert_performance_lib import (
+                aggregate_fleet_days,
+                build_machine_performance,
+                summarize_machine_period,
+            )
+            from alert_sx_lib import DEFAULT_SX_PRODUCT
+
+            machines_out: List[Dict[str, Any]] = []
+            for mid in requested:
+                c = cfg.get(mid) or {}
+                payload = build_machine_performance(
+                    machine_id=mid,
+                    machine_name=c.get("name") or name_by_id.get(mid) or mid,
+                    kwd_by_day=kwd_map.get(mid) or {},
+                    product_name=c.get("pname") or DEFAULT_SX_PRODUCT,
+                    location_target_kd=c.get("loc_target"),
+                    product_target_cups=c.get("prod_target"),
+                    target_period=c.get("period") or "daily",
+                    history_days=history_days,
+                    today=today,
+                    now_local=now_local,
+                    fetch_vends_fn=None,  # fleet = location KD only (fast)
+                )
+                machines_out.append(summarize_machine_period(payload))
+
+            # Rank by period achievement then revenue
+            machines_out.sort(
+                key=lambda m: (
+                    -(m.get("periodPctOfTarget") if m.get("periodPctOfTarget") is not None else -1),
+                    -float(m.get("totalLocationKwd") or 0),
+                )
+            )
+            aggregate_days = aggregate_fleet_days(machines_out)
+            body = {
+                "historyDays": history_days,
+                "asOf": now_local.replace(microsecond=0).isoformat(),
+                "machineCount": len(machines_out),
+                "machines": machines_out,
+                "aggregateDays": aggregate_days,
+            }
+            _alert_cache_set(cache_key, body)
+            return jsonify(body)
+        except Exception as ex:
+            logger.exception("alert_performance_fleet")
+            return jsonify({"error": str(ex), "machines": []}), 500
+        finally:
+            db.close()
+
     @app.route("/api/alert/promo/instruments", methods=["GET", "POST", "OPTIONS"])
     def alert_promo_instruments():
         """Promo swipe instruments keyed by area-owner vendon_user_id (Alert auth)."""

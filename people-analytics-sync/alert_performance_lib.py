@@ -125,3 +125,77 @@ def build_machine_performance(
         "productSxPct": sx_prod,
         "days": days_out,
     }
+
+
+def summarize_machine_period(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Period totals + % of target for ranking charts."""
+    days = payload.get("days") or []
+    total_kwd = sum(float(d.get("locationKwd") or 0) for d in days)
+    daily_tgt = None
+    for d in days:
+        if d.get("locationTargetKd") is not None:
+            daily_tgt = float(d["locationTargetKd"])
+            break
+    period_tgt = (daily_tgt * len(days)) if daily_tgt and daily_tgt > 0 else None
+    pct = round((total_kwd / period_tgt) * 100, 1) if period_tgt and period_tgt > 0 else None
+    return {
+        "machineId": payload.get("machineId"),
+        "machineName": payload.get("machineName"),
+        "totalLocationKwd": round(total_kwd, 4),
+        "periodTargetKd": round(period_tgt, 4) if period_tgt is not None else None,
+        "periodPctOfTarget": pct,
+        "locationSxPct": payload.get("locationSxPct"),
+        "days": payload.get("days") or [],
+    }
+
+
+def aggregate_fleet_days(machines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sum daily KD across machines; average daily target when present."""
+    by_date: Dict[str, Dict[str, Any]] = {}
+    for m in machines:
+        for d in m.get("days") or []:
+            key = str(d.get("date") or "")
+            if not key:
+                continue
+            slot = by_date.setdefault(
+                key,
+                {
+                    "date": key,
+                    "weekday": d.get("weekday"),
+                    "locationKwd": 0.0,
+                    "targetSum": 0.0,
+                    "targetN": 0,
+                    "productCups": 0,
+                },
+            )
+            slot["locationKwd"] += float(d.get("locationKwd") or 0)
+            tgt = d.get("locationTargetKd")
+            if tgt is not None and float(tgt) > 0:
+                slot["targetSum"] += float(tgt)
+                slot["targetN"] += 1
+    out: List[Dict[str, Any]] = []
+    prev: Optional[float] = None
+    for key in sorted(by_date.keys()):
+        slot = by_date[key]
+            kwd = float(slot["locationKwd"])
+            # For aggregate, sum targets (fleet target) not average
+            fleet_tgt = float(slot["targetSum"]) if slot["targetN"] else None
+            g = pct_points(growth_rate(kwd, prev)) if prev is not None else None
+            out.append(
+                {
+                    "date": slot["date"],
+                    "weekday": slot["weekday"],
+                    "locationKwd": round(kwd, 4),
+                    "productCups": 0,
+                    "locationTargetKd": round(fleet_tgt, 4) if fleet_tgt is not None else None,
+                    "productTargetCups": None,
+                    "locationGrowthPct": g,
+                    "productGrowthPct": None,
+                    "locationPctOfTarget": (
+                        round((kwd / fleet_tgt) * 100, 1) if fleet_tgt and fleet_tgt > 0 else None
+                    ),
+                    "productPctOfTarget": None,
+                }
+            )
+            prev = kwd
+    return out
