@@ -38,6 +38,9 @@ _MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_
 _WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "6"))
 # Always fully process audits modified in this recent window (no per-chunk truncate).
 _RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "21"))
+# Short modified_at windows for the recent org-traffic band — SC search may ignore order/limit.
+_RECENT_CHUNK_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_CHUNK_DAYS", "5"))
+_DEFAULT_CHUNK_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_CHUNK_DAYS", "28"))
 # SafetyCulture search index is by modified_at — widen so audits started earlier but finished in-range are found.
 _MODIFIED_SEARCH_PAD_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_MODIFIED_PAD_DAYS", "14"))
 _MIN_MACHINE_MATCH_SCORE = int(os.environ.get("SAFETY_CULTURE_QA_MIN_MATCH_SCORE", "55"))
@@ -66,20 +69,41 @@ def _search_audits(modified_after: str, modified_before: str) -> Tuple[List[str]
     return ids, err
 
 
+# SC /audits/search defaults to order=asc + limit=100 and has no next_page_token.
+# Without an explicit limit/order, long windows return only the *oldest* page and
+# drop same-day visits (e.g. KU CBA 14 Jul never appeared while 1 Jul did).
+_SEARCH_PAGE_LIMIT = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_LIMIT", "1000"))
+_SEARCH_MAX_PAGES = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_MAX_PAGES", "40"))
+
+
 def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[str], Optional[str]]:
-    """Search SafetyCulture audits; follow next_page_token; return newest-first by modified_at."""
+    """
+    Search SafetyCulture audits for a modified_at window.
+
+    Uses order=desc + limit=1000 and cursor-paginates by advancing modified_before
+    to the oldest timestamp on each page (the public API has no next_page_token).
+    Returns audit ids newest-first by modified_at.
+    """
     if not _API_TOKEN:
         return [], "SAFETY_CULTURE_API_TOKEN not configured"
     pairs: List[Tuple[str, str]] = []  # (modified_at, audit_id)
     seen: set[str] = set()
-    page_token: Optional[str] = None
     last_err: Optional[str] = None
-    for _ in range(40):
-        params = ["field=audit_id", "field=modified_at"]
-        params.append("modified_after=" + requests.utils.quote(modified_after))
-        params.append("modified_before=" + requests.utils.quote(modified_before))
-        if page_token:
-            params.append("next_page_token=" + requests.utils.quote(page_token))
+    cursor_after = modified_after
+    cursor_before = modified_before
+    page_order: Optional[str] = None
+    page_limit = max(1, min(int(_SEARCH_PAGE_LIMIT or 1000), 1000))
+    max_pages = max(1, int(_SEARCH_MAX_PAGES or 40))
+
+    for _ in range(max_pages):
+        params = [
+            "field=audit_id",
+            "field=modified_at",
+            "order=desc",
+            f"limit={page_limit}",
+            "modified_after=" + requests.utils.quote(cursor_after),
+            "modified_before=" + requests.utils.quote(cursor_before),
+        ]
         url = f"{_API_BASE}/audits/search?" + "&".join(params)
         try:
             res = requests.get(url, headers=_headers(), timeout=60)
@@ -98,6 +122,10 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
                 if not pairs:
                     return [], "SafetyCulture search returned unexpected payload"
                 break
+            if not audits:
+                break
+
+            page_pairs: List[Tuple[str, str]] = []
             for a in audits:
                 if not isinstance(a, dict) or not a.get("audit_id"):
                     continue
@@ -105,24 +133,65 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
                 if not aid or aid in seen:
                     continue
                 seen.add(aid)
-                pairs.append((str(a.get("modified_at") or ""), aid))
-            page_token = None
+                mod = str(a.get("modified_at") or "")
+                page_pairs.append((mod, aid))
+                pairs.append((mod, aid))
+
+            total = 0
+            count = len(audits)
             if isinstance(data, dict):
-                page_token = (
-                    data.get("next_page_token")
-                    or (data.get("pagination") or {}).get("next_page_token")
-                )
-                if page_token:
-                    page_token = str(page_token).strip() or None
-            if not page_token:
+                try:
+                    total = int(data.get("total") or 0)
+                except (TypeError, ValueError):
+                    total = 0
+                try:
+                    count = int(data.get("count") or count)
+                except (TypeError, ValueError):
+                    pass
+
+            # Done when this page emptied (all dupes), under page size, or we've covered total.
+            if not page_pairs:
                 break
+            if page_order is None and len(page_pairs) >= 2:
+                page_order = "asc" if page_pairs[0][0] <= page_pairs[-1][0] else "desc"
+            if count < page_limit:
+                break
+            if total and len(pairs) >= total:
+                break
+
+            # SC may ignore order=desc and return asc; paginate using the observed order.
+            if page_order == "asc":
+                newest_mod = page_pairs[-1][0] or (audits[-1].get("modified_at") if audits else None)
+                if not newest_mod:
+                    break
+                try:
+                    dt = datetime.fromisoformat(str(newest_mod).replace("Z", "+00:00"))
+                    next_after = (dt + timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z")
+                except Exception:
+                    break
+                if next_after >= cursor_before:
+                    break
+                cursor_after = next_after
+            else:
+                # desc (or unknown): advance modified_before past oldest on this page.
+                oldest_mod = page_pairs[-1][0] or (audits[-1].get("modified_at") if audits else None)
+                if not oldest_mod:
+                    break
+                if str(oldest_mod) >= cursor_before:
+                    try:
+                        dt = datetime.fromisoformat(str(oldest_mod).replace("Z", "+00:00"))
+                        cursor_before = (dt - timedelta(milliseconds=1)).isoformat().replace("+00:00", "Z")
+                    except Exception:
+                        break
+                else:
+                    cursor_before = str(oldest_mod)
         except Exception as ex:
             logger.exception("SafetyCulture search")
             last_err = str(ex)
             if not pairs:
                 return [], last_err
             break
-    # Critical: paginated pages are not globally ordered — sort newest first before any [:cap].
+
     pairs.sort(key=lambda t: t[0], reverse=True)
     return [aid for _, aid in pairs], last_err
 
@@ -608,6 +677,7 @@ def _process_audit(audit_id: str, now: datetime) -> Optional[Dict[str, Any]]:
     score = _extract_score(detail)
     days = max(0, int((now - visit_dt).total_seconds() // 86400))
     aid = str(detail.get("audit_id") or audit_id)
+    kuwait_day = visit_dt.astimezone(_KWT).date().isoformat()
     return {
         "location": location,
         "locationKeys": candidates,
@@ -615,7 +685,7 @@ def _process_audit(audit_id: str, now: datetime) -> Optional[Dict[str, Any]]:
         "officerName": user_name,
         "officerId": user_id,
         "lastVisitAt": visit_dt.isoformat(),
-        "lastVisitDate": visit_dt.date().isoformat(),
+        "lastVisitDate": kuwait_day,
         "daysSinceVisit": days,
         "isQc": kind == "qc",
         "visitKind": kind,
@@ -917,7 +987,7 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
 
     # Search by modified_at with padding; keep only visit_dt within [start, end].
     mod_start, mod_end = _modified_search_window(start, end)
-    chunks = _iter_date_chunks(mod_start, mod_end, chunk_days=28)
+    chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
     per_chunk_cap = (
         max(120, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks))))
         if _MACHINE_AUDITS_MAX_PROCESS > 0
@@ -1236,6 +1306,35 @@ def _iter_date_chunks(start: datetime, end: datetime, *, chunk_days: int = 28) -
     return chunks
 
 
+def _iter_adaptive_search_chunks(
+    mod_start: datetime,
+    mod_end: datetime,
+    *,
+    now: Optional[datetime] = None,
+) -> List[Tuple[datetime, datetime]]:
+    """
+    Split a modified_at search window into chunks. Dense recent org traffic can exceed
+    SC search page limits when order=desc is ignored — use short windows for the last
+    ~RECENT_FULL_SCAN_DAYS and wider windows for older history.
+    """
+    if mod_start > mod_end:
+        mod_start, mod_end = mod_end, mod_start
+    now = now or datetime.now(timezone.utc)
+    recent_floor = now - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
+    recent_span = max(1, min(int(_RECENT_CHUNK_DAYS or 5), 14))
+    older_span = max(recent_span, int(_DEFAULT_CHUNK_DAYS or 28))
+
+    chunks: List[Tuple[datetime, datetime]] = []
+    recent_start = max(mod_start, recent_floor)
+    if recent_start <= mod_end:
+        chunks.extend(_iter_date_chunks(recent_start, mod_end, chunk_days=recent_span))
+    if mod_start < recent_floor:
+        older_end = min(mod_end, recent_floor - timedelta(seconds=1))
+        if mod_start <= older_end:
+            chunks.extend(_iter_date_chunks(mod_start, older_end, chunk_days=older_span))
+    return chunks
+
+
 def list_qc_audits_for_machine(
     machine_name: str,
     *,
@@ -1279,7 +1378,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v6",
+            "v8",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1302,7 +1401,7 @@ def list_qc_audits_for_machine(
         return out
 
     mod_start, mod_end = _modified_search_window(start, end)
-    chunks = _iter_date_chunks(mod_start, mod_end, chunk_days=28)
+    chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
     per_chunk_cap = (
         max(250, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks))))
         if _MACHINE_AUDITS_MAX_PROCESS > 0
@@ -1395,7 +1494,7 @@ _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v4|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"qc_rows|v6|{start.isoformat()}|{end.isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1448,7 +1547,7 @@ def fleet_qc_visits_in_range(
     start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
 
     names_hash = hashlib.md5(",".join(names).encode()).hexdigest()[:12]
-    cache_key = f"fleet|v7|{names_hash}|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"fleet|v9|{names_hash}|{start.isoformat()}|{end.isoformat()}"
     hit = _FLEET_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
