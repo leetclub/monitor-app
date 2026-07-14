@@ -46,6 +46,23 @@ def _alias_groups() -> List[FrozenSet[str]]:
     except Exception:
         pass
 
+    qa_alias_path = os.path.join(_CONFIG_DIR, "qa_machine_aliases.json")
+    try:
+        with open(qa_alias_path, encoding="utf-8") as f:
+            raw = json.load(f)
+        if isinstance(raw, dict):
+            for key, aliases in raw.items():
+                if str(key).startswith("_"):
+                    continue
+                names = {str(key).strip()}
+                if isinstance(aliases, list):
+                    names |= {str(a).strip() for a in aliases if a}
+                elif isinstance(aliases, str) and aliases.strip():
+                    names.add(aliases.strip())
+                add_cluster(names)
+    except Exception:
+        pass
+
     mirror_path = os.path.join(_CONFIG_DIR, "commercial_moh_mirror_map.json")
     try:
         with open(mirror_path, encoding="utf-8") as f:

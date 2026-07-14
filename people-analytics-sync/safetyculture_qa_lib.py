@@ -295,12 +295,28 @@ def _visit_dt(audit: Dict[str, Any]) -> Optional[datetime]:
         for key in (
             "date_completed",
             "conducted_at",
+            "conducted_on",
             "completed_at",
+            "date_conducted",
             "date_modified",
             "modified_at",
+            "date_started",
             "created_at",
         ):
             raw = block.get(key)
+            if not raw:
+                continue
+            try:
+                return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+    # Some SC payloads nest conducted time under schedule / ownership blocks.
+    for nest_key in ("schedule", "ownership", "metadata"):
+        nest = ad.get(nest_key) if isinstance(ad.get(nest_key), dict) else None
+        if not nest:
+            continue
+        for key in ("date_completed", "conducted_at", "completed_at", "modified_at"):
+            raw = nest.get(key)
             if not raw:
                 continue
             try:
@@ -375,19 +391,22 @@ def _visit_kind(officer_name: str, role: str, audit: Optional[Dict[str, Any]] = 
         return "tech"
     if audit and _is_tech_audit(audit, role):
         return "tech"
-    # Same-day QC visits by other officers: accept scored inspections that are not ops/tech.
+    # Same-day QC visits by other officers: accept scored site inspections that are not ops/tech.
     if audit:
         role_l = (role or "").lower()
         if any(x in role_l for x in ("ops", "operator", "area manager")):
             return None
+        if _is_tech_audit(audit, role):
+            return None
         score = _extract_score(audit)
         text = _audit_template_text(audit)
-        if score is not None and not _is_tech_audit(audit, role):
-            if any(x in text for x in ("qc", "quality", "inspection", "audit", "leet", "checklist")):
+        if score is not None:
+            if any(x in text for x in ("qc", "quality", "inspection", "audit", "leet", "checklist", "visit")):
                 return "qc"
-            # Location'd scored inspection with unknown role → still surface as QC.
+            # Locationed scored inspection — treat as QC even if officer/role differs from Ismail.
+            # (Previously required role unknown + keyword; that dropped many real July QC visits.)
             loc = _extract_location(audit)
-            if loc and loc != "Unknown" and role_l in ("", "unknown"):
+            if loc and loc != "Unknown":
                 return "qc"
     return None
 
@@ -942,11 +961,48 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
     return rows, audits_searched, audits_processed, search_err
 
 
+_GENERIC_SITE_TOKENS = frozenset(
+    {
+        "ku",
+        "moh",
+        "o2",
+        "vm",
+        "vending",
+        "machine",
+        "site",
+        "location",
+        "left",
+        "right",
+        "main",
+        "gate",
+        "floor",
+        "floor1",
+        "floor2",
+        "ground",
+        "building",
+        "hospital",
+        "mall",
+        "the",
+        "and",
+        "leet",
+        "club",
+    }
+)
+
+
+def _has_distinctive_token(toks: set) -> bool:
+    return any(len(t) >= 3 and t not in _GENERIC_SITE_TOKENS for t in toks)
+
+
 def _audit_match_score(machine_name: str, location: str, location_keys: Optional[List[str]] = None) -> int:
     """
     Score how well a SafetyCulture site/label matches a Vendon machine (0 = no match).
     Higher = more specific. Shared site token-overlap is weak so sibling machines
     at the same mall/hospital do not all claim each other's inspections.
+
+    Important: short SC site labels that are a distinctive subset of the Vendon
+    name (e.g. SC ``CBA`` vs Vendon ``KU CBA``) must score above the match floor —
+    exclusive sibling logic previously left those audits unmatched (stale July dates).
     """
     from qa_machine_alias_lib import machines_share_qa_alias, norm_keys_for_lookup
 
@@ -958,7 +1014,7 @@ def _audit_match_score(machine_name: str, location: str, location_keys: Optional
     if location_keys:
         labels.extend([str(x) for x in location_keys if x])
     best = 0
-    n_toks = {t for t in needle.split() if len(t) > 2}
+    n_toks = {t for t in needle.split() if len(t) > 1}
     for label in labels:
         loc_key = _norm_key(label)
         if not loc_key:
@@ -973,17 +1029,27 @@ def _audit_match_score(machine_name: str, location: str, location_keys: Optional
         elif needle in loc_key:
             # Machine name fully contained in SC site (e.g. "Gate 1" in "Mall Gate 1 Left").
             score = 80
-        elif loc_key in needle:
-            # SC site is a shorter parent — weak for multi-machine sites unless name is short.
-            score = 62 if len(loc_key.split()) >= 3 else 48
         else:
-            l_toks = {t for t in loc_key.split() if len(t) > 2}
-            if n_toks and l_toks:
+            l_toks = {t for t in loc_key.split() if len(t) > 1}
+            # SC site tokens ⊆ Vendon name with a distinctive token (SC "CBA" → Vendon "KU CBA").
+            if l_toks and l_toks.issubset(n_toks) and _has_distinctive_token(l_toks):
+                score = 82
+            elif loc_key in needle:
+                if _has_distinctive_token(l_toks or {loc_key}):
+                    score = 78
+                elif len(loc_key.split()) >= 3:
+                    score = 62
+                else:
+                    score = 40
+            elif n_toks and l_toks:
                 shared = n_toks & l_toks
-                if len(shared) >= 3:
+                distinctive_shared = {t for t in shared if len(t) >= 3 and t not in _GENERIC_SITE_TOKENS}
+                if distinctive_shared and len(shared) >= 1:
+                    # One strong shared token (cba, jaber, …) plus optional generics.
+                    score = 74 if len(distinctive_shared) >= 1 and len(n_toks - shared) <= 2 else 60
+                elif len(shared) >= 3:
                     score = 70
                 elif len(shared) >= 2 and len(n_toks) <= 4:
-                    # Require a distinctive leftover token when both sides are long.
                     if not (n_toks - shared) or not (l_toks - shared):
                         score = 58
                     else:
@@ -1071,6 +1137,7 @@ def _latest_qc_by_machine_names(
         aid = str(row.get("auditId") or "")
         loc = str(row.get("location") or "")
         keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
+        visit_at = str(row.get("lastVisitAt") or "")
         for mname in names:
             score = _audit_match_score(mname, loc, keys)
             if score < _MIN_MACHINE_MATCH_SCORE:
@@ -1079,8 +1146,13 @@ def _latest_qc_by_machine_names(
             if not prev:
                 best_for_audit[aid] = (score, mname, row)
                 continue
-            prev_score, prev_name, _prev_row = prev
-            if score > prev_score or (score == prev_score and len(mname) > len(prev_name)):
+            prev_score, prev_name, prev_row = prev
+            prev_at = str(prev_row.get("lastVisitAt") or "")
+            better = score > prev_score
+            if score == prev_score:
+                # Prefer longer / more specific machine name; then newer visit (same object).
+                better = len(mname) > len(prev_name) or (len(mname) == len(prev_name) and visit_at > prev_at)
+            if better:
                 best_for_audit[aid] = (score, mname, row)
 
     by_machine: Dict[str, Dict[str, Any]] = {}
@@ -1207,7 +1279,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v5",
+            "v6",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1323,7 +1395,7 @@ _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v3|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"qc_rows|v4|{start.isoformat()}|{end.isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1376,7 +1448,7 @@ def fleet_qc_visits_in_range(
     start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
 
     names_hash = hashlib.md5(",".join(names).encode()).hexdigest()[:12]
-    cache_key = f"fleet|v6|{names_hash}|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"fleet|v7|{names_hash}|{start.isoformat()}|{end.isoformat()}"
     hit = _FLEET_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
