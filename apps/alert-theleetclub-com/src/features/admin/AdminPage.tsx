@@ -5,6 +5,7 @@ import { useAccess } from '@/context/AccessContext';
 import { getMonitorAppUrl } from '@/config/runtimeEnv';
 import { chipLabelForAccessKey, friendlyAccessSummary } from '@/lib/accessLabels';
 import { MachineProfileSection } from '@/features/admin/MachineProfileSection';
+import { TargetsAdminSection } from '@/features/admin/TargetsAdminSection';
 import { AreaOwnerAdminSection } from '@/features/admin/AreaOwnerAdminSection';
 import { QaVisitAdminSection } from '@/features/admin/QaVisitAdminSection';
 import { AlertPeopleManager } from '@/features/admin/AlertPeopleManager';
@@ -22,7 +23,7 @@ type CleaningScheduleRow = {
 
 type CleaningScheduleListResponse = { rows: CleaningScheduleRow[] };
 
-type AdminTab = 'machines' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
+type AdminTab = 'machines' | 'targets' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
 
 export function AdminPage() {
   const ac = useAccess();
@@ -123,7 +124,7 @@ export function AdminPage() {
             data feed; this area adds operational setup on top.
           </p>
         </div>
-        <HelpTip text="Machines: profiles & schedules. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional legacy substring rules." />
+        <HelpTip text="Machines: schedules & operators. Targets: location KD + SX product cups. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional legacy substring rules." />
       </header>
 
       <div className="adminAppGrid">
@@ -133,6 +134,11 @@ export function AdminPage() {
             'machines',
             'Machines',
             'Per-machine profiles: cleaning windows, operators, tags, and related settings.',
+          )}
+          {navBtn(
+            'targets',
+            'Targets',
+            'Location daily KD target, SX product name, product cups target, and period.',
           )}
           {navBtn(
             'owners',
@@ -160,6 +166,7 @@ export function AdminPage() {
 
         <main className="adminAppMain" id="admin-main-panel" tabIndex={-1}>
           {tab === 'machines' ? <MachineProfileSection /> : null}
+          {tab === 'targets' ? <TargetsAdminSection /> : null}
           {tab === 'owners' ? <AreaOwnerAdminSection /> : null}
           {tab === 'qa-visit' ? <QaVisitAdminSection /> : null}
 
