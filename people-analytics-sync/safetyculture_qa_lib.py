@@ -29,12 +29,15 @@ _GAS_WEB_APP_URL = (
 ).strip()
 _CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _MACHINE_AUDITS_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
-_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_CACHE_SEC", "600"))
+# Keep QA fresh — same-day inspections should appear within a couple of minutes.
+_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_CACHE_SEC", "120"))
 _SEARCH_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_DAYS", "180"))
-_MAX_AUDITS = int(os.environ.get("SAFETY_CULTURE_QA_MAX_AUDITS", "1000"))
-_MACHINE_AUDITS_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_CACHE_SEC", "600"))
-_MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS", "1200"))
+_MAX_AUDITS = int(os.environ.get("SAFETY_CULTURE_QA_MAX_AUDITS", "1500"))
+_MACHINE_AUDITS_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_CACHE_SEC", "120"))
+_MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS", "2000"))
 _WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "6"))
+# Always fully process audits modified in this recent window (no per-chunk truncate).
+_RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "14"))
 _QC_USER_PATTERNS = [
     p.strip().lower()
     for p in (os.environ.get("SAFETY_CULTURE_QC_USER_PATTERNS") or "ismail").split(",")
@@ -61,14 +64,14 @@ def _search_audits(modified_after: str, modified_before: str) -> Tuple[List[str]
 
 
 def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[str], Optional[str]]:
-    """Search SafetyCulture audits; follow next_page_token when present."""
+    """Search SafetyCulture audits; follow next_page_token; return newest-first by modified_at."""
     if not _API_TOKEN:
         return [], "SAFETY_CULTURE_API_TOKEN not configured"
-    all_ids: List[str] = []
+    pairs: List[Tuple[str, str]] = []  # (modified_at, audit_id)
     seen: set[str] = set()
     page_token: Optional[str] = None
     last_err: Optional[str] = None
-    for _ in range(25):
+    for _ in range(40):
         params = ["field=audit_id", "field=modified_at"]
         params.append("modified_after=" + requests.utils.quote(modified_after))
         params.append("modified_before=" + requests.utils.quote(modified_before))
@@ -83,25 +86,23 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
                 if body:
                     msg = f"{msg}: {body[:200]}"
                 logger.warning("SafetyCulture search %s: %s", res.status_code, res.text[:300])
-                if not all_ids:
+                if not pairs:
                     return [], msg
                 break
             data = res.json()
             audits = data.get("audits") if isinstance(data, dict) else None
             if not isinstance(audits, list):
-                if not all_ids:
+                if not pairs:
                     return [], "SafetyCulture search returned unexpected payload"
                 break
-            ordered = sorted(
-                [a for a in audits if isinstance(a, dict) and a.get("audit_id")],
-                key=lambda a: str(a.get("modified_at") or ""),
-                reverse=True,
-            )
-            for a in ordered:
+            for a in audits:
+                if not isinstance(a, dict) or not a.get("audit_id"):
+                    continue
                 aid = str(a.get("audit_id"))
-                if aid and aid not in seen:
-                    seen.add(aid)
-                    all_ids.append(aid)
+                if not aid or aid in seen:
+                    continue
+                seen.add(aid)
+                pairs.append((str(a.get("modified_at") or ""), aid))
             page_token = None
             if isinstance(data, dict):
                 page_token = (
@@ -115,10 +116,12 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
         except Exception as ex:
             logger.exception("SafetyCulture search")
             last_err = str(ex)
-            if not all_ids:
+            if not pairs:
                 return [], last_err
             break
-    return all_ids, last_err
+    # Critical: paginated pages are not globally ordered — sort newest first before any [:cap].
+    pairs.sort(key=lambda t: t[0], reverse=True)
+    return [aid for _, aid in pairs], last_err
 
 
 def _get_audit(audit_id: str) -> Optional[Dict[str, Any]]:
@@ -135,23 +138,56 @@ def _get_audit(audit_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _extract_location(audit: Dict[str, Any]) -> str:
+    candidates = _location_match_candidates(audit)
+    return candidates[0] if candidates else "Unknown"
+
+
+def _location_match_candidates(audit: Dict[str, Any]) -> List[str]:
+    """Primary site/machine labels an audit may match against (order = preference)."""
+    found: List[str] = []
+
+    def add(raw: Any) -> None:
+        name = str(raw or "").strip()
+        if not name or name.lower() == "unknown":
+            return
+        if name not in found:
+            found.append(name)
+
     ad = audit.get("audit_data") if isinstance(audit.get("audit_data"), dict) else {}
     site = ad.get("site") if isinstance(ad.get("site"), dict) else {}
-    name = str(site.get("name") or "").strip()
-    if name:
-        return name
+    add(site.get("name"))
+    add(ad.get("title"))
+    add(audit.get("name"))
+    add(ad.get("template_name"))
+
     for item in audit.get("header_items") or []:
         if not isinstance(item, dict):
             continue
         label = str(item.get("label") or "").lower()
-        if "location" in label:
-            resp = item.get("responses") if isinstance(item.get("responses"), dict) else {}
-            sel = resp.get("selected")
-            if isinstance(sel, list) and sel:
-                first = sel[0]
-                if isinstance(first, dict):
-                    return str(first.get("label") or first.get("name") or "Unknown").strip() or "Unknown"
-    return "Unknown"
+        if not any(
+            x in label
+            for x in (
+                "location",
+                "site",
+                "machine",
+                "vending",
+                "vm name",
+                "asset",
+                "place",
+            )
+        ):
+            continue
+        resp = item.get("responses") if isinstance(item.get("responses"), dict) else {}
+        sel = resp.get("selected")
+        if isinstance(sel, list) and sel:
+            first = sel[0]
+            if isinstance(first, dict):
+                add(first.get("label") or first.get("name"))
+            elif isinstance(first, str):
+                add(first)
+        add(resp.get("text"))
+        add(resp.get("value"))
+    return found
 
 
 def _extract_user(audit: Dict[str, Any]) -> Tuple[str, Optional[str]]:
@@ -248,21 +284,26 @@ def _extract_score(audit: Dict[str, Any]) -> Optional[float]:
 
 
 def _visit_dt(audit: Dict[str, Any]) -> Optional[datetime]:
-    for key in ("modified_at", "created_at"):
-        raw = audit.get(key)
-        if raw:
-            try:
-                return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-            except ValueError:
-                pass
+    """Prefer inspection conducted/completed time over last modified (edits shouldn't reorder visits)."""
     ad = audit.get("audit_data") if isinstance(audit.get("audit_data"), dict) else {}
-    for key in ("date_completed", "created_at", "modified_at"):
-        raw = ad.get(key)
-        if raw:
+    for block in (ad, audit):
+        if not isinstance(block, dict):
+            continue
+        for key in (
+            "date_completed",
+            "conducted_at",
+            "completed_at",
+            "created_at",
+            "date_modified",
+            "modified_at",
+        ):
+            raw = block.get(key)
+            if not raw:
+                continue
             try:
                 return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
             except ValueError:
-                pass
+                continue
     return None
 
 
@@ -314,6 +355,20 @@ def _visit_kind(officer_name: str, role: str, audit: Optional[Dict[str, Any]] = 
         return "tech"
     if audit and _is_tech_audit(audit, role):
         return "tech"
+    # Same-day QC visits by other officers: accept scored inspections that are not ops/tech.
+    if audit:
+        role_l = (role or "").lower()
+        if any(x in role_l for x in ("ops", "operator", "area manager")):
+            return None
+        score = _extract_score(audit)
+        text = _audit_template_text(audit)
+        if score is not None and not _is_tech_audit(audit, role):
+            if any(x in text for x in ("qc", "quality", "inspection", "audit", "leet", "checklist")):
+                return "qc"
+            # Location'd scored inspection with unknown role → still surface as QC.
+            loc = _extract_location(audit)
+            if loc and loc != "Unknown" and role_l in ("", "unknown"):
+                return "qc"
     return None
 
 
@@ -497,7 +552,8 @@ def _process_audit(audit_id: str, now: datetime) -> Optional[Dict[str, Any]]:
     detail = _get_audit(audit_id)
     if not detail:
         return None
-    location = _extract_location(detail)
+    candidates = _location_match_candidates(detail)
+    location = candidates[0] if candidates else ""
     if not location or location == "Unknown":
         return None
     role = _extract_role(detail)
@@ -515,6 +571,7 @@ def _process_audit(audit_id: str, now: datetime) -> Optional[Dict[str, Any]]:
     aid = str(detail.get("audit_id") or audit_id)
     return {
         "location": location,
+        "locationKeys": candidates,
         "role": role,
         "officerName": user_name,
         "officerId": user_id,
@@ -535,10 +592,17 @@ def _merge_visit_row(
     visits_by_loc: Dict[str, Dict[str, Any]],
     row: Dict[str, Any],
 ) -> None:
-    nk = _norm_key(row["location"])
-    prev = visits_by_loc.get(nk)
-    if not prev or row["lastVisitAt"] > prev["lastVisitAt"]:
-        visits_by_loc[nk] = row
+    labels = [str(row.get("location") or "")]
+    keys = row.get("locationKeys")
+    if isinstance(keys, list):
+        labels.extend([str(x) for x in keys if x])
+    for label in labels:
+        nk = _norm_key(label)
+        if not nk:
+            continue
+        prev = visits_by_loc.get(nk)
+        if not prev or row["lastVisitAt"] > prev["lastVisitAt"]:
+            visits_by_loc[nk] = row
 
 
 def _empty_payload(source: str, error: Optional[str] = None) -> Dict[str, Any]:
@@ -808,6 +872,7 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
         if _MACHINE_AUDITS_MAX_PROCESS > 0
         else 0
     )
+    recent_cut = datetime.now(timezone.utc) - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
     for chunk_start, chunk_end in chunks:
         audit_ids, chunk_err = _search_audits(
             chunk_start.isoformat().replace("+00:00", "Z"),
@@ -817,7 +882,11 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
             search_err = search_err or chunk_err
             continue
         audits_searched += len(audit_ids)
-        cap = audit_ids if per_chunk_cap <= 0 else audit_ids[:per_chunk_cap]
+        # Never truncate audits that fall in the recent window (same-day / last N days).
+        if chunk_end >= recent_cut or per_chunk_cap <= 0:
+            cap = audit_ids
+        else:
+            cap = audit_ids[:per_chunk_cap]
         audits_processed += len(cap)
         with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
             futures = {pool.submit(_process_audit, aid, now): aid for aid in cap}
@@ -854,7 +923,8 @@ def _latest_qc_by_machine_names(
             if not isinstance(row, dict) or not row.get("auditId"):
                 continue
             loc = str(row.get("location") or "")
-            if not _audit_matches_machine(mname, loc):
+            keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
+            if not _audit_matches_machine(mname, loc, keys):
                 continue
             lat = str(row.get("lastVisitAt") or row.get("lastVisitDate") or "")
             if not lat:
@@ -892,20 +962,35 @@ def _resolve_qc_date_range(
     return start, end
 
 
-def _audit_matches_machine(machine_name: str, location: str) -> bool:
+def _audit_matches_machine(machine_name: str, location: str, location_keys: Optional[List[str]] = None) -> bool:
     from qa_machine_alias_lib import machines_share_qa_alias, norm_keys_for_lookup
 
     needle = _norm_key(machine_name)
-    loc_key = _norm_key(location)
-    if not needle or not loc_key:
+    if not needle:
         return False
-    if needle == loc_key:
-        return True
-    if loc_key in norm_keys_for_lookup(machine_name):
-        return True
-    if machines_share_qa_alias(machine_name, location):
-        return True
-    return needle in loc_key or loc_key in needle
+    alias_keys = norm_keys_for_lookup(machine_name)
+    labels = [location]
+    if location_keys:
+        labels.extend([str(x) for x in location_keys if x])
+    for label in labels:
+        loc_key = _norm_key(label)
+        if not loc_key:
+            continue
+        if needle == loc_key:
+            return True
+        if loc_key in alias_keys:
+            return True
+        if machines_share_qa_alias(machine_name, label):
+            return True
+        # Shared site: "Souq Sharq" matches "Souq Sharq - Gate 1" and vice versa.
+        if needle in loc_key or loc_key in needle:
+            return True
+        # Token overlap (same building / hospital, different machine suffix).
+        n_toks = {t for t in needle.split() if len(t) > 2}
+        l_toks = {t for t in loc_key.split() if len(t) > 2}
+        if n_toks and l_toks and len(n_toks & l_toks) >= 2:
+            return True
+    return False
 
 
 def _parse_iso_dt(raw: Optional[str]) -> Optional[datetime]:
@@ -1029,7 +1114,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v2",
+            "v3",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1062,6 +1147,7 @@ def list_qc_audits_for_machine(
     audits_searched = 0
     audits_processed = 0
     search_err: Optional[str] = None
+    recent_cut = now - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
 
     for chunk_start, chunk_end in chunks:
         audit_ids, chunk_err = _search_audits(
@@ -1072,7 +1158,10 @@ def list_qc_audits_for_machine(
             search_err = chunk_err
             continue
         audits_searched += len(audit_ids)
-        cap = audit_ids if per_chunk_cap <= 0 else audit_ids[:per_chunk_cap]
+        if chunk_end >= recent_cut or per_chunk_cap <= 0:
+            cap = audit_ids
+        else:
+            cap = audit_ids[:per_chunk_cap]
         audits_processed += len(cap)
         with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
             futures = {pool.submit(_process_audit, aid, now): aid for aid in cap}
@@ -1086,10 +1175,13 @@ def list_qc_audits_for_machine(
                 aid = str(row.get("auditId") or "")
                 if aid and aid in seen_audit_ids:
                     continue
-                if not _audit_matches_machine(machine, str(row.get("location") or "")):
+                keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
+                if not _audit_matches_machine(machine, str(row.get("location") or ""), keys):
                     continue
                 if loc_q and loc_q not in _norm_key(str(row.get("location") or "")):
-                    continue
+                    loc_blob = " ".join([str(row.get("location") or "")] + [str(x) for x in (keys or [])])
+                    if loc_q not in _norm_key(loc_blob):
+                        continue
                 if aid:
                     seen_audit_ids.add(aid)
                 rows.append(row)
@@ -1128,12 +1220,12 @@ def list_qc_audits_for_machine(
 
 _FLEET_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _QC_ROWS_RANGE_CACHE: Dict[str, Tuple[float, Tuple[List[Dict[str, Any]], int, int, Optional[str]]]] = {}
-_FLEET_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_CACHE_SEC", "900"))
+_FLEET_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_CACHE_SEC", "180"))
 _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v1|{start.date().isoformat()}|{end.date().isoformat()}"
+    cache_key = f"qc_rows|v2|{start.date().isoformat()}|{end.date().isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1186,7 +1278,7 @@ def fleet_qc_visits_in_range(
     start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
 
     names_hash = hashlib.md5(",".join(names).encode()).hexdigest()[:12]
-    cache_key = f"fleet|v4|{names_hash}|{start.date().isoformat()}|{end.date().isoformat()}"
+    cache_key = f"fleet|v5|{names_hash}|{start.date().isoformat()}|{end.date().isoformat()}"
     hit = _FLEET_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
