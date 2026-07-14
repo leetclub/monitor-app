@@ -177,25 +177,25 @@ def aggregate_fleet_days(machines: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     prev: Optional[float] = None
     for key in sorted(by_date.keys()):
         slot = by_date[key]
-            kwd = float(slot["locationKwd"])
-            # For aggregate, sum targets (fleet target) not average
-            fleet_tgt = float(slot["targetSum"]) if slot["targetN"] else None
-            g = pct_points(growth_rate(kwd, prev)) if prev is not None else None
-            out.append(
-                {
-                    "date": slot["date"],
-                    "weekday": slot["weekday"],
-                    "locationKwd": round(kwd, 4),
-                    "productCups": 0,
-                    "locationTargetKd": round(fleet_tgt, 4) if fleet_tgt is not None else None,
-                    "productTargetCups": None,
-                    "locationGrowthPct": g,
-                    "productGrowthPct": None,
-                    "locationPctOfTarget": (
-                        round((kwd / fleet_tgt) * 100, 1) if fleet_tgt and fleet_tgt > 0 else None
-                    ),
-                    "productPctOfTarget": None,
-                }
-            )
-            prev = kwd
+        kwd = float(slot["locationKwd"])
+        # For aggregate, sum targets (fleet target) not average
+        fleet_tgt = float(slot["targetSum"]) if slot["targetN"] else None
+        g = pct_points(growth_rate(kwd, prev)) if prev is not None else None
+        out.append(
+            {
+                "date": slot["date"],
+                "weekday": slot["weekday"],
+                "locationKwd": round(kwd, 4),
+                "productCups": 0,
+                "locationTargetKd": round(fleet_tgt, 4) if fleet_tgt is not None else None,
+                "productTargetCups": None,
+                "locationGrowthPct": g,
+                "productGrowthPct": None,
+                "locationPctOfTarget": (
+                    round((kwd / fleet_tgt) * 100, 1) if fleet_tgt and fleet_tgt > 0 else None
+                ),
+                "productPctOfTarget": None,
+            }
+        )
+        prev = kwd
     return out
