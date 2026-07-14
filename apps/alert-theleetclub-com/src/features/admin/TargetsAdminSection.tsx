@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
 import { HelpTip } from '@/components/HelpTip';
 
 type MachineRow = { id: string; name: string };
-
 type TargetMetric = 'revenue' | 'cups';
 type TargetPeriod = 'daily' | 'weekly' | 'monthly';
 
@@ -29,12 +28,44 @@ type TargetsRow = {
 
 type VendonProduct = { name: string; vendCount: number };
 
-function emptyProduct(name = ''): PromotedProduct {
+type LocInsights = {
+  todayKd?: number;
+  yesterdayKd?: number;
+  avgDaily7d?: number | null;
+  avgDaily14d?: number | null;
+  avgDaily28d?: number | null;
+  last7TotalKd?: number;
+  wtdTotalKd?: number;
+  lastWeekTotalKd?: number;
+  suggestedDailyKd?: number | null;
+  hint?: string;
+};
+
+type ProdInsights = {
+  productName: string;
+  todayCups?: number;
+  yesterdayCups?: number;
+  avgDaily7d?: number | null;
+  avgDaily14d?: number | null;
+  last7TotalCups?: number;
+  wtdTotalCups?: number;
+  lastWeekTotalCups?: number;
+  suggestedDailyCups?: number | null;
+  hint?: string;
+};
+
+type InsightsPayload = {
+  location?: LocInsights;
+  products?: ProdInsights[];
+  error?: string;
+};
+
+function emptyProduct(name = '', period: TargetPeriod = 'daily'): PromotedProduct {
   return {
     productName: name,
     metric: 'cups',
     dailyTarget: null,
-    period: 'daily',
+    period,
     primary: false,
   };
 }
@@ -43,6 +74,61 @@ function fmtNum(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(Number(v))) return '—';
   const n = Number(v);
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
+}
+
+function productsFromRow(t?: TargetsRow | null): PromotedProduct[] {
+  if (!t) return [];
+  const prods = Array.isArray(t.promotedProducts) ? t.promotedProducts : [];
+  if (prods.length) {
+    return prods.map((p, i) => ({
+      productName: p.productName,
+      metric: p.metric === 'revenue' ? 'revenue' : 'cups',
+      dailyTarget: p.dailyTarget ?? null,
+      period: p.period === 'weekly' || p.period === 'monthly' ? p.period : 'daily',
+      primary: Boolean(p.primary) || i === 0,
+    }));
+  }
+  if (t.sxProductName) {
+    return [
+      {
+        productName: t.sxProductName,
+        metric: 'cups',
+        dailyTarget: t.dailyProductTarget ?? null,
+        period:
+          t.sxTargetPeriod === 'weekly' || t.sxTargetPeriod === 'monthly'
+            ? t.sxTargetPeriod
+            : 'daily',
+        primary: true,
+      },
+    ];
+  }
+  return [];
+}
+
+function InsightsChip({
+  title,
+  body,
+  onApply,
+  applyLabel,
+}: {
+  title: string;
+  body: string;
+  onApply?: () => void;
+  applyLabel?: string;
+}) {
+  return (
+    <details className="adminInsightChip">
+      <summary title="Sales insight to help set targets">{title}</summary>
+      <div className="adminInsightBody">
+        <p>{body}</p>
+        {onApply ? (
+          <button type="button" className="primary" onClick={onApply}>
+            {applyLabel || 'Use suggested'}
+          </button>
+        ) : null}
+      </div>
+    </details>
+  );
 }
 
 export function TargetsAdminSection() {
@@ -56,6 +142,7 @@ export function TargetsAdminSection() {
   const [formErr, setFormErr] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [addProductName, setAddProductName] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const machinesQ = useQuery({
     queryKey: ['alert-machines'],
@@ -71,6 +158,23 @@ export function TargetsAdminSection() {
       apiGet<{ products?: VendonProduct[] }>(
         `/api/alert/admin/vendon-products?machineId=${encodeURIComponent(machineId)}&days=21`,
       ),
+    enabled: Boolean(machineId),
+    staleTime: 5 * 60_000,
+  });
+
+  const productNamesKey = products
+    .map((p) => p.productName)
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(',');
+
+  const insightsQ = useQuery({
+    queryKey: ['alert-target-insights', machineId, productNamesKey || 'auto'],
+    queryFn: () => {
+      const qs = new URLSearchParams({ machineId });
+      if (productNamesKey) qs.set('products', productNamesKey);
+      return apiGet<InsightsPayload>(`/api/alert/admin/target-insights?${qs}`);
+    },
     enabled: Boolean(machineId),
     staleTime: 5 * 60_000,
   });
@@ -92,64 +196,38 @@ export function TargetsAdminSection() {
     return [...list].sort((a, b) => b.vendCount - a.vendCount || a.name.localeCompare(b.name));
   }, [vendonQ.data?.products]);
 
+  const applyRowToForm = useCallback((id: string, t?: TargetsRow | null) => {
+    setMachineId(id);
+    setFormErr(null);
+    setAddProductName('');
+    if (!t) {
+      setLocMetric('revenue');
+      setDailySalesTarget('');
+      setDailyLocCups('');
+      setDefaultPeriod('daily');
+      setProducts([]);
+      return;
+    }
+    setLocMetric(t.locationTargetMetric === 'cups' ? 'cups' : 'revenue');
+    setDailySalesTarget(
+      t.dailySalesTarget != null && Number.isFinite(Number(t.dailySalesTarget))
+        ? String(t.dailySalesTarget)
+        : '',
+    );
+    setDailyLocCups(
+      t.dailyLocationCupsTarget != null && Number.isFinite(Number(t.dailyLocationCupsTarget))
+        ? String(t.dailyLocationCupsTarget)
+        : '',
+    );
+    setDefaultPeriod(
+      t.sxTargetPeriod === 'weekly' || t.sxTargetPeriod === 'monthly' ? t.sxTargetPeriod : 'daily',
+    );
+    setProducts(productsFromRow(t));
+  }, []);
+
   const loadMachine = useCallback(
-    (id: string) => {
-      setMachineId(id);
-      setFormErr(null);
-      setAddProductName('');
-      const t = targetById.get(id);
-      if (!t) {
-        setLocMetric('revenue');
-        setDailySalesTarget('');
-        setDailyLocCups('');
-        setDefaultPeriod('daily');
-        setProducts([]);
-        return;
-      }
-      setLocMetric(t.locationTargetMetric === 'cups' ? 'cups' : 'revenue');
-      setDailySalesTarget(
-        t.dailySalesTarget != null && Number.isFinite(Number(t.dailySalesTarget))
-          ? String(t.dailySalesTarget)
-          : '',
-      );
-      setDailyLocCups(
-        t.dailyLocationCupsTarget != null && Number.isFinite(Number(t.dailyLocationCupsTarget))
-          ? String(t.dailyLocationCupsTarget)
-          : '',
-      );
-      setDefaultPeriod(
-        t.sxTargetPeriod === 'weekly' || t.sxTargetPeriod === 'monthly' ? t.sxTargetPeriod : 'daily',
-      );
-      const prods = Array.isArray(t.promotedProducts) ? t.promotedProducts : [];
-      if (prods.length) {
-        setProducts(
-          prods.map((p, i) => ({
-            productName: p.productName,
-            metric: p.metric === 'revenue' ? 'revenue' : 'cups',
-            dailyTarget: p.dailyTarget ?? null,
-            period:
-              p.period === 'weekly' || p.period === 'monthly' ? p.period : 'daily',
-            primary: Boolean(p.primary) || i === 0,
-          })),
-        );
-      } else if (t.sxProductName) {
-        setProducts([
-          {
-            productName: t.sxProductName,
-            metric: 'cups',
-            dailyTarget: t.dailyProductTarget ?? null,
-            period:
-              t.sxTargetPeriod === 'weekly' || t.sxTargetPeriod === 'monthly'
-                ? t.sxTargetPeriod
-                : 'daily',
-            primary: true,
-          },
-        ]);
-      } else {
-        setProducts([]);
-      }
-    },
-    [targetById],
+    (id: string) => applyRowToForm(id, targetById.get(id)),
+    [applyRowToForm, targetById],
   );
 
   const clearForm = () => {
@@ -174,7 +252,7 @@ export function TargetsAdminSection() {
   const removeProduct = (idx: number) => {
     setProducts((prev) => {
       const next = prev.filter((_, i) => i !== idx);
-      if (next.length && !next.some((p) => p.primary)) next[0].primary = true;
+      if (next.length && !next.some((p) => p.primary)) next[0] = { ...next[0], primary: true };
       return next;
     });
   };
@@ -184,12 +262,27 @@ export function TargetsAdminSection() {
     if (!n) return;
     setProducts((prev) => {
       if (prev.some((p) => p.productName.toLowerCase() === n.toLowerCase())) return prev;
-      const row = emptyProduct(n);
-      row.period = defaultPeriod;
+      const row = emptyProduct(n, defaultPeriod);
       row.primary = prev.length === 0;
       return [...prev, row];
     });
     setAddProductName('');
+  };
+
+  const promoteAllCatalog = () => {
+    setProducts((prev) => {
+      const byName = new Map(prev.map((p) => [p.productName.toLowerCase(), p]));
+      for (const c of catalog) {
+        const key = c.name.toLowerCase();
+        if (!byName.has(key)) {
+          const row = emptyProduct(c.name, defaultPeriod);
+          byName.set(key, row);
+        }
+      }
+      const next = [...byName.values()];
+      if (next.length && !next.some((p) => p.primary)) next[0] = { ...next[0], primary: true };
+      return next;
+    });
   };
 
   const saveMut = useMutation({
@@ -208,7 +301,8 @@ export function TargetsAdminSection() {
         }))
         .filter((p) => p.productName);
       if (cleaned.length && !cleaned.some((p) => p.primary)) cleaned[0].primary = true;
-      return apiJson('/api/alert/admin/targets', {
+      // Each product keeps its own target — server stores full promotedProducts JSON array
+      return apiJson<TargetsRow & { ok?: boolean }>('/api/alert/admin/targets', {
         machineId,
         locationTargetMetric: locMetric,
         dailySalesTarget: dailySalesTarget.trim() === '' ? null : Number(dailySalesTarget),
@@ -217,35 +311,49 @@ export function TargetsAdminSection() {
         promotedProducts: cleaned,
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       setFormErr(null);
       await qc.invalidateQueries({ queryKey: ['alert-admin-targets'] });
-      await qc.invalidateQueries({ queryKey: ['alert-machine-profiles'] });
+      await qc.invalidateQueries({ queryKey: ['alert-target-insights'] });
       await qc.invalidateQueries({ queryKey: ['alert-performance-fleet'] });
-      if (machineId) loadMachine(machineId);
+      // Apply server response directly so products never “collapse” to one after save
+      if (saved?.machineId) {
+        applyRowToForm(saved.machineId, {
+          machineId: saved.machineId,
+          locationTargetMetric: saved.locationTargetMetric,
+          dailySalesTarget: saved.dailySalesTarget,
+          dailyLocationCupsTarget: saved.dailyLocationCupsTarget,
+          sxTargetPeriod: saved.sxTargetPeriod,
+          promotedProducts: saved.promotedProducts,
+        });
+      }
     },
   });
+
+  const locIns = insightsQ.data?.location;
+  const prodInsByName = useMemo(() => {
+    const m = new Map<string, ProdInsights>();
+    for (const p of insightsQ.data?.products || []) {
+      if (p.productName) m.set(p.productName.toLowerCase(), p);
+    }
+    return m;
+  }, [insightsQ.data?.products]);
 
   const q = filter.trim().toLowerCase();
   const tableRows = useMemo(() => {
     const rows = machines.map((m) => {
       const t = targetById.get(m.id);
-      const prods = t?.promotedProducts?.length
-        ? t.promotedProducts
-        : t?.sxProductName
-          ? [{ productName: t.sxProductName, dailyTarget: t.dailyProductTarget }]
-          : [];
+      const prods = productsFromRow(t);
       return {
         id: m.id,
         name: m.name,
         locMetric: t?.locationTargetMetric || 'revenue',
         locKd: t?.dailySalesTarget ?? null,
         locCups: t?.dailyLocationCupsTarget ?? null,
+        period: t?.sxTargetPeriod || 'daily',
         products: prods,
         hasAny: Boolean(
-          t?.dailySalesTarget != null ||
-            t?.dailyLocationCupsTarget != null ||
-            (prods && prods.length),
+          t?.dailySalesTarget != null || t?.dailyLocationCupsTarget != null || prods.length,
         ),
       };
     });
@@ -258,15 +366,21 @@ export function TargetsAdminSection() {
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.id.toLowerCase().includes(q) ||
-        r.products.some((p) => (p.productName || '').toLowerCase().includes(q)),
+        r.products.some((p) => p.productName.toLowerCase().includes(q)),
     );
   }, [machines, targetById, q]);
+
+  useEffect(() => {
+    if (expandedId && !targetById.has(expandedId) && !machines.some((m) => m.id === expandedId)) {
+      setExpandedId(null);
+    }
+  }, [expandedId, targetById, machines]);
 
   return (
     <>
       <p className="muted" style={{ margin: '0 0 14px', fontSize: '0.9rem' }}>
-        Location targets (KD or cups) and promoted products from Vendon — each product has its own
-        cups or revenue target. Used by Performance + SX.
+        Set the <strong>location</strong> target once (KD or cups). Promote <strong>one or many</strong>{' '}
+        Vendon products — each keeps its own target. Insights use cached sales to guide the numbers.
       </p>
 
       <div className="adminCard">
@@ -274,7 +388,7 @@ export function TargetsAdminSection() {
           <h2 className="adminCardTitle">
             {machineId ? `Targets · ${machineName || machineId}` : 'Location & product targets'}
           </h2>
-          <HelpTip text="Pick a machine, set the location target unit (KD or cups), then promote one or more Vendon products with their own targets. Mark one product as Primary for SX column compatibility." />
+          <HelpTip text="Location target is independent of products. Promote any number of products; saving stores the full list (not just the Primary/SX product)." />
         </div>
 
         {formErr || saveMut.isError ? (
@@ -306,8 +420,8 @@ export function TargetsAdminSection() {
 
         <div className="adminGroup">
           <div className="adminGroupLabelRow">
-            <div className="adminGroupLabel">Location target</div>
-            <HelpTip text="Revenue = KD (overrides week default). Cups = total location cups target for the period." />
+            <div className="adminGroupLabel">1 · Location target</div>
+            <HelpTip text="Entered once for this machine. Edit anytime. Not overwritten by product targets." />
           </div>
           <div className="adminMachineCoreRow adminMachineCoreRow--3">
             <div className="adminFieldCell">
@@ -322,7 +436,7 @@ export function TargetsAdminSection() {
             </div>
             {locMetric === 'revenue' ? (
               <div className="adminFieldCell">
-                <span className="adminFieldCaption">Target (KD)</span>
+                <span className="adminFieldCaption">Target (KD / period)</span>
                 <input
                   type="number"
                   min={0}
@@ -334,7 +448,7 @@ export function TargetsAdminSection() {
               </div>
             ) : (
               <div className="adminFieldCell">
-                <span className="adminFieldCaption">Target (cups)</span>
+                <span className="adminFieldCaption">Target (cups / period)</span>
                 <input
                   type="number"
                   min={0}
@@ -346,7 +460,7 @@ export function TargetsAdminSection() {
               </div>
             )}
             <div className="adminFieldCell">
-              <span className="adminFieldCaption">Default period</span>
+              <span className="adminFieldCaption">Period</span>
               <select
                 value={defaultPeriod}
                 onChange={(e) => setDefaultPeriod(e.target.value as TargetPeriod)}
@@ -357,12 +471,41 @@ export function TargetsAdminSection() {
               </select>
             </div>
           </div>
+          {machineId ? (
+            <div className="adminInsightRow">
+              {insightsQ.isLoading ? (
+                <span className="muted" style={{ fontSize: '0.8rem' }}>
+                  Loading sales insights…
+                </span>
+              ) : locIns ? (
+                <InsightsChip
+                  title={`Insight · loc 14d avg ${fmtNum(locIns.avgDaily14d)} KD`}
+                  body={[
+                    locIns.hint,
+                    `Today ${fmtNum(locIns.todayKd)} · Yesterday ${fmtNum(locIns.yesterdayKd)}`,
+                    `7d avg ${fmtNum(locIns.avgDaily7d)} · 28d avg ${fmtNum(locIns.avgDaily28d)}`,
+                    `WTD ${fmtNum(locIns.wtdTotalKd)} · Last week ${fmtNum(locIns.lastWeekTotalKd)}`,
+                    locIns.suggestedDailyKd != null
+                      ? `Suggested daily ≈ ${fmtNum(locIns.suggestedDailyKd)} KD`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join('\n')}
+                  onApply={
+                    locIns.suggestedDailyKd != null && locMetric === 'revenue'
+                      ? () => setDailySalesTarget(String(locIns.suggestedDailyKd))
+                      : undefined
+                  }
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="adminGroup">
           <div className="adminGroupLabelRow">
-            <div className="adminGroupLabel">Promoted products</div>
-            <HelpTip text="Products are loaded from recent Vendon vends for this machine. Add several; each has cups or KD target and its own period." />
+            <div className="adminGroupLabel">2 · Promoted products</div>
+            <HelpTip text="Add one product or promote the whole Vendon catalog for this machine. Each row has its own measure, target, and period. Primary = SX column." />
           </div>
 
           {!machineId ? (
@@ -393,30 +536,34 @@ export function TargetsAdminSection() {
                     ))}
                   </select>
                 </div>
-                <div className="adminFieldCell" style={{ justifyContent: 'flex-end' }}>
+                <div className="adminFieldCell adminFieldCellActions">
                   <span className="adminFieldCaption" style={{ visibility: 'hidden' }}>
-                    Add
+                    Actions
                   </span>
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={!addProductName}
-                    onClick={() => addProduct(addProductName)}
-                  >
-                    Promote product
-                  </button>
+                  <div className="adminInlineActions">
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={!addProductName}
+                      onClick={() => addProduct(addProductName)}
+                    >
+                      Promote
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!catalog.length}
+                      onClick={promoteAllCatalog}
+                      title="Add every product seen in recent Vendon vends"
+                    >
+                      Promote all ({catalog.length})
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {vendonQ.isError ? (
-                <p className="pillDanger" style={{ fontSize: '0.85rem' }}>
-                  Could not load Vendon products: {(vendonQ.error as Error).message}
-                </p>
-              ) : null}
-
               {!products.length ? (
                 <p className="muted" style={{ fontSize: '0.85rem' }}>
-                  No promoted products yet — pick from the Vendon list above.
+                  No promoted products — pick from Vendon or Promote all.
                 </p>
               ) : (
                 <div className="tableWrap">
@@ -425,73 +572,103 @@ export function TargetsAdminSection() {
                       <tr>
                         <th>Product</th>
                         <th>Measure</th>
-                        <th>Target</th>
+                        <th>Own target</th>
                         <th>Period</th>
                         <th>Primary</th>
+                        <th>Insight</th>
                         <th />
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map((p, idx) => (
-                        <tr key={`${p.productName}-${idx}`}>
-                          <td className="tableCellWrap">{p.productName}</td>
-                          <td>
-                            <select
-                              value={p.metric}
-                              onChange={(e) =>
-                                updateProduct(idx, { metric: e.target.value as TargetMetric })
-                              }
-                            >
-                              <option value="cups">Cups</option>
-                              <option value="revenue">Revenue (KD)</option>
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              min={0}
-                              step={p.metric === 'cups' ? 1 : 0.001}
-                              value={p.dailyTarget ?? ''}
-                              onChange={(e) =>
-                                updateProduct(idx, {
-                                  dailyTarget:
-                                    e.target.value.trim() === '' ? null : Number(e.target.value),
-                                })
-                              }
-                              placeholder={p.metric === 'cups' ? 'cups' : 'KD'}
-                              style={{ minWidth: 88 }}
-                            />
-                          </td>
-                          <td>
-                            <select
-                              value={p.period}
-                              onChange={(e) =>
-                                updateProduct(idx, { period: e.target.value as TargetPeriod })
-                              }
-                            >
-                              <option value="daily">Daily</option>
-                              <option value="weekly">Weekly</option>
-                              <option value="monthly">Monthly</option>
-                            </select>
-                          </td>
-                          <td>
-                            <label className="adminInlineDayPick" style={{ gap: 6 }}>
+                      {products.map((p, idx) => {
+                        const ins = prodInsByName.get(p.productName.toLowerCase());
+                        return (
+                          <tr key={`${p.productName}-${idx}`}>
+                            <td className="tableCellWrap">{p.productName}</td>
+                            <td>
+                              <select
+                                value={p.metric}
+                                onChange={(e) =>
+                                  updateProduct(idx, { metric: e.target.value as TargetMetric })
+                                }
+                              >
+                                <option value="cups">Cups</option>
+                                <option value="revenue">Revenue (KD)</option>
+                              </select>
+                            </td>
+                            <td>
                               <input
-                                type="radio"
-                                name="primary-product"
-                                checked={Boolean(p.primary)}
-                                onChange={() => setPrimary(idx)}
+                                type="number"
+                                min={0}
+                                step={p.metric === 'cups' ? 1 : 0.001}
+                                value={p.dailyTarget ?? ''}
+                                onChange={(e) =>
+                                  updateProduct(idx, {
+                                    dailyTarget:
+                                      e.target.value.trim() === '' ? null : Number(e.target.value),
+                                  })
+                                }
+                                placeholder={p.metric === 'cups' ? 'cups' : 'KD'}
                               />
-                              SX
-                            </label>
-                          </td>
-                          <td>
-                            <button type="button" className="danger" onClick={() => removeProduct(idx)}>
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td>
+                              <select
+                                value={p.period}
+                                onChange={(e) =>
+                                  updateProduct(idx, { period: e.target.value as TargetPeriod })
+                                }
+                              >
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                              </select>
+                            </td>
+                            <td>
+                              <label className="adminCheckLabel">
+                                <input
+                                  type="radio"
+                                  name="primary-product"
+                                  checked={Boolean(p.primary)}
+                                  onChange={() => setPrimary(idx)}
+                                />
+                                SX
+                              </label>
+                            </td>
+                            <td>
+                              {ins ? (
+                                <InsightsChip
+                                  title={`14d ${fmtNum(ins.avgDaily14d)} cups`}
+                                  body={[
+                                    ins.hint,
+                                    `Today ${fmtNum(ins.todayCups)} · Yday ${fmtNum(ins.yesterdayCups)}`,
+                                    `Last week ${fmtNum(ins.lastWeekTotalCups)} · WTD ${fmtNum(ins.wtdTotalCups)}`,
+                                    ins.suggestedDailyCups != null
+                                      ? `Suggested ≈ ${fmtNum(ins.suggestedDailyCups)} cups/day`
+                                      : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join('\n')}
+                                  onApply={
+                                    ins.suggestedDailyCups != null && p.metric === 'cups'
+                                      ? () =>
+                                          updateProduct(idx, {
+                                            dailyTarget: Number(ins.suggestedDailyCups),
+                                          })
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <span className="muted">—</span>
+                              )}
+                            </td>
+                            <td>
+                              <button type="button" className="danger" onClick={() => removeProduct(idx)}>
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -517,13 +694,19 @@ export function TargetsAdminSection() {
           <button type="button" onClick={clearForm}>
             Clear
           </button>
+          {products.length ? (
+            <span className="muted" style={{ fontSize: '0.8rem' }}>
+              {products.length} product{products.length === 1 ? '' : 's'} will be saved with individual
+              targets
+            </span>
+          ) : null}
         </div>
       </div>
 
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">Fleet targets</h2>
-          <HelpTip text="Catalog machines with saved location/product targets. Edit loads the form above." />
+          <HelpTip text="One row per location. Expand to see every promoted product and its own target." />
         </div>
         <div className="adminFieldCell" style={{ maxWidth: 320, marginBottom: 12 }}>
           <input
@@ -538,44 +721,86 @@ export function TargetsAdminSection() {
           <table className="adminSavedProfilesTable">
             <thead>
               <tr>
-                <th>Machine</th>
                 <th>Location</th>
-                <th>Promoted products</th>
+                <th>Loc target</th>
+                <th>Products</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {tableRows.map((r) => (
-                <tr key={r.id}>
-                  <td className="tableCellWrap">{r.name}</td>
-                  <td>
-                    {r.locMetric === 'cups'
-                      ? r.locCups != null
-                        ? `${fmtNum(r.locCups)} cups`
-                        : '—'
-                      : r.locKd != null
-                        ? `${fmtNum(r.locKd)} KD`
-                        : '—'}
-                  </td>
-                  <td className="tableCellWrap">
-                    {r.products.length
-                      ? r.products
-                          .map(
-                            (p) =>
-                              `${p.productName}${
-                                p.dailyTarget != null ? ` (${fmtNum(p.dailyTarget)})` : ''
-                              }`,
-                          )
-                          .join(' · ')
-                      : '—'}
-                  </td>
-                  <td>
-                    <button type="button" className="primary" onClick={() => loadMachine(r.id)}>
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {tableRows.map((r) => {
+                const open = expandedId === r.id;
+                return (
+                  <Fragment key={r.id}>
+                    <tr>
+                      <td className="tableCellWrap">{r.name}</td>
+                      <td>
+                        {r.locMetric === 'cups'
+                          ? r.locCups != null
+                            ? `${fmtNum(r.locCups)} cups`
+                            : '—'
+                          : r.locKd != null
+                            ? `${fmtNum(r.locKd)} KD`
+                            : '—'}
+                        <div className="muted" style={{ fontSize: '0.7rem' }}>
+                          {r.period}
+                        </div>
+                      </td>
+                      <td className="tableCellWrap">
+                        {r.products.length ? (
+                          <button
+                            type="button"
+                            className="adminLinkBtn"
+                            onClick={() => setExpandedId(open ? null : r.id)}
+                          >
+                            {r.products.length} promoted {open ? '▴' : '▾'}
+                          </button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button type="button" className="primary" onClick={() => loadMachine(r.id)}>
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                    {open ? (
+                      <tr className="adminExpandRow">
+                        <td colSpan={4}>
+                          <div className="adminExpandPanel">
+                            <div className="adminGroupLabel" style={{ marginBottom: 8 }}>
+                              Promoted products · {r.name}
+                            </div>
+                            <table className="adminSavedProfilesTable">
+                              <thead>
+                                <tr>
+                                  <th>Product</th>
+                                  <th>Measure</th>
+                                  <th>Target</th>
+                                  <th>Period</th>
+                                  <th>Primary</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {r.products.map((p) => (
+                                  <tr key={p.productName}>
+                                    <td>{p.productName}</td>
+                                    <td>{p.metric === 'revenue' ? 'KD' : 'Cups'}</td>
+                                    <td>{fmtNum(p.dailyTarget)}</td>
+                                    <td>{p.period}</td>
+                                    <td>{p.primary ? 'SX' : '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
               {!tableRows.length && !machinesQ.isLoading ? (
                 <tr>
                   <td colSpan={4} className="muted">

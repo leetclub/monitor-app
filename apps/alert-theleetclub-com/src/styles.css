@@ -2425,6 +2425,89 @@ label.adminDayCheckbox {
   gap: 6px;
 }
 
+.adminInsightRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.adminInsightChip {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.06);
+  max-width: 420px;
+}
+
+.adminInsightChip > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--link);
+}
+
+.adminInsightChip > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adminInsightBody {
+  padding: 0 10px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.adminInsightBody .primary {
+  margin-top: 8px;
+}
+
+.adminInlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.adminFieldCellActions {
+  justify-content: flex-end;
+}
+
+.adminLinkBtn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.adminLinkBtn:hover {
+  text-decoration: underline;
+}
+
+.adminExpandRow > td {
+  padding: 0;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.adminExpandPanel {
+  padding: 12px 14px 16px;
+}
+
+.adminCheckLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .adminInlineDayPick {
   display: flex;
   flex-wrap: wrap;

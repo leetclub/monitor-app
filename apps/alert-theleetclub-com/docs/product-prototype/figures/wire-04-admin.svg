@@ -35,23 +35,23 @@
     <text x="28" y="270" class="label" font-size="9px">My access</text>
 
     <rect class="boxMuted" x="200" y="100" width="568" height="288" rx="6"/>
-    <text x="216" y="128" class="label" font-size="10px">Targets — location KD + SX product</text>
-    <text x="216" y="146" class="hint" font-size="8px">Pick machine · daily KD · SX product · cups · period (Performance / SX).</text>
+    <text x="216" y="128" class="label" font-size="10px">Targets — location once + multi-product</text>
+    <text x="216" y="146" class="hint" font-size="8px">Loc KD/cups · promote 1..N products each with own target · sales insights.</text>
 
     <rect class="box" x="216" y="158" width="320" height="28" rx="4"/>
     <text x="228" y="176" class="tiny">Machine dropdown</text>
-    <text x="216" y="208" class="label" font-size="9px">Daily target (KD)</text>
+    <text x="216" y="208" class="label" font-size="9px">Location target (KD)</text>
     <rect class="box" x="216" y="214" width="140" height="26" rx="4"/>
-    <text x="228" y="231" class="tiny">e.g. 45</text>
-    <text x="370" y="208" class="label" font-size="9px">SX product</text>
+    <text x="228" y="231" class="tiny">e.g. 45 · Insight ▾</text>
+    <text x="370" y="208" class="label" font-size="9px">Promoted products</text>
     <rect class="box" x="370" y="214" width="180" height="26" rx="4"/>
-    <text x="382" y="231" class="tiny">Americano Max</text>
-    <text x="216" y="268" class="label" font-size="9px">Product cups</text>
+    <text x="382" y="231" class="tiny">Americano · Latte · …</text>
+    <text x="216" y="268" class="label" font-size="9px">Each product target</text>
     <rect class="box" x="216" y="274" width="140" height="26" rx="4"/>
-    <text x="228" y="291" class="tiny">e.g. 80</text>
-    <text x="370" y="268" class="label" font-size="9px">Period</text>
+    <text x="228" y="291" class="tiny">own cups / KD</text>
+    <text x="370" y="268" class="label" font-size="9px">Fleet table</text>
     <rect class="box" x="370" y="274" width="120" height="26" rx="4"/>
-    <text x="382" y="291" class="tiny">Daily / Weekly / Monthly</text>
-    <text x="216" y="330" class="hint" font-size="8px">Fleet table below lists Loc KD · product · cups for every catalog machine.</text>
+    <text x="382" y="291" class="tiny">1 row · expand ▾</text>
+    <text x="216" y="330" class="hint" font-size="8px">Expand a location to see all promoted products + targets.</text>
   </g>
 </svg>

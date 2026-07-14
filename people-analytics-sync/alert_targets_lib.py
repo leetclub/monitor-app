@@ -247,3 +247,111 @@ def daily_yardstick(period_target: Optional[float], period: str) -> Optional[flo
     if per == "monthly":
         return v / 30.0
     return v
+
+
+def _avg(vals: List[float]) -> Optional[float]:
+    clean = [float(v) for v in vals if v is not None and float(v) >= 0]
+    if not clean:
+        return None
+    return round(sum(clean) / len(clean), 4)
+
+
+def build_location_sales_insights(
+    kwd_by_day: Dict[date, float],
+    *,
+    today: date,
+) -> Dict[str, Any]:
+    """Rolling KD stats to help set location targets (from revenue cache)."""
+    def sum_range(lo: date, hi: date) -> float:
+        tot = 0.0
+        d = lo
+        while d <= hi:
+            tot += float(kwd_by_day.get(d) or 0)
+            d += timedelta(days=1)
+        return round(tot, 4)
+
+    def daily_list(lo: date, hi: date) -> List[float]:
+        out: List[float] = []
+        d = lo
+        while d <= hi:
+            out.append(float(kwd_by_day.get(d) or 0))
+            d += timedelta(days=1)
+        return out
+
+    yday = today - timedelta(days=1)
+    last7_lo = today - timedelta(days=6)
+    last14_lo = today - timedelta(days=13)
+    last28_lo = today - timedelta(days=27)
+    week_sun = _kuwait_week_start(today)
+    last_week_lo = week_sun - timedelta(days=7)
+    last_week_hi = week_sun - timedelta(days=1)
+
+    avg7 = _avg(daily_list(last7_lo, today))
+    avg14 = _avg(daily_list(last14_lo, today))
+    avg28 = _avg(daily_list(last28_lo, today))
+    # Suggested daily ≈ mild stretch on 14-day average
+    suggested = round(avg14 * 1.05, 3) if avg14 and avg14 > 0 else (avg7 if avg7 else None)
+
+    return {
+        "unit": "kd",
+        "todayKd": round(float(kwd_by_day.get(today) or 0), 4),
+        "yesterdayKd": round(float(kwd_by_day.get(yday) or 0), 4),
+        "avgDaily7d": avg7,
+        "avgDaily14d": avg14,
+        "avgDaily28d": avg28,
+        "last7TotalKd": sum_range(last7_lo, today),
+        "wtdTotalKd": sum_range(week_sun, today),
+        "lastWeekTotalKd": sum_range(last_week_lo, last_week_hi),
+        "suggestedDailyKd": suggested,
+        "hint": (
+            f"14-day avg {avg14:.2f} KD/day · last week {sum_range(last_week_lo, last_week_hi):.1f} KD total"
+            if avg14
+            else "Not enough recent sales in cache yet."
+        ),
+    }
+
+
+def build_product_cups_insights(
+    cups_by_day: Dict[date, float],
+    *,
+    today: date,
+    product_name: str,
+) -> Dict[str, Any]:
+    """Rolling cups stats for one promoted product."""
+    def daily_list(lo: date, hi: date) -> List[float]:
+        out: List[float] = []
+        d = lo
+        while d <= hi:
+            out.append(float(cups_by_day.get(d) or 0))
+            d += timedelta(days=1)
+        return out
+
+    def sum_range(lo: date, hi: date) -> float:
+        return round(sum(daily_list(lo, hi)), 2)
+
+    yday = today - timedelta(days=1)
+    last7_lo = today - timedelta(days=6)
+    last14_lo = today - timedelta(days=13)
+    week_sun = _kuwait_week_start(today)
+    last_week_lo = week_sun - timedelta(days=7)
+    last_week_hi = week_sun - timedelta(days=1)
+    avg7 = _avg(daily_list(last7_lo, today))
+    avg14 = _avg(daily_list(last14_lo, today))
+    suggested = round(avg14 * 1.05, 1) if avg14 and avg14 > 0 else (avg7 if avg7 else None)
+    return {
+        "productName": product_name,
+        "unit": "cups",
+        "todayCups": int(cups_by_day.get(today) or 0),
+        "yesterdayCups": int(cups_by_day.get(yday) or 0),
+        "avgDaily7d": avg7,
+        "avgDaily14d": avg14,
+        "last7TotalCups": int(sum_range(last7_lo, today)),
+        "wtdTotalCups": int(sum_range(week_sun, today)),
+        "lastWeekTotalCups": int(sum_range(last_week_lo, last_week_hi)),
+        "suggestedDailyCups": suggested,
+        "hint": (
+            f"{product_name}: 14-day avg {avg14:.1f} cups/day · last week {sum_range(last_week_lo, last_week_hi):.0f} cups"
+            if avg14
+            else f"{product_name}: not enough recent cups yet."
+        ),
+    }

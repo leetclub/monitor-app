@@ -85,6 +85,13 @@
   gap: 4px;
 }
 
+.perfMachineFilterHint {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .perfMachineList {
   max-height: 420px;
   overflow: auto;
@@ -95,8 +102,8 @@
 
 .perfMachineRow {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  gap: 6px 8px;
   align-items: center;
   padding: 6px 4px;
   border-radius: 6px;
@@ -106,6 +113,11 @@
 
 .perfMachineRow:hover {
   background: rgba(45, 212, 191, 0.07);
+}
+
+.perfMachineRowSolo {
+  background: rgba(45, 212, 191, 0.12);
+  outline: 1px solid rgba(45, 212, 191, 0.35);
 }
 
 .perfMachineRowName {
@@ -119,6 +131,28 @@
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--muted);
+}
+
+.perfMachineOnlyBtn {
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.perfMachineOnlyBtn:hover,
+.perfMachineOnlyBtn.active {
+  color: var(--text);
+  border-color: rgba(45, 212, 191, 0.55);
+  background: rgba(45, 212, 191, 0.12);
 }
 
 .perfMain {

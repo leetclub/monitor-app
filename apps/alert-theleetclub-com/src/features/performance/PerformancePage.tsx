@@ -159,6 +159,14 @@ export function PerformancePage() {
   const kpis = fleetQ.data?.kpis;
   const detail = detailQ.data;
   const multi = selectedIds.length !== 1;
+  // All/Top5/Lowest5 only make sense for the full fleet (or a large explicit set)
+  const fleetRanking = selected === null || selectedIds.length > 5;
+  const selectionLabel =
+    selected === null
+      ? undefined
+      : selectedIds.length === 1
+        ? '1 location'
+        : `${selectedIds.length} locations`;
   const win = fleetQ.data?.window;
   const windowLabel =
     win?.start && win?.end ? `${win.start} → ${win.end}` : undefined;
@@ -221,6 +229,8 @@ export function PerformancePage() {
               onPresetChange={setPreset}
               windowLabel={windowLabel}
               loading={fleetQ.isLoading}
+              fleetRanking={fleetRanking}
+              selectionLabel={selectionLabel}
             />
 
             {fleetMachines.length ? (

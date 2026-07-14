@@ -1928,8 +1928,11 @@ def register_alert_routes(app) -> None:
                 if "daily_location_cups_target" in body:
                     lmc.daily_location_cups_target = _decimal_or_none(body.get("daily_location_cups_target"))
                 if "promoted_products" in body:
+                    from sqlalchemy.orm.attributes import flag_modified
+
                     products = normalize_promoted_products(body.get("promoted_products"))
-                    lmc.promoted_products = products
+                    lmc.promoted_products = list(products)
+                    flag_modified(lmc, "promoted_products")
                     pname, ptgt, per = legacy_primary_from_products(products)
                     lmc.sx_product_name = pname
                     lmc.daily_product_target = _decimal_or_none(ptgt)
@@ -2023,21 +2026,38 @@ def register_alert_routes(app) -> None:
                     body.get("sxTargetPeriod", body.get("sx_target_period")), "daily"
                 )
             if "promotedProducts" in body or "promoted_products" in body:
+                from sqlalchemy.orm.attributes import flag_modified
+
                 products = normalize_promoted_products(
                     body.get("promotedProducts", body.get("promoted_products"))
                 )
-                lmc.promoted_products = products
+                # Replace list so each product keeps its own target (JSONB needs flag_modified)
+                lmc.promoted_products = list(products)
+                flag_modified(lmc, "promoted_products")
                 pname, ptgt, per = legacy_primary_from_products(products)
                 lmc.sx_product_name = pname
                 lmc.daily_product_target = _decimal_or_none(ptgt)
                 if "sxTargetPeriod" not in body and "sx_target_period" not in body:
                     lmc.sx_target_period = per
             db.commit()
+            db.refresh(lmc)
             return jsonify(
                 {
                     "ok": True,
                     "machineId": mid,
                     "updatedBy": email,
+                    "locationTargetMetric": normalize_metric(
+                        getattr(lmc, "location_target_metric", None), "revenue"
+                    ),
+                    "dailySalesTarget": (
+                        float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None
+                    ),
+                    "dailyLocationCupsTarget": (
+                        float(lmc.daily_location_cups_target)
+                        if getattr(lmc, "daily_location_cups_target", None) is not None
+                        else None
+                    ),
+                    "sxTargetPeriod": normalize_period(lmc.sx_target_period, "daily"),
                     "promotedProducts": products_from_lmc_row(lmc),
                 }
             )
@@ -2111,6 +2131,132 @@ def register_alert_routes(app) -> None:
         }
         _alert_cache_set(cache_key, body)
         return jsonify(body)
+
+    @app.route("/api/alert/admin/target-insights", methods=["GET", "OPTIONS"])
+    def alert_admin_target_insights():
+        """
+        Cached sales insights to help set location/product targets.
+        Query: machineId=…&products=Name1,Name2 (optional; else uses promoted + top Vendon)
+        Location KD from revenue cache; product cups from Vendon (cached ~5 min).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_admin()
+        if denied:
+            return denied
+        mid = (request.args.get("machineId") or request.args.get("machine_id") or "").strip()
+        if not mid:
+            return jsonify({"error": "machineId required"}), 400
+        raw_prods = (request.args.get("products") or "").strip()
+        want_products = [p.strip() for p in raw_prods.split(",") if p.strip()][:12]
+        cache_key = f"perf:target-insights:v1:{mid}:{','.join(sorted(x.lower() for x in want_products)) or 'auto'}"
+        cached = _alert_cache_get(cache_key, 300)
+        if cached is not None:
+            return jsonify(cached)
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+        fetch_lo = today - timedelta(days=34)
+        for seed in (fetch_lo + timedelta(days=i) for i in range(0, 36)):
+            if seed > today:
+                break
+            _maybe_seed_vendon_revenue_cache(seed)
+
+        db = _pa_session()
+        try:
+            cache_rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.machine_id == mid,
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date <= today,
+                )
+                .all()
+            )
+            kwd_by_day: Dict[date, float] = {}
+            for r in cache_rows:
+                if r.cache_date is None:
+                    continue
+                kwd_by_day[r.cache_date] = float(r.total_sales_kwd or 0)
+            elapsed_payload = _load_daily_sales_elapsed_db_cache()
+            by_e = (elapsed_payload or {}).get("byMachineId") or {}
+            ent = by_e.get(mid) if isinstance(by_e, dict) else None
+            if isinstance(ent, dict) and ent.get("todayKwd") is not None:
+                kwd_by_day[today] = float(ent["todayKwd"])
+
+            from alert_targets_lib import (
+                build_location_sales_insights,
+                build_product_cups_insights,
+                products_from_lmc_row,
+            )
+            location = build_location_sales_insights(kwd_by_day, today=today)
+
+            dash = _dash_session()
+            try:
+                lmc = dash.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
+                promoted = products_from_lmc_row(lmc) if lmc else []
+            finally:
+                dash.close()
+
+            names = want_products or [p["productName"] for p in promoted if p.get("productName")]
+            if not names:
+                # light fallback: reuse vendon-products cache if warm
+                vp = _alert_cache_get(f"perf:vendon-products:v1:{mid}:21", 300) or {}
+                names = [x.get("name") for x in (vp.get("products") or [])[:5] if x.get("name")]
+
+            # One Vendon window for the lookback — bucket cups by product×day (fast + cacheable)
+            from promo_lib import _product_matches
+
+            cups_maps: Dict[str, Dict[date, float]] = {n: {} for n in names[:8]}
+            try:
+                from_ts, _ = _kuwait_day_bounds_utc(fetch_lo.isoformat())
+                _, to_ts = _kuwait_day_bounds_utc(today.isoformat())
+            except Exception:
+                from_ts = to_ts = 0
+            if from_ts and to_ts and cups_maps:
+                vends, _verr = _fetch_vends_machine_day(mid, from_ts, to_ts)
+                for v in vends or []:
+                    if not isinstance(v, dict):
+                        continue
+                    matched = None
+                    for want in cups_maps.keys():
+                        if _product_matches(v, want):
+                            matched = want
+                            break
+                    if not matched:
+                        continue
+                    ts = v.get("timestamp") or v.get("time") or v.get("created_at")
+                    try:
+                        if isinstance(ts, (int, float)):
+                            vd = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(tz).date()
+                        else:
+                            continue
+                    except Exception:
+                        continue
+                    if vd < fetch_lo or vd > today:
+                        continue
+                    cups_maps[matched][vd] = float(cups_maps[matched].get(vd) or 0) + 1.0
+
+            product_insights: List[Dict[str, Any]] = [
+                build_product_cups_insights(cups_maps.get(pname) or {}, today=today, product_name=pname)
+                for pname in cups_maps.keys()
+            ]
+
+            body = {
+                "machineId": mid,
+                "asOf": now_local.replace(microsecond=0).isoformat(),
+                "cachedTtlSec": 300,
+                "location": location,
+                "products": product_insights,
+            }
+            _alert_cache_set(cache_key, body)
+            return jsonify(body)
+        except Exception as ex:
+            logger.exception("alert_admin_target_insights")
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
 
     @app.route("/api/alert/overall/admin-profiles", methods=["GET", "OPTIONS"])
     def alert_overall_admin_profiles():

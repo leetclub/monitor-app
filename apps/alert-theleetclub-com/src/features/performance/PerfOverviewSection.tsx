@@ -20,7 +20,7 @@ const PRESETS: { id: PerfPreset; label: string }[] = [
   { id: 'last_month', label: 'Last month' },
 ];
 
-const VIEWS: { id: PerfViewMode; label: string }[] = [
+const FLEET_VIEWS: { id: PerfViewMode; label: string }[] = [
   { id: 'all', label: 'All machines' },
   { id: 'top5', label: 'Top 5' },
   { id: 'lowest5', label: 'Lowest 5' },
@@ -52,7 +52,19 @@ function dayLabel(d: PerfDay): string {
   return wd ? `${wd} ${md}` : md;
 }
 
-function pickMachines(machines: FleetMachine[], mode: PerfViewMode): FleetMachine[] {
+function pickMachines(
+  machines: FleetMachine[],
+  mode: PerfViewMode,
+  fleetRanking: boolean,
+): FleetMachine[] {
+  // Subset selection: chart exactly what was selected — Top/Lowest/All-fleet are N/A
+  if (!fleetRanking || mode === 'selected') {
+    return [...machines].sort(
+      (a, b) =>
+        (b.periodPctOfTarget ?? -1) - (a.periodPctOfTarget ?? -1) ||
+        b.totalLocationKwd - a.totalLocationKwd,
+    );
+  }
   const ranked = [...machines].sort(
     (a, b) =>
       (b.periodPctOfTarget ?? -1) - (a.periodPctOfTarget ?? -1) ||
@@ -93,6 +105,9 @@ export function PerfOverviewSection({
   onPresetChange,
   windowLabel,
   loading,
+  /** When false (1–few locations selected), hide All/Top5/Lowest5 fleet ranking. */
+  fleetRanking = true,
+  selectionLabel,
 }: {
   machines: FleetMachine[];
   aggregateDays: PerfDay[];
@@ -101,12 +116,22 @@ export function PerfOverviewSection({
   onPresetChange: (p: PerfPreset) => void;
   windowLabel?: string;
   loading?: boolean;
+  fleetRanking?: boolean;
+  selectionLabel?: string;
 }) {
   const [view, setView] = useState<PerfViewMode>('top5');
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
 
-  const seriesMachines = useMemo(() => pickMachines(machines, view), [machines, view]);
+  useEffect(() => {
+    if (!fleetRanking) setView('selected');
+    else setView((v) => (v === 'selected' ? 'top5' : v));
+  }, [fleetRanking]);
+
+  const seriesMachines = useMemo(
+    () => pickMachines(machines, fleetRanking ? view : 'selected', fleetRanking),
+    [machines, view, fleetRanking],
+  );
 
   const labels = useMemo(() => {
     const first = seriesMachines[0]?.days?.length
@@ -293,22 +318,34 @@ export function PerfOverviewSection({
           <p className="perfSectionHint">
             Line chart of daily location KD — trading-style crosshair. Default period: last week.
             {windowLabel ? ` · ${windowLabel}` : ''}
+            {!fleetRanking
+              ? ' · Showing only your selected locations (Top/Lowest 5 need the full fleet).'
+              : ''}
           </p>
         </div>
       </header>
 
       <div className="perfToolbarRow">
         <div className="perfModePills" role="group" aria-label="Machine view">
-          {VIEWS.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              className={`perfSegPill ${view === v.id ? 'active' : ''}`}
-              onClick={() => setView(v.id)}
+          {fleetRanking ? (
+            FLEET_VIEWS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className={`perfSegPill ${view === v.id ? 'active' : ''}`}
+                onClick={() => setView(v.id)}
+              >
+                {v.label}
+              </button>
+            ))
+          ) : (
+            <span
+              className="perfSegPill active"
+              title="Ranking modes apply to the full fleet only"
             >
-              {v.label}
-            </button>
-          ))}
+              {selectionLabel || `Selected (${machines.length})`}
+            </span>
+          )}
         </div>
         <div className="perfModePills" role="group" aria-label="Time period">
           {PRESETS.map((p) => (

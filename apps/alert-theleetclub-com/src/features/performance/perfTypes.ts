@@ -49,7 +49,7 @@ export type PerfPreset =
   | 'yesterday'
   | 'rolling';
 
-export type PerfViewMode = 'all' | 'top5' | 'lowest5';
+export type PerfViewMode = 'all' | 'top5' | 'lowest5' | 'selected';
 
 export type FleetPayload = {
   historyDays?: number;
