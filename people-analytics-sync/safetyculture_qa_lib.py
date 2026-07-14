@@ -30,14 +30,17 @@ _GAS_WEB_APP_URL = (
 _CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _MACHINE_AUDITS_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 # Keep QA fresh — same-day inspections should appear within a couple of minutes.
-_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_CACHE_SEC", "120"))
+_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_CACHE_SEC", "90"))
 _SEARCH_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_DAYS", "180"))
 _MAX_AUDITS = int(os.environ.get("SAFETY_CULTURE_QA_MAX_AUDITS", "1500"))
-_MACHINE_AUDITS_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_CACHE_SEC", "120"))
+_MACHINE_AUDITS_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_CACHE_SEC", "90"))
 _MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS", "2000"))
 _WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "6"))
 # Always fully process audits modified in this recent window (no per-chunk truncate).
-_RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "14"))
+_RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "21"))
+# SafetyCulture search index is by modified_at — widen so audits started earlier but finished in-range are found.
+_MODIFIED_SEARCH_PAD_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_MODIFIED_PAD_DAYS", "14"))
+_MIN_MACHINE_MATCH_SCORE = int(os.environ.get("SAFETY_CULTURE_QA_MIN_MATCH_SCORE", "55"))
 _QC_USER_PATTERNS = [
     p.strip().lower()
     for p in (os.environ.get("SAFETY_CULTURE_QC_USER_PATTERNS") or "ismail").split(",")
@@ -284,7 +287,7 @@ def _extract_score(audit: Dict[str, Any]) -> Optional[float]:
 
 
 def _visit_dt(audit: Dict[str, Any]) -> Optional[datetime]:
-    """Prefer inspection conducted/completed time over last modified (edits shouldn't reorder visits)."""
+    """Prefer completed/conducted time; then last modified (not created — unfinished drafts skew old)."""
     ad = audit.get("audit_data") if isinstance(audit.get("audit_data"), dict) else {}
     for block in (ad, audit):
         if not isinstance(block, dict):
@@ -293,9 +296,9 @@ def _visit_dt(audit: Dict[str, Any]) -> Optional[datetime]:
             "date_completed",
             "conducted_at",
             "completed_at",
-            "created_at",
             "date_modified",
             "modified_at",
+            "created_at",
         ):
             raw = block.get(key)
             if not raw:
@@ -305,6 +308,23 @@ def _visit_dt(audit: Dict[str, Any]) -> Optional[datetime]:
             except ValueError:
                 continue
     return None
+
+
+def _kuwait_day_start_utc(day_iso: str) -> Optional[datetime]:
+    """Parse YYYY-MM-DD as Asia/Kuwait local midnight → UTC."""
+    try:
+        y, m, d = [int(x) for x in str(day_iso).strip()[:10].split("-")]
+        return datetime(y, m, d, 0, 0, 0, tzinfo=_KWT).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _kuwait_day_end_utc(day_iso: str) -> Optional[datetime]:
+    try:
+        y, m, d = [int(x) for x in str(day_iso).strip()[:10].split("-")]
+        return datetime(y, m, d, 23, 59, 59, tzinfo=_KWT).astimezone(timezone.utc)
+    except Exception:
+        return None
 
 
 def _is_qc_role(role: str) -> bool:
@@ -785,7 +805,17 @@ def get_last_visit_tracking() -> Dict[str, Any]:
     return payload
 
 
-def qa_visits_payload() -> Dict[str, Any]:
+def clear_qa_caches() -> None:
+    """Drop in-process QA caches (fleet / machine history / summary)."""
+    _CACHE.clear()
+    _MACHINE_AUDITS_CACHE.clear()
+    _FLEET_CACHE.clear()
+    _QC_ROWS_RANGE_CACHE.clear()
+
+
+def qa_visits_payload(*, refresh: bool = False) -> Dict[str, Any]:
+    if refresh:
+        clear_qa_caches()
     return get_last_visit_tracking()
 
 
@@ -855,7 +885,7 @@ def _pick_visit_from_by_loc(
 
 
 def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    """Chunked SC scan for a date window → all QC audit rows in range."""
+    """Chunked SC scan for a date window → all QC audit rows in range (by conducted/completed time)."""
     rows: List[Dict[str, Any]] = []
     seen_audit_ids: set[str] = set()
     audits_searched = 0
@@ -866,7 +896,9 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
     if not _API_TOKEN:
         return rows, 0, 0, "SAFETY_CULTURE_API_TOKEN not configured"
 
-    chunks = _iter_date_chunks(start, end, chunk_days=28)
+    # Search by modified_at with padding; keep only visit_dt within [start, end].
+    mod_start, mod_end = _modified_search_window(start, end)
+    chunks = _iter_date_chunks(mod_start, mod_end, chunk_days=28)
     per_chunk_cap = (
         max(120, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks))))
         if _MACHINE_AUDITS_MAX_PROCESS > 0
@@ -910,31 +942,71 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
     return rows, audits_searched, audits_processed, search_err
 
 
-def _latest_qc_by_machine_names(
-    machine_names: List[str],
-    rows: List[Dict[str, Any]],
-) -> Dict[str, Dict[str, Any]]:
-    """Newest QC audit per machine using the same match rules as machine history."""
-    by_machine: Dict[str, Dict[str, Any]] = {}
-    for mname in machine_names:
-        best: Optional[Dict[str, Any]] = None
-        best_at = ""
-        for row in rows:
-            if not isinstance(row, dict) or not row.get("auditId"):
-                continue
-            loc = str(row.get("location") or "")
-            keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
-            if not _audit_matches_machine(mname, loc, keys):
-                continue
-            lat = str(row.get("lastVisitAt") or row.get("lastVisitDate") or "")
-            if not lat:
-                continue
-            if not best or lat > best_at:
-                best = row
-                best_at = lat
-        if best:
-            by_machine[mname] = best
-    return by_machine
+def _audit_match_score(machine_name: str, location: str, location_keys: Optional[List[str]] = None) -> int:
+    """
+    Score how well a SafetyCulture site/label matches a Vendon machine (0 = no match).
+    Higher = more specific. Shared site token-overlap is weak so sibling machines
+    at the same mall/hospital do not all claim each other's inspections.
+    """
+    from qa_machine_alias_lib import machines_share_qa_alias, norm_keys_for_lookup
+
+    needle = _norm_key(machine_name)
+    if not needle:
+        return 0
+    alias_keys = norm_keys_for_lookup(machine_name)
+    labels = [location]
+    if location_keys:
+        labels.extend([str(x) for x in location_keys if x])
+    best = 0
+    n_toks = {t for t in needle.split() if len(t) > 2}
+    for label in labels:
+        loc_key = _norm_key(label)
+        if not loc_key:
+            continue
+        score = 0
+        if needle == loc_key:
+            score = 100
+        elif loc_key in alias_keys:
+            score = 92
+        elif machines_share_qa_alias(machine_name, label):
+            score = 88
+        elif needle in loc_key:
+            # Machine name fully contained in SC site (e.g. "Gate 1" in "Mall Gate 1 Left").
+            score = 80
+        elif loc_key in needle:
+            # SC site is a shorter parent — weak for multi-machine sites unless name is short.
+            score = 62 if len(loc_key.split()) >= 3 else 48
+        else:
+            l_toks = {t for t in loc_key.split() if len(t) > 2}
+            if n_toks and l_toks:
+                shared = n_toks & l_toks
+                if len(shared) >= 3:
+                    score = 70
+                elif len(shared) >= 2 and len(n_toks) <= 4:
+                    # Require a distinctive leftover token when both sides are long.
+                    if not (n_toks - shared) or not (l_toks - shared):
+                        score = 58
+                    else:
+                        score = 40
+        if score > best:
+            best = score
+    return best
+
+
+def _audit_matches_machine(machine_name: str, location: str, location_keys: Optional[List[str]] = None) -> bool:
+    return _audit_match_score(machine_name, location, location_keys) >= _MIN_MACHINE_MATCH_SCORE
+
+
+def _parse_iso_dt(raw: Optional[str]) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
 
 
 def _resolve_qc_date_range(
@@ -948,61 +1020,78 @@ def _resolve_qc_date_range(
     start = now - timedelta(days=span_cap)
     end = now
     if date_from:
-        parsed = _parse_iso_dt(date_from if "T" in date_from else f"{date_from}T00:00:00+00:00")
+        # Bind calendar days in Asia/Kuwait so early-morning Kuwait visits are not dropped.
+        parsed = _kuwait_day_start_utc(date_from) or _parse_iso_dt(
+            date_from if "T" in date_from else f"{date_from}T00:00:00+03:00"
+        )
         if parsed:
             start = parsed
     if date_to:
-        parsed = _parse_iso_dt(date_to if "T" in date_to else f"{date_to}T23:59:59+00:00")
+        parsed = _kuwait_day_end_utc(date_to) or _parse_iso_dt(
+            date_to if "T" in date_to else f"{date_to}T23:59:59+03:00"
+        )
         if parsed:
             end = parsed
     if start > end:
         start, end = end, start
     if (end - start).days > span_cap:
         start = end - timedelta(days=span_cap)
+    # Never end in the future past "now" for search windows, but keep end for visit filters ≥ now if same day.
+    if end > now + timedelta(hours=12):
+        end = now + timedelta(hours=12)
     return start, end
 
 
-def _audit_matches_machine(machine_name: str, location: str, location_keys: Optional[List[str]] = None) -> bool:
-    from qa_machine_alias_lib import machines_share_qa_alias, norm_keys_for_lookup
+def _modified_search_window(start: datetime, end: datetime) -> Tuple[datetime, datetime]:
+    """Widen modified_at search so audits started earlier but finished in-range are included."""
+    pad = timedelta(days=max(0, _MODIFIED_SEARCH_PAD_DAYS))
+    now = datetime.now(timezone.utc)
+    mod_start = start - pad
+    mod_end = max(end, now) + timedelta(hours=6)
+    return mod_start, mod_end
 
-    needle = _norm_key(machine_name)
-    if not needle:
-        return False
-    alias_keys = norm_keys_for_lookup(machine_name)
-    labels = [location]
-    if location_keys:
-        labels.extend([str(x) for x in location_keys if x])
-    for label in labels:
-        loc_key = _norm_key(label)
-        if not loc_key:
+
+def _latest_qc_by_machine_names(
+    machine_names: List[str],
+    rows: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Newest QC audit per machine. Each audit is awarded to its best-scoring machine
+    (exclusive) so siblings at the same site do not all inherit one inspection.
+    """
+    names = [str(n).strip() for n in machine_names if str(n).strip()]
+    if not names or not rows:
+        return {}
+
+    # audit_id → (score, machine_name, row)
+    best_for_audit: Dict[str, Tuple[int, str, Dict[str, Any]]] = {}
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("auditId"):
             continue
-        if needle == loc_key:
-            return True
-        if loc_key in alias_keys:
-            return True
-        if machines_share_qa_alias(machine_name, label):
-            return True
-        # Shared site: "Souq Sharq" matches "Souq Sharq - Gate 1" and vice versa.
-        if needle in loc_key or loc_key in needle:
-            return True
-        # Token overlap (same building / hospital, different machine suffix).
-        n_toks = {t for t in needle.split() if len(t) > 2}
-        l_toks = {t for t in loc_key.split() if len(t) > 2}
-        if n_toks and l_toks and len(n_toks & l_toks) >= 2:
-            return True
-    return False
+        aid = str(row.get("auditId") or "")
+        loc = str(row.get("location") or "")
+        keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
+        for mname in names:
+            score = _audit_match_score(mname, loc, keys)
+            if score < _MIN_MACHINE_MATCH_SCORE:
+                continue
+            prev = best_for_audit.get(aid)
+            if not prev:
+                best_for_audit[aid] = (score, mname, row)
+                continue
+            prev_score, prev_name, _prev_row = prev
+            if score > prev_score or (score == prev_score and len(mname) > len(prev_name)):
+                best_for_audit[aid] = (score, mname, row)
 
-
-def _parse_iso_dt(raw: Optional[str]) -> Optional[datetime]:
-    if not raw:
-        return None
-    try:
-        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception:
-        return None
+    by_machine: Dict[str, Dict[str, Any]] = {}
+    for score, mname, row in best_for_audit.values():
+        lat = str(row.get("lastVisitAt") or row.get("lastVisitDate") or "")
+        if not lat:
+            continue
+        prev = by_machine.get(mname)
+        if not prev or lat > str(prev.get("lastVisitAt") or prev.get("lastVisitDate") or ""):
+            by_machine[mname] = row
+    return by_machine
 
 
 def _qa_score_trend(
@@ -1099,11 +1188,15 @@ def list_qc_audits_for_machine(
     start = now - timedelta(days=span_days)
     end = now
     if date_from:
-        parsed = _parse_iso_dt(date_from if "T" in date_from else f"{date_from}T00:00:00+00:00")
+        parsed = _kuwait_day_start_utc(date_from) or _parse_iso_dt(
+            date_from if "T" in date_from else f"{date_from}T00:00:00+03:00"
+        )
         if parsed:
             start = parsed
     if date_to:
-        parsed = _parse_iso_dt(date_to if "T" in date_to else f"{date_to}T23:59:59+00:00")
+        parsed = _kuwait_day_end_utc(date_to) or _parse_iso_dt(
+            date_to if "T" in date_to else f"{date_to}T23:59:59+03:00"
+        )
         if parsed:
             end = parsed
     if start > end:
@@ -1114,7 +1207,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v3",
+            "v5",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1136,7 +1229,8 @@ def list_qc_audits_for_machine(
         }
         return out
 
-    chunks = _iter_date_chunks(start, end, chunk_days=28)
+    mod_start, mod_end = _modified_search_window(start, end)
+    chunks = _iter_date_chunks(mod_start, mod_end, chunk_days=28)
     per_chunk_cap = (
         max(250, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks))))
         if _MACHINE_AUDITS_MAX_PROCESS > 0
@@ -1175,8 +1269,12 @@ def list_qc_audits_for_machine(
                 aid = str(row.get("auditId") or "")
                 if aid and aid in seen_audit_ids:
                     continue
+                visit_dt = _parse_iso_dt(str(row.get("lastVisitAt") or ""))
+                if visit_dt and (visit_dt < start or visit_dt > end):
+                    continue
                 keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
-                if not _audit_matches_machine(machine, str(row.get("location") or ""), keys):
+                score = _audit_match_score(machine, str(row.get("location") or ""), keys)
+                if score < _MIN_MACHINE_MATCH_SCORE:
                     continue
                 if loc_q and loc_q not in _norm_key(str(row.get("location") or "")):
                     loc_blob = " ".join([str(row.get("location") or "")] + [str(x) for x in (keys or [])])
@@ -1220,12 +1318,12 @@ def list_qc_audits_for_machine(
 
 _FLEET_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _QC_ROWS_RANGE_CACHE: Dict[str, Tuple[float, Tuple[List[Dict[str, Any]], int, int, Optional[str]]]] = {}
-_FLEET_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_CACHE_SEC", "180"))
+_FLEET_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_CACHE_SEC", "90"))
 _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v2|{start.date().isoformat()}|{end.date().isoformat()}"
+    cache_key = f"qc_rows|v3|{start.isoformat()}|{end.isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1278,7 +1376,7 @@ def fleet_qc_visits_in_range(
     start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
 
     names_hash = hashlib.md5(",".join(names).encode()).hexdigest()[:12]
-    cache_key = f"fleet|v5|{names_hash}|{start.date().isoformat()}|{end.date().isoformat()}"
+    cache_key = f"fleet|v6|{names_hash}|{start.isoformat()}|{end.isoformat()}"
     hit = _FLEET_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]

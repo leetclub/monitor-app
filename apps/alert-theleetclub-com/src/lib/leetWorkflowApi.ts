@@ -171,10 +171,11 @@ export function fetchQaManualSummary(machineName: string): Promise<QaManualSumma
   );
 }
 
-export function fetchQaFleet(input: { from?: string; to?: string }): Promise<QaFleetPayload> {
+export function fetchQaFleet(input: { from?: string; to?: string; refresh?: boolean }): Promise<QaFleetPayload> {
   const params = new URLSearchParams();
   if (input.from?.trim()) params.set('from', input.from.trim());
   if (input.to?.trim()) params.set('to', input.to.trim());
+  if (input.refresh) params.set('refresh', '1');
   const qs = params.toString();
   return apiGet<QaFleetPayload>(`/api/alert/qa/fleet${qs ? `?${qs}` : ''}`);
 }
@@ -187,6 +188,7 @@ export function fetchQaMachineAudits(input: {
   sort?: 'date' | 'score';
   order?: 'asc' | 'desc';
   days?: number;
+  refresh?: boolean;
 }): Promise<QaMachineAuditsPayload> {
   const name = String(input.machineName || '').trim();
   const params = new URLSearchParams({ machineName: name });
@@ -196,6 +198,7 @@ export function fetchQaMachineAudits(input: {
   if (input.sort) params.set('sort', input.sort);
   if (input.order) params.set('order', input.order);
   if (input.days != null && Number.isFinite(input.days)) params.set('days', String(input.days));
+  if (input.refresh) params.set('refresh', '1');
   return apiGet<QaMachineAuditsPayload>(`/api/alert/qa/machine-audits?${params.toString()}`);
 }
 

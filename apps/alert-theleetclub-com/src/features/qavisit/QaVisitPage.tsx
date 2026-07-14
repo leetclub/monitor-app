@@ -85,7 +85,8 @@ export function QaVisitPage() {
   const qaSummaryQ = useQuery({
     queryKey: ['alert-qa-summary'],
     queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
-    staleTime: 5 * 60_000,
+    staleTime: 90_000,
+    refetchInterval: 3 * 60_000,
     enabled: showFleet || Boolean(machineName),
   });
 
@@ -93,9 +94,10 @@ export function QaVisitPage() {
     queryKey: ['alert-qa-fleet', dateFrom, dateTo],
     queryFn: () => fetchQaFleet({ from: dateFrom, to: dateTo }),
     enabled: showFleet,
-    staleTime: 10 * 60_000,
+    staleTime: 90_000,
+    refetchInterval: 3 * 60_000,
     retry: 1,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const machines = useMemo(() => {

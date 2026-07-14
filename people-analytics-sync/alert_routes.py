@@ -1142,8 +1142,10 @@ def register_alert_routes(app) -> None:
         machine_name = (request.args.get("machineName") or request.args.get("name") or "").strip()
         if not machine_name:
             return jsonify({"error": "machineName required"}), 400
-        from safetyculture_qa_lib import list_qc_audits_for_machine
+        from safetyculture_qa_lib import clear_qa_caches, list_qc_audits_for_machine
 
+        if (request.args.get("refresh") or "").strip() in ("1", "true", "yes"):
+            clear_qa_caches()
         days_raw = request.args.get("days")
         days = int(days_raw) if days_raw and str(days_raw).isdigit() else None
         payload = list_qc_audits_for_machine(
@@ -1165,8 +1167,10 @@ def register_alert_routes(app) -> None:
         if denied:
             return denied
         from qa_manual_summary_lib import admin_summary_mtd_for_machine, admin_summary_month_counts, kuwait_year_month
-        from safetyculture_qa_lib import fleet_qc_visits_in_range
+        from safetyculture_qa_lib import clear_qa_caches, fleet_qc_visits_in_range
 
+        if (request.args.get("refresh") or "").strip() in ("1", "true", "yes"):
+            clear_qa_caches()
         rows, err = vendon_fetch_machine_list(_vendon_get)
         if err:
             return jsonify({"error": err, "byMachine": {}, "total": 0}), 502
@@ -1217,7 +1221,8 @@ def register_alert_routes(app) -> None:
         )
         from safetyculture_qa_lib import latest_qc_by_machine_map, qa_visits_payload
 
-        payload = qa_visits_payload()
+        refresh = (request.args.get("refresh") or "").strip() in ("1", "true", "yes")
+        payload = qa_visits_payload(refresh=refresh)
         rows, list_err = vendon_fetch_machine_list(_vendon_get)
         machine_names: List[str] = []
         if not list_err:

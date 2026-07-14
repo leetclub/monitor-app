@@ -109,7 +109,8 @@ export function QaVisitMachineWorkspace({
         days: 365,
       }),
     enabled: Boolean(machine),
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
   });
 
   const audits = useMemo(() => {
