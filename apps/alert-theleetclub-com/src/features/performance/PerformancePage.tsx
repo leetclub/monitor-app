@@ -8,17 +8,12 @@ import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
 import { PerfMachineFilter } from '@/features/performance/PerfMachineFilter';
 import {
   FleetCompareChart,
-  FleetRankingChart,
+  FleetPerformanceOverview,
   GrowthRateChart,
   ProductTrajectoryChart,
   RevenueTrajectoryChart,
 } from '@/features/performance/PerformanceCharts';
-import type {
-  ChartMode,
-  FleetPayload,
-  MachineRow,
-  PerfDay,
-} from '@/features/performance/perfTypes';
+import type { FleetPayload, MachineRow, PerfDay } from '@/features/performance/perfTypes';
 
 type PerfPayload = {
   machineId: string;
@@ -51,7 +46,7 @@ export function PerformancePage() {
   const focusId = (params.get('machineId') || params.get('machine') || '').trim();
   const urlIds = parseIds(params.get('machineIds'));
   const [days, setDays] = useState(14);
-  const [chartMode, setChartMode] = useState<ChartMode>('ranking');
+  const [showCompare, setShowCompare] = useState(false);
   const [selected, setSelected] = useState<Set<string> | null>(() =>
     urlIds.length ? new Set(urlIds) : focusId ? new Set([focusId]) : null,
   );
@@ -134,7 +129,8 @@ export function PerformancePage() {
     refetchInterval: 3 * 60_000,
   });
 
-  const singleId = selectedIds.length === 1 ? selectedIds[0] : focusId && selectedIds.includes(focusId) ? focusId : '';
+  const singleId =
+    selectedIds.length === 1 ? selectedIds[0] : focusId && selectedIds.includes(focusId) ? focusId : '';
 
   const detailQ = useQuery({
     queryKey: ['alert-performance', singleId, days],
@@ -150,12 +146,18 @@ export function PerformancePage() {
   const aggregateDays = fleetQ.data?.aggregateDays || [];
   const detail = detailQ.data;
   const multi = selectedIds.length !== 1;
+  const periodKd = fleetMachines.reduce((s, m) => s + (m.totalLocationKwd || 0), 0);
+  const periodTarget = fleetMachines.reduce((s, m) => s + (m.periodTargetKd || 0), 0);
+  const avgPct =
+    fleetMachines.length && periodTarget > 0
+      ? Math.round((periodKd / periodTarget) * 1000) / 10
+      : null;
 
   return (
     <div className="perfPage">
       <StitchOpsPanel
         title="Performance"
-        subtitle="Multi-location Revenue Trajectory · Ranking · Compare · SX / Promo"
+        subtitle="Multi-select charts · Target vs actual · Ranking · Daily revenue — Targets Areas style"
         iconName="performance"
       >
         <div className="perfToolbar">
@@ -167,25 +169,14 @@ export function PerformancePage() {
               <option value={30}>30</option>
             </select>
           </label>
-          <div className="perfModePills" role="tablist" aria-label="Chart mode">
-            {(
-              [
-                ['ranking', 'Ranking'],
-                ['compare', 'Compare'],
-                ['aggregate', 'Aggregate'],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={chartMode === id}
-                className={`perfSegPill ${chartMode === id ? 'active' : ''}`}
-                onClick={() => setChartMode(id)}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="perfModePills" role="group" aria-label="Extra chart views">
+            <button
+              type="button"
+              className={`perfSegPill ${showCompare ? 'active' : ''}`}
+              onClick={() => setShowCompare((v) => !v)}
+            >
+              {showCompare ? 'Hide compare lines' : 'Daily compare lines'}
+            </button>
           </div>
           <Link className="perfBackLink" to="/red-flags">
             ← Red Flags
@@ -217,9 +208,15 @@ export function PerformancePage() {
                   </div>
                   <div className="perfKpi">
                     <span className="perfKpiLabel">Period KD</span>
-                    <strong>
-                      {formatKwd(fleetMachines.reduce((s, m) => s + (m.totalLocationKwd || 0), 0))}
-                    </strong>
+                    <strong>{formatKwd(periodKd)}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Period target</span>
+                    <strong>{periodTarget > 0 ? formatKwd(periodTarget) : '—'}</strong>
+                  </div>
+                  <div className="perfKpi">
+                    <span className="perfKpiLabel">Achievement</span>
+                    <strong>{avgPct != null ? `${avgPct}%` : '—'}</strong>
                   </div>
                   <div className="perfKpi">
                     <span className="perfKpiLabel">Window</span>
@@ -227,33 +224,16 @@ export function PerformancePage() {
                   </div>
                 </div>
 
-                {chartMode === 'ranking' ? (
-                  <section className="perfSection">
-                    <h3 className="perfSectionTitle">Achievement ranking</h3>
-                    <p className="perfSectionHint">
-                      Period location KD vs target — same ranking style as Targets Areas (100% dashed line).
-                    </p>
-                    <FleetRankingChart machines={fleetMachines} />
-                  </section>
-                ) : null}
+                <FleetPerformanceOverview machines={fleetMachines} aggregateDays={aggregateDays} />
 
-                {chartMode === 'compare' ? (
+                {showCompare ? (
                   <section className="perfSection">
-                    <h3 className="perfSectionTitle">Revenue compare</h3>
+                    <h3 className="perfSectionTitle">Daily compare (lines)</h3>
                     <p className="perfSectionHint">
-                      Daily location KD for each selected machine (up to 12 series). Scroll legend to toggle.
+                      Overlay daily location KD for each selected machine (up to 12). Toggle series in the
+                      legend.
                     </p>
                     <FleetCompareChart machines={fleetMachines} />
-                  </section>
-                ) : null}
-
-                {chartMode === 'aggregate' ? (
-                  <section className="perfSection">
-                    <h3 className="perfSectionTitle">Fleet Revenue Trajectory</h3>
-                    <p className="perfSectionHint">
-                      Sum of selected locations — teal = achieved, hollow = remaining to summed daily targets.
-                    </p>
-                    <RevenueTrajectoryChart days={aggregateDays} title="Selected locations (sum)" />
                   </section>
                 ) : null}
               </>

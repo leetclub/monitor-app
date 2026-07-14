@@ -90,6 +90,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-14 | **QA Visit KU CBA / recent visits:** SC short site labels (e.g. `CBA` → `KU CBA`) now match. Scored location inspections count as QC even when officer ≠ Ismail. Alias map `config/qa_machine_aliases.json`. Busts QA caches. Fixes Alert showing 1 Jul while SC shows 14 Jul. |
 | 2026-07-14 | **QA Visit freshness + matching:** SafetyCulture search now **globally sorts newest-first** before capping; last **14 days** of audits are fully processed (no truncating). Richer location keys (site + machine header fields), softer QC detect for scored inspections, shorter caches (~2–3 min). Fixes missing same-day / same-site reports and stale 2–3 day lag. |
 | 2026-07-14 | **QA Visit freshness + same-site matching:** Visit timestamps prefer completed/modified over created (fixes “2–3 days old”). Date filters use **Asia/Kuwait** day bounds. SC search widens by `modified_at` pad so late finishes appear. Sibling machines at one site: exclusive best-match (no shared stolen visits). Shorter QA caches (~90s) + quicker client refetch. |
 | 2026-07-14 | **Performance multi-select graphs (Targets Areas style):** Location checkbox filter · Ranking / Compare / Aggregate chart modes · `GET /api/alert/performance/fleet`. Single machine still opens detail (product trajectory, SX, promo). |

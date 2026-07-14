@@ -31,8 +31,6 @@ export type FleetPayload = {
   error?: string;
 };
 
-export type ChartMode = 'ranking' | 'compare' | 'aggregate';
-
 export const SERIES_PALETTE = [
   '#2dd4bf',
   '#38bdf8',

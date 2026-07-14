@@ -135,10 +135,134 @@
   min-height: 220px;
 }
 
+.perfEchartDaily {
+  height: 380px;
+  min-height: 320px;
+}
+
 @media (max-width: 720px) {
   .perfEchart {
     height: 300px;
   }
+  .perfEchartDaily {
+    height: 320px;
+  }
+}
+
+/* Targets Areas–style multi chart grid */
+.perfOverview {
+  margin: 4px 0 20px;
+}
+
+.perfOverviewHead {
+  margin-bottom: 12px;
+}
+
+.perfOverviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.perfPanel {
+  min-width: 0;
+  padding: 12px 14px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+}
+
+.perfPanelWide {
+  grid-column: 1 / -1;
+}
+
+.perfPanelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.perfPanelTitle {
+  margin: 0 0 2px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.perfChartToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.perfChartToolbarLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+@media (max-width: 960px) {
+  .perfOverviewGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Chart PNG export (Targets parity) */
+.chartExportWrap {
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+
+.chartExportWrapBlock {
+  width: 100%;
+}
+
+.chartExportToolbar {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 5;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.chartExportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.chartExportBtn:hover:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.55);
+  color: #2dd4bf;
+}
+
+.chartExportBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chartExportIcon {
+  flex-shrink: 0;
+}
+
+.chartExportBtnText {
+  letter-spacing: 0.02em;
 }
 
 .perfField {

@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import * as echarts from 'echarts';
+import { ChartExportWrap } from '@/components/ChartExportWrap';
+import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import {
   SERIES_PALETTE,
@@ -7,6 +9,8 @@ import {
   type FleetMachine,
   type PerfDay,
 } from '@/features/performance/perfTypes';
+
+export type MachineSort = 'achievement' | 'name' | 'actual' | 'target';
 
 function readTheme(): { dark: boolean; text: string; muted: string; grid: string; axis: string; tipBg: string } {
   const isPro = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'pro';
@@ -34,8 +38,8 @@ function useEcharts(
   optionFactory: () => echarts.EChartsOption | null,
   deps: unknown[],
   heightHint?: number,
-): RefObject<HTMLDivElement | null> {
-  const ref = useRef<HTMLDivElement>(null);
+): { ref: RefObject<HTMLDivElement>; getChart: () => echarts.ECharts | null } {
+  const ref = useRef<HTMLDivElement>(null) as RefObject<HTMLDivElement>;
   const chartRef = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
@@ -71,7 +75,7 @@ function useEcharts(
     }
   }, [heightHint]);
 
-  return ref;
+  return { ref, getChart: () => chartRef.current };
 }
 
 function dayLabel(d: PerfDay): string {
@@ -80,31 +84,94 @@ function dayLabel(d: PerfDay): string {
   return wd ? `${wd} ${md}` : md;
 }
 
-/** Areas-style horizontal ranking by period % of target. */
-export function FleetRankingChart({ machines }: { machines: FleetMachine[] }) {
-  const rows = useMemo(
-    () =>
-      [...machines].sort(
-        (a, b) => (b.periodPctOfTarget ?? -1) - (a.periodPctOfTarget ?? -1) || b.totalLocationKwd - a.totalLocationKwd,
-      ),
-    [machines],
+function sortMachines(rows: FleetMachine[], sort: MachineSort): FleetMachine[] {
+  const list = [...rows];
+  switch (sort) {
+    case 'name':
+      list.sort((a, b) => a.machineName.localeCompare(b.machineName));
+      break;
+    case 'actual':
+      list.sort((a, b) => b.totalLocationKwd - a.totalLocationKwd);
+      break;
+    case 'target':
+      list.sort((a, b) => (b.periodTargetKd ?? 0) - (a.periodTargetKd ?? 0));
+      break;
+    case 'achievement':
+    default:
+      list.sort(
+        (a, b) =>
+          (b.periodPctOfTarget ?? -1) - (a.periodPctOfTarget ?? -1) ||
+          b.totalLocationKwd - a.totalLocationKwd,
+      );
+      break;
+  }
+  return list;
+}
+
+export function PerfSortToolbar({
+  sort,
+  onChange,
+}: {
+  sort: MachineSort;
+  onChange: (s: MachineSort) => void;
+}) {
+  return (
+    <div className="perfChartToolbar" role="group" aria-label="Sort machines">
+      <span className="perfChartToolbarLabel">Sort</span>
+      {(
+        [
+          ['achievement', 'Achievement'],
+          ['actual', 'Actual'],
+          ['target', 'Target'],
+          ['name', 'Name'],
+        ] as const
+      ).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          className={`perfSegPill ${sort === key ? 'active' : ''}`}
+          onClick={() => onChange(key)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
-  const height = Math.min(520, Math.max(220, rows.length * 30 + 56));
-  const ref = useEcharts(
+}
+
+/** Areas-style horizontal ranking by period % of target. */
+export function FleetRankingChart({
+  machines,
+  sort = 'achievement',
+}: {
+  machines: FleetMachine[];
+  sort?: MachineSort;
+}) {
+  const rows = useMemo(() => sortMachines(machines, sort), [machines, sort]);
+  const height = Math.min(560, Math.max(260, rows.length * 34 + 80));
+  const { ref, getChart } = useEcharts(
     () => {
       if (!rows.length) return null;
       const theme = readTheme();
       const names = rows.map((m) => m.machineName);
       const pcts = rows.map((m) => m.periodPctOfTarget ?? 0);
       const axisMax = Math.max(120, ...pcts.map((p) => Math.ceil(p / 5) * 5));
-      const needZoom = rows.length > 14;
-      const zoomEnd = needZoom ? Math.round((14 / rows.length) * 100) : 100;
+      const needZoom = rows.length > 10;
+      const zoomEnd = needZoom ? Math.round((10 / rows.length) * 100) : 100;
       return {
         backgroundColor: 'transparent',
-        grid: { left: 8, right: 64, top: 16, bottom: needZoom ? 36 : 12, containLabel: true },
+        grid: { left: 8, right: 64, top: 16, bottom: needZoom ? 48 : 16, containLabel: true },
         dataZoom: needZoom
           ? [
-              { type: 'slider', yAxisIndex: 0, start: 0, end: zoomEnd, brushSelect: false },
+              {
+                type: 'slider',
+                yAxisIndex: 0,
+                right: 4,
+                width: 14,
+                start: 0,
+                end: zoomEnd,
+                brushSelect: false,
+              },
               { type: 'inside', yAxisIndex: 0, start: 0, end: zoomEnd },
             ]
           : [],
@@ -122,7 +189,7 @@ export function FleetRankingChart({ machines }: { machines: FleetMachine[] }) {
             color: theme.text,
             fontSize: 11,
             fontWeight: 600,
-            width: 140,
+            width: 160,
             overflow: 'truncate',
           },
           axisTick: { show: false },
@@ -131,13 +198,13 @@ export function FleetRankingChart({ machines }: { machines: FleetMachine[] }) {
         series: [
           {
             type: 'bar',
-            barMaxWidth: 18,
+            barMaxWidth: 16,
             data: pcts.map((p, i) => ({
               value: p,
               itemStyle: { color: pctColor(rows[i]?.periodPctOfTarget), borderRadius: [0, 4, 4, 0] },
             })),
             label: {
-              show: rows.length <= 18,
+              show: rows.length <= 14,
               position: 'right',
               formatter: '{c}%',
               color: theme.muted,
@@ -163,11 +230,14 @@ export function FleetRankingChart({ machines }: { machines: FleetMachine[] }) {
             const i = (params as { dataIndex?: number }[])[0]?.dataIndex ?? 0;
             const m = rows[i];
             if (!m) return '';
+            const tgt = m.periodTargetKd ?? 0;
+            const gap = tgt > 0 ? m.totalLocationKwd - tgt : null;
             return [
               `<strong>${m.machineName}</strong>`,
               `Period: ${formatKwd(m.totalLocationKwd)}`,
-              `Target: ${m.periodTargetKd != null ? formatKwd(m.periodTargetKd) : '—'}`,
+              `Target: ${tgt > 0 ? formatKwd(tgt) : '—'}`,
               `Achievement: ${m.periodPctOfTarget != null ? `${m.periodPctOfTarget}%` : '—'}`,
+              gap != null ? `Gap: ${formatKwd(gap)}` : null,
               m.locationSxPct != null
                 ? `SX: ${formatSalesTrendPct(m.locationSxPct).replace(/%$/, ' pts')}`
                 : null,
@@ -182,8 +252,339 @@ export function FleetRankingChart({ machines }: { machines: FleetMachine[] }) {
     height,
   );
 
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-ranking']));
+  }, [getChart]);
+
   if (!rows.length) return <p className="perfMuted">Select locations to rank.</p>;
-  return <div ref={ref} className="perfEchart perfEchartRank" role="img" aria-label="Achievement ranking" />;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div ref={ref} className="perfEchart perfEchartRank" role="img" aria-label="Achievement ranking" />
+    </ChartExportWrap>
+  );
+}
+
+/** Targets Areas MachinesKdChart — period target vs actual KD by machine. */
+export function FleetTargetActualChart({
+  machines,
+  sort = 'achievement',
+}: {
+  machines: FleetMachine[];
+  sort?: MachineSort;
+}) {
+  const ranked = useMemo(() => sortMachines(machines, sort), [machines, sort]);
+  const height = Math.min(560, Math.max(260, ranked.length * 34 + 80));
+  const { ref, getChart } = useEcharts(
+    () => {
+      if (!ranked.length) return null;
+      const theme = readTheme();
+      const names = ranked.map((m) => m.machineName);
+      const targets = ranked.map((m) => m.periodTargetKd ?? 0);
+      const actuals = ranked.map((m) => m.totalLocationKwd);
+      const maxKd = Math.max(1, ...targets, ...actuals);
+      const needZoom = ranked.length > 10;
+      const zoomEnd = needZoom ? Math.round((10 / ranked.length) * 100) : 100;
+      return {
+        backgroundColor: 'transparent',
+        grid: { left: 8, right: 24, top: 44, bottom: needZoom ? 48 : 16, containLabel: true },
+        legend: {
+          top: 0,
+          data: ['Period target', 'Period actual'],
+          textStyle: { fontSize: 11, color: theme.muted },
+        },
+        dataZoom: needZoom
+          ? [
+              {
+                type: 'slider',
+                yAxisIndex: 0,
+                right: 4,
+                width: 14,
+                start: 0,
+                end: zoomEnd,
+                brushSelect: false,
+              },
+              { type: 'inside', yAxisIndex: 0, start: 0, end: zoomEnd },
+            ]
+          : [],
+        xAxis: {
+          type: 'value',
+          max: Math.ceil(maxKd * 1.12),
+          axisLabel: { formatter: (v: number) => `${v} KD`, color: theme.muted, fontSize: 10 },
+          splitLine: { lineStyle: { color: theme.grid, type: 'dashed' } },
+        },
+        yAxis: {
+          type: 'category',
+          data: names,
+          inverse: true,
+          axisLabel: {
+            color: theme.text,
+            fontSize: 11,
+            fontWeight: 600,
+            width: 160,
+            overflow: 'truncate',
+          },
+          axisTick: { show: false },
+          axisLine: { show: false },
+        },
+        series: [
+          {
+            name: 'Period target',
+            type: 'bar',
+            barGap: '20%',
+            barMaxWidth: 14,
+            data: targets,
+            itemStyle: { color: theme.dark ? '#475569' : '#cbd5e1', borderRadius: [0, 3, 3, 0] },
+            z: 1,
+          },
+          {
+            name: 'Period actual',
+            type: 'bar',
+            barMaxWidth: 14,
+            data: actuals.map((v, i) => ({
+              value: v,
+              itemStyle: {
+                color: pctColor(ranked[i]?.periodPctOfTarget ?? null),
+                borderRadius: [0, 3, 3, 0],
+              },
+            })),
+            label: {
+              show: ranked.length <= 14,
+              position: 'right',
+              formatter: (p: { dataIndex?: number }) => {
+                const m = ranked[p.dataIndex ?? 0];
+                return m?.periodPctOfTarget != null ? `${m.periodPctOfTarget}%` : '';
+              },
+              fontSize: 10,
+              fontWeight: 700,
+              color: theme.muted,
+            },
+            z: 2,
+          },
+        ],
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' },
+          backgroundColor: theme.tipBg,
+          borderWidth: 0,
+          textStyle: { color: '#e8f4fc', fontSize: 12 },
+          formatter: (params: unknown) => {
+            const arr = params as { dataIndex?: number }[];
+            const i = arr[0]?.dataIndex ?? 0;
+            const m = ranked[i];
+            if (!m) return '';
+            const target = m.periodTargetKd ?? 0;
+            return [
+              `<strong>${m.machineName}</strong>`,
+              `${m.machineId}`,
+              `Target: ${target > 0 ? formatKwd(target) : '—'}`,
+              `Actual: ${formatKwd(m.totalLocationKwd)}`,
+              `Achievement: ${m.periodPctOfTarget != null ? `${m.periodPctOfTarget}%` : '—'}`,
+              target > 0 ? `Gap: ${formatKwd(m.totalLocationKwd - target)}` : '',
+            ]
+              .filter(Boolean)
+              .join('<br/>');
+          },
+        },
+      } as echarts.EChartsOption;
+    },
+    [ranked],
+    height,
+  );
+
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-target-actual']));
+  }, [getChart]);
+
+  if (!ranked.length) return <p className="perfMuted">No machines to chart.</p>;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div
+        ref={ref}
+        className="perfEchart perfEchartRank"
+        role="img"
+        aria-label="Period target vs actual by machine"
+      />
+    </ChartExportWrap>
+  );
+}
+
+/** Targets Areas DailyRevenueChart — daily bars + target + optional cumulative. */
+export function FleetDailyRevenueChart({
+  days,
+  showCumulative,
+}: {
+  days: PerfDay[];
+  showCumulative: boolean;
+}) {
+  const labels = useMemo(() => days.map((d) => dayLabel(d)), [days]);
+  const actuals = useMemo(() => days.map((d) => Number(d.locationKwd) || 0), [days]);
+  const targets = useMemo(() => days.map((d) => Number(d.locationTargetKd) || 0), [days]);
+  const dailyTargetAvg = useMemo(() => {
+    const withT = targets.filter((t) => t > 0);
+    if (!withT.length) return 0;
+    return withT.reduce((a, b) => a + b, 0) / withT.length;
+  }, [targets]);
+
+  const cumulativeActual = useMemo(() => {
+    const out: number[] = [];
+    let run = 0;
+    for (const v of actuals) {
+      run += v;
+      out.push(Math.round(run * 100) / 100);
+    }
+    return out;
+  }, [actuals]);
+
+  const cumulativeTarget = useMemo(() => {
+    const out: number[] = [];
+    let run = 0;
+    for (const t of targets) {
+      run += t > 0 ? t : dailyTargetAvg;
+      out.push(Math.round(run * 100) / 100);
+    }
+    return out;
+  }, [targets, dailyTargetAvg]);
+
+  const { ref, getChart } = useEcharts(() => {
+    if (!days.length) return null;
+    const theme = readTheme();
+    const maxBar = Math.max(1, dailyTargetAvg, ...actuals, ...targets);
+    const maxCum = Math.max(1, ...cumulativeTarget, ...cumulativeActual);
+    const series: echarts.SeriesOption[] = [
+      {
+        name: 'Daily actual',
+        type: 'bar',
+        data: actuals.map((v, i) => {
+          const tgt = targets[i] || dailyTargetAvg;
+          return {
+            value: Math.round(v * 100) / 100,
+            itemStyle: {
+              color: tgt > 0 && v >= tgt ? '#15803d' : v > 0 ? '#2563eb' : theme.dark ? '#334155' : '#cbd5e1',
+              borderRadius: [4, 4, 0, 0],
+            },
+          };
+        }),
+        barMaxWidth: 48,
+        yAxisIndex: 0,
+      },
+      {
+        name: 'Daily target',
+        type: 'line',
+        data: days.map((_, i) => (targets[i] > 0 ? targets[i] : dailyTargetAvg)),
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { color: '#94a3b8', type: 'dashed', width: 2 },
+        itemStyle: { color: '#94a3b8' },
+        yAxisIndex: 0,
+      },
+    ];
+    if (showCumulative) {
+      series.push(
+        {
+          name: 'Cumulative actual',
+          type: 'line',
+          data: cumulativeActual,
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 7,
+          lineStyle: { color: '#1d4ed8', width: 2.5 },
+          itemStyle: { color: '#1d4ed8' },
+          yAxisIndex: 1,
+        },
+        {
+          name: 'Cumulative target',
+          type: 'line',
+          data: cumulativeTarget,
+          smooth: true,
+          symbol: 'emptyCircle',
+          symbolSize: 6,
+          lineStyle: { color: '#b45309', type: 'dotted', width: 2 },
+          itemStyle: { color: '#b45309' },
+          yAxisIndex: 1,
+        },
+      );
+    }
+    return {
+      backgroundColor: 'transparent',
+      grid: { left: 8, right: showCumulative ? 56 : 16, top: 48, bottom: 36, containLabel: true },
+      legend: {
+        top: 0,
+        type: 'scroll',
+        textStyle: { fontSize: 11, color: theme.muted },
+      },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        axisLabel: {
+          color: theme.muted,
+          fontSize: 11,
+          fontWeight: 600,
+          rotate: labels.length > 14 ? 35 : 0,
+        },
+        axisTick: { alignWithLabel: true },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          name: 'KD / day',
+          nameTextStyle: { color: theme.muted, fontSize: 10 },
+          max: Math.ceil(maxBar * 1.2),
+          axisLabel: { formatter: '{value}', color: theme.muted, fontSize: 10 },
+          splitLine: { lineStyle: { color: theme.grid, type: 'dashed' } },
+        },
+        ...(showCumulative
+          ? [
+              {
+                type: 'value' as const,
+                name: 'KD cumulative',
+                nameTextStyle: { color: theme.muted, fontSize: 10 },
+                max: Math.ceil(maxCum * 1.15),
+                axisLabel: { formatter: '{value}', color: theme.muted, fontSize: 10 },
+                splitLine: { show: false },
+              },
+            ]
+          : []),
+      ],
+      series,
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: theme.tipBg,
+        borderWidth: 0,
+        textStyle: { color: '#e8f4fc', fontSize: 12 },
+        formatter: (params: unknown) => {
+          const arr = params as { dataIndex?: number }[];
+          const i = arr[0]?.dataIndex ?? 0;
+          const actual = actuals[i] ?? 0;
+          const tgt = targets[i] > 0 ? targets[i] : dailyTargetAvg;
+          const lines = [`<strong>${labels[i]}</strong>`, `${days[i]?.date || ''}`];
+          lines.push(`Daily actual: ${formatKwd(actual)}`);
+          if (tgt > 0) {
+            lines.push(`Daily target: ${formatKwd(tgt)}`);
+            lines.push(`Gap: ${formatKwd(actual - tgt)}`);
+          }
+          if (showCumulative) {
+            lines.push(`Period-to-date: ${formatKwd(cumulativeActual[i] ?? 0)}`);
+            lines.push(`Target pace: ${formatKwd(cumulativeTarget[i] ?? 0)}`);
+          }
+          return lines.join('<br/>');
+        },
+      },
+    } as echarts.EChartsOption;
+  }, [days, labels, actuals, targets, dailyTargetAvg, showCumulative, cumulativeActual, cumulativeTarget]);
+
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-daily-revenue']));
+  }, [getChart]);
+
+  if (!days.length) return <p className="perfMuted">No business days in this period.</p>;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div ref={ref} className="perfEchart perfEchartDaily" role="img" aria-label="Daily revenue chart" />
+    </ChartExportWrap>
+  );
 }
 
 /** Multi-series daily KD overlay (compare selected machines). */
@@ -194,7 +595,7 @@ export function FleetCompareChart({ machines }: { machines: FleetMachine[] }) {
     return first.map((d) => dayLabel(d));
   }, [limited]);
 
-  const ref = useEcharts(() => {
+  const { ref, getChart } = useEcharts(() => {
     if (!limited.length || !labels.length) return null;
     const theme = readTheme();
     return {
@@ -251,8 +652,17 @@ export function FleetCompareChart({ machines }: { machines: FleetMachine[] }) {
     } as echarts.EChartsOption;
   }, [limited, labels]);
 
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-compare']));
+  }, [getChart]);
+
   if (!limited.length) return <p className="perfMuted">Select locations to compare.</p>;
-  return <div ref={ref} className="perfEchart" role="img" aria-label="Revenue compare by location" />;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div ref={ref} className="perfEchart" role="img" aria-label="Revenue compare by location" />
+    </ChartExportWrap>
+  );
 }
 
 /** Stacked achieved + remaining for one day series (single or aggregate). */
@@ -276,7 +686,7 @@ export function RevenueTrajectoryChart({ days, title }: { days: PerfDay[]; title
     [days],
   );
 
-  const ref = useEcharts(() => {
+  const { ref, getChart } = useEcharts(() => {
     if (!seriesData.length) return null;
     const theme = readTheme();
     const labels = seriesData.map((r) => r.label);
@@ -378,8 +788,17 @@ export function RevenueTrajectoryChart({ days, title }: { days: PerfDay[]; title
     } as echarts.EChartsOption;
   }, [seriesData, title]);
 
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-trajectory']));
+  }, [getChart]);
+
   if (!days.length) return <p className="perfMuted">No days in range.</p>;
-  return <div ref={ref} className="perfEchart" role="img" aria-label="Revenue Trajectory" />;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div ref={ref} className="perfEchart" role="img" aria-label="Revenue Trajectory" />
+    </ChartExportWrap>
+  );
 }
 
 export function ProductTrajectoryChart({ days, productName }: { days: PerfDay[]; productName: string }) {
@@ -402,7 +821,7 @@ export function ProductTrajectoryChart({ days, productName }: { days: PerfDay[];
     [days],
   );
 
-  const ref = useEcharts(() => {
+  const { ref, getChart } = useEcharts(() => {
     if (!seriesData.length) return null;
     const theme = readTheme();
     const labels = seriesData.map((r) => r.label);
@@ -496,8 +915,17 @@ export function ProductTrajectoryChart({ days, productName }: { days: PerfDay[];
     } as echarts.EChartsOption;
   }, [seriesData, productName]);
 
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-product']));
+  }, [getChart]);
+
   if (!days.length) return <p className="perfMuted">No days in range.</p>;
-  return <div ref={ref} className="perfEchart" role="img" aria-label={`Product Trajectory ${productName}`} />;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div ref={ref} className="perfEchart" role="img" aria-label={`Product Trajectory ${productName}`} />
+    </ChartExportWrap>
+  );
 }
 
 export function GrowthRateChart({ days }: { days: PerfDay[] }) {
@@ -511,7 +939,7 @@ export function GrowthRateChart({ days }: { days: PerfDay[] }) {
     [days],
   );
 
-  const ref = useEcharts(() => {
+  const { ref, getChart } = useEcharts(() => {
     if (!seriesData.length) return null;
     const theme = readTheme();
     const labels = seriesData.map((r) => r.label);
@@ -587,8 +1015,91 @@ export function GrowthRateChart({ days }: { days: PerfDay[] }) {
     } as echarts.EChartsOption;
   }, [seriesData]);
 
+  const onExport = useCallback(() => {
+    const c = getChart();
+    if (c) downloadChartPng(c, chartFilename(['perf-growth']));
+  }, [getChart]);
+
   if (!days.length) return <p className="perfMuted">No days in range.</p>;
-  return <div ref={ref} className="perfEchart" role="img" aria-label="Day growth rates" />;
+  return (
+    <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
+      <div ref={ref} className="perfEchart" role="img" aria-label="Day growth rates" />
+    </ChartExportWrap>
+  );
+}
+
+/** Multi-select overview — Targets Areas detail layout. */
+export function FleetPerformanceOverview({
+  machines,
+  aggregateDays,
+}: {
+  machines: FleetMachine[];
+  aggregateDays: PerfDay[];
+}) {
+  const [machineSort, setMachineSort] = useState<MachineSort>('achievement');
+  const [showCumulative, setShowCumulative] = useState(true);
+
+  if (!machines.length) return null;
+
+  return (
+    <section className="perfOverview" aria-labelledby="perf-overview-title">
+      <header className="perfOverviewHead">
+        <div>
+          <h3 id="perf-overview-title" className="perfSectionTitle">
+            Performance charts
+          </h3>
+          <p className="perfSectionHint">
+            Target vs actual by machine, achievement ranking, and daily fleet revenue — same pattern as
+            Targets Areas. Zoom when you have many machines. PNG export on each chart.
+          </p>
+        </div>
+      </header>
+
+      <div className="perfOverviewGrid">
+        <article className="perfPanel">
+          <div className="perfPanelHead">
+            <div>
+              <h4 className="perfPanelTitle">Period revenue by machine</h4>
+              <p className="perfSectionHint">Gray = target · color = actual · label = achievement %</p>
+            </div>
+            <PerfSortToolbar sort={machineSort} onChange={setMachineSort} />
+          </div>
+          <FleetTargetActualChart machines={machines} sort={machineSort} />
+        </article>
+
+        <article className="perfPanel">
+          <div className="perfPanelHead">
+            <div>
+              <h4 className="perfPanelTitle">Achievement ranking</h4>
+              <p className="perfSectionHint">Period KD vs target — 100% dashed line</p>
+            </div>
+          </div>
+          <FleetRankingChart machines={machines} sort={machineSort} />
+        </article>
+
+        <article className="perfPanel perfPanelWide">
+          <div className="perfPanelHead">
+            <div>
+              <h4 className="perfPanelTitle">Daily revenue (selected fleet)</h4>
+              <p className="perfSectionHint">
+                Sum of selected locations · dashed line = daily target · optional cumulative pace
+              </p>
+            </div>
+            <div className="perfChartToolbar">
+              <button
+                type="button"
+                className={`perfSegPill ${showCumulative ? 'active' : ''}`}
+                onClick={() => setShowCumulative((v) => !v)}
+              >
+                {showCumulative ? 'Cumulative on' : 'Cumulative off'}
+              </button>
+            </div>
+          </div>
+          <FleetDailyRevenueChart days={aggregateDays} showCumulative={showCumulative} />
+        </article>
+      </div>
+    </section>
+  );
 }
 
 export type { PerfDay };
