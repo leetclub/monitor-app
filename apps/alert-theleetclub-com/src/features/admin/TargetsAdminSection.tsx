@@ -5,165 +5,248 @@ import { HelpTip } from '@/components/HelpTip';
 
 type MachineRow = { id: string; name: string };
 
-type ProfileRow = {
-  machine_id: string;
-  machine_name: string | null;
-  location_owner: string | null;
-  location_hours: string | null;
-  operating_days: unknown;
-  cleaning_windows: unknown;
-  operator_hours: unknown;
-  technician_schedule: unknown;
-  qa_schedule: unknown;
-  timezone: string;
-  priority?: number;
-  daily_sales_target?: number | null;
-  sx_product_name?: string | null;
-  daily_product_target?: number | null;
-  sx_target_period?: string | null;
-  updated_at?: string | null;
+type TargetMetric = 'revenue' | 'cups';
+type TargetPeriod = 'daily' | 'weekly' | 'monthly';
+
+type PromotedProduct = {
+  productName: string;
+  metric: TargetMetric;
+  dailyTarget: number | null;
+  period: TargetPeriod;
+  primary?: boolean;
 };
 
-function fmtKd(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(Number(v))) return '—';
-  return String(v);
+type TargetsRow = {
+  machineId: string;
+  dailySalesTarget?: number | null;
+  locationTargetMetric?: TargetMetric;
+  dailyLocationCupsTarget?: number | null;
+  sxTargetPeriod?: TargetPeriod;
+  promotedProducts?: PromotedProduct[];
+  sxProductName?: string | null;
+  dailyProductTarget?: number | null;
+};
+
+type VendonProduct = { name: string; vendCount: number };
+
+function emptyProduct(name = ''): PromotedProduct {
+  return {
+    productName: name,
+    metric: 'cups',
+    dailyTarget: null,
+    period: 'daily',
+    primary: false,
+  };
 }
 
-function fmtCups(v: number | null | undefined): string {
+function fmtNum(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(Number(v))) return '—';
-  return String(Math.round(Number(v)));
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
 }
 
 export function TargetsAdminSection() {
   const qc = useQueryClient();
   const [machineId, setMachineId] = useState('');
+  const [locMetric, setLocMetric] = useState<TargetMetric>('revenue');
   const [dailySalesTarget, setDailySalesTarget] = useState('');
-  const [sxProductName, setSxProductName] = useState('Americano Max');
-  const [dailyProductTarget, setDailyProductTarget] = useState('');
-  const [sxTargetPeriod, setSxTargetPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [dailyLocCups, setDailyLocCups] = useState('');
+  const [defaultPeriod, setDefaultPeriod] = useState<TargetPeriod>('daily');
+  const [products, setProducts] = useState<PromotedProduct[]>([]);
   const [formErr, setFormErr] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [addProductName, setAddProductName] = useState('');
 
   const machinesQ = useQuery({
     queryKey: ['alert-machines'],
     queryFn: () => apiGet<{ machines: MachineRow[] }>('/api/alert/machines'),
   });
-  const profilesQ = useQuery({
-    queryKey: ['alert-machine-profiles'],
-    queryFn: () => apiGet<{ rows: ProfileRow[] }>('/api/alert/admin/machine-profiles'),
+  const targetsQ = useQuery({
+    queryKey: ['alert-admin-targets'],
+    queryFn: () => apiGet<{ rows: TargetsRow[] }>('/api/alert/admin/targets'),
+  });
+  const vendonQ = useQuery({
+    queryKey: ['alert-vendon-products', machineId || 'none'],
+    queryFn: () =>
+      apiGet<{ products?: VendonProduct[] }>(
+        `/api/alert/admin/vendon-products?machineId=${encodeURIComponent(machineId)}&days=21`,
+      ),
+    enabled: Boolean(machineId),
+    staleTime: 5 * 60_000,
   });
 
   const machines = machinesQ.data?.machines ?? [];
-  const profiles = profilesQ.data?.rows ?? [];
-  const profileById = useMemo(() => {
-    const m = new Map<string, ProfileRow>();
-    for (const r of profiles) m.set(r.machine_id, r);
+  const targetById = useMemo(() => {
+    const m = new Map<string, TargetsRow>();
+    for (const r of targetsQ.data?.rows || []) m.set(r.machineId, r);
     return m;
-  }, [profiles]);
+  }, [targetsQ.data?.rows]);
 
   const machineName = useMemo(
     () => machines.find((m) => m.id === machineId)?.name ?? '',
     [machines, machineId],
   );
 
+  const catalog = useMemo(() => {
+    const list = vendonQ.data?.products || [];
+    return [...list].sort((a, b) => b.vendCount - a.vendCount || a.name.localeCompare(b.name));
+  }, [vendonQ.data?.products]);
+
   const loadMachine = useCallback(
     (id: string) => {
       setMachineId(id);
       setFormErr(null);
-      const p = profileById.get(id);
-      if (!p) {
+      setAddProductName('');
+      const t = targetById.get(id);
+      if (!t) {
+        setLocMetric('revenue');
         setDailySalesTarget('');
-        setSxProductName('Americano Max');
-        setDailyProductTarget('');
-        setSxTargetPeriod('daily');
+        setDailyLocCups('');
+        setDefaultPeriod('daily');
+        setProducts([]);
         return;
       }
+      setLocMetric(t.locationTargetMetric === 'cups' ? 'cups' : 'revenue');
       setDailySalesTarget(
-        p.daily_sales_target != null && Number.isFinite(Number(p.daily_sales_target))
-          ? String(p.daily_sales_target)
+        t.dailySalesTarget != null && Number.isFinite(Number(t.dailySalesTarget))
+          ? String(t.dailySalesTarget)
           : '',
       );
-      setSxProductName((p.sx_product_name || '').trim() || 'Americano Max');
-      setDailyProductTarget(
-        p.daily_product_target != null && Number.isFinite(Number(p.daily_product_target))
-          ? String(p.daily_product_target)
+      setDailyLocCups(
+        t.dailyLocationCupsTarget != null && Number.isFinite(Number(t.dailyLocationCupsTarget))
+          ? String(t.dailyLocationCupsTarget)
           : '',
       );
-      const per = String(p.sx_target_period || 'daily').toLowerCase();
-      setSxTargetPeriod(per === 'weekly' || per === 'monthly' ? per : 'daily');
+      setDefaultPeriod(
+        t.sxTargetPeriod === 'weekly' || t.sxTargetPeriod === 'monthly' ? t.sxTargetPeriod : 'daily',
+      );
+      const prods = Array.isArray(t.promotedProducts) ? t.promotedProducts : [];
+      if (prods.length) {
+        setProducts(
+          prods.map((p, i) => ({
+            productName: p.productName,
+            metric: p.metric === 'revenue' ? 'revenue' : 'cups',
+            dailyTarget: p.dailyTarget ?? null,
+            period:
+              p.period === 'weekly' || p.period === 'monthly' ? p.period : 'daily',
+            primary: Boolean(p.primary) || i === 0,
+          })),
+        );
+      } else if (t.sxProductName) {
+        setProducts([
+          {
+            productName: t.sxProductName,
+            metric: 'cups',
+            dailyTarget: t.dailyProductTarget ?? null,
+            period:
+              t.sxTargetPeriod === 'weekly' || t.sxTargetPeriod === 'monthly'
+                ? t.sxTargetPeriod
+                : 'daily',
+            primary: true,
+          },
+        ]);
+      } else {
+        setProducts([]);
+      }
     },
-    [profileById],
+    [targetById],
   );
 
   const clearForm = () => {
     setMachineId('');
+    setLocMetric('revenue');
     setDailySalesTarget('');
-    setSxProductName('Americano Max');
-    setDailyProductTarget('');
-    setSxTargetPeriod('daily');
+    setDailyLocCups('');
+    setDefaultPeriod('daily');
+    setProducts([]);
+    setAddProductName('');
     setFormErr(null);
+  };
+
+  const setPrimary = (idx: number) => {
+    setProducts((prev) => prev.map((p, i) => ({ ...p, primary: i === idx })));
+  };
+
+  const updateProduct = (idx: number, patch: Partial<PromotedProduct>) => {
+    setProducts((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  };
+
+  const removeProduct = (idx: number) => {
+    setProducts((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      if (next.length && !next.some((p) => p.primary)) next[0].primary = true;
+      return next;
+    });
+  };
+
+  const addProduct = (name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    setProducts((prev) => {
+      if (prev.some((p) => p.productName.toLowerCase() === n.toLowerCase())) return prev;
+      const row = emptyProduct(n);
+      row.period = defaultPeriod;
+      row.primary = prev.length === 0;
+      return [...prev, row];
+    });
+    setAddProductName('');
   };
 
   const saveMut = useMutation({
     mutationFn: async () => {
       if (!machineId.trim()) throw new Error('Choose a machine first.');
-      const existing = profileById.get(machineId);
-      const body: Record<string, unknown> = {
-        machine_id: machineId,
-        machine_name: machineName || existing?.machine_name || null,
-        location_owner: existing?.location_owner ?? null,
-        location_hours: existing?.location_hours ?? null,
-        operating_days: existing?.operating_days ?? { preset: 'all_week' },
-        cleaning_windows: Array.isArray(existing?.cleaning_windows) ? existing!.cleaning_windows : [],
-        operator_hours: Array.isArray(existing?.operator_hours) ? existing!.operator_hours : [],
-        technician_schedule: Array.isArray(existing?.technician_schedule)
-          ? existing!.technician_schedule
-          : [],
-        qa_schedule: Array.isArray(existing?.qa_schedule) ? existing!.qa_schedule : [],
-        timezone: existing?.timezone || 'Asia/Kuwait',
-        priority: typeof existing?.priority === 'number' ? existing.priority : 10,
-        daily_sales_target: dailySalesTarget.trim() === '' ? null : Number(dailySalesTarget),
-        sx_product_name: sxProductName.trim() || 'Americano Max',
-        daily_product_target: dailyProductTarget.trim() === '' ? null : Number(dailyProductTarget),
-        sx_target_period: sxTargetPeriod,
-      };
-      if (
-        body.daily_sales_target != null &&
-        (!Number.isFinite(body.daily_sales_target as number) || (body.daily_sales_target as number) < 0)
-      ) {
-        throw new Error('Daily target (KD) must be a valid number.');
-      }
-      if (
-        body.daily_product_target != null &&
-        (!Number.isFinite(body.daily_product_target as number) || (body.daily_product_target as number) < 0)
-      ) {
-        throw new Error('Product target (cups) must be a valid number.');
-      }
-      return apiJson('/api/alert/admin/machine-profiles', body);
+      const cleaned = products
+        .map((p) => ({
+          productName: p.productName.trim(),
+          metric: p.metric,
+          dailyTarget:
+            p.dailyTarget != null && Number.isFinite(Number(p.dailyTarget))
+              ? Number(p.dailyTarget)
+              : null,
+          period: p.period,
+          primary: Boolean(p.primary),
+        }))
+        .filter((p) => p.productName);
+      if (cleaned.length && !cleaned.some((p) => p.primary)) cleaned[0].primary = true;
+      return apiJson('/api/alert/admin/targets', {
+        machineId,
+        locationTargetMetric: locMetric,
+        dailySalesTarget: dailySalesTarget.trim() === '' ? null : Number(dailySalesTarget),
+        dailyLocationCupsTarget: dailyLocCups.trim() === '' ? null : Number(dailyLocCups),
+        sxTargetPeriod: defaultPeriod,
+        promotedProducts: cleaned,
+      });
     },
     onSuccess: async () => {
       setFormErr(null);
+      await qc.invalidateQueries({ queryKey: ['alert-admin-targets'] });
       await qc.invalidateQueries({ queryKey: ['alert-machine-profiles'] });
       await qc.invalidateQueries({ queryKey: ['alert-performance-fleet'] });
-      await qc.invalidateQueries({ queryKey: ['alert-performance'] });
+      if (machineId) loadMachine(machineId);
     },
   });
 
   const q = filter.trim().toLowerCase();
   const tableRows = useMemo(() => {
     const rows = machines.map((m) => {
-      const p = profileById.get(m.id);
+      const t = targetById.get(m.id);
+      const prods = t?.promotedProducts?.length
+        ? t.promotedProducts
+        : t?.sxProductName
+          ? [{ productName: t.sxProductName, dailyTarget: t.dailyProductTarget }]
+          : [];
       return {
         id: m.id,
         name: m.name,
-        locKd: p?.daily_sales_target ?? null,
-        product: (p?.sx_product_name || '').trim() || null,
-        cups: p?.daily_product_target ?? null,
-        period: (p?.sx_target_period || 'daily').toLowerCase(),
-        hasAny:
-          p?.daily_sales_target != null ||
-          p?.daily_product_target != null ||
-          Boolean((p?.sx_product_name || '').trim()),
+        locMetric: t?.locationTargetMetric || 'revenue',
+        locKd: t?.dailySalesTarget ?? null,
+        locCups: t?.dailyLocationCupsTarget ?? null,
+        products: prods,
+        hasAny: Boolean(
+          t?.dailySalesTarget != null ||
+            t?.dailyLocationCupsTarget != null ||
+            (prods && prods.length),
+        ),
       };
     });
     rows.sort((a, b) => {
@@ -175,23 +258,23 @@ export function TargetsAdminSection() {
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.id.toLowerCase().includes(q) ||
-        (r.product || '').toLowerCase().includes(q),
+        r.products.some((p) => (p.productName || '').toLowerCase().includes(q)),
     );
-  }, [machines, profileById, q]);
+  }, [machines, targetById, q]);
 
   return (
     <>
       <p className="muted" style={{ margin: '0 0 14px', fontSize: '0.9rem' }}>
-        Location KD and promoted-product cup targets used by Performance + SX. Cleaning schedules stay under{' '}
-        <strong>Machines</strong>.
+        Location targets (KD or cups) and promoted products from Vendon — each product has its own
+        cups or revenue target. Used by Performance + SX.
       </p>
 
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">
-            {machineId ? `Targets: ${machineName || machineId}` : 'Location & product targets'}
+            {machineId ? `Targets · ${machineName || machineId}` : 'Location & product targets'}
           </h2>
-          <HelpTip text="Daily KD target overrides the week default when set. SX product is matched as a substring on Vendon vend names (default Americano Max). Period converts weekly/monthly targets into a daily yardstick on charts." />
+          <HelpTip text="Pick a machine, set the location target unit (KD or cups), then promote one or more Vendon products with their own targets. Mark one product as Primary for SX column compatibility." />
         </div>
 
         {formErr || saveMut.isError ? (
@@ -222,26 +305,51 @@ export function TargetsAdminSection() {
         </div>
 
         <div className="adminGroup">
-          <div className="adminGroupLabel">Location revenue</div>
-          <div className="adminMachineCoreRow">
+          <div className="adminGroupLabelRow">
+            <div className="adminGroupLabel">Location target</div>
+            <HelpTip text="Revenue = KD (overrides week default). Cups = total location cups target for the period." />
+          </div>
+          <div className="adminMachineCoreRow adminMachineCoreRow--3">
             <div className="adminFieldCell">
-              <span className="adminFieldCaption">Daily target (KD)</span>
-              <input
-                type="number"
-                min={0}
-                step={0.001}
-                value={dailySalesTarget}
-                onChange={(e) => setDailySalesTarget(e.target.value)}
-                placeholder="e.g. 45"
-                title="Location daily sales target — overrides week default when set"
-              />
-            </div>
-            <div className="adminFieldCell">
-              <span className="adminFieldCaption">Target period</span>
+              <span className="adminFieldCaption">Measure by</span>
               <select
-                value={sxTargetPeriod}
-                onChange={(e) => setSxTargetPeriod(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                title="How location/product targets apply for Performance + SX"
+                value={locMetric}
+                onChange={(e) => setLocMetric(e.target.value as TargetMetric)}
+              >
+                <option value="revenue">Revenue (KD)</option>
+                <option value="cups">Cups</option>
+              </select>
+            </div>
+            {locMetric === 'revenue' ? (
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">Target (KD)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.001}
+                  value={dailySalesTarget}
+                  onChange={(e) => setDailySalesTarget(e.target.value)}
+                  placeholder="e.g. 45"
+                />
+              </div>
+            ) : (
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">Target (cups)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={dailyLocCups}
+                  onChange={(e) => setDailyLocCups(e.target.value)}
+                  placeholder="e.g. 200"
+                />
+              </div>
+            )}
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Default period</span>
+              <select
+                value={defaultPeriod}
+                onChange={(e) => setDefaultPeriod(e.target.value as TargetPeriod)}
               >
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
@@ -252,31 +360,144 @@ export function TargetsAdminSection() {
         </div>
 
         <div className="adminGroup">
-          <div className="adminGroupLabel">Promoted product (SX)</div>
-          <div className="adminMachineCoreRow">
-            <div className="adminFieldCell">
-              <span className="adminFieldCaption">SX product</span>
-              <input
-                value={sxProductName}
-                onChange={(e) => setSxProductName(e.target.value)}
-                placeholder="e.g. Americano Max"
-                autoComplete="off"
-                title="Vendon product name (substring match)"
-              />
-            </div>
-            <div className="adminFieldCell">
-              <span className="adminFieldCaption">Product target (cups)</span>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={dailyProductTarget}
-                onChange={(e) => setDailyProductTarget(e.target.value)}
-                placeholder="e.g. 80"
-                title="Cup target for the SX product (interpreted by period)"
-              />
-            </div>
+          <div className="adminGroupLabelRow">
+            <div className="adminGroupLabel">Promoted products</div>
+            <HelpTip text="Products are loaded from recent Vendon vends for this machine. Add several; each has cups or KD target and its own period." />
           </div>
+
+          {!machineId ? (
+            <p className="muted" style={{ fontSize: '0.85rem' }}>
+              Select a machine to load Vendon products.
+            </p>
+          ) : (
+            <>
+              <div className="adminMachineCoreRow adminMachineCoreRow--2" style={{ marginBottom: 12 }}>
+                <div className="adminFieldCell">
+                  <span className="adminFieldCaption">Add from Vendon</span>
+                  <select
+                    value={addProductName}
+                    onChange={(e) => setAddProductName(e.target.value)}
+                    disabled={vendonQ.isLoading}
+                  >
+                    <option value="">
+                      {vendonQ.isLoading
+                        ? 'Loading products…'
+                        : catalog.length
+                          ? 'Choose product…'
+                          : 'No recent products found'}
+                    </option>
+                    {catalog.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} ({p.vendCount})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="adminFieldCell" style={{ justifyContent: 'flex-end' }}>
+                  <span className="adminFieldCaption" style={{ visibility: 'hidden' }}>
+                    Add
+                  </span>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={!addProductName}
+                    onClick={() => addProduct(addProductName)}
+                  >
+                    Promote product
+                  </button>
+                </div>
+              </div>
+
+              {vendonQ.isError ? (
+                <p className="pillDanger" style={{ fontSize: '0.85rem' }}>
+                  Could not load Vendon products: {(vendonQ.error as Error).message}
+                </p>
+              ) : null}
+
+              {!products.length ? (
+                <p className="muted" style={{ fontSize: '0.85rem' }}>
+                  No promoted products yet — pick from the Vendon list above.
+                </p>
+              ) : (
+                <div className="tableWrap">
+                  <table className="adminSavedProfilesTable">
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Measure</th>
+                        <th>Target</th>
+                        <th>Period</th>
+                        <th>Primary</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {products.map((p, idx) => (
+                        <tr key={`${p.productName}-${idx}`}>
+                          <td className="tableCellWrap">{p.productName}</td>
+                          <td>
+                            <select
+                              value={p.metric}
+                              onChange={(e) =>
+                                updateProduct(idx, { metric: e.target.value as TargetMetric })
+                              }
+                            >
+                              <option value="cups">Cups</option>
+                              <option value="revenue">Revenue (KD)</option>
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min={0}
+                              step={p.metric === 'cups' ? 1 : 0.001}
+                              value={p.dailyTarget ?? ''}
+                              onChange={(e) =>
+                                updateProduct(idx, {
+                                  dailyTarget:
+                                    e.target.value.trim() === '' ? null : Number(e.target.value),
+                                })
+                              }
+                              placeholder={p.metric === 'cups' ? 'cups' : 'KD'}
+                              style={{ minWidth: 88 }}
+                            />
+                          </td>
+                          <td>
+                            <select
+                              value={p.period}
+                              onChange={(e) =>
+                                updateProduct(idx, { period: e.target.value as TargetPeriod })
+                              }
+                            >
+                              <option value="daily">Daily</option>
+                              <option value="weekly">Weekly</option>
+                              <option value="monthly">Monthly</option>
+                            </select>
+                          </td>
+                          <td>
+                            <label className="adminInlineDayPick" style={{ gap: 6 }}>
+                              <input
+                                type="radio"
+                                name="primary-product"
+                                checked={Boolean(p.primary)}
+                                onChange={() => setPrimary(idx)}
+                              />
+                              SX
+                            </label>
+                          </td>
+                          <td>
+                            <button type="button" className="danger" onClick={() => removeProduct(idx)}>
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="adminSaveBar">
@@ -302,7 +523,7 @@ export function TargetsAdminSection() {
       <div className="adminCard">
         <div className="adminCardHeadRow">
           <h2 className="adminCardTitle">Fleet targets</h2>
-          <HelpTip text="All catalog machines. Edit loads the form above. Machines with no saved targets show dashes." />
+          <HelpTip text="Catalog machines with saved location/product targets. Edit loads the form above." />
         </div>
         <div className="adminFieldCell" style={{ maxWidth: 320, marginBottom: 12 }}>
           <input
@@ -312,19 +533,14 @@ export function TargetsAdminSection() {
             aria-label="Filter machines"
           />
         </div>
-        {machinesQ.isLoading || profilesQ.isLoading ? <div className="muted">Loading…</div> : null}
-        {machinesQ.isError ? (
-          <div className="muted">{(machinesQ.error as Error).message}</div>
-        ) : null}
+        {machinesQ.isLoading || targetsQ.isLoading ? <div className="muted">Loading…</div> : null}
         <div className="tableWrap tableWrapBounded">
           <table className="adminSavedProfilesTable">
             <thead>
               <tr>
                 <th>Machine</th>
-                <th>Loc KD</th>
-                <th>SX product</th>
-                <th>Cups</th>
-                <th>Period</th>
+                <th>Location</th>
+                <th>Promoted products</th>
                 <th />
               </tr>
             </thead>
@@ -332,10 +548,27 @@ export function TargetsAdminSection() {
               {tableRows.map((r) => (
                 <tr key={r.id}>
                   <td className="tableCellWrap">{r.name}</td>
-                  <td>{fmtKd(r.locKd)}</td>
-                  <td className="tableCellWrap">{r.product || '—'}</td>
-                  <td>{fmtCups(r.cups)}</td>
-                  <td className="muted">{r.period}</td>
+                  <td>
+                    {r.locMetric === 'cups'
+                      ? r.locCups != null
+                        ? `${fmtNum(r.locCups)} cups`
+                        : '—'
+                      : r.locKd != null
+                        ? `${fmtNum(r.locKd)} KD`
+                        : '—'}
+                  </td>
+                  <td className="tableCellWrap">
+                    {r.products.length
+                      ? r.products
+                          .map(
+                            (p) =>
+                              `${p.productName}${
+                                p.dailyTarget != null ? ` (${fmtNum(p.dailyTarget)})` : ''
+                              }`,
+                          )
+                          .join(' · ')
+                      : '—'}
+                  </td>
                   <td>
                     <button type="button" className="primary" onClick={() => loadMachine(r.id)}>
                       Edit
@@ -345,7 +578,7 @@ export function TargetsAdminSection() {
               ))}
               {!tableRows.length && !machinesQ.isLoading ? (
                 <tr>
-                  <td colSpan={6} className="muted">
+                  <td colSpan={4} className="muted">
                     No machines match.
                   </td>
                 </tr>

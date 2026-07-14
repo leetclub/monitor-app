@@ -27,6 +27,8 @@ def build_machine_performance(
     today: date,
     now_local: datetime,
     fetch_vends_fn: Optional[VendonGetVends],
+    range_start: Optional[date] = None,
+    range_end: Optional[date] = None,
 ) -> Dict[str, Any]:
     """Daily location KD + product cups for Revenue Trajectory / product charts."""
     pname = (product_name or "").strip() or DEFAULT_SX_PRODUCT
@@ -51,11 +53,14 @@ def build_machine_performance(
             daily_prod = prod_tgt / 30.0
 
     days_out: List[Dict[str, Any]] = []
-    start = today - timedelta(days=max(1, history_days) - 1)
+    end = range_end or today
+    start = range_start if range_start is not None else end - timedelta(days=max(1, history_days) - 1)
+    if start > end:
+        start = end
     d = start
     prev_kwd: Optional[float] = None
     prev_cups: Optional[float] = None
-    while d <= today:
+    while d <= end:
         kwd = float(kwd_by_day.get(d) or 0) if kwd_by_day else 0.0
         cups = 0
         if fetch_vends_fn and pname:

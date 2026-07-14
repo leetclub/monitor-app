@@ -1412,29 +1412,116 @@ label.adminFormLabel > textarea {
   min-width: 0;
 }
 
+.adminFieldCell > .adminFieldCaption {
+  margin-bottom: 0;
+}
+
 .adminFieldCell > input,
-.adminFieldCell > select {
+.adminFieldCell > select,
+.adminFieldCell > textarea {
   width: 100%;
   min-width: 0;
 }
 
-/* Equal columns; minimum width stops selects truncating “Choose…” / “Select…” */
+/* Unified Admin controls — custom chevron only (no native + SVG double arrow) */
+.adminAppRoot input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.adminAppRoot select,
+.adminAppRoot textarea {
+  box-sizing: border-box;
+  min-height: 40px;
+  max-width: 100%;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background-color: var(--panel);
+  line-height: 1.3;
+}
+
+.adminAppRoot select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  /* Keep chevron inside the control; avoid far-right overflow in grids/tables */
+  padding: 8px 2rem 8px 12px !important;
+  background-color: var(--panel) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2394a3b8' d='M1.2 1.2L6 6l4.8-4.8'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.7rem center !important;
+  background-size: 10px 6px !important;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.adminAppRoot select::-ms-expand {
+  display: none;
+}
+
+.adminAppRoot table select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 1.75rem 6px 8px !important;
+  background-position: right 0.55rem center !important;
+}
+
+.adminAppRoot table input[type='number'] {
+  min-height: 36px;
+  max-width: 7.5rem;
+}
+
+.adminAppRoot .adminSideNav {
+  min-width: 0;
+}
+
+.adminAppRoot .adminAppMain {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.adminAppRoot .adminCard {
+  overflow: hidden;
+}
+
+.adminAppRoot .adminMachineCoreRow > .adminFieldCell {
+  align-self: stretch;
+}
+
+/* Equal columns; auto-fit avoids empty third track when only 2 fields */
 .adminMachineCoreRow {
   display: grid;
-  grid-template-columns: repeat(3, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 16px;
   align-items: stretch;
 }
 
+.adminMachineCoreRow--2 {
+  grid-template-columns: repeat(2, minmax(12rem, 1fr));
+}
+
+.adminMachineCoreRow--3 {
+  grid-template-columns: repeat(3, minmax(12rem, 1fr));
+}
+
 @media (max-width: 840px) {
-  .adminMachineCoreRow {
+  .adminMachineCoreRow,
+  .adminMachineCoreRow--2,
+  .adminMachineCoreRow--3 {
     grid-template-columns: 1fr;
   }
 }
 
-.adminCardMachineProfile .adminMachineCoreRow .adminFieldCell > select,
-.adminCardMachineProfile .adminMachineCoreRow .adminFieldCell > input {
-  min-height: 40px;
+.adminCard .row > label {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: min(100%, 14rem);
+  flex: 1 1 12rem;
+}
+
+.adminCard .row > label > input,
+.adminCard .row > label > select {
+  width: 100%;
   box-sizing: border-box;
 }
 

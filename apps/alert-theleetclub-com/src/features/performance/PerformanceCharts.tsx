@@ -1613,7 +1613,8 @@ export function FleetPerformanceOverview({
       <h4 className="perfGroupTitle">Promoted product{prodTitle}</h4>
       {!hasProductData ? (
         <p className="perfMuted">
-          No product cups in this selection yet (loading cups can take a moment on first load).
+          Product cups are off by default for speed. Use <strong>Load product cups</strong> in the
+          toolbar (or open a single machine for detail charts).
         </p>
       ) : (
         <div className="perfOverviewGrid">

@@ -28,13 +28,40 @@ export type FleetMachine = {
   days: PerfDay[];
 };
 
+export type FleetKpis = {
+  deficitKd?: number | null;
+  periodActualKd?: number | null;
+  periodTargetKd?: number | null;
+  achievementRatePct?: number | null;
+  machinesOnTarget?: number;
+  machinesWithTarget?: number;
+  growthRatePct?: number | null;
+  prevPeriodActualKd?: number | null;
+};
+
+export type PerfPreset =
+  | 'this_week'
+  | 'last_week'
+  | 'last_2_weeks'
+  | 'this_month'
+  | 'last_month'
+  | 'today'
+  | 'yesterday'
+  | 'rolling';
+
+export type PerfViewMode = 'all' | 'top5' | 'lowest5';
+
 export type FleetPayload = {
   historyDays?: number;
+  preset?: string;
+  window?: { start?: string; end?: string; prevStart?: string; prevEnd?: string };
+  includeProducts?: boolean;
   machineCount?: number;
   productName?: string | null;
   productNames?: string[];
   machines?: FleetMachine[];
   aggregateDays?: PerfDay[];
+  kpis?: FleetKpis;
   error?: string;
 };
 

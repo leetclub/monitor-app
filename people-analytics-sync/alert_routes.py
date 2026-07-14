@@ -1765,8 +1765,11 @@ def register_alert_routes(app) -> None:
                 ).all()
                 out: List[Dict[str, Any]] = []
                 target_by_mid: Dict[str, Dict[str, Any]] = {}
+                from alert_targets_lib import products_from_lmc_row
+
                 for lmc in db.query(LiveMachineConfig).all():
                     mid_k = str(lmc.machine_id)
+                    products = products_from_lmc_row(lmc)
                     target_by_mid[mid_k] = {
                         "daily_sales_target": (
                             float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None
@@ -1776,6 +1779,17 @@ def register_alert_routes(app) -> None:
                             float(lmc.daily_product_target) if lmc.daily_product_target is not None else None
                         ),
                         "sx_target_period": (lmc.sx_target_period or "daily"),
+                        "location_target_metric": (
+                            (lmc.location_target_metric or "revenue").strip().lower()
+                            if getattr(lmc, "location_target_metric", None)
+                            else "revenue"
+                        ),
+                        "daily_location_cups_target": (
+                            float(lmc.daily_location_cups_target)
+                            if getattr(lmc, "daily_location_cups_target", None) is not None
+                            else None
+                        ),
+                        "promoted_products": products,
                     }
                 for r in rows:
                     pat = (r.machine_name or r.machine_id or "").strip()
@@ -1806,6 +1820,9 @@ def register_alert_routes(app) -> None:
                             "sx_product_name": lmc_fields.get("sx_product_name"),
                             "daily_product_target": lmc_fields.get("daily_product_target"),
                             "sx_target_period": lmc_fields.get("sx_target_period") or "daily",
+                            "location_target_metric": lmc_fields.get("location_target_metric") or "revenue",
+                            "daily_location_cups_target": lmc_fields.get("daily_location_cups_target"),
+                            "promoted_products": lmc_fields.get("promoted_products") or [],
                             "updated_by": r.updated_by,
                             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                         }
@@ -1889,23 +1906,42 @@ def register_alert_routes(app) -> None:
                 or "sx_product_name" in body
                 or "daily_product_target" in body
                 or "sx_target_period" in body
+                or "promoted_products" in body
+                or "location_target_metric" in body
+                or "daily_location_cups_target" in body
             ):
+                from alert_targets_lib import (
+                    legacy_primary_from_products,
+                    normalize_metric,
+                    normalize_period,
+                    normalize_promoted_products,
+                )
+
                 lmc = db.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
                 if not lmc:
                     lmc = LiveMachineConfig(machine_id=mid)
                     db.add(lmc)
                 if "daily_sales_target" in body:
                     lmc.daily_sales_target = _decimal_or_none(daily_target_raw)
-                if "sx_product_name" in body:
-                    pname = (str(sx_product_name_raw).strip() if sx_product_name_raw is not None else "") or None
+                if "location_target_metric" in body:
+                    lmc.location_target_metric = normalize_metric(body.get("location_target_metric"), "revenue")
+                if "daily_location_cups_target" in body:
+                    lmc.daily_location_cups_target = _decimal_or_none(body.get("daily_location_cups_target"))
+                if "promoted_products" in body:
+                    products = normalize_promoted_products(body.get("promoted_products"))
+                    lmc.promoted_products = products
+                    pname, ptgt, per = legacy_primary_from_products(products)
                     lmc.sx_product_name = pname
-                if "daily_product_target" in body:
-                    lmc.daily_product_target = _decimal_or_none(daily_product_target_raw)
-                if "sx_target_period" in body:
-                    per = (str(sx_target_period_raw or "").strip().lower() if sx_target_period_raw is not None else "")
-                    if per not in ("daily", "weekly", "monthly"):
-                        per = "daily"
+                    lmc.daily_product_target = _decimal_or_none(ptgt)
                     lmc.sx_target_period = per
+                else:
+                    if "sx_product_name" in body:
+                        pname = (str(sx_product_name_raw).strip() if sx_product_name_raw is not None else "") or None
+                        lmc.sx_product_name = pname
+                    if "daily_product_target" in body:
+                        lmc.daily_product_target = _decimal_or_none(daily_product_target_raw)
+                    if "sx_target_period" in body:
+                        lmc.sx_target_period = normalize_period(sx_target_period_raw, "daily")
             db.commit()
             db.refresh(row)
             return jsonify({"ok": True, "machine_id": row.machine_id, "updated_by": email})
@@ -1915,6 +1951,166 @@ def register_alert_routes(app) -> None:
             return jsonify({"error": "save_failed", "message": str(ex)}), 500
         finally:
             db.close()
+
+    @app.route("/api/alert/admin/targets", methods=["GET", "POST", "OPTIONS"])
+    def alert_admin_targets():
+        """Location + multi-product targets (LMC only — does not touch cleaning profiles)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        from alert_targets_lib import (
+            legacy_primary_from_products,
+            normalize_metric,
+            normalize_period,
+            normalize_promoted_products,
+            products_from_lmc_row,
+        )
+
+        db = _dash_session()
+        try:
+            if request.method == "GET":
+                out: List[Dict[str, Any]] = []
+                for lmc in db.query(LiveMachineConfig).all():
+                    products = products_from_lmc_row(lmc)
+                    out.append(
+                        {
+                            "machineId": str(lmc.machine_id),
+                            "dailySalesTarget": (
+                                float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None
+                            ),
+                            "locationTargetMetric": normalize_metric(
+                                getattr(lmc, "location_target_metric", None), "revenue"
+                            ),
+                            "dailyLocationCupsTarget": (
+                                float(lmc.daily_location_cups_target)
+                                if getattr(lmc, "daily_location_cups_target", None) is not None
+                                else None
+                            ),
+                            "sxTargetPeriod": normalize_period(lmc.sx_target_period, "daily"),
+                            "promotedProducts": products,
+                            "sxProductName": lmc.sx_product_name,
+                            "dailyProductTarget": (
+                                float(lmc.daily_product_target) if lmc.daily_product_target is not None else None
+                            ),
+                        }
+                    )
+                return jsonify({"rows": out})
+
+            body = request.get_json(silent=True) or {}
+            mid = str(body.get("machineId") or body.get("machine_id") or "").strip()
+            if not mid:
+                return jsonify({"error": "machineId required"}), 400
+            lmc = db.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
+            if not lmc:
+                lmc = LiveMachineConfig(machine_id=mid)
+                db.add(lmc)
+            if "dailySalesTarget" in body or "daily_sales_target" in body:
+                lmc.daily_sales_target = _decimal_or_none(
+                    body.get("dailySalesTarget", body.get("daily_sales_target"))
+                )
+            if "locationTargetMetric" in body or "location_target_metric" in body:
+                lmc.location_target_metric = normalize_metric(
+                    body.get("locationTargetMetric", body.get("location_target_metric")), "revenue"
+                )
+            if "dailyLocationCupsTarget" in body or "daily_location_cups_target" in body:
+                lmc.daily_location_cups_target = _decimal_or_none(
+                    body.get("dailyLocationCupsTarget", body.get("daily_location_cups_target"))
+                )
+            if "sxTargetPeriod" in body or "sx_target_period" in body:
+                lmc.sx_target_period = normalize_period(
+                    body.get("sxTargetPeriod", body.get("sx_target_period")), "daily"
+                )
+            if "promotedProducts" in body or "promoted_products" in body:
+                products = normalize_promoted_products(
+                    body.get("promotedProducts", body.get("promoted_products"))
+                )
+                lmc.promoted_products = products
+                pname, ptgt, per = legacy_primary_from_products(products)
+                lmc.sx_product_name = pname
+                lmc.daily_product_target = _decimal_or_none(ptgt)
+                if "sxTargetPeriod" not in body and "sx_target_period" not in body:
+                    lmc.sx_target_period = per
+            db.commit()
+            return jsonify(
+                {
+                    "ok": True,
+                    "machineId": mid,
+                    "updatedBy": email,
+                    "promotedProducts": products_from_lmc_row(lmc),
+                }
+            )
+        except Exception as ex:
+            logger.exception("alert_admin_targets")
+            db.rollback()
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/admin/vendon-products", methods=["GET", "OPTIONS"])
+    def alert_admin_vendon_products():
+        """Distinct product names from recent Vendon vends (per machine or fleet sample)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_admin()
+        if denied:
+            return denied
+        mid = (request.args.get("machineId") or request.args.get("machine_id") or "").strip()
+        try:
+            lookback = max(3, min(45, int(request.args.get("days") or 21)))
+        except (TypeError, ValueError):
+            lookback = 21
+        cache_key = f"perf:vendon-products:v1:{mid or 'fleet'}:{lookback}"
+        cached = _alert_cache_get(cache_key, 300)
+        if cached is not None:
+            return jsonify(cached)
+
+        tz = ZoneInfo("Asia/Kuwait")
+        today = datetime.now(tz).date()
+        start = today - timedelta(days=lookback - 1)
+        from vendon_proxy_routes import _stats_vend_product_fields
+
+        names: Dict[str, int] = {}
+        machine_ids: List[str] = []
+        if mid:
+            machine_ids = [mid]
+        else:
+            fleet_rows, _ferr = vendon_fetch_machine_list(_vendon_get)
+            machine_ids = [str(m.get("id") or "").strip() for m in (fleet_rows or []) if m.get("id")]
+            machine_ids = machine_ids[:18]
+
+        try:
+            from_ts, _ = _kuwait_day_bounds_utc(start.isoformat())
+            _, to_ts = _kuwait_day_bounds_utc(today.isoformat())
+        except Exception:
+            from_ts = to_ts = 0
+        for machine_id in machine_ids:
+            if not from_ts or not to_ts:
+                break
+            # One window per machine (much faster than per-day paging)
+            vends, _err = _fetch_vends_machine_day(machine_id, from_ts, to_ts)
+            for v in vends or []:
+                if not isinstance(v, dict):
+                    continue
+                pn, _sel = _stats_vend_product_fields(v)
+                pn = (pn or "").strip()
+                if not pn or len(pn) < 2:
+                    continue
+                names[pn] = names.get(pn, 0) + 1
+
+        products = [
+            {"name": n, "vendCount": c}
+            for n, c in sorted(names.items(), key=lambda kv: (-kv[1], kv[0].lower()))
+        ]
+        body = {
+            "machineId": mid or None,
+            "days": lookback,
+            "products": products[:200],
+            "count": len(products),
+        }
+        _alert_cache_set(cache_key, body)
+        return jsonify(body)
 
     @app.route("/api/alert/overall/admin-profiles", methods=["GET", "OPTIONS"])
     def alert_overall_admin_profiles():
@@ -2617,8 +2813,9 @@ def register_alert_routes(app) -> None:
         """
         Multi-machine Performance graphs (Areas-style).
         Query: machineIds=id1,id2 (max 24) OR empty = top revenue machines from cache window
-               days=14
-        Location KD + promoted-product cups (parallel vend fetch; cached ~90s).
+               preset=last_week|this_week|last_2_weeks|this_month|last_month|today|yesterday
+               days=14 (rolling fallback)
+               includeProducts=0|1 (default 0 for speed — location KD only)
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2626,26 +2823,44 @@ def register_alert_routes(app) -> None:
         if denied:
             return denied
         try:
-            history_days = max(7, min(45, int(request.args.get("days") or 14)))
+            history_days = max(1, min(62, int(request.args.get("days") or 14)))
         except (TypeError, ValueError):
             history_days = 14
+        preset = (request.args.get("preset") or "last_week").strip().lower()
+        include_products = str(request.args.get("includeProducts") or "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         raw_ids = (request.args.get("machineIds") or request.args.get("machine_ids") or "").strip()
         requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
         if len(requested) > 24:
             requested = requested[:24]
 
-        cache_key = f"perf:fleet:v2:{','.join(sorted(requested)) or 'auto'}:{history_days}"
-        cached = _alert_cache_get(cache_key, 90)
-        if cached is not None:
-            return jsonify(cached)
+        from alert_targets_lib import resolve_perf_window
 
         tz = ZoneInfo("Asia/Kuwait")
         now_local = datetime.now(tz)
         today = now_local.date()
-        fetch_lo = today - timedelta(days=history_days - 1)
+        win_start, win_end, prev_start, prev_end, preset_id = resolve_perf_window(
+            today=today,
+            preset=preset,
+            history_days=history_days,
+        )
+        history_days = (win_end - win_start).days + 1
+        fetch_lo = min(win_start, prev_start)
+        fetch_hi = max(win_end, today)
+
+        cache_key = (
+            f"perf:fleet:v3:{','.join(sorted(requested)) or 'auto'}:"
+            f"{preset_id}:{win_start}:{win_end}:p{int(include_products)}"
+        )
+        cached = _alert_cache_get(cache_key, 120)
+        if cached is not None:
+            return jsonify(cached)
 
         seed = fetch_lo
-        while seed < today:
+        while seed <= fetch_hi:
             _maybe_seed_vendon_revenue_cache(seed)
             seed += timedelta(days=1)
 
@@ -2661,23 +2876,23 @@ def register_alert_routes(app) -> None:
         db = _pa_session()
         try:
             if not requested:
-                # Auto: top 12 machines by recent revenue in window
+                # Auto: machines with revenue in window (cap for overview speed)
                 rows = (
                     db.query(
                         VendonDailyMachineRevenueCache.machine_id,
                         func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).label("tot"),
                     )
                     .filter(
-                        VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
-                        VendonDailyMachineRevenueCache.cache_date <= today,
+                        VendonDailyMachineRevenueCache.cache_date >= win_start,
+                        VendonDailyMachineRevenueCache.cache_date <= win_end,
                     )
                     .group_by(VendonDailyMachineRevenueCache.machine_id)
                     .order_by(func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).desc())
-                    .limit(12)
+                    .limit(48)
                     .all()
                 )
                 requested = [str(r.machine_id) for r in rows if r.machine_id]
-                requested = [mid for mid in requested if mid in name_by_id] or list(name_by_id.keys())[:12]
+                requested = [mid for mid in requested if mid in name_by_id] or list(name_by_id.keys())[:48]
 
             cache_rows = (
                 db.query(VendonDailyMachineRevenueCache)
@@ -2754,10 +2969,13 @@ def register_alert_routes(app) -> None:
 
             def _build_one(mid: str) -> Dict[str, Any]:
                 c = cfg.get(mid) or {}
+                fetch_fn = None
+                if include_products:
 
-                def _fetch_vends(from_ts: int, to_ts: int, machine_id: str = mid):
-                    return _fetch_vends_machine_day(machine_id, from_ts, to_ts)
+                    def _fetch_vends(from_ts: int, to_ts: int, machine_id: str = mid):
+                        return _fetch_vends_machine_day(machine_id, from_ts, to_ts)
 
+                    fetch_fn = _fetch_vends
                 payload = build_machine_performance(
                     machine_id=mid,
                     machine_name=c.get("name") or name_by_id.get(mid) or mid,
@@ -2769,12 +2987,15 @@ def register_alert_routes(app) -> None:
                     history_days=history_days,
                     today=today,
                     now_local=now_local,
-                    fetch_vends_fn=_fetch_vends,
+                    fetch_vends_fn=fetch_fn,
+                    range_start=win_start,
+                    range_end=win_end,
                 )
                 return summarize_machine_period(payload)
 
             machines_out: List[Dict[str, Any]] = []
-            workers = min(6, max(1, len(requested)))
+            # Location-only path is cache-backed and fast — allow more workers lightly
+            workers = min(8 if not include_products else 4, max(1, len(requested)))
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futs = {pool.submit(_build_one, mid): mid for mid in requested}
                 for fut in as_completed(futs):
@@ -2783,6 +3004,27 @@ def register_alert_routes(app) -> None:
                         machines_out.append(fut.result())
                     except Exception:
                         logger.exception("alert_performance_fleet machine %s", mid)
+
+            # Previous-period totals (cache only — for growth KPI)
+            prev_kwd_by_mid: Dict[str, float] = {mid: 0.0 for mid in requested}
+            if prev_start <= prev_end:
+                prev_rows = (
+                    db.query(
+                        VendonDailyMachineRevenueCache.machine_id,
+                        func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).label("tot"),
+                    )
+                    .filter(
+                        VendonDailyMachineRevenueCache.machine_id.in_(requested),
+                        VendonDailyMachineRevenueCache.cache_date >= prev_start,
+                        VendonDailyMachineRevenueCache.cache_date <= prev_end,
+                    )
+                    .group_by(VendonDailyMachineRevenueCache.machine_id)
+                    .all()
+                )
+                for r in prev_rows:
+                    mid = str(r.machine_id or "").strip()
+                    if mid:
+                        prev_kwd_by_mid[mid] = float(r.tot or 0)
 
             # Rank by period achievement then revenue
             machines_out.sort(
@@ -2799,14 +3041,54 @@ def register_alert_routes(app) -> None:
                     if str(m.get("productName") or "").strip()
                 }
             )
+
+            period_actual = sum(float(m.get("totalLocationKwd") or 0) for m in machines_out)
+            period_target = sum(float(m.get("periodTargetKd") or 0) for m in machines_out)
+            prev_actual = sum(prev_kwd_by_mid.get(str(m.get("machineId") or ""), 0.0) for m in machines_out)
+            with_tgt = [
+                m
+                for m in machines_out
+                if m.get("periodTargetKd") is not None and float(m.get("periodTargetKd") or 0) > 0
+            ]
+            hit_count = sum(
+                1
+                for m in with_tgt
+                if float(m.get("totalLocationKwd") or 0) >= float(m.get("periodTargetKd") or 0)
+            )
+            achievement_rate = (
+                round((hit_count / len(with_tgt)) * 100, 1) if with_tgt else None
+            )
+            growth_pct = None
+            if prev_actual > 0:
+                growth_pct = round((period_actual / prev_actual) * 100, 1)
+            deficit = round(period_actual - period_target, 4) if period_target > 0 else None
+
             body = {
                 "historyDays": history_days,
+                "preset": preset_id,
+                "window": {
+                    "start": win_start.isoformat(),
+                    "end": win_end.isoformat(),
+                    "prevStart": prev_start.isoformat(),
+                    "prevEnd": prev_end.isoformat(),
+                },
+                "includeProducts": bool(include_products),
                 "asOf": now_local.replace(microsecond=0).isoformat(),
                 "machineCount": len(machines_out),
                 "productName": product_names[0] if len(product_names) == 1 else None,
                 "productNames": product_names,
                 "machines": machines_out,
                 "aggregateDays": aggregate_days,
+                "kpis": {
+                    "deficitKd": deficit,
+                    "periodActualKd": round(period_actual, 4),
+                    "periodTargetKd": round(period_target, 4) if period_target > 0 else None,
+                    "achievementRatePct": achievement_rate,
+                    "machinesOnTarget": hit_count,
+                    "machinesWithTarget": len(with_tgt),
+                    "growthRatePct": growth_pct,
+                    "prevPeriodActualKd": round(prev_actual, 4),
+                },
             }
             _alert_cache_set(cache_key, body)
             return jsonify(body)

@@ -158,6 +158,61 @@
   margin-bottom: 12px;
 }
 
+.perfOverviewHero {
+  margin: 0 0 22px;
+  padding: 14px 14px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+}
+
+.perfToolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+  align-items: center;
+}
+
+.perfEchartOverview {
+  height: 380px;
+  min-height: 300px;
+}
+
+.perfKpiRowHero {
+  margin-top: 14px;
+  margin-bottom: 0;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.perfKpiWide {
+  min-height: 78px;
+}
+
+.perfKpiHint {
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.perfKpiToneUp strong {
+  color: #34d399;
+}
+
+.perfKpiToneDown strong {
+  color: #f87171;
+}
+
+.perfKpiToneNeutral strong {
+  color: inherit;
+}
+
+@media (max-width: 720px) {
+  .perfEchartOverview {
+    height: 300px;
+  }
+}
+
 .perfGroupTitle {
   margin: 18px 0 10px;
   font-size: 0.82rem;

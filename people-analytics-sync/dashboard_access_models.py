@@ -52,6 +52,9 @@ class LiveMachineConfig(Base):
     sx_product_name = Column(Text, nullable=True)
     daily_product_target = Column(Numeric(14, 4), nullable=True)
     sx_target_period = Column(Text, nullable=True)  # daily | weekly | monthly
+    location_target_metric = Column(Text, nullable=True)  # revenue | cups
+    daily_location_cups_target = Column(Numeric(14, 4), nullable=True)
+    promoted_products = Column(JSONB, nullable=True)  # [{productName, metric, dailyTarget, period}]
     expected_shift_start = Column(Text, nullable=True)
     shift_timezone = Column(Text, nullable=True)
     shift_grace_minutes = Column(Integer, nullable=False, default=15)

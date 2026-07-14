@@ -393,11 +393,37 @@ html[data-theme='pro'] .appShellPro .muted {
 html[data-theme='pro'] .appShellPro input,
 html[data-theme='pro'] .appShellPro select,
 html[data-theme='pro'] .appShellPro textarea {
-  background: #fff;
+  background-color: #fff;
   color: #0f172a;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   min-height: 44px;
+}
+
+/* Admin forms: keep one control height + select chevron (never use background shorthand) */
+html[data-theme='pro'] .appShellPro .adminAppRoot input:not([type='checkbox']):not([type='radio']),
+html[data-theme='pro'] .appShellPro .adminAppRoot select,
+html[data-theme='pro'] .appShellPro .adminAppRoot textarea {
+  min-height: 40px;
+  box-sizing: border-box;
+  border-radius: var(--radius-md, 8px);
+  background-color: #fff;
+}
+
+html[data-theme='pro'] .appShellPro .adminAppRoot select {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  padding: 8px 2rem 8px 12px !important;
+  background-color: #fff !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748b' d='M1.2 1.2L6 6l4.8-4.8'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.7rem center !important;
+  background-size: 10px 6px !important;
+}
+
+html[data-theme='pro'] .appShellPro .adminAppRoot table select {
+  padding: 6px 1.75rem 6px 8px !important;
+  background-position: right 0.55rem center !important;
 }
 
 /* Narrow phone only */
