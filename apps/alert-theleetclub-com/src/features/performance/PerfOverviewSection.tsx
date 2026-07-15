@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
@@ -6,9 +6,19 @@ import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import {
   SERIES_PALETTE,
   type FleetMachine,
+  type FleetKpis,
   type PerfDay,
+  type PerfPreset,
   type PerfViewMode,
 } from '@/features/performance/perfTypes';
+
+const PRESETS: { id: PerfPreset; label: string }[] = [
+  { id: 'this_week', label: 'This week (WTD)' },
+  { id: 'last_week', label: 'Last week' },
+  { id: 'last_2_weeks', label: 'Last 2 weeks' },
+  { id: 'this_month', label: 'This month (MTD)' },
+  { id: 'last_month', label: 'Last month' },
+];
 
 const FLEET_VIEWS: { id: PerfViewMode; label: string }[] = [
   { id: 'all', label: 'All machines' },
@@ -52,6 +62,7 @@ function pickMachines(
   mode: PerfViewMode,
   fleetRanking: boolean,
 ): FleetMachine[] {
+  // Subset selection: chart exactly what was selected — Top/Lowest/All-fleet are N/A
   if (!fleetRanking || mode === 'selected') {
     return [...machines].sort(
       (a, b) =>
@@ -69,26 +80,58 @@ function pickMachines(
   return ranked.slice(0, 12);
 }
 
-/** Optional multi-line daily KD overlay — secondary to Targets-style bar charts. */
-export function PerfTrajectorySection({
+function KpiBox({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: 'up' | 'down' | 'neutral';
+}) {
+  const cls =
+    tone === 'up' ? 'perfKpiToneUp' : tone === 'down' ? 'perfKpiToneDown' : 'perfKpiToneNeutral';
+  return (
+    <div className={`perfKpi perfKpiWide ${cls}`}>
+      <span className="perfKpiLabel">{label}</span>
+      <strong>{value}</strong>
+      {hint ? <span className="perfKpiHint">{hint}</span> : null}
+    </div>
+  );
+}
+
+export function PerfOverviewSection({
   machines,
   aggregateDays,
+  kpis,
+  preset,
+  onPresetChange,
+  windowLabel,
   loading,
+  /** When false (1–few locations selected), hide All/Top5/Lowest5 fleet ranking. */
   fleetRanking = true,
   selectionLabel,
-  view,
-  onViewChange,
 }: {
   machines: FleetMachine[];
   aggregateDays: PerfDay[];
+  kpis?: FleetKpis | null;
+  preset: PerfPreset;
+  onPresetChange: (p: PerfPreset) => void;
+  windowLabel?: string;
   loading?: boolean;
   fleetRanking?: boolean;
   selectionLabel?: string;
-  view: PerfViewMode;
-  onViewChange: (v: PerfViewMode) => void;
 }) {
+  const [view, setView] = useState<PerfViewMode>('top5');
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+
+  useEffect(() => {
+    if (!fleetRanking) setView('selected');
+    else setView((v) => (v === 'selected' ? 'top5' : v));
+  }, [fleetRanking]);
 
   const seriesMachines = useMemo(
     () => pickMachines(machines, fleetRanking ? view : 'selected', fleetRanking),
@@ -96,7 +139,9 @@ export function PerfTrajectorySection({
   );
 
   const labels = useMemo(() => {
-    const first = seriesMachines[0]?.days?.length ? seriesMachines[0].days : aggregateDays;
+    const first = seriesMachines[0]?.days?.length
+      ? seriesMachines[0].days
+      : aggregateDays;
     return first.map((d) => dayLabel(d));
   }, [seriesMachines, aggregateDays]);
 
@@ -139,6 +184,7 @@ export function PerfTrajectorySection({
       };
     });
 
+    // Target pace line (fleet average daily target across shown machines)
     const tgtByIdx: (number | null)[] = labels.map((_, i) => {
       let sum = 0;
       let n = 0;
@@ -249,21 +295,34 @@ export function PerfTrajectorySection({
 
   const onExport = useCallback(() => {
     const c = chartInst.current;
-    if (c) downloadChartPng(c, chartFilename(['perf-trajectory-lines', view]));
-  }, [view]);
+    if (c) downloadChartPng(c, chartFilename(['perf-overview', preset, view]));
+  }, [preset, view]);
 
-  if (!machines.length) return null;
+  const deficitTone =
+    kpis?.deficitKd == null ? 'neutral' : kpis.deficitKd >= 0 ? 'up' : 'down';
+  const growthTone =
+    kpis?.growthRatePct == null
+      ? 'neutral'
+      : kpis.growthRatePct >= 100
+        ? 'up'
+        : 'down';
+  const achTone =
+    kpis?.achievementRatePct == null
+      ? 'neutral'
+      : kpis.achievementRatePct >= 50
+        ? 'up'
+        : 'down';
 
   return (
-    <section className="perfSection perfTrajectorySection" aria-labelledby="perf-trajectory-title">
+    <section className="perfOverviewHero" aria-labelledby="perf-hero-title">
       <header className="perfOverviewHead">
         <div>
-          <h3 id="perf-trajectory-title" className="perfSectionTitle">
-            Daily trajectory (lines)
+          <h3 id="perf-hero-title" className="perfSectionTitle">
+            Overview trajectory
           </h3>
           <p className="perfSectionHint">
-            Optional overlay — daily location KD by machine with dashed avg target. Primary sales vs
-            target views are the bar charts above (Targets Areas style).
+            Line chart of daily location KD — trading-style crosshair. Default period: last week.
+            {windowLabel ? ` · ${windowLabel}` : ''}
             {!fleetRanking
               ? ' · Showing only your selected locations (Top/Lowest 5 need the full fleet).'
               : ''}
@@ -279,7 +338,7 @@ export function PerfTrajectorySection({
                 key={v.id}
                 type="button"
                 className={`perfSegPill ${view === v.id ? 'active' : ''}`}
-                onClick={() => onViewChange(v.id)}
+                onClick={() => setView(v.id)}
               >
                 {v.label}
               </button>
@@ -293,18 +352,73 @@ export function PerfTrajectorySection({
             </span>
           )}
         </div>
+        <div className="perfModePills" role="group" aria-label="Time period">
+          {PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`perfSegPill ${preset === p.id ? 'active' : ''}`}
+              onClick={() => onPresetChange(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {loading ? <p className="perfMuted">Loading trajectory…</p> : null}
+      {loading ? <p className="perfMuted">Loading overview…</p> : null}
 
       <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
         <div
           ref={chartRef}
           className="perfEchart perfEchartOverview"
           role="img"
-          aria-label="Daily trajectory line chart"
+          aria-label="Performance overview trajectory"
         />
       </ChartExportWrap>
+
+      <div className="perfKpiRow perfKpiRowHero">
+        <KpiBox
+          label="Deficit"
+          value={
+            kpis?.deficitKd == null
+              ? '—'
+              : `${kpis.deficitKd >= 0 ? '+' : ''}${formatKwd(kpis.deficitKd)}`
+          }
+          hint="Actual − target (period)"
+          tone={deficitTone}
+        />
+        <KpiBox
+          label="Target achievement"
+          value={
+            kpis?.achievementRatePct != null ? `${kpis.achievementRatePct}%` : '—'
+          }
+          hint={
+            kpis?.machinesWithTarget
+              ? `${kpis.machinesOnTarget ?? 0}/${kpis.machinesWithTarget} machines ≥ target`
+              : 'Machines hitting target'
+          }
+          tone={achTone}
+        />
+        <KpiBox
+          label="Growth rate"
+          value={
+            kpis?.growthRatePct != null ? `${kpis.growthRatePct}%` : '—'
+          }
+          hint="Period sales ÷ previous period × 100"
+          tone={growthTone}
+        />
+        <KpiBox
+          label="Period KD"
+          value={kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—'}
+          hint={
+            kpis?.periodTargetKd != null
+              ? `Target ${formatKwd(kpis.periodTargetKd)}`
+              : `${seriesMachines.length} series shown`
+          }
+          tone="neutral"
+        />
+      </div>
     </section>
   );
 }

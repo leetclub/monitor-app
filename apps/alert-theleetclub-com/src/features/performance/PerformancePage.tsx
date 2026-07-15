@@ -7,20 +7,19 @@ import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import { V2Panel } from '@/features/v2/v2Ui';
 import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
 import { PerfMachineFilter } from '@/features/performance/PerfMachineFilter';
-import { PerfTrajectorySection } from '@/features/performance/PerfOverviewSection';
+import { PerfOverviewSection } from '@/features/performance/PerfOverviewSection';
 import {
   FleetCompareChart,
-  FleetDailyProductChart,
-  FleetDailyRevenueChart,
   FleetPerformanceOverview,
   GrowthRateChart,
+  ProductTrajectoryChart,
+  RevenueTrajectoryChart,
 } from '@/features/performance/PerformanceCharts';
 import type {
   FleetPayload,
   MachineRow,
   PerfDay,
   PerfPreset,
-  PerfViewMode,
 } from '@/features/performance/perfTypes';
 
 type PerfPayload = {
@@ -60,8 +59,6 @@ export function PerformancePage({
   const urlIds = parseIds(params.get('machineIds'));
   const [preset, setPreset] = useState<PerfPreset>('last_week');
   const [showCompare, setShowCompare] = useState(false);
-  const [showTrajectory, setShowTrajectory] = useState(false);
-  const [trajectoryView, setTrajectoryView] = useState<PerfViewMode>('top5');
   const [loadProducts, setLoadProducts] = useState(false);
   const [selected, setSelected] = useState<Set<string> | null>(() =>
     urlIds.length ? new Set(urlIds) : focusId ? new Set([focusId]) : null,
@@ -202,14 +199,6 @@ export function PerformancePage({
           <div className="perfModePills" role="group" aria-label="Extra chart views">
             <button
               type="button"
-              className={`perfSegPill ${showTrajectory ? 'active' : ''}`}
-              onClick={() => setShowTrajectory((v) => !v)}
-              title="Optional multi-line daily KD overlay"
-            >
-              {showTrajectory ? 'Hide trajectory lines' : 'Daily trajectory lines'}
-            </button>
-            <button
-              type="button"
               className={`perfSegPill ${showCompare ? 'active' : ''}`}
               onClick={() => setShowCompare((v) => !v)}
             >
@@ -246,13 +235,25 @@ export function PerformancePage({
 
             {fleetMachines.length > 0 && !fleetQ.isLoading && !hasTargetData ? (
               <p className="perfTargetBanner" role="status">
-                <strong>No targets on these charts yet.</strong> Sales bars still plot, but gray target
-                bars and dashed target lines need a location KD (and optional product cups) in{' '}
-                <strong>Admin → Targets</strong>, or a matching name in the weekly revenue target
+                <strong>No targets on these charts yet.</strong> Sales lines and bars still plot, but
+                dashed target lines and gray target bars need a location KD (and optional product cups)
+                in <strong>Admin → Targets</strong>, or a matching name in the weekly revenue target
                 sheet. Red Flags <strong>Target</strong> column shows today % only — full sales vs
-                target graphs are the bar charts below.
+                target graphs live on this tab (scroll to <strong>Performance charts</strong>).
               </p>
             ) : null}
+
+            <PerfOverviewSection
+              machines={fleetMachines}
+              aggregateDays={aggregateDays}
+              kpis={kpis}
+              preset={preset}
+              onPresetChange={setPreset}
+              windowLabel={windowLabel}
+              loading={fleetQ.isLoading}
+              fleetRanking={fleetRanking}
+              selectionLabel={selectionLabel}
+            />
 
             {fleetMachines.length ? (
               <>
@@ -260,24 +261,7 @@ export function PerformancePage({
                   machines={fleetMachines}
                   aggregateDays={aggregateDays}
                   productLabel={productLabel}
-                  preset={preset}
-                  onPresetChange={setPreset}
-                  windowLabel={windowLabel}
-                  kpis={kpis}
-                  loading={fleetQ.isLoading}
                 />
-
-                {showTrajectory ? (
-                  <PerfTrajectorySection
-                    machines={fleetMachines}
-                    aggregateDays={aggregateDays}
-                    loading={fleetQ.isLoading}
-                    fleetRanking={fleetRanking}
-                    selectionLabel={selectionLabel}
-                    view={trajectoryView}
-                    onViewChange={setTrajectoryView}
-                  />
-                ) : null}
 
                 {showCompare ? (
                   <section className="perfSection">
@@ -335,20 +319,14 @@ export function PerformancePage({
                 ) : null}
 
                 <section className="perfSection">
-                  <h3 className="perfSectionTitle">Daily revenue · {detail.machineName}</h3>
-                  <p className="perfSectionHint">
-                    Targets-style daily bars + dashed target line + cumulative pace (same as Areas).
-                  </p>
-                  <FleetDailyRevenueChart days={detail.days || []} showCumulative />
+                  <h3 className="perfSectionTitle">Revenue Trajectory</h3>
+                  <RevenueTrajectoryChart days={detail.days || []} />
                 </section>
                 <section className="perfSection">
-                  <h3 className="perfSectionTitle">
-                    Daily product cups · {detail.productName || 'Americano Max'}
-                  </h3>
-                  <FleetDailyProductChart
+                  <h3 className="perfSectionTitle">Product Trajectory · {detail.productName}</h3>
+                  <ProductTrajectoryChart
                     days={detail.days || []}
-                    showCumulative
-                    productLabel={detail.productName || 'Americano Max'}
+                    productName={detail.productName || 'Americano Max'}
                   />
                 </section>
                 <section className="perfSection">
@@ -384,7 +362,7 @@ export function PerformancePage({
     <div className="perfPage">
       <StitchOpsPanel
         title="Performance"
-        subtitle="Sales vs target · Achievement % · Target vs actual bars — Targets Areas style"
+        subtitle="Overview trajectory · Target vs actual · Ranking — Targets Areas style"
         iconName="performance"
       >
         {boardInner}
