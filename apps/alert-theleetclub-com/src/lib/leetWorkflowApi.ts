@@ -145,6 +145,8 @@ export type QaFleetPayload = {
   yearMonth?: string;
   source?: string;
   error?: string;
+  warning?: string;
+  partial?: boolean;
 };
 
 export type QaManualSummaryAdminPayload = {

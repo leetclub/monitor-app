@@ -111,9 +111,16 @@ export function QaVisitPage() {
     enabled: showFleet,
     staleTime: 90_000,
     refetchInterval: 3 * 60_000,
-    retry: 1,
+    retry: 2,
     refetchOnWindowFocus: true,
   });
+
+  const fleetWarning =
+    fleetQ.data?.warning ||
+    (fleetQ.data?.partial
+      ? 'SafetyCulture scan was partial — some machines may be missing. Narrow the date range or retry.'
+      : undefined);
+  const summaryWarning = qaSummaryQ.data?.warning;
 
   const machines = useMemo(() => {
     const rows = machinesQ.data?.machines ?? [];
@@ -289,10 +296,33 @@ export function QaVisitPage() {
               <p className="qaVisitError">
                 {(fleetQ.error as Error).message}
                 {qaSummaryQ.data ? ' — showing summary snapshot where available.' : ''}
+                {' '}
+                <button
+                  type="button"
+                  className="qaVisitTableAction"
+                  onClick={() => {
+                    void fleetQ.refetch();
+                    void qaSummaryQ.refetch();
+                  }}
+                >
+                  Retry
+                </button>
               </p>
             ) : null}
             {!fleetQ.isLoading && !qaSummaryQ.isLoading && fleetQ.data?.error ? (
-              <p className="qaVisitError">{fleetQ.data.error}</p>
+              <p className="qaVisitError">
+                {fleetQ.data.error}
+                {' '}
+                <button type="button" className="qaVisitTableAction" onClick={() => void fleetQ.refetch()}>
+                  Retry
+                </button>
+              </p>
+            ) : null}
+            {!fleetQ.isLoading && !qaSummaryQ.isLoading && fleetWarning && !fleetQ.data?.error ? (
+              <p className="qaVisitError">{fleetWarning}</p>
+            ) : null}
+            {!fleetQ.isLoading && !qaSummaryQ.isLoading && summaryWarning && !qaSummaryQ.data?.error ? (
+              <p className="qaVisitError">{summaryWarning}</p>
             ) : null}
             {!fleetQ.isLoading && !qaSummaryQ.isLoading && qaSummaryQ.data?.error && !fleetQ.data?.byMachine ? (
               <p className="qaVisitError">{qaSummaryQ.data.error}</p>

@@ -1219,10 +1219,11 @@ def register_alert_routes(app) -> None:
             enrich_qc_visits_with_admin_summaries,
             kuwait_year_month,
         )
-        from safetyculture_qa_lib import latest_qc_by_machine_map, qa_visits_payload
+        from safetyculture_qa_lib import clear_qa_caches, latest_qc_by_machine_map, qa_visits_payload
 
         refresh = (request.args.get("refresh") or "").strip() in ("1", "true", "yes")
-        payload = qa_visits_payload(refresh=refresh)
+        if refresh:
+            clear_qa_caches()
         rows, list_err = vendon_fetch_machine_list(_vendon_get)
         machine_names: List[str] = []
         if not list_err:
@@ -1239,6 +1240,8 @@ def register_alert_routes(app) -> None:
         if machine_names:
             latest_payload = latest_qc_by_machine_map(machine_names)
             latest_map = dict(latest_payload.get("byMachine") or {})
+
+        payload = qa_visits_payload(refresh=False)
 
         db = _dash_session()
         try:
@@ -1259,6 +1262,12 @@ def register_alert_routes(app) -> None:
         payload["latestByMachine"] = latest_by_machine
         payload["latestByMachineDateFrom"] = latest_payload.get("dateFrom") if latest_map else None
         payload["latestByMachineDateTo"] = latest_payload.get("dateTo") if latest_map else None
+        if latest_payload.get("warning"):
+            payload["warning"] = latest_payload.get("warning")
+        if latest_payload.get("partial"):
+            payload["partial"] = latest_payload.get("partial")
+        if latest_payload.get("error") and not latest_map:
+            payload["error"] = latest_payload.get("error")
         for nk, row in list(by_loc.items()):
             if isinstance(row, dict):
                 loc = str(row.get("location") or "")

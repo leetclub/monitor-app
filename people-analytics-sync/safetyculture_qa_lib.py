@@ -838,7 +838,7 @@ def _fetch_from_monitor_gas(
 
 def get_last_visit_tracking() -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
-    cache_key = "visits|v2"
+    cache_key = "visits|v3"
     hit = _CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _CACHE_SEC:
         return hit[1]
@@ -846,47 +846,67 @@ def get_last_visit_tracking() -> Dict[str, Any]:
     payload: Optional[Dict[str, Any]] = None
     search_err: Optional[str] = None
     visit_count_mtd: Dict[str, int] = {}
+    audits_searched = 0
+    audits_processed = 0
 
     if _API_TOKEN:
         start = now - timedelta(days=max(1, _SEARCH_DAYS))
-        mod_start, mod_end = _modified_search_window(start, now)
-        chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
-        audit_ids: List[str] = []
-        seen_ids: set[str] = set()
-        for chunk_start, chunk_end in chunks:
-            chunk_ids, chunk_err = _search_audits(
-                chunk_start.isoformat().replace("+00:00", "Z"),
-                chunk_end.isoformat().replace("+00:00", "Z"),
-            )
-            if chunk_err and not chunk_ids:
-                search_err = search_err or chunk_err
-                continue
-            for aid in chunk_ids:
-                if aid and aid not in seen_ids:
-                    seen_ids.add(aid)
-                    audit_ids.append(aid)
-        if audit_ids:
-            visit_count_mtd = _build_visit_count_mtd(audit_ids, now)
-            cap = audit_ids if _MAX_AUDITS <= 0 else audit_ids[: max(1, _MAX_AUDITS)]
+        end = now
+        # Reuse the same chunked row scan as fleet / latestByMachine (one SC search pass).
+        qc_rows, audits_searched, audits_processed, search_err = _get_qc_rows_in_range_cached(start, end)
+        audit_ids = [str(r.get("auditId") or "") for r in qc_rows if r.get("auditId")]
+        if qc_rows or audits_searched:
+            visit_count_mtd = _build_visit_count_mtd(audit_ids, now) if audit_ids else {}
             visits_by_loc_qc: Dict[str, Dict[str, Any]] = {}
             visits_by_loc_tech: Dict[str, Dict[str, Any]] = {}
-            with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
-                futures = {pool.submit(_process_audit, aid, now): aid for aid in cap}
-                for fut in as_completed(futures):
-                    try:
-                        row = fut.result()
-                    except Exception:
-                        continue
-                    if not row:
-                        continue
-                    target = visits_by_loc_qc if row.get("visitKind") == "qc" else visits_by_loc_tech
-                    _merge_visit_row(target, row)
+            for row in qc_rows:
+                if row.get("visitKind") == "qc":
+                    _merge_visit_row(visits_by_loc_qc, row)
+            # Tech visits are not returned by _build_qc_rows_in_range — fetch recent audits for tech only.
+            mod_start, mod_end = _modified_search_window(start, end)
+            chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
+            tech_seen: set[str] = set(audit_ids)
+            recent_cut = now - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
+            per_chunk_cap = max(120, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks) or 1)))
+            for chunk_start, chunk_end in chunks:
+                chunk_ids, chunk_err = _search_audits(
+                    chunk_start.isoformat().replace("+00:00", "Z"),
+                    chunk_end.isoformat().replace("+00:00", "Z"),
+                )
+                if chunk_err and not chunk_ids:
+                    search_err = search_err or chunk_err
+                    continue
+                if chunk_end >= recent_cut or per_chunk_cap <= 0:
+                    cap = chunk_ids
+                else:
+                    cap = chunk_ids[:per_chunk_cap]
+                extra = [aid for aid in cap if aid and aid not in tech_seen]
+                for aid in extra:
+                    tech_seen.add(aid)
+                if not extra:
+                    continue
+                with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
+                    futures = {pool.submit(_process_audit, aid, now): aid for aid in extra}
+                    for fut in as_completed(futures):
+                        try:
+                            row = fut.result()
+                        except Exception:
+                            continue
+                        if not row or row.get("visitKind") != "tech":
+                            continue
+                        _merge_visit_row(visits_by_loc_tech, row)
             payload = _finalize_visit_payload(
                 visits_by_loc_qc,
                 visits_by_loc_tech,
                 source="safetyculture",
-                audits_searched=len(audit_ids),
+                audits_searched=audits_searched,
                 visit_count_mtd=visit_count_mtd,
+            )
+            payload = _apply_qc_scan_status(
+                payload,
+                search_err=search_err,
+                audits_searched=audits_searched,
+                audits_processed=audits_processed,
             )
         elif search_err:
             logger.warning("SafetyCulture direct failed (%s) — trying Monitor GAS", search_err)
@@ -1077,6 +1097,99 @@ def _has_distinctive_token(toks: set) -> bool:
     return any(len(t) >= 3 and t not in _GENERIC_SITE_TOKENS for t in toks)
 
 
+def _machine_name_tokens(machine_name: str) -> set[str]:
+    needle = _norm_key(machine_name)
+    return {t for t in needle.split() if len(t) > 1 and t not in _GENERIC_SITE_TOKENS}
+
+
+def _audit_label_list(location: str, location_keys: Optional[List[str]] = None) -> List[str]:
+    labels: List[str] = []
+    seen: set[str] = set()
+    for raw in [str(location or "").strip(), *([str(x).strip() for x in (location_keys or []) if x])]:
+        if not raw:
+            continue
+        nk = _norm_key(raw)
+        if not nk or nk in seen:
+            continue
+        seen.add(nk)
+        labels.append(raw)
+    return labels
+
+
+def _is_machine_specific_match(
+    machine_name: str,
+    location: str,
+    location_keys: Optional[List[str]],
+    score: int,
+) -> bool:
+    """
+    True when the audit text identifies one Vendon machine (title/header/full name),
+    not just a shared mall/hospital site label.
+    """
+    if score < _MIN_MACHINE_MATCH_SCORE:
+        return False
+    needle = _norm_key(machine_name)
+    n_toks = _machine_name_tokens(machine_name)
+    labels = _audit_label_list(location, location_keys)
+    if not labels:
+        return False
+
+    site_key = _norm_key(labels[0])
+    site_toks = {t for t in site_key.split() if len(t) > 1}
+
+    for label in labels:
+        lk = _norm_key(label)
+        if needle == lk:
+            return True
+        if needle in lk and _has_distinctive_token(n_toks):
+            return True
+
+    # Title / header / asset fields (after primary site.name).
+    for label in labels[1:]:
+        lk = _norm_key(label)
+        if not lk or lk == site_key:
+            continue
+        if needle == lk or needle in lk:
+            return True
+        l_toks = {t for t in lk.split() if len(t) > 1}
+        machine_only = n_toks - site_toks - _GENERIC_SITE_TOKENS
+        if machine_only and machine_only.issubset(l_toks):
+            return True
+        if machine_only and any(t in lk for t in machine_only if len(t) >= 3):
+            return True
+
+    # Full machine name embedded in SC site (not just shared token overlap).
+    if site_key and site_key in needle and len(n_toks) > len(site_toks):
+        return True
+
+    return False
+
+
+def _apply_qc_scan_status(
+    payload: Dict[str, Any],
+    *,
+    search_err: Optional[str],
+    audits_searched: int,
+    audits_processed: int,
+) -> Dict[str, Any]:
+    """Surface partial SafetyCulture scans — never hide truncation behind empty success."""
+    out = dict(payload)
+    if search_err:
+        out["warning"] = search_err
+        if not (out.get("count") or out.get("countTech") or out.get("total")):
+            out["error"] = search_err
+    if audits_searched > 0 and audits_processed > 0 and audits_searched > audits_processed:
+        msg = (
+            f"Processed {audits_processed} of {audits_searched} SafetyCulture inspections in this window. "
+            "Narrow the date range or retry for full coverage."
+        )
+        out["partial"] = True
+        out["warning"] = out.get("warning") or msg
+        if not out.get("count") and not out.get("countTech"):
+            out["error"] = msg
+    return out
+
+
 def _audit_match_score(machine_name: str, location: str, location_keys: Optional[List[str]] = None) -> int:
     """
     Score how well a SafetyCulture site/label matches a Vendon machine (0 = no match).
@@ -1093,12 +1206,10 @@ def _audit_match_score(machine_name: str, location: str, location_keys: Optional
     if not needle:
         return 0
     alias_keys = norm_keys_for_lookup(machine_name)
-    labels = [location]
-    if location_keys:
-        labels.extend([str(x) for x in location_keys if x])
+    labels = _audit_label_list(location, location_keys)
     best = 0
     n_toks = {t for t in needle.split() if len(t) > 1}
-    for label in labels:
+    for idx, label in enumerate(labels):
         loc_key = _norm_key(label)
         if not loc_key:
             continue
@@ -1112,6 +1223,9 @@ def _audit_match_score(machine_name: str, location: str, location_keys: Optional
         elif needle in loc_key:
             # Machine name fully contained in SC site (e.g. "Gate 1" in "Mall Gate 1 Left").
             score = 80
+        elif idx > 0 and n_toks and all(t in loc_key for t in n_toks if len(t) >= 3):
+            # Title / header / asset field carries the machine identity.
+            score = 86
         else:
             l_toks = {t for t in loc_key.split() if len(t) > 1}
             # SC site tokens ⊆ Vendon name with a distinctive token (SC "CBA" → Vendon "KU CBA").
@@ -1205,47 +1319,52 @@ def _latest_qc_by_machine_names(
     rows: List[Dict[str, Any]],
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Newest QC audit per machine. Each audit is awarded to its best-scoring machine
-    (exclusive) so siblings at the same site do not all inherit one inspection.
+    Newest QC audit per machine.
+
+    - Audits with a machine-specific title/header → exclusive to that machine.
+    - Location-only site visits (shared mall/hospital name) → attributed to every
+      fleet machine that matches the site above the score floor, so co-located
+      siblings are not left blank when operators file one checklist per location.
     """
     names = [str(n).strip() for n in machine_names if str(n).strip()]
     if not names or not rows:
         return {}
 
-    # audit_id → (score, machine_name, row)
-    best_for_audit: Dict[str, Tuple[int, str, Dict[str, Any]]] = {}
+    by_machine: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         if not isinstance(row, dict) or not row.get("auditId"):
             continue
-        aid = str(row.get("auditId") or "")
         loc = str(row.get("location") or "")
         keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
-        visit_at = str(row.get("lastVisitAt") or "")
+        lat = str(row.get("lastVisitAt") or row.get("lastVisitDate") or "")
+        if not lat:
+            continue
+
+        matches: List[Tuple[int, str, bool]] = []
         for mname in names:
             score = _audit_match_score(mname, loc, keys)
             if score < _MIN_MACHINE_MATCH_SCORE:
                 continue
-            prev = best_for_audit.get(aid)
-            if not prev:
-                best_for_audit[aid] = (score, mname, row)
-                continue
-            prev_score, prev_name, prev_row = prev
-            prev_at = str(prev_row.get("lastVisitAt") or "")
-            better = score > prev_score
-            if score == prev_score:
-                # Prefer longer / more specific machine name; then newer visit (same object).
-                better = len(mname) > len(prev_name) or (len(mname) == len(prev_name) and visit_at > prev_at)
-            if better:
-                best_for_audit[aid] = (score, mname, row)
-
-    by_machine: Dict[str, Dict[str, Any]] = {}
-    for score, mname, row in best_for_audit.values():
-        lat = str(row.get("lastVisitAt") or row.get("lastVisitDate") or "")
-        if not lat:
+            specific = _is_machine_specific_match(mname, loc, keys, score)
+            matches.append((score, mname, specific))
+        if not matches:
             continue
-        prev = by_machine.get(mname)
-        if not prev or lat > str(prev.get("lastVisitAt") or prev.get("lastVisitDate") or ""):
-            by_machine[mname] = row
+
+        specific_matches = [(s, m) for s, m, sp in matches if sp]
+        if specific_matches:
+            best_score, best_name = max(specific_matches, key=lambda item: (item[0], len(item[1])))
+            tied = [m for s, m in specific_matches if s == best_score]
+            if len(tied) == 1:
+                targets = [best_name]
+            else:
+                targets = [max(tied, key=len)]
+        else:
+            targets = [m for _, m, _ in matches]
+
+        for mname in targets:
+            prev = by_machine.get(mname)
+            if not prev or lat > str(prev.get("lastVisitAt") or prev.get("lastVisitDate") or ""):
+                by_machine[mname] = row
     return by_machine
 
 
@@ -1391,7 +1510,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v9",
+            "v10",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1507,7 +1626,7 @@ _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v7|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"qc_rows|v8|{start.isoformat()}|{end.isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1539,8 +1658,12 @@ def latest_qc_by_machine_map(
         "dateTo": end.date().isoformat(),
         "source": "safetyculture",
     }
-    if search_err and not by_machine:
-        out["error"] = search_err
+    out = _apply_qc_scan_status(
+        out,
+        search_err=search_err,
+        audits_searched=audits_searched,
+        audits_processed=audits_processed,
+    )
     return out
 
 
@@ -1560,7 +1683,7 @@ def fleet_qc_visits_in_range(
     start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
 
     names_hash = hashlib.md5(",".join(names).encode()).hexdigest()[:12]
-    cache_key = f"fleet|v10|{names_hash}|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"fleet|v11|{names_hash}|{start.isoformat()}|{end.isoformat()}"
     hit = _FLEET_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1577,8 +1700,12 @@ def fleet_qc_visits_in_range(
         "dateTo": end.date().isoformat(),
         "source": "safetyculture",
     }
-    if search_err and not by_machine:
-        out["error"] = search_err
+    out = _apply_qc_scan_status(
+        out,
+        search_err=search_err,
+        audits_searched=audits_searched,
+        audits_processed=audits_processed,
+    )
     _FLEET_CACHE[cache_key] = (time.time(), out)
     return out
 

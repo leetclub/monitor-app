@@ -44,6 +44,9 @@ export type QaSummaryResponse = {
   locationsWithTech?: number;
   source?: string;
   error?: string;
+  warning?: string;
+  partial?: boolean;
+  auditsProcessed?: number;
   /** Admin manual summary saves per normalized machine key — Kuwait calendar month. */
   adminSummaryMtdByMachine?: Record<string, number>;
   yearMonth?: string;

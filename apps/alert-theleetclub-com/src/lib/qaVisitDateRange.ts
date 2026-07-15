@@ -21,11 +21,11 @@ export function qaTodayIso(): string {
   return kuwaitIsoFromParts(y, m, day);
 }
 
-/** From-date = Kuwait today minus ~180 days. */
+/** From-date = Kuwait today minus ~90 days (lighter default SC scan). */
 export function qaDefaultFromDate(): string {
   const { y, m, day } = kuwaitParts();
   const utcNoon = new Date(Date.UTC(y, m - 1, day, 9, 0, 0));
-  utcNoon.setUTCDate(utcNoon.getUTCDate() - 180);
+  utcNoon.setUTCDate(utcNoon.getUTCDate() - 90);
   const p = kuwaitParts(utcNoon);
   return kuwaitIsoFromParts(p.y, p.m, p.day);
 }
