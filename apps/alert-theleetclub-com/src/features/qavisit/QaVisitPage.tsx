@@ -39,9 +39,24 @@ function norm(s: string): string {
 
 function visitInDateRange(visit: QaVisitRow | null | undefined, from: string, to: string): boolean {
   if (!visit) return false;
-  const raw = visit.lastVisitAt || visit.lastVisitDate;
-  if (!raw) return false;
-  const day = String(raw).slice(0, 10);
+  // Date filters are Asia/Kuwait calendar days — never slice UTC from lastVisitAt.
+  let day = '';
+  if (visit.lastVisitAt) {
+    try {
+      day = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kuwait',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(visit.lastVisitAt));
+    } catch {
+      day = '';
+    }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    day = String(visit.lastVisitDate || '').trim().slice(0, 10);
+  }
+  if (!day) return false;
   return day >= from && day <= to;
 }
 
@@ -264,12 +279,23 @@ export function QaVisitPage() {
               </span>
             </div>
 
-            {machinesQ.isLoading || qaSummaryQ.isLoading ? <p className="qaVisitMuted">Loading fleet…</p> : null}
+            {machinesQ.isLoading || qaSummaryQ.isLoading || fleetQ.isLoading ? (
+              <p className="qaVisitMuted">Loading fleet…</p>
+            ) : null}
             {qaSummaryQ.isError && !fleetQ.data ? (
               <p className="qaVisitError">{(qaSummaryQ.error as Error).message}</p>
             ) : null}
             {fleetQ.isError ? (
-              <p className="qaVisitMuted">Range filter loading slowly — showing summary snapshot.</p>
+              <p className="qaVisitError">
+                {(fleetQ.error as Error).message}
+                {qaSummaryQ.data ? ' — showing summary snapshot where available.' : ''}
+              </p>
+            ) : null}
+            {!fleetQ.isLoading && !qaSummaryQ.isLoading && fleetQ.data?.error ? (
+              <p className="qaVisitError">{fleetQ.data.error}</p>
+            ) : null}
+            {!fleetQ.isLoading && !qaSummaryQ.isLoading && qaSummaryQ.data?.error && !fleetQ.data?.byMachine ? (
+              <p className="qaVisitError">{qaSummaryQ.data.error}</p>
             ) : null}
 
             <TableScrollControls>

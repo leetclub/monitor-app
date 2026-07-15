@@ -70,9 +70,9 @@ def _search_audits(modified_after: str, modified_before: str) -> Tuple[List[str]
 
 
 # SC /audits/search defaults to order=asc + limit=100 and has no next_page_token.
-# Without an explicit limit/order, long windows return only the *oldest* page and
-# drop same-day visits (e.g. KU CBA 14 Jul never appeared while 1 Jul did).
-_SEARCH_PAGE_LIMIT = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_LIMIT", "1000"))
+# The API caps each page at 100 even when limit=1000 — paginate on that cap, not our request.
+_SC_API_MAX_PAGE = int(os.environ.get("SAFETY_CULTURE_QA_SC_MAX_PAGE", "100"))
+_SEARCH_PAGE_LIMIT = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_LIMIT", "100"))
 _SEARCH_MAX_PAGES = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_MAX_PAGES", "40"))
 
 
@@ -80,8 +80,8 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
     """
     Search SafetyCulture audits for a modified_at window.
 
-    Uses order=desc + limit=1000 and cursor-paginates by advancing modified_before
-    to the oldest timestamp on each page (the public API has no next_page_token).
+    Requests limit=100 (SC cap), order=desc, and cursor-paginates by advancing
+    modified_before / modified_after (the public API has no next_page_token).
     Returns audit ids newest-first by modified_at.
     """
     if not _API_TOKEN:
@@ -92,7 +92,7 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
     cursor_after = modified_after
     cursor_before = modified_before
     page_order: Optional[str] = None
-    page_limit = max(1, min(int(_SEARCH_PAGE_LIMIT or 1000), 1000))
+    page_limit = max(1, min(int(_SEARCH_PAGE_LIMIT or 100), int(_SC_API_MAX_PAGE or 100)))
     max_pages = max(1, int(_SEARCH_MAX_PAGES or 40))
 
     for _ in range(max_pages):
@@ -149,7 +149,7 @@ def _search_audit_ids(modified_after: str, modified_before: str) -> Tuple[List[s
                 except (TypeError, ValueError):
                     pass
 
-            # Done when this page emptied (all dupes), under page size, or we've covered total.
+            # Done when this page emptied (all dupes), page not full vs SC cap, or we've covered total.
             if not page_pairs:
                 break
             if page_order is None and len(page_pairs) >= 2:
@@ -838,7 +838,7 @@ def _fetch_from_monitor_gas(
 
 def get_last_visit_tracking() -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
-    cache_key = "visits"
+    cache_key = "visits|v2"
     hit = _CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _CACHE_SEC:
         return hit[1]
@@ -849,9 +849,22 @@ def get_last_visit_tracking() -> Dict[str, Any]:
 
     if _API_TOKEN:
         start = now - timedelta(days=max(1, _SEARCH_DAYS))
-        audit_ids, search_err = _search_audits(
-            start.isoformat().replace("+00:00", "Z"), now.isoformat().replace("+00:00", "Z")
-        )
+        mod_start, mod_end = _modified_search_window(start, now)
+        chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
+        audit_ids: List[str] = []
+        seen_ids: set[str] = set()
+        for chunk_start, chunk_end in chunks:
+            chunk_ids, chunk_err = _search_audits(
+                chunk_start.isoformat().replace("+00:00", "Z"),
+                chunk_end.isoformat().replace("+00:00", "Z"),
+            )
+            if chunk_err and not chunk_ids:
+                search_err = search_err or chunk_err
+                continue
+            for aid in chunk_ids:
+                if aid and aid not in seen_ids:
+                    seen_ids.add(aid)
+                    audit_ids.append(aid)
         if audit_ids:
             visit_count_mtd = _build_visit_count_mtd(audit_ids, now)
             cap = audit_ids if _MAX_AUDITS <= 0 else audit_ids[: max(1, _MAX_AUDITS)]
@@ -1378,7 +1391,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v8",
+            "v9",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1494,7 +1507,7 @@ _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v6|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"qc_rows|v7|{start.isoformat()}|{end.isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
@@ -1547,7 +1560,7 @@ def fleet_qc_visits_in_range(
     start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
 
     names_hash = hashlib.md5(",".join(names).encode()).hexdigest()[:12]
-    cache_key = f"fleet|v9|{names_hash}|{start.isoformat()}|{end.isoformat()}"
+    cache_key = f"fleet|v10|{names_hash}|{start.isoformat()}|{end.isoformat()}"
     hit = _FLEET_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
