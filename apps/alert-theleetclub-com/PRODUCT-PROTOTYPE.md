@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; **Live operator** — Task Manager name in metric box + attendance badge (Late / Absent / Missing); column **not sortable**; **one tap** → schedule + **icon-only** contacts (no email/phone in table or modal body). **Last / tx** — weekday + date + time (3 lines; sortable via Vendon timestamp). Sales / Target / Trend / QA popups; fleet bar on Today vs Yesterday adds **Yest. full day** KD + **−2d full day** KD + **vs −2d** %. Last clean + tech visit use snapshot/SafetyCulture. |
 | `/overall` | Overall | Workbook columns; **sortable headers** (⇅/▼/▲) on all columns with real data; **Operator Activity** column; **Attendance** from Task Manager (`GET /api/alert/workflow/machine-attendance-map` + tap → `operator-schedule` modal); **Sales** uses `GET /api/alert/overall/daily-sales-elapsed` — **Today vs Yesterday** or **Yesterday vs Day Before** per compare preset; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | **Sales vs target graphs** (Targets Areas parity): overview trajectory + dashed **Avg daily target** line; **Performance charts** grid — period target vs actual bars, achievement ranking (100% line), daily revenue + cumulative pace; single machine → Revenue / Product trajectory (stacked achieved + remaining + target line). Presets WTD/MTD/…; filter Select all / Clear / **Only**. Product cups optional. Banner when no Admin/sheet targets. Red Flags **Target** column is today % only (tap modal) — not graphs. |
+| `/performance` | Performance | **Sales vs target graphs** (Targets Areas parity): **Achievement by machine** (% + 100% line) first · KPI strip + period presets · **Period target vs actual** + **Daily revenue** (bars, dashed target, cumulative) in 2-col grid · optional product cups charts · single machine → same daily bar charts (not stacked trajectory). Line trajectory/compare behind toggles. Banner when no Admin/sheet targets. Red Flags **Target** column is today % only. |
 | `/admin` → Targets | Admin · Targets | Location target once (KD or cups). Promote **1..N Vendon products**, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** (avg / last week / suggest) on hover-click. |
 | `/v2` … `/v2/*` | **Alert v2** | Pure Manus **Fleet Intelligence** UI with **full Classic workbook fields** (Red Flags / Overall / QA / Performance) in Manus tables/cards — no Classic Stitch chrome. Classic + Pro at `/`. Login `/v2/login`. |
 | `/admin` | Admin | User-entered data **not on Vendon**. **Machines** (cleaning, operators, hours), **Targets** (location KD + SX product cups + period), **Area owners**, **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
@@ -58,7 +58,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
-*Figure 6 — Performance: multi-select location KD + product cups charts (Targets Areas style).*
+*Figure 6 — Performance: Targets Areas layout — achievement %, target vs actual bars, daily revenue + cumulative.*
 
 ![7 Alert v2](docs/product-prototype/figures/wire-07-v2.svg)
 
@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-15 | **Performance charts = Targets Areas layout:** Primary view is achievement % (100% line) → period target vs actual bars + daily revenue side-by-side (dashed target + cumulative). KPIs + presets at top. Line trajectory demoted to optional toggle. Single-machine detail uses same daily bar charts (not stacked trajectory). |
 | 2026-07-15 | **Performance target discoverability:** Clarified that sales-vs-target **graphs** are on `/performance` (not Red Flags tables). Status banner when fleet has sales but zero configured targets (Admin → Targets or weekly sheet). |
 | 2026-07-15 | **Alert v2 Classic boards for data+popups:** `/v2` Red Flags & Overall mount Classic pages with `variant=manus` (same APIs, cells, sales/trend/target/QA/cleaning/detail popups as `/`). Thin Manus-only tables removed from those routes. Classic/Pro untouched. |
 | 2026-07-15 | **Alert v2 login full-bleed:** Login is edge-to-edge split (hero + sign-in rail), not a shrunk centered card; cancels body safe-area inset. Classic/Pro untouched. |

@@ -6,8 +6,10 @@ import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import {
   SERIES_PALETTE,
   pctColor,
+  type FleetKpis,
   type FleetMachine,
   type PerfDay,
+  type PerfPreset,
 } from '@/features/performance/perfTypes';
 
 export type MachineSort = 'achievement' | 'name' | 'actual' | 'target';
@@ -1530,15 +1532,55 @@ export function GrowthRateChart({ days }: { days: PerfDay[] }) {
   );
 }
 
-/** Multi-select overview — Targets Areas detail layout (location + product). */
+const PRESET_OPTIONS: { id: PerfPreset; label: string }[] = [
+  { id: 'this_week', label: 'This week (WTD)' },
+  { id: 'last_week', label: 'Last week' },
+  { id: 'last_2_weeks', label: 'Last 2 weeks' },
+  { id: 'this_month', label: 'This month (MTD)' },
+  { id: 'last_month', label: 'Last month' },
+];
+
+function PerfKpiBox({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: 'up' | 'down' | 'neutral';
+}) {
+  const cls =
+    tone === 'up' ? 'perfKpiToneUp' : tone === 'down' ? 'perfKpiToneDown' : 'perfKpiToneNeutral';
+  return (
+    <div className={`perfKpi perfKpiWide ${cls}`}>
+      <span className="perfKpiLabel">{label}</span>
+      <strong>{value}</strong>
+      {hint ? <span className="perfKpiHint">{hint}</span> : null}
+    </div>
+  );
+}
+
+/** Multi-select overview — Targets Areas page layout (achievement → target vs actual + daily). */
 export function FleetPerformanceOverview({
   machines,
   aggregateDays,
   productLabel,
+  preset,
+  onPresetChange,
+  windowLabel,
+  kpis,
+  loading,
 }: {
   machines: FleetMachine[];
   aggregateDays: PerfDay[];
   productLabel?: string;
+  preset: PerfPreset;
+  onPresetChange: (p: PerfPreset) => void;
+  windowLabel?: string;
+  kpis?: FleetKpis | null;
+  loading?: boolean;
 }) {
   const [machineSort, setMachineSort] = useState<MachineSort>('achievement');
   const [productSort, setProductSort] = useState<MachineSort>('achievement');
@@ -1554,6 +1596,21 @@ export function FleetPerformanceOverview({
 
   const prodTitle = productLabel ? ` · ${productLabel}` : '';
 
+  const deficitTone =
+    kpis?.deficitKd == null ? 'neutral' : kpis.deficitKd >= 0 ? 'up' : 'down';
+  const growthTone =
+    kpis?.growthRatePct == null
+      ? 'neutral'
+      : kpis.growthRatePct >= 100
+        ? 'up'
+        : 'down';
+  const achTone =
+    kpis?.achievementRatePct == null
+      ? 'neutral'
+      : kpis.achievementRatePct >= 50
+        ? 'up'
+        : 'down';
+
   if (!machines.length) return null;
 
   return (
@@ -1561,17 +1618,91 @@ export function FleetPerformanceOverview({
       <header className="perfOverviewHead">
         <div>
           <h3 id="perf-overview-title" className="perfSectionTitle">
-            Performance charts
+            Sales vs target
           </h3>
           <p className="perfSectionHint">
-            Location KD and promoted-product cups — target vs actual, ranking, daily + cumulative.
-            Same pattern as Targets Areas. PNG export on each chart.
+            Same chart recipe as Targets Areas — achievement % first, then period target vs actual
+            bars and daily revenue with dashed target + cumulative pace.
+            {windowLabel ? ` · ${windowLabel}` : ''}
           </p>
         </div>
       </header>
 
-      <h4 className="perfGroupTitle">Location revenue</h4>
-      <div className="perfOverviewGrid">
+      <div className="perfToolbarRow">
+        <div className="perfModePills" role="group" aria-label="Time period">
+          {PRESET_OPTIONS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`perfSegPill ${preset === p.id ? 'active' : ''}`}
+              onClick={() => onPresetChange(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? <p className="perfMuted">Loading charts…</p> : null}
+
+      <div className="perfKpiRow perfKpiRowHero">
+        <PerfKpiBox
+          label="Deficit"
+          value={
+            kpis?.deficitKd == null
+              ? '—'
+              : `${kpis.deficitKd >= 0 ? '+' : ''}${formatKwd(kpis.deficitKd)}`
+          }
+          hint="Actual − target (period)"
+          tone={deficitTone}
+        />
+        <PerfKpiBox
+          label="Target achievement"
+          value={kpis?.achievementRatePct != null ? `${kpis.achievementRatePct}%` : '—'}
+          hint={
+            kpis?.machinesWithTarget
+              ? `${kpis.machinesOnTarget ?? 0}/${kpis.machinesWithTarget} machines ≥ target`
+              : 'Machines hitting target'
+          }
+          tone={achTone}
+        />
+        <PerfKpiBox
+          label="Growth rate"
+          value={kpis?.growthRatePct != null ? `${kpis.growthRatePct}%` : '—'}
+          hint="Period sales ÷ previous period × 100"
+          tone={growthTone}
+        />
+        <PerfKpiBox
+          label="Period KD"
+          value={kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—'}
+          hint={
+            kpis?.periodTargetKd != null
+              ? `Target ${formatKwd(kpis.periodTargetKd)}`
+              : `${machines.length} locations`
+          }
+          tone="neutral"
+        />
+      </div>
+
+      <article className="perfPanel perfPanelAchievement">
+        <div className="perfPanelHead">
+          <div>
+            <h4 className="perfPanelTitle">Achievement by machine</h4>
+            <p className="perfSectionHint">% of period revenue target per machine · dashed line = 100%</p>
+          </div>
+        </div>
+        <FleetRankingChart machines={machines} sort={machineSort} />
+      </article>
+
+      <header className="perfDetailChartsHead">
+        <h4 className="perfGroupTitle perfGroupTitleInline">Location revenue</h4>
+        <p className="perfSectionHint perfDetailChartsHint">
+          Target vs actual by machine, and daily revenue through the period. Scroll or zoom when you
+          have many machines.
+        </p>
+      </header>
+
+      <div className="perfDetailChartsGrid">
         <article className="perfPanel">
           <div className="perfPanelHead">
             <div>
@@ -1586,19 +1717,9 @@ export function FleetPerformanceOverview({
         <article className="perfPanel">
           <div className="perfPanelHead">
             <div>
-              <h4 className="perfPanelTitle">Achievement ranking</h4>
-              <p className="perfSectionHint">Period KD vs target — 100% dashed line</p>
-            </div>
-          </div>
-          <FleetRankingChart machines={machines} sort={machineSort} />
-        </article>
-
-        <article className="perfPanel perfPanelWide">
-          <div className="perfPanelHead">
-            <div>
-              <h4 className="perfPanelTitle">Daily revenue (selected fleet)</h4>
+              <h4 className="perfPanelTitle">Daily revenue</h4>
               <p className="perfSectionHint">
-                Sum of selected locations · dashed line = daily target · optional cumulative pace
+                Business days · dashed line = combined daily target for selected locations
               </p>
             </div>
             <div className="perfChartToolbar">
@@ -1622,53 +1743,55 @@ export function FleetPerformanceOverview({
           toolbar (or open a single machine for detail charts).
         </p>
       ) : (
-        <div className="perfOverviewGrid">
-          <article className="perfPanel">
+        <>
+          <article className="perfPanel perfPanelAchievement">
             <div className="perfPanelHead">
               <div>
-                <h4 className="perfPanelTitle">Period cups by machine</h4>
-                <p className="perfSectionHint">Gray = target · color = actual · label = achievement %</p>
-              </div>
-              <PerfSortToolbar sort={productSort} onChange={setProductSort} />
-            </div>
-            <FleetProductTargetActualChart machines={machines} sort={productSort} />
-          </article>
-
-          <article className="perfPanel">
-            <div className="perfPanelHead">
-              <div>
-                <h4 className="perfPanelTitle">Product achievement ranking</h4>
-                <p className="perfSectionHint">Period cups vs target — 100% dashed line</p>
+                <h4 className="perfPanelTitle">Product achievement by machine</h4>
+                <p className="perfSectionHint">% of period cup target · dashed line = 100%</p>
               </div>
             </div>
             <FleetProductRankingChart machines={machines} sort={productSort} />
           </article>
 
-          <article className="perfPanel perfPanelWide">
-            <div className="perfPanelHead">
-              <div>
-                <h4 className="perfPanelTitle">Daily product cups (selected fleet)</h4>
-                <p className="perfSectionHint">
-                  Sum of selected locations · dashed = daily cup target · optional cumulative
-                </p>
+          <div className="perfDetailChartsGrid">
+            <article className="perfPanel">
+              <div className="perfPanelHead">
+                <div>
+                  <h4 className="perfPanelTitle">Period cups by machine</h4>
+                  <p className="perfSectionHint">Gray = target · color = actual · label = achievement %</p>
+                </div>
+                <PerfSortToolbar sort={productSort} onChange={setProductSort} />
               </div>
-              <div className="perfChartToolbar">
-                <button
-                  type="button"
-                  className={`perfSegPill ${showProductCumulative ? 'active' : ''}`}
-                  onClick={() => setShowProductCumulative((v) => !v)}
-                >
-                  {showProductCumulative ? 'Cumulative on' : 'Cumulative off'}
-                </button>
+              <FleetProductTargetActualChart machines={machines} sort={productSort} />
+            </article>
+
+            <article className="perfPanel">
+              <div className="perfPanelHead">
+                <div>
+                  <h4 className="perfPanelTitle">Daily product cups</h4>
+                  <p className="perfSectionHint">
+                    Sum of selected locations · dashed = daily cup target · optional cumulative
+                  </p>
+                </div>
+                <div className="perfChartToolbar">
+                  <button
+                    type="button"
+                    className={`perfSegPill ${showProductCumulative ? 'active' : ''}`}
+                    onClick={() => setShowProductCumulative((v) => !v)}
+                  >
+                    {showProductCumulative ? 'Cumulative on' : 'Cumulative off'}
+                  </button>
+                </div>
               </div>
-            </div>
-            <FleetDailyProductChart
-              days={aggregateDays}
-              showCumulative={showProductCumulative}
-              productLabel={productLabel}
-            />
-          </article>
-        </div>
+              <FleetDailyProductChart
+                days={aggregateDays}
+                showCumulative={showProductCumulative}
+                productLabel={productLabel}
+              />
+            </article>
+          </div>
+        </>
       )}
     </section>
   );
