@@ -2,6 +2,9 @@ import { normKey, qaMachineNamesMatch } from '@/lib/qaMachineAliases';
 
 /** Operator-facing canonical labels when Vendon/SC use a known misspelling. */
 const DISPLAY_CANONICAL: Record<string, string> = {
+  // normKey folds enginnering→engineering; accept both spellings.
+  'ku engineering': 'KU Engineering',
+  'ku engineering j': 'KU Engineering J',
   'ku enginnering': 'KU Engineering',
   'ku enginnering j': 'KU Engineering J',
 };

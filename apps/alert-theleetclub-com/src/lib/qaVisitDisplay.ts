@@ -64,13 +64,28 @@ export type QaFindingsResponse = {
 };
 
 
+function latestVisitForMachine(
+  machineName: string,
+  latestByMachine?: Record<string, QaVisitRow> | null,
+): QaVisitRow | undefined {
+  if (!latestByMachine) return undefined;
+  const direct = latestByMachine[machineName];
+  if (direct?.auditId || direct?.lastVisitAt || direct?.lastVisitDate) return direct;
+  for (const [key, row] of Object.entries(latestByMachine)) {
+    if (!row) continue;
+    if (!(row.auditId || row.lastVisitAt || row.lastVisitDate)) continue;
+    if (qaMachineNamesMatch(key, machineName)) return row;
+  }
+  return undefined;
+}
+
 export function qaVisitForMachineName(
   machineName: string,
   byLocationKey: Record<string, QaVisitRow> | undefined,
   adminMtdByMachine?: Record<string, number> | null,
   latestByMachine?: Record<string, QaVisitRow> | null,
 ): QaVisitRow | null {
-  const fromLatest = latestByMachine?.[machineName];
+  const fromLatest = latestVisitForMachine(machineName, latestByMachine);
   const visit =
     fromLatest?.auditId || fromLatest?.lastVisitAt || fromLatest?.lastVisitDate
       ? fromLatest
