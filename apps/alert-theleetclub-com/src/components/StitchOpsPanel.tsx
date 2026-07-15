@@ -13,6 +13,8 @@ export function StitchOpsPanel({
   children,
   className = '',
   compact = false,
+  /** Hide Classic title chrome when hosted inside Alert v2 Manus section heads. */
+  embedded = false,
 }: {
   iconName: string;
   title: string;
@@ -25,41 +27,66 @@ export function StitchOpsPanel({
   children: ReactNode;
   className?: string;
   compact?: boolean;
+  embedded?: boolean;
 }) {
   const kpisInline = compact && (kpis?.length ?? 0) > 0;
+  const showTitleBlock = !embedded;
 
   return (
     <section
-      className={`stitchDataPanel stitchOpsPanel${compact ? ' stitchOpsPanelCompact' : ''} ${className}`.trim()}
+      className={`stitchDataPanel stitchOpsPanel${compact ? ' stitchOpsPanelCompact' : ''}${embedded ? ' stitchOpsPanelEmbedded' : ''} ${className}`.trim()}
     >
-      <header className="stitchOpsHead">
-        <div className="stitchOpsHeadMain">
-          <div className="stitchOpsTitleRow">
-            <h1 className="stitchDataPanelTitle">
-              <NavIcon name={iconName} />
-              {title}
-            </h1>
-            {badge ? <span className="stitchOpsBadge">{badge}</span> : null}
-            {metaLine && compact ? <span className="stitchOpsMetaInline">{metaLine}</span> : null}
+      {showTitleBlock || toolbar || badge || (metaLine && compact) || kpisInline ? (
+        <header className={`stitchOpsHead${embedded ? ' stitchOpsHeadEmbedded' : ''}`}>
+          <div className="stitchOpsHeadMain">
+            {showTitleBlock ? (
+              <div className="stitchOpsTitleRow">
+                <h1 className="stitchDataPanelTitle">
+                  <NavIcon name={iconName} />
+                  {title}
+                </h1>
+                {badge ? <span className="stitchOpsBadge">{badge}</span> : null}
+                {metaLine && compact ? <span className="stitchOpsMetaInline">{metaLine}</span> : null}
+              </div>
+            ) : (
+              <div className="stitchOpsTitleRow stitchOpsTitleRowEmbedded">
+                {badge ? <span className="stitchOpsBadge">{badge}</span> : null}
+                {metaLine && compact ? <span className="stitchOpsMetaInline">{metaLine}</span> : null}
+                {kpisInline ? (
+                  <div className="stitchKpiInline" role="group" aria-label="Key metrics">
+                    {kpis!.map((k) => (
+                      <span
+                        key={k.label}
+                        className={`stitchKpiInlineItem${k.tone === 'warn' ? ' stitchKpiInlineItemWarn' : ''}${k.tone === 'good' ? ' stitchKpiInlineItemGood' : ''}`}
+                        title={k.sub ? `${k.label}: ${k.sub}` : k.label}
+                      >
+                        <span className="stitchKpiInlineVal">{k.value}</span>
+                        <span className="stitchKpiInlineLabel">{k.label}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )}
+            {showTitleBlock && subtitle && !compact ? <p className="stitchOpsSubtitle">{subtitle}</p> : null}
+            {showTitleBlock && kpisInline ? (
+              <div className="stitchKpiInline" role="group" aria-label="Key metrics">
+                {kpis!.map((k) => (
+                  <span
+                    key={k.label}
+                    className={`stitchKpiInlineItem${k.tone === 'warn' ? ' stitchKpiInlineItemWarn' : ''}${k.tone === 'good' ? ' stitchKpiInlineItemGood' : ''}`}
+                    title={k.sub ? `${k.label}: ${k.sub}` : k.label}
+                  >
+                    <span className="stitchKpiInlineVal">{k.value}</span>
+                    <span className="stitchKpiInlineLabel">{k.label}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
-          {subtitle && !compact ? <p className="stitchOpsSubtitle">{subtitle}</p> : null}
-          {kpisInline ? (
-            <div className="stitchKpiInline" role="group" aria-label="Key metrics">
-              {kpis!.map((k) => (
-                <span
-                  key={k.label}
-                  className={`stitchKpiInlineItem${k.tone === 'warn' ? ' stitchKpiInlineItemWarn' : ''}${k.tone === 'good' ? ' stitchKpiInlineItemGood' : ''}`}
-                  title={k.sub ? `${k.label}: ${k.sub}` : k.label}
-                >
-                  <span className="stitchKpiInlineVal">{k.value}</span>
-                  <span className="stitchKpiInlineLabel">{k.label}</span>
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        {toolbar ? <div className="stitchOpsToolbar">{toolbar}</div> : null}
-      </header>
+          {toolbar ? <div className="stitchOpsToolbar">{toolbar}</div> : null}
+        </header>
+      ) : null}
       <div className="stitchOpsBody">
         <div className="opsDashboard opsDashboard--tight">
           {!kpisInline && kpis?.length ? (

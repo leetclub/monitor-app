@@ -333,7 +333,7 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
   );
 }
 
-export function RedFlagsPage() {
+export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
@@ -1197,6 +1197,7 @@ export function RedFlagsPage() {
     <div className={styles.root}>
       <StitchOpsPanel
         compact
+        embedded={embedded}
         iconName="red_flags"
         title="Red Flags"
         badge={emptyClear ? 'All clear' : `${ranked.length} machine${ranked.length === 1 ? '' : 's'}`}

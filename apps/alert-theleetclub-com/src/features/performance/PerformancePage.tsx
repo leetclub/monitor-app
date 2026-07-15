@@ -47,7 +47,7 @@ function parseIds(raw: string | null): string[] {
     .slice(0, 48);
 }
 
-export function PerformancePage() {
+export function PerformancePage({ embedded = false }: { embedded?: boolean } = {}) {
   const [params, setParams] = useSearchParams();
   const focusId = (params.get('machineId') || params.get('machine') || '').trim();
   const urlIds = parseIds(params.get('machineIds'));
@@ -179,6 +179,7 @@ export function PerformancePage() {
   return (
     <div className="perfPage">
       <StitchOpsPanel
+        embedded={embedded}
         title="Performance"
         subtitle="Overview trajectory · Target vs actual · Ranking — Targets Areas style"
         iconName="performance"

@@ -24,7 +24,7 @@
   <text x="620" y="78" fill="#99f6e4" font-size="9" font-weight="700">Ï LIVE</text>
 
   <text x="194" y="124" fill="#f8fafc" font-size="16" font-weight="700">Red Flags</text>
-  <text x="194" y="140" fill="#8fa3b8" font-size="9">KPI strip + filter bar + exception board (live snapshot)</text>
+  <text x="194" y="140" fill="#8fa3b8" font-size="9">Manus chrome + full Classic board (all columns / presets / popups)</text>
 
   <rect x="194" y="152" width="130" height="54" rx="8" fill="#121f33" stroke="rgba(148,163,184,0.18)"/>
   <text x="206" y="170" fill="#94a3b8" font-size="8">TOTAL FLAGS</text>

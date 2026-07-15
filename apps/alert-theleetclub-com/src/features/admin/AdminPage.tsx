@@ -25,7 +25,7 @@ type CleaningScheduleListResponse = { rows: CleaningScheduleRow[] };
 
 type AdminTab = 'machines' | 'targets' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
 
-export function AdminPage() {
+export function AdminPage({ embedded = false }: { embedded?: boolean } = {}) {
   const ac = useAccess();
   const qc = useQueryClient();
   const [tab, setTab] = useState<AdminTab>('machines');
@@ -114,18 +114,20 @@ export function AdminPage() {
     ) : null;
 
   return (
-    <div className="pageShell pageShellWide adminAppRoot">
-      <header className="adminAppHeader">
-        <div className="adminAppHeaderMain">
-          <p className="adminAppEyebrow">Settings</p>
-          <h1 className="adminAppTitle">Admin</h1>
-          <p className="adminAppTagline">
-            Configure schedules, cleaning windows, operators, and access. Device names and fleet tags come from your vending
-            data feed; this area adds operational setup on top.
-          </p>
-        </div>
-        <HelpTip text="Machines: schedules & operators. Targets: location KD + SX product cups. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional legacy substring rules." />
-      </header>
+    <div className={`pageShell pageShellWide adminAppRoot${embedded ? ' adminAppRootEmbedded' : ''}`}>
+      {embedded ? null : (
+        <header className="adminAppHeader">
+          <div className="adminAppHeaderMain">
+            <p className="adminAppEyebrow">Settings</p>
+            <h1 className="adminAppTitle">Admin</h1>
+            <p className="adminAppTagline">
+              Configure schedules, cleaning windows, operators, and access. Device names and fleet tags come from your vending
+              data feed; this area adds operational setup on top.
+            </p>
+          </div>
+          <HelpTip text="Machines: schedules & operators. Targets: location KD + SX product cups. Who can use Alert: sign-in access. My access: your permissions. Advanced: optional legacy substring rules." />
+        </header>
+      )}
 
       <div className="adminAppGrid">
         <nav className="adminSideNav" role="tablist" aria-label="Admin sections">

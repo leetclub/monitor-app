@@ -66,7 +66,7 @@ function visitFromFleetRow(row: QaVisitRow | undefined, adminMtd: number): QaVis
   return { ...row, adminSummaryMtd: adminMtd };
 }
 
-export function QaVisitPage() {
+export function QaVisitPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const machineFromUrl = (searchParams.get('machine') || '').trim();
   const auditFromUrl = (searchParams.get('auditId') || '').trim();
@@ -229,6 +229,7 @@ export function QaVisitPage() {
 
   return (
     <StitchOpsPanel
+      embedded={embedded}
       iconName="qa_visit"
       title="QA Visit"
       subtitle="Fleet-wide SafetyCulture insights — filter by date, then inspect a machine for full history."

@@ -285,7 +285,7 @@ function attendanceLabelFromShift(
   return { label: 'Absent', color: 'r' };
 }
 
-export function OverallPage() {
+export function OverallPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const { user } = useAuth();
   const { stored: columnStored, setColumns: handleColumnsChange, syncState: columnSyncState } =
@@ -805,6 +805,7 @@ export function OverallPage() {
     <div className="pageShellWide">
       <StitchOpsPanel
         compact
+        embedded={embedded}
         iconName="overall"
         title="Overall"
         badge={`${fleetMachines.length} machines`}
