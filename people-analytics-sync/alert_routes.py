@@ -2989,6 +2989,7 @@ def register_alert_routes(app) -> None:
         )
         raw_ids = (request.args.get("machineIds") or request.args.get("machine_ids") or "").strip()
         requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
+        explicit_machine_ids = bool(requested)
         if len(requested) > 24:
             requested = requested[:24]
 
@@ -3014,19 +3015,26 @@ def register_alert_routes(app) -> None:
         if cached is not None:
             return jsonify(cached)
 
-        seed = fetch_lo
-        while seed <= fetch_hi:
-            _maybe_seed_vendon_revenue_cache(seed)
-            seed += timedelta(days=1)
+        # Explicit machineIds: skip Vendon /machine (paginated fleet scan) and background
+        # revenue seeds — cron warms cache; both saturated the single gunicorn worker CPU.
+        if not explicit_machine_ids:
+            seed = fetch_lo
+            while seed <= fetch_hi:
+                _maybe_seed_vendon_revenue_cache(seed)
+                seed += timedelta(days=1)
 
-        fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
-        if fleet_err:
-            return jsonify({"error": fleet_err, "machines": []}), 502
         name_by_id: Dict[str, str] = {}
-        for m in fleet_rows or []:
-            mid = str(m.get("id") or "").strip()
-            if mid:
-                name_by_id[mid] = str(m.get("name") or mid).strip() or mid
+        fleet_err: Optional[str] = None
+        if explicit_machine_ids:
+            name_by_id = {mid: mid for mid in requested}
+        else:
+            fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
+            if fleet_err:
+                return jsonify({"error": fleet_err, "machines": []}), 502
+            for m in fleet_rows or []:
+                mid = str(m.get("id") or "").strip()
+                if mid:
+                    name_by_id[mid] = str(m.get("name") or mid).strip() or mid
 
         db = _pa_session()
         try:
@@ -3093,7 +3101,12 @@ def register_alert_routes(app) -> None:
                 for mid in requested:
                     lmc = lmcs.get(mid)
                     prof = profs.get(mid)
-                    mname = name_by_id.get(mid) or mid
+                    mname = (
+                        (str(prof.machine_name).strip() if prof and prof.machine_name else None)
+                        or name_by_id.get(mid)
+                        or mid
+                    )
+                    name_by_id[mid] = mname
                     loc_target = float(lmc.daily_sales_target) if lmc and lmc.daily_sales_target is not None else None
                     owner = (prof.location_owner if prof else None) or None
                     if loc_target is None:

@@ -256,7 +256,8 @@ spec:
             cpu: "500m"
           limits:
             memory: "768Mi"
-            cpu: "1500m"
+            # Performance fleet + background cache seeds pegged 1500m and starved /health probes.
+            cpu: "2500m"
         startupProbe:
           httpGet:
             path: /health
@@ -269,16 +270,16 @@ spec:
             port: 5000
           initialDelaySeconds: 15
           periodSeconds: 30
-          timeoutSeconds: 20
-          failureThreshold: 4
+          timeoutSeconds: 30
+          failureThreshold: 6
         readinessProbe:
           httpGet:
             path: /health
             port: 5000
           initialDelaySeconds: 10
           periodSeconds: 10
-          timeoutSeconds: 15
-          failureThreshold: 6
+          timeoutSeconds: 30
+          failureThreshold: 12
 ---
 apiVersion: v1
 kind: Service
