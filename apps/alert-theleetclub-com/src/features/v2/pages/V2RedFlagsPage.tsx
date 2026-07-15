@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { useV2RedFlagsData } from '@/features/v2/hooks/useV2RedFlagsData';
+import { useMemo, useState, type ReactNode } from 'react';
+import { useV2RedFlagsData, V2_RED_FLAGS_COLUMNS } from '@/features/v2/hooks/useV2RedFlagsData';
+import { V2DataTable } from '@/features/v2/V2DataTable';
 import {
   V2EmptyState,
   V2GhostBtn,
@@ -8,15 +9,15 @@ import {
   V2ProgressBar,
   V2SectionHead,
 } from '@/features/v2/v2Ui';
+import type { RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColumns';
 
 type SeverityFilter = 'all' | 'critical' | 'watch';
 
-/** Pure Manus Red Flags — no Classic / Stitch / ops-cell UI. */
+/** Pure Manus Red Flags with full Classic workbook field set. */
 export function V2RedFlagsPage() {
   const data = useV2RedFlagsData();
   const [q, setQ] = useState('');
   const [severity, setSeverity] = useState<SeverityFilter>('all');
-  const [expanded, setExpanded] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -24,22 +25,43 @@ export function V2RedFlagsPage() {
       if (severity === 'critical' && e.severity !== 'Critical') return false;
       if (severity === 'watch' && e.severity !== 'Watch') return false;
       if (!needle) return true;
-      return [e.machineName, e.id, e.location, e.operator, e.alertType, ...e.reasons]
-        .join(' ')
-        .toLowerCase()
-        .includes(needle);
+      return Object.values(e.fields).concat(e.reasons).join(' ').toLowerCase().includes(needle);
     });
   }, [data.exceptions, q, severity]);
+
+  const rows = filtered.map((e) => {
+    const cells: Record<string, ReactNode> = {};
+    for (const col of V2_RED_FLAGS_COLUMNS) {
+      const key = col.key as RedFlagsColumnKey;
+      if (key === 'vendingMachine') {
+        cells[key] = (
+          <div className="v2CellMachine">
+            <strong>{e.fields.vendingMachine}</strong>
+            <span>{e.id}</span>
+            <span className={e.severity === 'Critical' ? 'v2PillCrit' : 'v2PillWatch'}>{e.severity}</span>
+            {e.isNew ? <em className="v2PillNew">New</em> : null}
+          </div>
+        );
+      } else {
+        cells[key] = e.fields[key] || '—';
+      }
+    }
+    return {
+      id: e.id,
+      tone: e.severity === 'Critical' ? ('crit' as const) : ('' as const),
+      cells,
+    };
+  });
 
   return (
     <div className="v2Page">
       <V2SectionHead
         eyebrow="Exception management"
         title="Red Flags"
-        description="Prioritized fleet exceptions with clear ownership, severity, and resolution status."
+        description="Full fleet exception workbook — every Classic field, Manus Fleet Intelligence look."
         actions={
           <V2GhostBtn onClick={data.refetch} disabled={data.fetching}>
-            {data.fetching ? 'Refreshing…' : 'Saved view'}
+            {data.fetching ? 'Refreshing…' : 'Refresh'}
           </V2GhostBtn>
         }
       />
@@ -53,20 +75,8 @@ export function V2RedFlagsPage() {
           tone="red"
           icon="red_flags"
         />
-        <V2KpiCard
-          label="Active cases"
-          value={data.open}
-          detail="open or investigating"
-          tone="amber"
-          icon="overall"
-        />
-        <V2KpiCard
-          label="Resolved"
-          value={data.clear}
-          detail="machines clear in scope"
-          tone="teal"
-          icon="admin"
-        />
+        <V2KpiCard label="Active cases" value={data.open} detail="open or investigating" tone="amber" icon="overall" />
+        <V2KpiCard label="Resolved" value={data.clear} detail="machines clear in scope" tone="teal" icon="admin" />
       </div>
 
       <div className="v2StatusCard">
@@ -78,11 +88,11 @@ export function V2RedFlagsPage() {
       </div>
 
       <V2Panel
-        title="Exceptions"
-        subtitle="Live Alert snapshot — Manus board"
+        title="Exception workbook"
+        subtitle={`${V2_RED_FLAGS_COLUMNS.length} Classic fields · live APIs`}
         meta={
           <span className="v2PanelMetaText">
-            Showing {filtered.length} of {data.open} · Fleet-wide scope
+            Showing {filtered.length} of {data.open} · Fleet-wide
           </span>
         }
       >
@@ -92,7 +102,7 @@ export function V2RedFlagsPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search machine, category, or location"
+              placeholder="Search machine, operator, alert, location…"
             />
           </label>
           <select
@@ -110,91 +120,19 @@ export function V2RedFlagsPage() {
         {data.error ? (
           <V2EmptyState title="Could not load exceptions" description={data.error} icon="red_flags" />
         ) : data.loading ? (
-          <V2EmptyState title="Loading exceptions…" description="Fetching live fleet snapshot." />
-        ) : filtered.length === 0 ? (
-          <V2EmptyState
-            title="No matching exceptions"
-            description="No red flags have been recorded for machines in your scope."
-          />
+          <V2EmptyState title="Loading exceptions…" description="Fetching full fleet workbook." />
         ) : (
-          <ul className="v2ExceptionList">
-            {filtered.map((e) => {
-              const open = expanded === e.id;
-              return (
-                <li key={e.id} className={`v2ExceptionCard ${e.severity === 'Critical' ? 'isCrit' : ''}`}>
-                  <button
-                    type="button"
-                    className="v2ExceptionMain"
-                    onClick={() => setExpanded(open ? null : e.id)}
-                    aria-expanded={open}
-                  >
-                    <div className="v2ExceptionTop">
-                      <div>
-                        <strong>{e.machineName}</strong>
-                        <span className="v2ExceptionId">{e.id}</span>
-                      </div>
-                      <span className={e.severity === 'Critical' ? 'v2PillCrit' : 'v2PillWatch'}>
-                        {e.severity}
-                      </span>
-                    </div>
-                    <p className="v2ExceptionAlert">{e.alertType}</p>
-                    <div className="v2ExceptionMeta">
-                      <span>{e.operator}</span>
-                      <span>{e.location}</span>
-                      <span>Sales {e.dailySales}</span>
-                      <span>Freq {e.frequency}</span>
-                      {e.isNew ? <em className="v2PillNew">New</em> : null}
-                    </div>
-                  </button>
-                  {open ? (
-                    <div className="v2ExceptionDetail">
-                      <div className="v2FieldGrid">
-                        <div>
-                          <span>Last transaction</span>
-                          <strong>{e.lastTx}</strong>
-                        </div>
-                        <div>
-                          <span>Daily sales</span>
-                          <strong>{e.dailySales}</strong>
-                        </div>
-                        <div>
-                          <span>MTD sales</span>
-                          <strong>{e.mtdSales}</strong>
-                        </div>
-                        <div>
-                          <span>Target</span>
-                          <strong>{e.target}</strong>
-                        </div>
-                        <div>
-                          <span>Frequency</span>
-                          <strong>{e.frequency}</strong>
-                        </div>
-                        <div>
-                          <span>Last cleaning</span>
-                          <strong>{e.lastCleaning}</strong>
-                        </div>
-                        <div>
-                          <span>QA score</span>
-                          <strong>{e.qaScore}</strong>
-                        </div>
-                        <div>
-                          <span>Operator</span>
-                          <strong>{e.operator}</strong>
-                        </div>
-                      </div>
-                      {e.reasons.length ? (
-                        <ul className="v2ReasonList">
-                          {e.reasons.map((r) => (
-                            <li key={r}>{r}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+          <V2DataTable
+            columns={V2_RED_FLAGS_COLUMNS}
+            rows={rows}
+            empty={
+              <V2EmptyState
+                title="No matching exceptions"
+                description="No red flags recorded for machines in your scope."
+              />
+            }
+            footer={`All ${V2_RED_FLAGS_COLUMNS.length} Classic Red Flags fields · Manus display`}
+          />
         )}
       </V2Panel>
     </div>

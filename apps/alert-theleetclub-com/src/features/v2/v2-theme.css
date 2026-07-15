@@ -615,6 +615,123 @@ a.v2NavLink.v2NavLinkActive {
   max-width: none;
 }
 
+/* Manus data workbook table (all Classic fields, Manus chrome) */
+.v2DataTableWrap {
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid var(--v2-border-soft);
+  max-height: min(70vh, 820px);
+}
+
+.v2DataTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+}
+
+.v2DataTable th,
+.v2DataTable td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--v2-border-soft);
+  vertical-align: top;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.v2DataTable th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #0a1322;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.v2DataTable th small {
+  display: block;
+  margin-top: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #475569;
+  text-transform: none;
+}
+
+.v2DataTable th.isSticky,
+.v2DataTable td.isSticky {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #0a1322;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.25);
+}
+
+.v2DataTable td.isSticky {
+  z-index: 1;
+  background: #0c1524;
+}
+
+.v2DataTable tbody tr:hover td {
+  background: rgba(45, 212, 191, 0.05);
+}
+
+.v2DataTable tbody tr.isCrit td {
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.v2DataTable tbody tr.isWarn td {
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.v2DataTableFoot {
+  padding: 10px 12px;
+  font-size: 0.72rem;
+  color: #64748b;
+  border-top: 1px solid var(--v2-border-soft);
+}
+
+.v2CellMachine {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 140px;
+  white-space: normal;
+}
+
+.v2CellMachine strong {
+  color: #f8fafc;
+  font-size: 0.86rem;
+}
+
+.v2CellMachine span {
+  font-family: var(--v2-mono);
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.v2Check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--v2-border);
+  color: #94a3b8;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.v2Check input {
+  accent-color: var(--v2-teal);
+}
+
 /* Pure Manus exception / fleet cards (never Classic Stitch/ops UI) */
 .v2ExceptionList {
   list-style: none;
