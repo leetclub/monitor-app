@@ -31,6 +31,7 @@ import type { SxAccelerationRow } from '@/components/SxAccelerationCell';
 import { formatKuwaitActivityStamp } from '@/lib/formatKuwait';
 import { RED_FLAGS_XLSX_ORDER, type RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColumns';
 import { RED_FLAGS_TABLE_HEADERS } from '@/lib/tableHeaderLabels';
+import type { V2MetricItem, V2MetricTone } from '@/features/v2/V2MetricStack';
 
 type Snapshot = { rows?: RedAlertRow[]; error?: string; generatedAt?: string };
 type CreditsTotals = {
@@ -40,6 +41,19 @@ type CreditsTotals = {
   >;
 };
 
+const WIDE_COLS = new Set<RedFlagsColumnKey>([
+  'dailySales',
+  'mtdSales',
+  'mtdYoySales',
+  'dailyTarget',
+  'salesAcceleration',
+  'frequency',
+  'qaVisit',
+  'lastTransaction',
+  'operatorActivity',
+  'lastCleaning',
+]);
+
 export type V2ExceptionRow = {
   id: string;
   machineName: string;
@@ -47,6 +61,8 @@ export type V2ExceptionRow = {
   isNew: boolean;
   /** Manus display values keyed by Classic workbook column. */
   fields: Record<RedFlagsColumnKey, string>;
+  /** Manus metric stacks for trend-style cells. */
+  stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>>;
   reasons: string[];
 };
 
@@ -57,12 +73,28 @@ function isCritical(row: RedAlertRow): boolean {
   return /offline|power.?off|\boff\b|dispense|critical|stale.?sale|no.?sale/i.test(blob);
 }
 
-function sxText(sx?: SxAccelerationRow | null): string {
+function toneFromPct(pct: number | null | undefined): V2MetricTone {
+  if (pct == null || !Number.isFinite(pct)) return 'muted';
+  if (pct > 0.5) return 'up';
+  if (pct < -0.5) return 'down';
+  return 'flat';
+}
+
+function sxStack(sx?: SxAccelerationRow | null): V2MetricItem[] {
   const loc = sx?.location?.sxPct;
   const prod = sx?.product?.sxPct;
-  const a = loc != null && Number.isFinite(Number(loc)) ? formatSalesTrendPct(Number(loc)).replace(/%$/, 'p') : '—';
-  const b = prod != null && Number.isFinite(Number(prod)) ? formatSalesTrendPct(Number(prod)).replace(/%$/, 'p') : '—';
-  return `${a} / ${b}`;
+  return [
+    {
+      label: 'Loc SX',
+      value: loc != null && Number.isFinite(Number(loc)) ? formatSalesTrendPct(Number(loc)).replace(/%$/, ' pts') : '—',
+      tone: toneFromPct(loc != null ? Number(loc) : null),
+    },
+    {
+      label: 'Prod SX',
+      value: prod != null && Number.isFinite(Number(prod)) ? formatSalesTrendPct(Number(prod)).replace(/%$/, ' pts') : '—',
+      tone: toneFromPct(prod != null ? Number(prod) : null),
+    },
+  ];
 }
 
 export const V2_RED_FLAGS_COLUMNS = RED_FLAGS_XLSX_ORDER.map((key) => ({
@@ -70,6 +102,7 @@ export const V2_RED_FLAGS_COLUMNS = RED_FLAGS_XLSX_ORDER.map((key) => ({
   label: RED_FLAGS_TABLE_HEADERS[key].main,
   sub: RED_FLAGS_TABLE_HEADERS[key].sub,
   sticky: key === 'vendingMachine',
+  wide: WIDE_COLS.has(key),
 }));
 
 export function useV2RedFlagsData() {
@@ -261,6 +294,13 @@ export function useV2RedFlagsData() {
       const strike = getStrikeOperatorEmail(row);
       const opName = getOperatorDisplayName(row);
 
+      const trendPctNum = sales?.trendPct != null ? Number(sales.trendPct) : null;
+      const yoyPct = yoy?.trendPct != null ? Number(yoy.trendPct) : null;
+      const targetPctNum =
+        Number.isFinite(dailyTarget) && dailyTarget > 0 && today != null && Number.isFinite(Number(today))
+          ? (Number(today) / dailyTarget) * 100
+          : null;
+
       const fields: Record<RedFlagsColumnKey, string> = {
         vendingMachine: name,
         alertType: String(reasons[reasons.length - 1] || '—').replace(/\s+/g, ' ').trim(),
@@ -275,13 +315,13 @@ export function useV2RedFlagsData() {
             : '—',
         mtdSales: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
         mtdYoySales:
-          yoy?.trendPct != null && Number.isFinite(Number(yoy.trendPct))
-            ? `${formatKwd(Number(yoy.aSalesKwd || 0))} · ${formatSalesTrendPct(Number(yoy.trendPct))}`
+          yoyPct != null && Number.isFinite(yoyPct)
+            ? `${formatKwd(Number(yoy?.aSalesKwd || 0))} · ${formatSalesTrendPct(yoyPct)}`
             : yoy?.aSalesKwd != null
               ? formatKwd(Number(yoy.aSalesKwd))
               : '—',
         dailyTarget: `${targetPct} · rem ${remain} · ${owner}`,
-        salesAcceleration: sxText(sxQ.data?.byMachineId?.[id]),
+        salesAcceleration: 'SX',
         frequency: `${Number.isFinite(hw) ? hw : 0} / ${Number.isFinite(lw) ? lw : 0}`,
         goCheck: strike ? 'Ready' : '—',
         sendCredit: cred?.credits_sent != null ? String(cred.credits_sent) : '—',
@@ -297,12 +337,116 @@ export function useV2RedFlagsData() {
         callAm: owner !== '—' ? owner : '—',
       };
 
+      const stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>> = {
+        dailySales: [
+          {
+            label: 'Today',
+            value: today != null && Number.isFinite(Number(today)) ? formatKwd(Number(today)) : '—',
+            tone: 'teal',
+          },
+          {
+            label: 'Trend',
+            value: trendPctNum != null && Number.isFinite(trendPctNum) ? formatSalesTrendPct(trendPctNum) : '—',
+            tone: toneFromPct(trendPctNum),
+          },
+          ...(yest != null
+            ? [{ label: 'Yest', value: formatKwd(Number(yest)), tone: 'muted' as V2MetricTone }]
+            : []),
+        ],
+        mtdSales: [
+          {
+            label: 'MTD',
+            value: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
+            tone: 'teal',
+          },
+        ],
+        mtdYoySales: [
+          {
+            label: 'This MTD',
+            value: yoy?.aSalesKwd != null ? formatKwd(Number(yoy.aSalesKwd)) : '—',
+            tone: 'teal',
+          },
+          {
+            label: 'YoY',
+            value: yoyPct != null && Number.isFinite(yoyPct) ? formatSalesTrendPct(yoyPct) : '—',
+            tone: toneFromPct(yoyPct),
+          },
+        ],
+        dailyTarget: [
+          {
+            label: 'Achieved',
+            value: targetPct,
+            tone:
+              targetPctNum == null
+                ? 'muted'
+                : targetPctNum >= 100
+                  ? 'up'
+                  : targetPctNum >= 70
+                    ? 'amber'
+                    : 'down',
+          },
+          { label: 'Remain', value: remain, tone: 'muted' },
+          { label: 'Owner', value: owner, tone: 'violet' },
+        ],
+        salesAcceleration: sxStack(sxQ.data?.byMachineId?.[id]),
+        frequency: [
+          { label: 'This week', value: String(Number.isFinite(hw) ? hw : 0), tone: hw >= 10 ? 'crit' : 'amber' },
+          { label: 'Last week', value: String(Number.isFinite(lw) ? lw : 0), tone: 'muted' },
+        ],
+        lastTransaction: [
+          { label: 'Last tx', value: lastTxIso ? formatLastTxCompact(String(lastTxIso)) : '—', tone: 'teal' },
+        ],
+        operatorActivity: [
+          {
+            label: act?.kindShort || 'Activity',
+            value: act ? formatKuwaitActivityStamp(act.iso) || '—' : '—',
+            tone: act ? 'teal' : 'muted',
+          },
+        ],
+        lastCleaning: [
+          { label: 'Last clean', value: cleanIso ? formatLastTxCompact(cleanIso) : '—', tone: cleanIso ? 'teal' : 'muted' },
+        ],
+        qaVisit: [
+          {
+            label: 'Score',
+            value: qa?.score != null ? `${Math.round(Number(qa.score))}%` : '—',
+            tone:
+              qa?.score == null
+                ? 'muted'
+                : Number(qa.score) >= 85
+                  ? 'up'
+                  : Number(qa.score) >= 70
+                    ? 'amber'
+                    : 'down',
+          },
+          {
+            label: 'Visit',
+            value: qa?.lastVisitDate || (qa?.lastVisitAt ? formatLastTxCompact(String(qa.lastVisitAt)) : '—'),
+            tone: 'muted',
+          },
+        ],
+        sendCredit: [
+          { label: 'Credits', value: cred?.credits_sent != null ? String(cred.credits_sent) : '—', tone: 'teal' },
+        ],
+        testCredits: [
+          { label: 'Tests', value: cred?.dispense_tests != null ? String(cred.dispense_tests) : '—', tone: 'amber' },
+        ],
+        vendsResolved: [
+          {
+            label: 'Vends',
+            value: cred?.vends_resolved != null ? String(cred.vends_resolved) : '—',
+            tone: 'flat',
+          },
+        ],
+      };
+
       out.push({
         id,
         machineName: name,
         severity: isCritical(row) ? 'Critical' : 'Watch',
         isNew,
         fields,
+        stacks,
         reasons,
       });
     }

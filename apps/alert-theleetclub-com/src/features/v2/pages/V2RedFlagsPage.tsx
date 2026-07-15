@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useV2RedFlagsData, V2_RED_FLAGS_COLUMNS } from '@/features/v2/hooks/useV2RedFlagsData';
 import { V2DataTable } from '@/features/v2/V2DataTable';
+import { V2MetricStack } from '@/features/v2/V2MetricStack';
 import {
   V2EmptyState,
   V2GhostBtn,
@@ -13,7 +14,7 @@ import type { RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColu
 
 type SeverityFilter = 'all' | 'critical' | 'watch';
 
-/** Pure Manus Red Flags with full Classic workbook field set. */
+/** Pure Manus Red Flags — full Classic fields + metric mini-boxes. */
 export function V2RedFlagsPage() {
   const data = useV2RedFlagsData();
   const [q, setQ] = useState('');
@@ -37,10 +38,20 @@ export function V2RedFlagsPage() {
         cells[key] = (
           <div className="v2CellMachine">
             <strong>{e.fields.vendingMachine}</strong>
-            <span>{e.id}</span>
-            <span className={e.severity === 'Critical' ? 'v2PillCrit' : 'v2PillWatch'}>{e.severity}</span>
-            {e.isNew ? <em className="v2PillNew">New</em> : null}
+            <span className="v2CellId">{e.id}</span>
+            <div className="v2CellTags">
+              <span className={e.severity === 'Critical' ? 'v2PillCrit' : 'v2PillWatch'}>{e.severity}</span>
+              {e.isNew ? <em className="v2PillNew">New</em> : null}
+            </div>
           </div>
+        );
+      } else if (e.stacks[key]?.length) {
+        cells[key] = <V2MetricStack items={e.stacks[key]} />;
+      } else if (key === 'alertType') {
+        cells[key] = <span className="v2CellWrap">{e.fields.alertType}</span>;
+      } else if (key === 'goCheck') {
+        cells[key] = (
+          <span className={e.fields.goCheck === 'Ready' ? 'v2PillOk' : 'v2MetricEmpty'}>{e.fields.goCheck}</span>
         );
       } else {
         cells[key] = e.fields[key] || '—';
@@ -58,7 +69,7 @@ export function V2RedFlagsPage() {
       <V2SectionHead
         eyebrow="Exception management"
         title="Red Flags"
-        description="Full fleet exception workbook — every Classic field, Manus Fleet Intelligence look."
+        description="Full fleet exception workbook — Classic metrics in Manus boxes, scrollable fleet board."
         actions={
           <V2GhostBtn onClick={data.refetch} disabled={data.fetching}>
             {data.fetching ? 'Refreshing…' : 'Refresh'}
@@ -89,7 +100,7 @@ export function V2RedFlagsPage() {
 
       <V2Panel
         title="Exception workbook"
-        subtitle={`${V2_RED_FLAGS_COLUMNS.length} Classic fields · live APIs`}
+        subtitle={`${V2_RED_FLAGS_COLUMNS.length} Classic fields · Manus metric boxes`}
         meta={
           <span className="v2PanelMetaText">
             Showing {filtered.length} of {data.open} · Fleet-wide
@@ -131,7 +142,7 @@ export function V2RedFlagsPage() {
                 description="No red flags recorded for machines in your scope."
               />
             }
-            footer={`All ${V2_RED_FLAGS_COLUMNS.length} Classic Red Flags fields · Manus display`}
+            footer="Use ← → or drag to browse every Classic field"
           />
         )}
       </V2Panel>

@@ -5,6 +5,7 @@ import { RevenueTrajectoryChart } from '@/features/performance/PerformanceCharts
 import type { FleetPayload, PerfPreset } from '@/features/performance/perfTypes';
 import { formatKwd } from '@/lib/salesDisplay';
 import { V2DataTable } from '@/features/v2/V2DataTable';
+import { V2MetricStack } from '@/features/v2/V2MetricStack';
 import {
   V2EmptyState,
   V2KpiCard,
@@ -26,15 +27,14 @@ const PRESETS: Array<{ id: PerfPreset; label: string }> = [
 const PERF_COLS = [
   { key: 'rank', label: '#' },
   { key: 'machine', label: 'Machine', sticky: true },
-  { key: 'revenue', label: 'Revenue', sub: 'KD' },
-  { key: 'target', label: 'Target', sub: 'KD' },
-  { key: 'pct', label: '% of target' },
+  { key: 'revenue', label: 'Revenue', sub: 'KD', wide: true },
+  { key: 'target', label: 'Target', sub: 'KD', wide: true },
+  { key: 'pct', label: '% of target', wide: true },
   { key: 'product', label: 'Product' },
-  { key: 'cups', label: 'Cups' },
+  { key: 'cups', label: 'Cups', wide: true },
   { key: 'cupTarget', label: 'Cup target' },
-  { key: 'cupPct', label: 'Cup %' },
-  { key: 'locSx', label: 'Loc SX' },
-  { key: 'prodSx', label: 'Prod SX' },
+  { key: 'cupPct', label: 'Cup %', wide: true },
+  { key: 'sx', label: 'SX', sub: 'Loc · Prod', wide: true },
 ];
 
 /** Pure Manus Performance — full fleet ranking workbook + trajectory. */
@@ -70,28 +70,102 @@ export function V2PerformancePage() {
       .filter(({ m }) => !needle || `${m.machineName} ${m.machineId}`.toLowerCase().includes(needle));
   }, [fleetQ.data?.machines, q]);
 
-  const tableRows = ranked.map(({ m, rank }) => ({
-    id: m.machineId,
-    cells: {
-      rank: String(rank),
-      machine: (
-        <div className="v2CellMachine">
-          <strong>{m.machineName}</strong>
-          <span>{m.machineId}</span>
-        </div>
-      ),
-      revenue: formatKwd(m.totalLocationKwd),
-      target: m.periodTargetKd != null ? formatKwd(Number(m.periodTargetKd)) : '—',
-      pct: m.periodPctOfTarget != null ? `${m.periodPctOfTarget.toFixed(0)}%` : '—',
-      product: m.productName || '—',
-      cups: m.totalProductCups != null ? String(Math.round(Number(m.totalProductCups))) : '—',
-      cupTarget:
-        m.periodProductTargetCups != null ? String(Math.round(Number(m.periodProductTargetCups))) : '—',
-      cupPct: m.periodProductPctOfTarget != null ? `${m.periodProductPctOfTarget.toFixed(0)}%` : '—',
-      locSx: m.locationSxPct != null ? `${Number(m.locationSxPct).toFixed(1)} pts` : '—',
-      prodSx: m.productSxPct != null ? `${Number(m.productSxPct).toFixed(1)} pts` : '—',
-    } as Record<string, ReactNode>,
-  }));
+  const tableRows = ranked.map(({ m, rank }) => {
+    const pct = m.periodPctOfTarget;
+    const cupPct = m.periodProductPctOfTarget;
+    return {
+      id: m.machineId,
+      cells: {
+        rank: <span className="v2LeaderRank">{rank}</span>,
+        machine: (
+          <div className="v2CellMachine">
+            <strong>{m.machineName}</strong>
+            <span className="v2CellId">{m.machineId}</span>
+          </div>
+        ),
+        revenue: (
+          <V2MetricStack items={[{ label: 'Actual', value: formatKwd(m.totalLocationKwd), tone: 'teal' }]} />
+        ),
+        target: (
+          <V2MetricStack
+            items={[
+              {
+                label: 'Target',
+                value: m.periodTargetKd != null ? formatKwd(Number(m.periodTargetKd)) : '—',
+                tone: 'muted',
+              },
+            ]}
+          />
+        ),
+        pct: (
+          <V2MetricStack
+            items={[
+              {
+                label: 'Achieved',
+                value: pct != null ? `${pct.toFixed(0)}%` : '—',
+                tone: pct == null ? 'muted' : pct >= 100 ? 'up' : pct >= 70 ? 'amber' : 'down',
+              },
+            ]}
+          />
+        ),
+        product: m.productName || '—',
+        cups: (
+          <V2MetricStack
+            items={[
+              {
+                label: 'Cups',
+                value: m.totalProductCups != null ? String(Math.round(Number(m.totalProductCups))) : '—',
+                tone: 'teal',
+              },
+            ]}
+          />
+        ),
+        cupTarget:
+          m.periodProductTargetCups != null ? String(Math.round(Number(m.periodProductTargetCups))) : '—',
+        cupPct: (
+          <V2MetricStack
+            items={[
+              {
+                label: 'Cup %',
+                value: cupPct != null ? `${cupPct.toFixed(0)}%` : '—',
+                tone: cupPct == null ? 'muted' : cupPct >= 100 ? 'up' : cupPct >= 70 ? 'amber' : 'down',
+              },
+            ]}
+          />
+        ),
+        sx: (
+          <V2MetricStack
+            items={[
+              {
+                label: 'Loc SX',
+                value: m.locationSxPct != null ? `${Number(m.locationSxPct).toFixed(1)} pts` : '—',
+                tone:
+                  m.locationSxPct == null
+                    ? 'muted'
+                    : Number(m.locationSxPct) > 0
+                      ? 'up'
+                      : Number(m.locationSxPct) < 0
+                        ? 'down'
+                        : 'flat',
+              },
+              {
+                label: 'Prod SX',
+                value: m.productSxPct != null ? `${Number(m.productSxPct).toFixed(1)} pts` : '—',
+                tone:
+                  m.productSxPct == null
+                    ? 'muted'
+                    : Number(m.productSxPct) > 0
+                      ? 'up'
+                      : Number(m.productSxPct) < 0
+                        ? 'down'
+                        : 'flat',
+              },
+            ]}
+          />
+        ),
+      } as Record<string, ReactNode>,
+    };
+  });
 
   return (
     <div className="v2Page">

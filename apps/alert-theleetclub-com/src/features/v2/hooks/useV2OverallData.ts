@@ -23,24 +23,49 @@ import { formatKuwaitActivityStamp } from '@/lib/formatKuwait';
 import { OVERALL_XLSX_ORDER, type OverallColumnKey } from '@/features/overall/overallWorkbookColumns';
 import { OVERALL_TABLE_HEADERS } from '@/lib/tableHeaderLabels';
 import { fetchMachineAttendanceMapBatched } from '@/lib/leetWorkflowApi';
+import type { V2MetricItem, V2MetricTone } from '@/features/v2/V2MetricStack';
 
 type MachinesResponse = {
   machines?: Array<{ id?: string; name?: string; vendon_location_owner?: string }>;
   rows?: Array<{ id?: string; name?: string; vendon_location_owner?: string }>;
 };
 
+const WIDE = new Set<OverallColumnKey>([
+  'salesTrend',
+  'mtdSales',
+  'mtdYoySales',
+  'targetAchieved',
+  'peopleCount',
+  'lastQaCheck',
+  'lastTechCheck',
+  'operatorActivity',
+  'lastTransaction',
+  'lastCleaned',
+  'attendance',
+  'wastagePct',
+]);
+
 export type V2OverallRow = {
   id: string;
   name: string;
   flagged: boolean;
   fields: Record<OverallColumnKey, string>;
+  stacks: Partial<Record<OverallColumnKey, V2MetricItem[]>>;
 };
+
+function toneFromPct(pct: number | null | undefined): V2MetricTone {
+  if (pct == null || !Number.isFinite(pct)) return 'muted';
+  if (pct > 0.5) return 'up';
+  if (pct < -0.5) return 'down';
+  return 'flat';
+}
 
 export const V2_OVERALL_COLUMNS = OVERALL_XLSX_ORDER.map((key) => ({
   key,
   label: OVERALL_TABLE_HEADERS[key].main,
   sub: OVERALL_TABLE_HEADERS[key].sub,
   sticky: key === 'vendingMachine',
+  wide: WIDE.has(key),
 }));
 
 export function useV2OverallData() {
@@ -247,6 +272,14 @@ export function useV2OverallData() {
       const foot = footQ.data?.byMachineId?.[m.id];
       const reasons = snap?.reasons || [];
 
+      const trendPctNum = sales?.trendPct != null ? Number(sales.trendPct) : null;
+      const yoyPct = yoy?.trendPct != null ? Number(yoy.trendPct) : null;
+      const targetPctNum =
+        Number.isFinite(dailyTarget) && dailyTarget > 0 && today != null && Number.isFinite(Number(today))
+          ? (Number(today) / dailyTarget) * 100
+          : null;
+      const footPct = foot?.trendPct != null ? Number(foot.trendPct) : null;
+
       const fields: Record<OverallColumnKey, string> = {
         operatingHours: prof?.hours || '—',
         vendingMachine: m.name,
@@ -264,8 +297,8 @@ export function useV2OverallData() {
             : '—',
         mtdSales: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
         mtdYoySales:
-          yoy?.trendPct != null && Number.isFinite(Number(yoy.trendPct))
-            ? `${formatKwd(Number(yoy.aSalesKwd || 0))} · ${formatSalesTrendPct(Number(yoy.trendPct))}`
+          yoyPct != null && Number.isFinite(yoyPct)
+            ? `${formatKwd(Number(yoy?.aSalesKwd || 0))} · ${formatSalesTrendPct(yoyPct)}`
             : yoy?.aSalesKwd != null
               ? formatKwd(Number(yoy.aSalesKwd))
               : '—',
@@ -276,7 +309,7 @@ export function useV2OverallData() {
         lowestProduct: '—',
         peopleCount:
           foot?.aCount != null
-            ? `${foot.aCount}${foot.trendPct != null ? ` · ${formatSalesTrendPct(Number(foot.trendPct))}` : ''}`
+            ? `${foot.aCount}${footPct != null ? ` · ${formatSalesTrendPct(footPct)}` : ''}`
             : '—',
         customerCalls: '—',
         mostIssue: reasons[0] || '—',
@@ -289,7 +322,110 @@ export function useV2OverallData() {
         promotionRuns: '—',
       };
 
-      out.push({ id: m.id, name: m.name, flagged: flagged.has(m.id), fields });
+      const stacks: Partial<Record<OverallColumnKey, V2MetricItem[]>> = {
+        salesTrend: [
+          {
+            label: 'Today',
+            value: today != null && Number.isFinite(Number(today)) ? formatKwd(Number(today)) : '—',
+            tone: 'teal',
+          },
+          {
+            label: 'Trend',
+            value: trendPctNum != null && Number.isFinite(trendPctNum) ? formatSalesTrendPct(trendPctNum) : '—',
+            tone: toneFromPct(trendPctNum),
+          },
+        ],
+        mtdSales: [
+          {
+            label: 'MTD',
+            value: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
+            tone: 'teal',
+          },
+        ],
+        mtdYoySales: [
+          {
+            label: 'This MTD',
+            value: yoy?.aSalesKwd != null ? formatKwd(Number(yoy.aSalesKwd)) : '—',
+            tone: 'teal',
+          },
+          {
+            label: 'YoY',
+            value: yoyPct != null && Number.isFinite(yoyPct) ? formatSalesTrendPct(yoyPct) : '—',
+            tone: toneFromPct(yoyPct),
+          },
+        ],
+        targetAchieved: [
+          {
+            label: 'Target',
+            value: targetPct,
+            tone:
+              targetPctNum == null
+                ? 'muted'
+                : targetPctNum >= 100
+                  ? 'up'
+                  : targetPctNum >= 70
+                    ? 'amber'
+                    : 'down',
+          },
+        ],
+        peopleCount: [
+          {
+            label: 'Footfall',
+            value: foot?.aCount != null ? String(foot.aCount) : '—',
+            tone: 'teal',
+          },
+          {
+            label: 'vs yest',
+            value: footPct != null && Number.isFinite(footPct) ? formatSalesTrendPct(footPct) : '—',
+            tone: toneFromPct(footPct),
+          },
+        ],
+        lastQaCheck: [
+          {
+            label: 'QA',
+            value: qa?.score != null ? `${Math.round(Number(qa.score))}%` : '—',
+            tone:
+              qa?.score == null
+                ? 'muted'
+                : Number(qa.score) >= 85
+                  ? 'up'
+                  : Number(qa.score) >= 70
+                    ? 'amber'
+                    : 'down',
+          },
+          {
+            label: 'When',
+            value: qa?.lastVisitDate || '—',
+            tone: 'muted',
+          },
+        ],
+        lastTechCheck: [
+          { label: 'Tech', value: tech?.lastVisitDate || tech?.lastVisitAt || '—', tone: 'muted' },
+        ],
+        operatorActivity: [
+          {
+            label: act?.kindShort || 'Activity',
+            value: act ? formatKuwaitActivityStamp(act.iso) : '—',
+            tone: act ? 'teal' : 'muted',
+          },
+        ],
+        lastTransaction: [
+          { label: 'Last tx', value: lastTx ? formatLastTxCompact(String(lastTx)) : '—', tone: 'teal' },
+        ],
+        lastCleaned: [
+          { label: 'Clean', value: cleanIso ? formatLastTxCompact(cleanIso) : '—', tone: cleanIso ? 'teal' : 'muted' },
+        ],
+        attendance: [{ label: 'Shift', value: attLabel, tone: attLabel !== '—' ? 'amber' : 'muted' }],
+        wastagePct: [
+          {
+            label: 'Waste',
+            value: waste != null && Number.isFinite(Number(waste)) ? `${Number(waste).toFixed(1)}%` : '—',
+            tone: waste != null && Number(waste) > 5 ? 'down' : 'flat',
+          },
+        ],
+      };
+
+      out.push({ id: m.id, name: m.name, flagged: flagged.has(m.id), fields, stacks });
     }
     return out;
   }, [

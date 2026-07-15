@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useV2OverallData, V2_OVERALL_COLUMNS } from '@/features/v2/hooks/useV2OverallData';
 import { V2DataTable } from '@/features/v2/V2DataTable';
+import { V2MetricStack } from '@/features/v2/V2MetricStack';
 import {
   V2EmptyState,
   V2GhostBtn,
@@ -10,7 +11,7 @@ import {
 } from '@/features/v2/v2Ui';
 import type { OverallColumnKey } from '@/features/overall/overallWorkbookColumns';
 
-/** Pure Manus Overall — full Classic workbook fields. */
+/** Pure Manus Overall — full Classic fields + metric mini-boxes. */
 export function V2OverallPage() {
   const data = useV2OverallData();
   const [q, setQ] = useState('');
@@ -33,14 +34,18 @@ export function V2OverallPage() {
         cells[key] = (
           <div className="v2CellMachine">
             <strong>{r.fields.vendingMachine}</strong>
-            <span>{r.id}</span>
-            <span className={r.flagged ? 'v2PillCrit' : 'v2PillOk'}>
-              {r.flagged ? 'Needs attention' : 'Operational'}
-            </span>
+            <span className="v2CellId">{r.id}</span>
+            <div className="v2CellTags">
+              <span className={r.flagged ? 'v2PillCrit' : 'v2PillOk'}>
+                {r.flagged ? 'Needs attention' : 'Operational'}
+              </span>
+            </div>
           </div>
         );
+      } else if (r.stacks[key]?.length) {
+        cells[key] = <V2MetricStack items={r.stacks[key]} />;
       } else {
-        cells[key] = r.fields[key] || '—';
+        cells[key] = <span className="v2CellWrap">{r.fields[key] || '—'}</span>;
       }
     }
     return { id: r.id, tone: r.flagged ? ('warn' as const) : ('' as const), cells };
@@ -51,7 +56,7 @@ export function V2OverallPage() {
       <V2SectionHead
         eyebrow="Fleet command"
         title="Overall"
-        description="Full fleet workbook — every Classic Overall field in Manus Fleet Intelligence."
+        description="Full fleet workbook — Classic metrics in Manus boxes, easy sideways browsing."
         actions={
           <V2GhostBtn onClick={data.refetch} disabled={data.fetching}>
             {data.fetching ? 'Refreshing…' : 'Refresh'}
@@ -80,7 +85,7 @@ export function V2OverallPage() {
 
       <V2Panel
         title="Fleet workbook"
-        subtitle={`${V2_OVERALL_COLUMNS.length} Classic fields · live APIs`}
+        subtitle={`${V2_OVERALL_COLUMNS.length} Classic fields · Manus metric boxes`}
         meta={
           <span className="v2PanelMetaText">
             Showing {filtered.length} of {data.machineCount}
@@ -117,7 +122,7 @@ export function V2OverallPage() {
                 icon="overall"
               />
             }
-            footer={`All ${V2_OVERALL_COLUMNS.length} Classic Overall fields · Manus display`}
+            footer="Use ← → or drag to browse every Classic field"
           />
         )}
       </V2Panel>

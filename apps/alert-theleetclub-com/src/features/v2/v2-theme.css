@@ -615,12 +615,82 @@ a.v2NavLink.v2NavLinkActive {
   max-width: none;
 }
 
-/* Manus data workbook table (all Classic fields, Manus chrome) */
+/* Manus workbook shell — scroll arrows + drag pan */
+.v2TableShell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.v2TableToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.v2TableHint {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.v2TableNav {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.v2TableNavBtn {
+  appearance: none;
+  width: 40px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.1);
+  color: #99f6e4;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.v2TableNavBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.v2TableNavBtn:not(:disabled):hover {
+  background: rgba(45, 212, 191, 0.2);
+}
+
 .v2DataTableWrap {
   overflow: auto;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--v2-border-soft);
-  max-height: min(70vh, 820px);
+  max-height: min(68vh, 780px);
+  background: rgba(6, 13, 25, 0.55);
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-color: rgba(45, 212, 191, 0.45) rgba(15, 23, 42, 0.6);
+  scrollbar-width: thin;
+}
+
+.v2DataTableWrap::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.v2DataTableWrap::-webkit-scrollbar-thumb {
+  background: rgba(45, 212, 191, 0.4);
+  border-radius: 999px;
+}
+
+.v2TableScrollDragging {
+  cursor: grabbing !important;
+  user-select: none;
 }
 
 .v2DataTable {
@@ -637,20 +707,20 @@ a.v2NavLink.v2NavLinkActive {
   text-align: left;
   border-bottom: 1px solid var(--v2-border-soft);
   vertical-align: top;
-  white-space: nowrap;
-  max-width: 220px;
+  white-space: normal;
 }
 
 .v2DataTable th {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
   background: #0a1322;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #64748b;
+  white-space: nowrap;
 }
 
 .v2DataTable th small {
@@ -663,56 +733,94 @@ a.v2NavLink.v2NavLinkActive {
   text-transform: none;
 }
 
-.v2DataTable th.isSticky,
+.v2DataTable th.isSticky {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 6;
+  min-width: 168px;
+  background: #0a1322;
+  box-shadow: 6px 0 14px rgba(0, 0, 0, 0.35);
+}
+
 .v2DataTable td.isSticky {
   position: sticky;
   left: 0;
   z-index: 3;
-  background: #0a1322;
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.25);
+  min-width: 168px;
+  background: #0c1524;
+  box-shadow: 6px 0 14px rgba(0, 0, 0, 0.28);
 }
 
-.v2DataTable td.isSticky {
-  z-index: 1;
-  background: #0c1524;
+.v2DataTable th.isWide,
+.v2DataTable td.isWide {
+  min-width: 118px;
 }
 
 .v2DataTable tbody tr:hover td {
   background: rgba(45, 212, 191, 0.05);
 }
 
+.v2DataTable tbody tr:hover td.isSticky {
+  background: #102033;
+}
+
 .v2DataTable tbody tr.isCrit td {
   background: rgba(248, 113, 113, 0.06);
+}
+
+.v2DataTable tbody tr.isCrit td.isSticky {
+  background: #1a1218;
 }
 
 .v2DataTable tbody tr.isWarn td {
   background: rgba(251, 191, 36, 0.05);
 }
 
+.v2DataTable tbody tr.isWarn td.isSticky {
+  background: #1a1710;
+}
+
 .v2DataTableFoot {
-  padding: 10px 12px;
+  padding: 10px 4px 0;
   font-size: 0.72rem;
   color: #64748b;
-  border-top: 1px solid var(--v2-border-soft);
 }
 
 .v2CellMachine {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-width: 140px;
-  white-space: normal;
+  gap: 4px;
+  min-width: 148px;
+  max-width: 200px;
 }
 
 .v2CellMachine strong {
   color: #f8fafc;
   font-size: 0.86rem;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
-.v2CellMachine span {
+.v2CellId {
   font-family: var(--v2-mono);
   font-size: 0.68rem;
   color: #64748b;
+}
+
+.v2CellTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.v2CellWrap {
+  display: inline-block;
+  max-width: 200px;
+  white-space: normal;
+  line-height: 1.35;
+  color: #cbd5e1;
 }
 
 .v2Check {
@@ -730,6 +838,113 @@ a.v2NavLink.v2NavLinkActive {
 
 .v2Check input {
   accent-color: var(--v2-teal);
+}
+
+/* Manus metric mini-boxes (v1 trend feel, v2 chrome) */
+.v2MetricStack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 5.5rem;
+  max-width: 7.75rem;
+}
+
+.v2MetricBox {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+  line-height: 1.2;
+}
+
+.v2MetricLabel {
+  font-family: var(--v2-mono);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.v2MetricVal {
+  font-family: var(--v2-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v2MetricEmpty {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.v2MetricTone-up {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.v2MetricTone-up .v2MetricVal {
+  color: #6ee7b7;
+}
+
+.v2MetricTone-down {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.v2MetricTone-down .v2MetricVal {
+  color: #fca5a5;
+}
+
+.v2MetricTone-flat .v2MetricVal {
+  color: #cbd5e1;
+}
+
+.v2MetricTone-teal {
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.v2MetricTone-teal .v2MetricVal {
+  color: #5eead4;
+}
+
+.v2MetricTone-amber {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.v2MetricTone-amber .v2MetricVal {
+  color: #fcd34d;
+}
+
+.v2MetricTone-violet {
+  border-color: rgba(167, 139, 250, 0.4);
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.v2MetricTone-violet .v2MetricVal {
+  color: #ddd6fe;
+}
+
+.v2MetricTone-muted {
+  opacity: 0.85;
+}
+
+.v2MetricTone-crit {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.v2MetricTone-crit .v2MetricVal {
+  color: #fecaca;
 }
 
 /* Pure Manus exception / fleet cards (never Classic Stitch/ops UI) */

@@ -96,7 +96,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-07-15 | **Alert v2 full workbook in Manus:** All Classic Red Flags / Overall / QA / Performance fields rendered as Manus data tables (sticky machine col, KPI strip). No Classic Stitch/ops UI. Classic/Pro untouched at `/`. |
+| 2026-07-15 | **Alert v2 scroll + metric boxes:** Workbook tables get ← → / drag pan, sticky machine column overlap fixes, and Manus mini metric boxes (sales/trend/SX/freq/target) matching Fleet Intelligence look. Classic/Pro untouched. |
+| 2026-07-15 | **Alert v2 full workbook in Manus:** All Classic Red Flags / Overall / QA / Performance fields rendered as Manus data tables. No Classic Stitch/ops UI. |
 | 2026-07-15 | **Alert v2 = Manus page layouts:** `/v2` Manus Fleet Intelligence chrome. Classic + Pro untouched. |
 | 2026-07-14 | **QA Visit missing same-day SC audits (real root cause):** SafetyCulture `/audits/search` defaults to **order=asc + limit=100** and has **no `next_page_token`**. Code only fetched the oldest 100 audits per window, so **14 Jul KU CBA** (exact site label, match score 100) never entered the pipeline while older visits (1 Jul / 9 Jul) did. Fix: `order=desc`, `limit=1000`, cursor-paginate via `modified_before`. Fleet date filter uses **Asia/Kuwait** day from `lastVisitAt`. |
 | 2026-07-14 | **QA Visit KU CBA / recent visits:** SC short site labels (e.g. `CBA` → `KU CBA`) now match. Scored location inspections count as QC even when officer ≠ Ismail. Alias map `config/qa_machine_aliases.json`. Busts QA caches. Fixes Alert showing 1 Jul while SC shows 14 Jul. |
