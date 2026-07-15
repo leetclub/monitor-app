@@ -1,10 +1,16 @@
 /** Vendon machine name ↔ SafetyCulture / alias names for QA summary counts. */
 
-function normKey(s: string): string {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+function applyQaNameTypos(norm: string): string {
+  return norm.replace(/enginnering/g, 'engineering');
+}
+
+export function normKey(s: string): string {
+  return applyQaNameTypos(
+    String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim(),
+  );
 }
 
 // Mirrors people-analytics-sync/config/commercial_people_camera_names.json + MOH mirror pairs.
@@ -24,6 +30,7 @@ const RAW_GROUPS: string[][] = [
   ['Amiri New', 'Amiri Hospital New', 'Amiri old 2', 'Amiri old', 'Amiri Old'],
   ['Maternity Hospital Main', 'Maternity Hospital', 'Maternity Hospital OPD', 'MOH main', 'Moh Main'],
   ['Razi Hospital - OPD', 'Razi OPD', 'Razi Hospital', 'Razi Hospital - Old', 'Razi Old', 'Zain hospital'],
+  ['KU Engineering', 'KU Enginnering', 'KU Engineering J', 'KU Enginnering J'],
 ];
 
 const NORM_TO_GROUP: Map<string, Set<string>> = (() => {

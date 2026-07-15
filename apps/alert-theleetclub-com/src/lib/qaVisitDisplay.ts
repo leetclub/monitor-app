@@ -1,4 +1,4 @@
-import { normKeysForQaMachine, qaMachineNamesMatch } from '@/lib/qaMachineAliases';
+import { normKeysForQaMachine, normKey, qaMachineNamesMatch } from '@/lib/qaMachineAliases';
 
 export type QaVisitRow = {
   location?: string | null;
@@ -63,12 +63,6 @@ export type QaFindingsResponse = {
   source?: string;
 };
 
-function normKey(s: string): string {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
 
 export function qaVisitForMachineName(
   machineName: string,

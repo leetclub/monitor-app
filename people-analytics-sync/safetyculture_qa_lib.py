@@ -57,7 +57,9 @@ _TECH_USER_PATTERNS = [
 
 
 def _norm_key(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).strip()
+    from qa_machine_alias_lib import _apply_qa_name_typos
+
+    return _apply_qa_name_typos(re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).strip())
 
 
 def _headers() -> Dict[str, str]:

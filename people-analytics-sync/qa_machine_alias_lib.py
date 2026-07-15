@@ -11,8 +11,13 @@ from typing import FrozenSet, List, Set
 _CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
 
 
+def _apply_qa_name_typos(norm: str) -> str:
+    """Fold known SC/Vendon spelling variants so QA matching stays tolerant."""
+    return norm.replace("enginnering", "engineering")
+
+
 def _norm_name(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+    return _apply_qa_name_typos(re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip())
 
 
 @lru_cache(maxsize=1)

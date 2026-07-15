@@ -16,6 +16,7 @@ import {
   type QaSummaryResponse,
   type QaVisitRow,
 } from '@/lib/qaVisitDisplay';
+import { canonicalQaMachineLabel, scLocationSubtitle } from '@/lib/qaMachineDisplay';
 import { qaDateRangeFromSearchParams, qaDefaultFromDate, qaTodayIso } from '@/lib/qaVisitDateRange';
 import { formatKuwaitCleaningWhen } from '@/lib/formatKuwait';
 import {
@@ -370,13 +371,16 @@ export function QaVisitPage() {
                 <tbody>
                   {fleetFiltered.map(({ name, visit }) => {
                     const score = qaScoreDisplay(visit?.score);
+                    const machineLabel = canonicalQaMachineLabel(name);
+                    const scSub = scLocationSubtitle(name, visit?.location);
                     const when = visit?.lastVisitAt
                       ? formatKuwaitCleaningWhen(visit.lastVisitAt)?.date
                       : visit?.lastVisitDate || '—';
                     return (
                       <tr key={name}>
                         <td className="qaVisitColMachine">
-                          <div className="opsMachineName qaVisitFleetName">{name}</div>
+                          <div className="opsMachineName qaVisitFleetName">{machineLabel}</div>
+                          {scSub ? <div className="opsCellSub">{scSub}</div> : null}
                           {visit?.officerName ? (
                             <div className="opsCellSub">{visit.officerName}</div>
                           ) : null}

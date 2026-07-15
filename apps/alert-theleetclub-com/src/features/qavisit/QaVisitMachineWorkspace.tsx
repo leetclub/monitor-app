@@ -16,6 +16,7 @@ import {
 } from '@/lib/leetWorkflowApi';
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { parseBulletLines } from '@/lib/qaManualSummary';
+import { canonicalQaMachineLabel, scLocationSubtitle } from '@/lib/qaMachineDisplay';
 import { qaDefaultFromDate, qaTodayIso } from '@/lib/qaVisitDateRange';
 import { qaScoreDisplay } from '@/lib/qaVisitDisplay';
 import {
@@ -69,6 +70,7 @@ export function QaVisitMachineWorkspace({
   const [selectedAuditId, setSelectedAuditId] = useState(initialAuditId);
 
   const machine = machineName.trim();
+  const machineLabel = canonicalQaMachineLabel(machine);
 
   useEffect(() => {
     setSelectedAuditId(initialAuditId);
@@ -236,7 +238,7 @@ export function QaVisitMachineWorkspace({
           <div className="opsSectionHead">
             <div>
               <span className="opsSectionTitle">Machine workspace</span>
-              <span className="opsSectionTitleStrong">{machine}</span>
+              <span className="opsSectionTitleStrong">{machineLabel}</span>
             </div>
           </div>
           <div className="qaVisitFilterBar qaVisitFilterBar--workspace">
@@ -317,8 +319,8 @@ export function QaVisitMachineWorkspace({
                       onSortClick={() => setColumnSort((prev) => cycleColumnSort(prev, 'date'))}
                     />
                     <AlertTableHeader
-                      label={{ main: 'Location' }}
-                      title="SafetyCulture location name"
+                      label={{ main: 'SC', sub: 'site' }}
+                      title="SafetyCulture site name (canonical machine label is in the page header)"
                       sortable
                       sortDir={sortDirForColumn(columnSort, 'location')}
                       onSortClick={() => setColumnSort((prev) => cycleColumnSort(prev, 'location'))}
@@ -349,6 +351,7 @@ export function QaVisitMachineWorkspace({
                         ? id === activeAuditId
                         : Boolean(selectedAudit && auditRowKey(selectedAudit, -1) === auditRowKey(row, index));
                       const rowScore = qaScoreDisplay(row.score);
+                      const rowScSub = scLocationSubtitle(machine, row.location);
                       const when = row.lastVisitAt
                         ? formatKuwaitDateTime(row.lastVisitAt)
                         : row.lastVisitDate || '—';
@@ -371,7 +374,10 @@ export function QaVisitMachineWorkspace({
                           <td className="qaVisitColDate" data-mono="true">
                             {when}
                           </td>
-                          <td>{row.location || '—'}</td>
+                          <td>
+                            <div className="opsMachineName">{machineLabel}</div>
+                            {rowScSub ? <div className="opsCellSub">{rowScSub}</div> : null}
+                          </td>
                           <td>{row.officerName || '—'}</td>
                           <td className="qaVisitColScore">
                             <span className={`qaVisitScoreChip qaVisitScoreChip--${rowScore.tone}`}>
@@ -424,8 +430,14 @@ export function QaVisitMachineWorkspace({
               <dl className="qaVisitSelectedMeta">
                 {selectedAudit.location ? (
                   <>
-                    <dt>Location</dt>
-                    <dd>{selectedAudit.location}</dd>
+                    <dt>Machine</dt>
+                    <dd>{machineLabel}</dd>
+                    {scLocationSubtitle(machine, selectedAudit.location) ? (
+                      <>
+                        <dt>SC site</dt>
+                        <dd>{selectedAudit.location}</dd>
+                      </>
+                    ) : null}
                   </>
                 ) : null}
                 {selectedAudit.officerName ? (

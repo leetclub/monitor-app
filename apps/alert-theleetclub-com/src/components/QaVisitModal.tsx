@@ -15,6 +15,7 @@ import {
 } from '@/lib/leetWorkflowApi';
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { parseBulletLines } from '@/lib/qaManualSummary';
+import { canonicalQaMachineLabel, scLocationSubtitle } from '@/lib/qaMachineDisplay';
 import { qaScoreDisplay, type QaVisitRow } from '@/lib/qaVisitDisplay';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 
@@ -146,6 +147,8 @@ export function QaVisitModal({
       : null;
   const scOfficer = activeAuditId ? selectedAudit?.officerName : visit.auditId ? visit.officerName : null;
   const scLocation = selectedAudit?.location || visit.location;
+  const machineLabel = canonicalQaMachineLabel(machineName);
+  const scSub = scLocationSubtitle(machineName, scLocation);
   const adminWhen = manualQ.data?.savedAt || visit.adminSummaryAt;
   const adminBy = manualQ.data?.savedBy || visit.adminSummaryBy;
 
@@ -169,8 +172,8 @@ export function QaVisitModal({
         <div className="salesHistoryHead">
           <div>
             <p className="salesHistoryEyebrow">QA visit</p>
-            <h2 className="salesHistoryTitle">{machineName}</h2>
-            {scLocation ? <p className="salesHistorySub">SafetyCulture: {scLocation}</p> : null}
+            <h2 className="salesHistoryTitle">{machineLabel}</h2>
+            {scSub ? <p className="salesHistorySub">{scSub}</p> : null}
             {scOfficer ? <p className="salesHistorySub">{scOfficer}</p> : null}
             {scWhen ? (
               <p className="salesHistorySub">
@@ -270,6 +273,7 @@ export function QaVisitModal({
                   const id = row.auditId ? String(row.auditId) : '';
                   const isSelected = id && id === activeAuditId;
                   const rowScore = qaScoreDisplay(row.score);
+                  const rowScSub = scLocationSubtitle(machineName, row.location);
                   const when = row.lastVisitAt
                     ? formatKuwaitDateTime(row.lastVisitAt)
                     : row.lastVisitDate || '—';
@@ -282,7 +286,10 @@ export function QaVisitModal({
                       }}
                     >
                       <td>{when}</td>
-                      <td>{row.location || '—'}</td>
+                      <td>
+                        <div className="opsMachineName">{machineLabel}</div>
+                        {rowScSub ? <div className="opsCellSub">{rowScSub}</div> : null}
+                      </td>
                       <td>{row.officerName || '—'}</td>
                       <td>
                         <span className={`qaVisitScoreChip qaVisitScoreChip--${rowScore.tone}`}>
