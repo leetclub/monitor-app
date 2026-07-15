@@ -2,7 +2,7 @@ import { AdminPage } from '@/features/admin/AdminPage';
 import { useAccess } from '@/context/AccessContext';
 import { V2SectionHead } from '@/features/v2/v2Ui';
 
-/** Manus chrome + full Classic Admin (all sections). */
+/** Manus chrome + full Classic Admin sections. */
 export function V2AdminPage() {
   const { canSeeTab } = useAccess();
 
@@ -23,11 +23,9 @@ export function V2AdminPage() {
       <V2SectionHead
         eyebrow="Governance and controls"
         title="Admin"
-        description="Full Classic Admin — machines, targets, area owners, QA visit, access, and advanced rules."
+        description="Manus layout with every Classic Admin section — machines, targets, owners, QA, access, advanced."
       />
-      <div className="v2BoardHost">
-        <AdminPage embedded />
-      </div>
+      <AdminPage variant="manus" />
     </div>
   );
 }

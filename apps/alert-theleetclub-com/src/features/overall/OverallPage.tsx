@@ -22,6 +22,7 @@ import { SalesHistoryModal } from '@/components/SalesHistoryModal';
 import { AlertTableHeader } from '@/components/AlertTableHeader';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import type { StitchKpi } from '@/components/StitchKpiStrip';
+import { V2GhostBtn, V2KpiCard, V2Panel } from '@/features/v2/v2Ui';
 import { useAuth } from '@/context/AuthContext';
 import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
 import { ProOverallView, type ProOverallCard } from '@/features/pro/ProOverallView';
@@ -285,7 +286,12 @@ function attendanceLabelFromShift(
   return { label: 'Absent', color: 'r' };
 }
 
-export function OverallPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function OverallPage({
+  variant = 'classic',
+}: {
+  variant?: 'classic' | 'manus';
+} = {}) {
+  const manus = variant === 'manus';
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const { user } = useAuth();
   const { stored: columnStored, setColumns: handleColumnsChange, syncState: columnSyncState } =
@@ -801,27 +807,8 @@ export function OverallPage({ embedded = false }: { embedded?: boolean } = {}) {
     );
   }
 
-  return (
-    <div className="pageShellWide">
-      <StitchOpsPanel
-        compact
-        embedded={embedded}
-        iconName="overall"
-        title="Overall"
-        badge={`${fleetMachines.length} machines`}
-        kpis={overallKpis}
-        toolbar={
-          <>
-            <span className="stitchOpsLive">
-              <span className="stitchOpsLiveDot" aria-hidden />
-              Auto · ~1m
-            </span>
-            <button type="button" className="stitchOpsRefresh stitchOpsRefreshCompact" onClick={refetchAll} disabled={isRefreshing}>
-              {isRefreshing ? '…' : 'Refresh'}
-            </button>
-          </>
-        }
-      >
+  const boardInner = (
+    <>
         <div className="opsPrepCompact">
           <div className="opsPrepRow">
             <div className="stitchOpsControls opsPrepControls">
@@ -1079,34 +1066,94 @@ export function OverallPage({ embedded = false }: { embedded?: boolean } = {}) {
         </TableScrollControls>
           </div>
         </section>
-      </StitchOpsPanel>
+    </>
+  );
 
-      {fleetMachines.length > 0 ? (
-        <OpsRevenueTotalsBar
-          totals={fleetRevenueTotals}
-          machineCount={fleetRevenueTotals.machineCount}
-          loading={fleetRevenueTotals.loading}
-          asOfLocal={dailySalesQ.data?.asOfLocal}
-          salesFreshnessNote={
-            dailySalesQ.isFetched
-              ? freshnessNotice('minute', dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal, {
-                  fetching: dailySalesQ.isFetching,
-                })
-              : null
+  const fleetBar =
+    fleetMachines.length > 0 ? (
+      <OpsRevenueTotalsBar
+        totals={fleetRevenueTotals}
+        machineCount={fleetRevenueTotals.machineCount}
+        loading={fleetRevenueTotals.loading}
+        asOfLocal={dailySalesQ.data?.asOfLocal}
+        salesFreshnessNote={
+          dailySalesQ.isFetched
+            ? freshnessNotice('minute', dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal, {
+                fetching: dailySalesQ.isFetching,
+              })
+            : null
+        }
+        yesterdayOverall={fleetYesterdayOverall}
+      />
+    ) : null;
+
+  const modals =
+    salesDetail && salesDetail.salesElapsed ? (
+      <SalesHistoryModal
+        machineName={salesDetail.m.name}
+        machineId={salesDetail.m.id}
+        row={salesDetail.salesElapsed}
+        meta={dailySalesQ.data}
+        onClose={() => setSalesDetail(null)}
+      />
+    ) : null;
+
+  if (manus) {
+    return (
+      <div className="pageShellWide v2ManusBoard">
+        <div className="v2KpiGrid">
+          {overallKpis.map((k) => (
+            <V2KpiCard
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              detail={k.sub || ''}
+              tone={k.tone === 'warn' ? 'amber' : k.tone === 'good' ? 'teal' : 'blue'}
+              icon="overall"
+            />
+          ))}
+        </div>
+        <V2Panel
+          title="Fleet workbook"
+          subtitle={`${fleetMachines.length} machines · ${visibleColumns.length} Classic fields`}
+          meta={
+            <V2GhostBtn onClick={refetchAll} disabled={isRefreshing}>
+              {isRefreshing ? 'Refreshing…' : 'Refresh'}
+            </V2GhostBtn>
           }
-          yesterdayOverall={fleetYesterdayOverall}
-        />
-      ) : null}
+        >
+          {boardInner}
+        </V2Panel>
+        {fleetBar}
+        {modals}
+      </div>
+    );
+  }
 
-      {salesDetail && salesDetail.salesElapsed ? (
-        <SalesHistoryModal
-          machineName={salesDetail.m.name}
-          machineId={salesDetail.m.id}
-          row={salesDetail.salesElapsed}
-          meta={dailySalesQ.data}
-          onClose={() => setSalesDetail(null)}
-        />
-      ) : null}
+  return (
+    <div className="pageShellWide">
+      <StitchOpsPanel
+        compact
+        iconName="overall"
+        title="Overall"
+        badge={`${fleetMachines.length} machines`}
+        kpis={overallKpis}
+        toolbar={
+          <>
+            <span className="stitchOpsLive">
+              <span className="stitchOpsLiveDot" aria-hidden />
+              Auto · ~1m
+            </span>
+            <button type="button" className="stitchOpsRefresh stitchOpsRefreshCompact" onClick={refetchAll} disabled={isRefreshing}>
+              {isRefreshing ? '…' : 'Refresh'}
+            </button>
+          </>
+        }
+      >
+        {boardInner}
+      </StitchOpsPanel>
+      {fleetBar}
+      {modals}
     </div>
   );
 }

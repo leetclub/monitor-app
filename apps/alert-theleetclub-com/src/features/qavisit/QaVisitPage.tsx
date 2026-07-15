@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTableHeader } from '@/components/AlertTableHeader';
 import { MachineSearchSelect } from '@/components/MachineSearchSelect';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
+import { V2Panel } from '@/features/v2/v2Ui';
 import { TableScrollControls } from '@/components/TableScrollControls';
 import { QaVisitMachineWorkspace } from '@/features/qavisit/QaVisitMachineWorkspace';
 import { apiGet } from '@/lib/api';
@@ -66,7 +67,12 @@ function visitFromFleetRow(row: QaVisitRow | undefined, adminMtd: number): QaVis
   return { ...row, adminSummaryMtd: adminMtd };
 }
 
-export function QaVisitPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function QaVisitPage({
+  variant = 'classic',
+}: {
+  variant?: 'classic' | 'manus';
+} = {}) {
+  const manus = variant === 'manus';
   const [searchParams, setSearchParams] = useSearchParams();
   const machineFromUrl = (searchParams.get('machine') || '').trim();
   const auditFromUrl = (searchParams.get('auditId') || '').trim();
@@ -227,28 +233,8 @@ export function QaVisitPage({ embedded = false }: { embedded?: boolean } = {}) {
     patchSearchParams({ to: value || null });
   }
 
-  return (
-    <StitchOpsPanel
-      embedded={embedded}
-      iconName="qa_visit"
-      title="QA Visit"
-      subtitle="Fleet-wide SafetyCulture insights — filter by date, then inspect a machine for full history."
-      compact
-      badge={
-        qaSummaryQ.data?.yearMonth ?? fleetQ.data?.yearMonth ? (
-          <span title="Admin summary month (Kuwait)">
-            {qaSummaryQ.data?.yearMonth ?? fleetQ.data?.yearMonth}
-          </span>
-        ) : null
-      }
-      toolbar={
-        machineName ? (
-          <button type="button" className="stitchRefreshBtn" onClick={() => selectMachine('')}>
-            ← All machines
-          </button>
-        ) : null
-      }
-    >
+  const boardInner = (
+    <>
       {showFleet ? (
         <section className="opsDashboardSection opsDashboardSection--data qaVisitFleetSection" aria-label="QA fleet">
           <div className="opsDashboardSectionBody opsDashboardSectionBody--data">
@@ -423,6 +409,51 @@ export function QaVisitPage({ embedded = false }: { embedded?: boolean } = {}) {
           }}
         />
       )}
+    </>
+  );
+
+  if (manus) {
+    return (
+      <div className="v2ManusBoard">
+        <V2Panel
+          title="Quality workbook"
+          subtitle="Same Classic fleet filters, scores, Admin MTD, and machine workspace"
+          meta={
+            machineName ? (
+              <button type="button" className="v2GhostBtn" onClick={() => selectMachine('')}>
+                ← All machines
+              </button>
+            ) : null
+          }
+        >
+          {boardInner}
+        </V2Panel>
+      </div>
+    );
+  }
+
+  return (
+    <StitchOpsPanel
+      iconName="qa_visit"
+      title="QA Visit"
+      subtitle="Fleet-wide SafetyCulture insights — filter by date, then inspect a machine for full history."
+      compact
+      badge={
+        qaSummaryQ.data?.yearMonth ?? fleetQ.data?.yearMonth ? (
+          <span title="Admin summary month (Kuwait)">
+            {qaSummaryQ.data?.yearMonth ?? fleetQ.data?.yearMonth}
+          </span>
+        ) : null
+      }
+      toolbar={
+        machineName ? (
+          <button type="button" className="stitchRefreshBtn" onClick={() => selectMachine('')}>
+            ← All machines
+          </button>
+        ) : null
+      }
+    >
+      {boardInner}
     </StitchOpsPanel>
   );
 }

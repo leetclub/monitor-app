@@ -1,18 +1,16 @@
 import { OverallPage } from '@/features/overall/OverallPage';
 import { V2SectionHead } from '@/features/v2/v2Ui';
 
-/** Manus chrome + full Classic Overall workbook. */
+/** Manus chrome + Classic Overall workbook fields/APIs. */
 export function V2OverallPage() {
   return (
     <div className="v2Page v2PageBoard">
       <V2SectionHead
         eyebrow="Fleet command"
         title="Overall"
-        description="Full Classic fleet workbook — sales, attendance, QA, waste, footfall, and compare presets."
+        description="Manus layout with the full Classic fleet workbook — attendance, sales, footfall, waste, QA, and more."
       />
-      <div className="v2BoardHost">
-        <OverallPage embedded />
-      </div>
+      <OverallPage variant="manus" />
     </div>
   );
 }

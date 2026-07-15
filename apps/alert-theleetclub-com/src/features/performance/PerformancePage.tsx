@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
 import { formatSalesTrendPct } from '@/lib/salesDisplay';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
+import { V2Panel } from '@/features/v2/v2Ui';
 import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
 import { PerfMachineFilter } from '@/features/performance/PerfMachineFilter';
 import { PerfOverviewSection } from '@/features/performance/PerfOverviewSection';
@@ -47,7 +48,12 @@ function parseIds(raw: string | null): string[] {
     .slice(0, 48);
 }
 
-export function PerformancePage({ embedded = false }: { embedded?: boolean } = {}) {
+export function PerformancePage({
+  variant = 'classic',
+}: {
+  variant?: 'classic' | 'manus';
+} = {}) {
+  const manus = variant === 'manus';
   const [params, setParams] = useSearchParams();
   const focusId = (params.get('machineId') || params.get('machine') || '').trim();
   const urlIds = parseIds(params.get('machineIds'));
@@ -176,14 +182,8 @@ export function PerformancePage({ embedded = false }: { embedded?: boolean } = {
     (fleetMachines.find((m) => m.productName)?.productName ?? undefined) ||
     undefined;
 
-  return (
-    <div className="perfPage">
-      <StitchOpsPanel
-        embedded={embedded}
-        title="Performance"
-        subtitle="Overview trajectory · Target vs actual · Ranking — Targets Areas style"
-        iconName="performance"
-      >
+  const boardInner = (
+    <>
         <div className="perfToolbar">
           <div className="perfModePills" role="group" aria-label="Extra chart views">
             <button
@@ -202,7 +202,7 @@ export function PerformancePage({ embedded = false }: { embedded?: boolean } = {
               {loadProducts ? 'Product cups on' : 'Load product cups'}
             </button>
           </div>
-          <Link className="perfBackLink" to="/red-flags">
+          <Link className="perfBackLink" to={manus ? '/v2/red-flags' : '/red-flags'}>
             ← Red Flags
           </Link>
         </div>
@@ -321,6 +321,30 @@ export function PerformancePage({ embedded = false }: { embedded?: boolean } = {
             ) : null}
           </div>
         </div>
+    </>
+  );
+
+  if (manus) {
+    return (
+      <div className="perfPage v2ManusBoard">
+        <V2Panel
+          title="Performance workbook"
+          subtitle="Same Classic filters, KPIs, ranking, and trajectory charts"
+        >
+          {boardInner}
+        </V2Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div className="perfPage">
+      <StitchOpsPanel
+        title="Performance"
+        subtitle="Overview trajectory · Target vs actual · Ranking — Targets Areas style"
+        iconName="performance"
+      >
+        {boardInner}
       </StitchOpsPanel>
     </div>
   );

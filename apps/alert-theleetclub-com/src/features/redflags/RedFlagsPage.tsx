@@ -77,6 +77,7 @@ import {
 } from '@/lib/useCleaningOverdueAlerts';
 import { fetchCleaningWorkflowMapBatched, fetchMachineAttendanceMapBatched, type MachineAttendanceSummary } from '@/lib/leetWorkflowApi';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
+import { V2GhostBtn, V2KpiCard, V2Panel } from '@/features/v2/v2Ui';
 import { TableScrollControls } from '@/components/TableScrollControls';
 import { RedFlagsColumnPicker } from './RedFlagsColumnPicker';
 import { visibleRedFlagsColumns } from './redFlagsColumnVisibility';
@@ -333,7 +334,13 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
   );
 }
 
-export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function RedFlagsPage({
+  variant = 'classic',
+}: {
+  /** classic = Stitch panel; manus = Manus chrome + same Classic fields/APIs */
+  variant?: 'classic' | 'manus';
+} = {}) {
+  const manus = variant === 'manus';
   const navigate = useNavigate();
   const location = useLocation();
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
@@ -1193,40 +1200,8 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
     );
   }
 
-  return (
-    <div className={styles.root}>
-      <StitchOpsPanel
-        compact
-        embedded={embedded}
-        iconName="red_flags"
-        title="Red Flags"
-        badge={emptyClear ? 'All clear' : `${ranked.length} machine${ranked.length === 1 ? '' : 's'}`}
-        metaLine={
-          generatedAt ? (
-            <>
-              Snap {generatedAt}
-              {q.isFetching && ranked.length ? ' · updating' : ''}
-            </>
-          ) : null
-        }
-        kpis={redKpis}
-        toolbar={
-          <>
-            <span className="stitchOpsLive">
-              <span className="stitchOpsLiveDot" aria-hidden />
-              Live · ~1m
-            </span>
-            <button
-              type="button"
-              className="stitchOpsRefresh stitchOpsRefreshCompact"
-              onClick={() => void q.refetch()}
-              disabled={q.isFetching}
-            >
-              {q.isFetching ? '…' : 'Refresh'}
-            </button>
-          </>
-        }
-      >
+  const boardInner = (
+    <>
         <div className="opsPrepCompact">
           <div className="opsPrepRow">
             <div className="stitchOpsControls opsPrepControls">
@@ -1532,7 +1507,8 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
                       },
                       onOpenPerformance: () => {
                         if (!machId) return;
-                        navigate(`/performance?machineId=${encodeURIComponent(machId)}`);
+                        const base = manus ? '/v2/performance' : '/performance';
+                        navigate(`${base}?machineId=${encodeURIComponent(machId)}`);
                       },
                       onGoCheck: () => {
                         setGoCheckDetail({
@@ -1580,9 +1556,11 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
             </div>
           </section>
         ) : null}
-      </StitchOpsPanel>
+    </>
+  );
 
-      {ranked.length > 0 ? (
+  const fleetBar =
+    ranked.length > 0 ? (
         <OpsRevenueTotalsBar
           totals={fleetRevenueTotals}
           machineCount={fleetRevenueTotals.machineCount}
@@ -1597,12 +1575,13 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
           }
           yesterdayOverall={fleetYesterdayOverall}
         />
-      ) : null}
+      ) : null;
 
+  const modals = (
+    <>
       {detail
         ? createPortal(<DetailModal view={detail} onClose={() => setDetail(null)} />, getAlertModalPortal())
         : null}
-
       {trendDetail ? (
         <TrendHistoryModal
           machineName={trendDetail.machineName}
@@ -1623,7 +1602,6 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
           onClose={() => setTrendDetail(null)}
         />
       ) : null}
-
       {salesDetail ? (
         <SalesHistoryModal
           machineName={salesDetail.machineName}
@@ -1636,7 +1614,6 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
           onClose={() => setSalesDetail(null)}
         />
       ) : null}
-
       {targetDetail ? (
         <TargetDetailModal
           machineName={targetDetail.machineName}
@@ -1648,7 +1625,6 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
           onClose={() => setTargetDetail(null)}
         />
       ) : null}
-
       {goCheckDetail ? (
         <GoCheckWorkflowModal
           machineId={goCheckDetail.machineId}
@@ -1657,6 +1633,78 @@ export function RedFlagsPage({ embedded = false }: { embedded?: boolean } = {}) 
           onClose={() => setGoCheckDetail(null)}
         />
       ) : null}
+    </>
+  );
+
+  if (manus) {
+    return (
+      <div className={`${styles.root} v2ManusBoard`}>
+        <div className="v2KpiGrid">
+          {redKpis.map((k) => (
+            <V2KpiCard
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              detail={k.sub || ''}
+              tone={k.tone === 'warn' ? 'amber' : k.tone === 'good' ? 'teal' : 'slate'}
+              icon="red_flags"
+            />
+          ))}
+        </div>
+        <V2Panel
+          title="Exception board"
+          subtitle={`${ranked.length} machines · ${visibleColumns.length} Classic fields`}
+          meta={
+            <V2GhostBtn onClick={() => void q.refetch()} disabled={q.isFetching}>
+              {q.isFetching ? 'Refreshing…' : 'Refresh'}
+            </V2GhostBtn>
+          }
+        >
+          {boardInner}
+        </V2Panel>
+        {fleetBar}
+        {modals}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.root}>
+      <StitchOpsPanel
+        compact
+        iconName="red_flags"
+        title="Red Flags"
+        badge={emptyClear ? 'All clear' : `${ranked.length} machine${ranked.length === 1 ? '' : 's'}`}
+        metaLine={
+          generatedAt ? (
+            <>
+              Snap {generatedAt}
+              {q.isFetching && ranked.length ? ' · updating' : ''}
+            </>
+          ) : null
+        }
+        kpis={redKpis}
+        toolbar={
+          <>
+            <span className="stitchOpsLive">
+              <span className="stitchOpsLiveDot" aria-hidden />
+              Live · ~1m
+            </span>
+            <button
+              type="button"
+              className="stitchOpsRefresh stitchOpsRefreshCompact"
+              onClick={() => void q.refetch()}
+              disabled={q.isFetching}
+            >
+              {q.isFetching ? '…' : 'Refresh'}
+            </button>
+          </>
+        }
+      >
+        {boardInner}
+      </StitchOpsPanel>
+      {fleetBar}
+      {modals}
     </div>
   );
 }

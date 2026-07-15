@@ -25,7 +25,12 @@ type CleaningScheduleListResponse = { rows: CleaningScheduleRow[] };
 
 type AdminTab = 'machines' | 'targets' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
 
-export function AdminPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function AdminPage({
+  variant = 'classic',
+}: {
+  variant?: 'classic' | 'manus';
+} = {}) {
+  const manus = variant === 'manus';
   const ac = useAccess();
   const qc = useQueryClient();
   const [tab, setTab] = useState<AdminTab>('machines');
@@ -114,8 +119,8 @@ export function AdminPage({ embedded = false }: { embedded?: boolean } = {}) {
     ) : null;
 
   return (
-    <div className={`pageShell pageShellWide adminAppRoot${embedded ? ' adminAppRootEmbedded' : ''}`}>
-      {embedded ? null : (
+    <div className={`pageShell pageShellWide adminAppRoot${manus ? ' adminAppRootEmbedded v2ManusBoard' : ''}`}>
+      {manus ? null : (
         <header className="adminAppHeader">
           <div className="adminAppHeaderMain">
             <p className="adminAppEyebrow">Settings</p>
