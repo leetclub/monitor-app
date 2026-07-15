@@ -182,6 +182,17 @@ export function PerformancePage({
     (fleetMachines.find((m) => m.productName)?.productName ?? undefined) ||
     undefined;
 
+  const hasTargetData = useMemo(() => {
+    if (kpis?.machinesWithTarget != null && kpis.machinesWithTarget > 0) return true;
+    if ((kpis?.periodTargetKd ?? 0) > 0) return true;
+    return (
+      fleetMachines.some((m) => (m.periodTargetKd ?? 0) > 0 || (m.periodProductTargetCups ?? 0) > 0) ||
+      aggregateDays.some(
+        (d) => (d.locationTargetKd ?? 0) > 0 || (d.productTargetCups ?? 0) > 0,
+      )
+    );
+  }, [fleetMachines, aggregateDays, kpis]);
+
   const boardInner = (
     <>
         <div className="perfToolbar">
@@ -221,6 +232,16 @@ export function PerformancePage({
 
             {fleetQ.isError ? <p className="perfError">{(fleetQ.error as Error).message}</p> : null}
             {fleetQ.data?.error ? <p className="perfError">{fleetQ.data.error}</p> : null}
+
+            {fleetMachines.length > 0 && !fleetQ.isLoading && !hasTargetData ? (
+              <p className="perfTargetBanner" role="status">
+                <strong>No targets on these charts yet.</strong> Sales lines and bars still plot, but
+                dashed target lines and gray target bars need a location KD (and optional product cups)
+                in <strong>Admin → Targets</strong>, or a matching name in the weekly revenue target
+                sheet. Red Flags <strong>Target</strong> column shows today % only — full sales vs
+                target graphs live on this tab (scroll to <strong>Performance charts</strong>).
+              </p>
+            ) : null}
 
             <PerfOverviewSection
               machines={fleetMachines}
