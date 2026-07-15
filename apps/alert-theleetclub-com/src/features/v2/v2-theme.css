@@ -419,7 +419,8 @@ a.v2NavLink.v2NavLinkActive {
 .v2AppRoot .adminCard,
 .v2AppRoot .stitchOpsPanel,
 .v2AppRoot .perfPage,
-.v2AppRoot .adminAppRoot {
+.v2AppRoot .adminAppRoot,
+.v2AppRoot .v2ManusBoard {
   --bg: var(--v2-bg);
   --panel: var(--v2-panel);
   --panel2: var(--v2-panel2);
@@ -429,6 +430,32 @@ a.v2NavLink.v2NavLinkActive {
   --border-soft: var(--v2-border-soft);
   --accent: var(--v2-teal);
   --link: #5eead4;
+}
+
+/* Classic boards hosted under Manus shell — full data + popups */
+.v2AppRoot .v2ManusBoard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+}
+
+.v2AppRoot .v2ManusBoard .tableWrap,
+.v2AppRoot .v2ManusBoard .opsFleetTableWrap,
+.v2AppRoot .v2ManusBoard .rfTableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  max-width: 100%;
+}
+
+.v2AppRoot .v2ManusBoard .comparePickerRow,
+.v2AppRoot .v2ManusBoard .opsToolbar,
+.v2AppRoot .v2ManusBoard .rfToolbar {
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .v2Backdrop {
