@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="320" viewBox="0 0 800 320" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="800" height="320" fill="#060d19"/>
+  <text x="16" y="22" fill="#2dd4bf" font-size="11" font-weight="700" letter-spacing="0.12em">ALERT V2  /v2 (MANUS FLEET INTELLIGENCE)</text>
+  <text x="16" y="40" fill="#64748b" font-size="10">Dedicated page layouts + live APIs  not Classic boards inside a frame. Classic + Pro unchanged at /.</text>
+
+  <!-- sidebar -->
+  <rect x="16" y="56" width="150" height="248" rx="10" fill="#0a1322" stroke="rgba(148,163,184,0.22)"/>
+  <text x="28" y="78" fill="#f8fafc" font-size="11" font-weight="700">LEET ALERT</text>
+  <text x="28" y="92" fill="#2dd4bf" font-size="8" letter-spacing="0.1em">FLEET INTELLIGENCE</text>
+  <text x="28" y="114" fill="#64748b" font-size="8" letter-spacing="0.12em">OPERATIONS</text>
+  <rect x="24" y="124" width="134" height="36" rx="8" fill="rgba(45,212,191,0.14)" stroke="rgba(45,212,191,0.35)"/>
+  <rect x="24" y="124" width="3" height="36" fill="#2dd4bf"/>
+  <text x="36" y="140" fill="#f0fdfa" font-size="10" font-weight="700">Red Flags</text>
+  <text x="36" y="152" fill="#5eead4" font-size="8">Priority exceptions</text>
+  <text x="36" y="178" fill="#e2e8f0" font-size="10">Overall</text>
+  <text x="36" y="190" fill="#64748b" font-size="8">Fleet overview</text>
+  <text x="36" y="214" fill="#e2e8f0" font-size="10">QA · Perf · Admin</text>
+  <text x="36" y="226" fill="#64748b" font-size="8">blurbs under each nav</text>
+
+  <!-- main -->
+  <rect x="178" y="56" width="606" height="248" rx="10" fill="#0f1a2c" stroke="rgba(148,163,184,0.18)"/>
+  <text x="194" y="78" fill="#64748b" font-size="9" letter-spacing="0.1em">OPERATIONS / RED FLAGS</text>
+  <text x="194" y="98" fill="#f8fafc" font-size="14" font-weight="700">Priority exceptions</text>
+  <text x="620" y="78" fill="#99f6e4" font-size="9" font-weight="700">Ï LIVE</text>
+
+  <text x="194" y="124" fill="#f8fafc" font-size="16" font-weight="700">Red Flags</text>
+  <text x="194" y="140" fill="#8fa3b8" font-size="9">KPI strip + filter bar + exception board (live snapshot)</text>
+
+  <rect x="194" y="152" width="130" height="54" rx="8" fill="#121f33" stroke="rgba(148,163,184,0.18)"/>
+  <text x="206" y="170" fill="#94a3b8" font-size="8">TOTAL FLAGS</text>
+  <text x="206" y="192" fill="#f8fafc" font-size="18" font-weight="700">N</text>
+
+  <rect x="334" y="152" width="130" height="54" rx="8" fill="#121f33" stroke="rgba(148,163,184,0.18)"/>
+  <text x="346" y="170" fill="#94a3b8" font-size="8">OPEN CRITICAL</text>
+  <text x="346" y="192" fill="#f8fafc" font-size="18" font-weight="700">N</text>
+
+  <rect x="474" y="152" width="130" height="54" rx="8" fill="#121f33" stroke="rgba(148,163,184,0.18)"/>
+  <text x="486" y="170" fill="#94a3b8" font-size="8">ACTIVE CASES</text>
+  <text x="486" y="192" fill="#f8fafc" font-size="18" font-weight="700">N</text>
+
+  <rect x="614" y="152" width="150" height="54" rx="8" fill="#121f33" stroke="rgba(148,163,184,0.18)"/>
+  <text x="626" y="170" fill="#94a3b8" font-size="8">CLEAR SCOPE</text>
+  <text x="626" y="192" fill="#f8fafc" font-size="18" font-weight="700">N</text>
+
+  <rect x="194" y="218" width="570" height="70" rx="8" fill="#0a1322" stroke="rgba(148,163,184,0.16)"/>
+  <text x="210" y="244" fill="#f8fafc" font-size="11" font-weight="700">Exception board</text>
+  <text x="210" y="262" fill="#64748b" font-size="9">Search · severity · status · machine / reasons table</text>
+</svg>

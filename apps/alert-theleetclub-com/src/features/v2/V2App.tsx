@@ -1,14 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAccess } from '@/context/AccessContext';
 import { NoAccessPage } from '@/pages/NoAccessPage';
-import { AdminPage } from '@/features/admin/AdminPage';
-import { RedFlagsPage } from '@/features/redflags/RedFlagsPage';
-import { OverallPage } from '@/features/overall/OverallPage';
-import { QaVisitPage } from '@/features/qavisit/QaVisitPage';
-import { PerformancePage } from '@/features/performance/PerformancePage';
 import { V2Shell } from '@/features/v2/V2Shell';
+import { V2RedFlagsPage } from '@/features/v2/pages/V2RedFlagsPage';
+import { V2OverallPage } from '@/features/v2/pages/V2OverallPage';
+import { V2QaVisitPage } from '@/features/v2/pages/V2QaVisitPage';
+import { V2PerformancePage } from '@/features/v2/pages/V2PerformancePage';
+import { V2AdminPage } from '@/features/v2/pages/V2AdminPage';
 
-/** Authenticated Alert v2 workspace (Manus fleet shell + production pages). */
+/** Authenticated Alert v2 workspace — Manus fleet UI + live Alert APIs. */
 export function V2App() {
   const access = useAccess();
 
@@ -39,11 +39,11 @@ export function V2App() {
     <Routes>
       <Route element={<V2Shell />}>
         <Route index element={<Navigate to="red-flags" replace />} />
-        <Route path="red-flags" element={<RedFlagsPage />} />
-        <Route path="overall" element={<OverallPage />} />
-        <Route path="qa-visit" element={<QaVisitPage />} />
-        <Route path="performance" element={<PerformancePage />} />
-        <Route path="admin" element={<AdminPage />} />
+        <Route path="red-flags" element={<V2RedFlagsPage />} />
+        <Route path="overall" element={<V2OverallPage />} />
+        <Route path="qa-visit" element={<V2QaVisitPage />} />
+        <Route path="performance" element={<V2PerformancePage />} />
+        <Route path="admin" element={<V2AdminPage />} />
         <Route path="*" element={<Navigate to="red-flags" replace />} />
       </Route>
     </Routes>

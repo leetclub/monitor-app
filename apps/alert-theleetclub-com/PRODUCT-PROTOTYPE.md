@@ -17,7 +17,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
 | `/performance` | Performance | Overview **line trajectory** (All / Top 5 / Lowest 5 on full fleet only) with period presets (last week default, WTD, MTD, …), KPI boxes (deficit, achievement rate, growth), then multi charts. Location filter: Select all / Clear / **Only** per row. ≤5 selected → charts those machines (ranking modes hidden). Product cups optional. |
 | `/admin` → Targets | Admin · Targets | Location target once (KD or cups). Promote **1..N Vendon products**, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** (avg / last week / suggest) on hover-click. |
-| `/v2` … `/v2/*` | **Alert v2** | Separate Manus-style fleet shell (`alert…/v2`). Same APIs/tabs as Classic; **not** Pro. Login at `/v2/login`. Classic + Pro unchanged at `/`. |
+| `/v2` … `/v2/*` | **Alert v2** | Manus **Fleet Intelligence** UI at `alert…/v2` (KPI cards, exception board, overall/QA/performance layouts — not Classic tables in a frame). Live Alert APIs. **Not** Pro. Login `/v2/login`. Classic + Pro stay at `/`. |
 | `/admin` | Admin | User-entered data **not on Vendon**. **Machines** (cleaning, operators, hours), **Targets** (location KD + SX product cups + period), **Area owners**, **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
@@ -38,7 +38,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![1 Shell + Home](docs/product-prototype/figures/wire-01-shell-home.svg)
 
-*Figure 1 — **Classic:** coral Stitch sidebar. **Pro:** light iPad tab strip (unchanged). **v2 (`/v2`):** Manus fleet-intelligence shell — separate from Pro.*
+*Figure 1 — **Classic:** coral Stitch sidebar. **Pro:** light iPad tab strip (unchanged). **v2 (`/v2`):** Manus Fleet Intelligence pages — separate from Pro (see figure 7).*
 
 ![2 Red Flags](docs/product-prototype/figures/wire-02-red-flags.svg)
 
@@ -59,6 +59,10 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
 *Figure 6 — Performance: multi-select location KD + product cups charts (Targets Areas style).*
+
+![7 Alert v2](docs/product-prototype/figures/wire-07-v2.svg)
+
+*Figure 7 — **Alert v2 (`/v2`):** Manus Fleet Intelligence — sidebar blurbs, KPI cards, exception board (live APIs). Not Pro.*
 
 **Composite SVG (all panels):** `docs/product-prototype/visual-prototype.svg`
 
@@ -92,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-15 | **Alert v2 = Manus page layouts:** `/v2` no longer embeds Classic boards. Dedicated Manus pages (Red Flags KPI strip + exception board, Overall fleet summary, QA workspace, Performance trajectory, Admin horizontal tabs) on live Alert APIs. Classic + Pro untouched. |
 | 2026-07-14 | **QA Visit missing same-day SC audits (real root cause):** SafetyCulture `/audits/search` defaults to **order=asc + limit=100** and has **no `next_page_token`**. Code only fetched the oldest 100 audits per window, so **14 Jul KU CBA** (exact site label, match score 100) never entered the pipeline while older visits (1 Jul / 9 Jul) did. Fix: `order=desc`, `limit=1000`, cursor-paginate via `modified_before`. Fleet date filter uses **Asia/Kuwait** day from `lastVisitAt`. |
 | 2026-07-14 | **QA Visit KU CBA / recent visits:** SC short site labels (e.g. `CBA` → `KU CBA`) now match. Scored location inspections count as QC even when officer ≠ Ismail. Alias map `config/qa_machine_aliases.json`. Busts QA caches. Fixes Alert showing 1 Jul while SC shows 14 Jul. |
 | 2026-07-14 | **QA Visit freshness + matching:** SafetyCulture search now **globally sorts newest-first** before capping; last **14 days** of audits are fully processed (no truncating). Richer location keys (site + machine header fields), softer QC detect for scored inspections, shorter caches (~2–3 min). Fixes missing same-day / same-site reports and stale 2–3 day lag. |
