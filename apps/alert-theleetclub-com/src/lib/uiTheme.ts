@@ -1,4 +1,4 @@
-/** Alert UI theme: classic (tactical Stitch) vs pro (Manus fleet-intelligence shell). */
+/** Alert UI theme: classic (tactical Stitch) vs pro (light professional workspace). */
 
 export type AlertUiThemeId = 'classic' | 'pro';
 
@@ -28,11 +28,10 @@ export function readAlertUiTheme(): AlertUiThemeId {
 export function applyAlertUiTheme(theme: AlertUiThemeId): void {
   const root = document.documentElement;
   root.setAttribute('data-theme', theme);
-  // Both shells are dark; Pro uses Manus teal fleet chrome
-  root.style.colorScheme = 'dark';
+  root.style.colorScheme = theme === 'pro' ? 'light' : 'dark';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute('content', theme === 'pro' ? '#060d19' : '#0c0f14');
+    meta.setAttribute('content', theme === 'pro' ? '#e8edf3' : '#0c0f14');
   }
 }
 

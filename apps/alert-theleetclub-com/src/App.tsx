@@ -12,6 +12,8 @@ import { NoAccessPage } from '@/pages/NoAccessPage';
 import { NavIcon } from '@/components/NavIcon';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
+import { V2App } from '@/features/v2/V2App';
+import { V2LoginPage } from '@/features/v2/V2LoginPage';
 import {
   navDrawerMediaQuery,
   persistNavExpandedPreference,
@@ -213,6 +215,13 @@ function DefaultRedirect() {
   return <Navigate to="/red-flags" replace />;
 }
 
+/** Unauthenticated /v2/* → Manus login, preserve destination. */
+function V2LoginRedirect() {
+  const location = useLocation();
+  const next = encodeURIComponent(`${location.pathname}${location.search}`);
+  return <Navigate to={`/v2/login?next=${next}`} replace />;
+}
+
 function AppRoutesOutlet() {
   return (
     <Routes>
@@ -268,54 +277,60 @@ function ClassicTopBar() {
   );
 }
 
-/** Manus fleet-intelligence nav copy — routes stay our production tabs. */
-const PRO_NAV: {
-  to: string;
-  title: string;
-  description: string;
-  icon: 'red_flags' | 'overall' | 'qa_visit' | 'performance' | 'admin';
-  adminOnly?: boolean;
-}[] = [
-  { to: '/red-flags', title: 'Red Flags', description: 'Priority exceptions', icon: 'red_flags' },
-  { to: '/overall', title: 'Overall', description: 'Fleet overview', icon: 'overall' },
-  { to: '/qa-visit', title: 'QA Visit', description: 'Quality workspace', icon: 'qa_visit' },
-  { to: '/performance', title: 'Performance', description: 'Trends & targets', icon: 'performance' },
-  { to: '/admin', title: 'Admin', description: 'Fleet configuration', icon: 'admin', adminOnly: true },
-];
+/**
+ * Pro: product app bar — brand + horizontal tabs + session.
+ * Different IA from Classic sidebar shell.
+ */
+function ProAppHeader({
+  menuOpen,
+  onMenuToggle,
+  onNavigate,
+}: {
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+  onNavigate: () => void;
+}) {
+  const clock = useKuwaitClock();
 
-function proPageMeta(pathname: string) {
-  const hit = PRO_NAV.find((n) => pathname === n.to || pathname.startsWith(`${n.to}/`));
-  return {
-    crumb: (hit?.title || 'Red Flags').toUpperCase(),
-    headline: hit?.description || 'Priority exceptions',
-    title: hit?.title || 'Red Flags',
-  };
-}
-
-function ProFleetNav({ onNavigate }: { onNavigate?: () => void }) {
-  const { canSeeTab } = useAccess();
   return (
-    <nav className="proFleetNav" aria-label="Operations">
-      <p className="proFleetNavSection">Operations</p>
-      {PRO_NAV.map((item) => {
-        if (item.adminOnly && !canSeeTab('leetAlertAdmin')) return null;
-        return (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            title={`${item.title} — ${item.description}`}
-            className={({ isActive }) => `proFleetNavLink ${isActive ? 'proFleetNavLinkActive' : ''}`}
-            onClick={onNavigate}
+    <header className="proAppHeader">
+      <div className="proAppHeaderBar">
+        <div className="proAppHeaderBrand">
+          <button
+            type="button"
+            className="proAppMenuBtn"
+            onClick={onMenuToggle}
+            aria-expanded={menuOpen}
+            aria-controls="pro-app-nav"
+            title={menuOpen ? 'Close menu' : 'Open menu'}
           >
-            <NavIcon name={item.icon} />
-            <span className="proFleetNavText">
-              <span className="proFleetNavTitle">{item.title}</span>
-              <span className="proFleetNavDesc">{item.description}</span>
-            </span>
-          </NavLink>
-        );
-      })}
-    </nav>
+            <NavIcon name={menuOpen ? 'panel_close' : 'menu'} />
+            <span className="srOnly">{menuOpen ? 'Close menu' : 'Open menu'}</span>
+          </button>
+          <div className="proAppBrandText">
+            <p className="proAppBrandName">Leet Alert</p>
+            <p className="proAppBrandSub">iPad ops</p>
+          </div>
+        </div>
+
+        <div className="proAppHeaderEnd">
+          <span className="proAppClock" title="Kuwait time">
+            {clock}
+          </span>
+          <UserSessionControls />
+        </div>
+      </div>
+
+      <div className="proAppTabStripWrap">
+        <NavLinks className="proAppTabStrip" onNavigate={onNavigate} />
+      </div>
+
+      {menuOpen ? (
+        <div id="pro-app-nav" className="proAppMobileNav">
+          <NavLinks onNavigate={onNavigate} className="proAppMobileNavList" />
+        </div>
+      ) : null}
+    </header>
   );
 }
 
@@ -382,10 +397,6 @@ function ClassicShell() {
 function ProShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
-  const clock = useKuwaitClock();
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
-  const meta = proPageMeta(location.pathname);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -403,97 +414,16 @@ function ProShell() {
   return (
     <div className="appShell appShellPro">
       {menuOpen ? (
-        <button
-          type="button"
-          className="navBackdrop proNavBackdrop"
-          aria-label="Close menu"
-          onClick={() => setMenuOpen(false)}
-        />
+        <button type="button" className="navBackdrop proNavBackdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
       ) : null}
-
-      <aside
-        id="pro-fleet-sidebar"
-        className={`proFleetSidebar ${menuOpen ? 'proFleetSidebarOpen' : ''}`}
-        aria-label="Fleet navigation"
-      >
-        <div className="proFleetBrand">
-          <div className="proFleetBrandMark" aria-hidden>
-            <NavIcon name="performance" />
-          </div>
-          <div>
-            <p className="proFleetBrandName">Leet Alert</p>
-            <p className="proFleetBrandSub">Fleet intelligence</p>
-          </div>
-        </div>
-
-        <ProFleetNav onNavigate={() => setMenuOpen(false)} />
-
-        <div className="proFleetSidebarFoot">
-          <div className="proFleetOnline">
-            <span className="proFleetOnlineDot" aria-hidden />
-            <div>
-              <strong>Workspace online</strong>
-              <span>Google session · live fleet APIs</span>
-            </div>
-          </div>
-          {user?.email ? (
-            <div className="proFleetUserChip" title={user.email}>
-              <NavIcon name="account_circle" />
-              <span>{user.email}</span>
-            </div>
-          ) : null}
-        </div>
-      </aside>
-
-      <div className="proFleetMain">
-        <header className="proFleetTop">
-          <div className="proFleetTopStart">
-            <button
-              type="button"
-              className="proAppMenuBtn"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-expanded={menuOpen}
-              aria-controls="pro-fleet-sidebar"
-              title={menuOpen ? 'Close menu' : 'Open menu'}
-            >
-              <NavIcon name={menuOpen ? 'panel_close' : 'menu'} />
-              <span className="srOnly">{menuOpen ? 'Close menu' : 'Open menu'}</span>
-            </button>
-            <div className="proFleetTopTitles">
-              <p className="proFleetBreadcrumb">
-                <span>Operations</span>
-                <span aria-hidden> / </span>
-                <span className="proFleetBreadcrumbActive">{meta.crumb}</span>
-              </p>
-              <h1 className="proFleetPageTitle">{meta.headline}</h1>
-            </div>
-          </div>
-          <div className="proFleetTopEnd">
-            <span className="proFleetLive" title="Live data">
-              <span className="proFleetLiveDot" aria-hidden />
-              Live
-            </span>
-            <span className="proAppClock" title="Kuwait time">
-              {clock}
-            </span>
-            <ThemeToggle compact />
-            <button
-              type="button"
-              className="topBarSignOut"
-              onClick={async () => {
-                await signOut();
-                navigate('/login', { replace: true });
-              }}
-            >
-              Sign out
-            </button>
-          </div>
-        </header>
-
-        <main className="content contentMain appMain proAppMain">
-          <AppRoutesOutlet />
-        </main>
-      </div>
+      <ProAppHeader
+        menuOpen={menuOpen}
+        onMenuToggle={() => setMenuOpen((v) => !v)}
+        onNavigate={() => setMenuOpen(false)}
+      />
+      <main className="content contentMain appMain proAppMain">
+        <AppRoutesOutlet />
+      </main>
     </div>
   );
 }
@@ -544,6 +474,8 @@ function AppRoutes() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/v2/login" element={<V2LoginPage />} />
+          <Route path="/v2/*" element={<V2LoginRedirect />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
@@ -553,7 +485,11 @@ function AppRoutes() {
   return (
     <AccessProvider userEmail={user.email}>
       <BrowserRouter>
-        <ProtectedShell />
+        <Routes>
+          <Route path="/v2/login" element={<Navigate to="/v2/red-flags" replace />} />
+          <Route path="/v2/*" element={<V2App />} />
+          <Route path="/*" element={<ProtectedShell />} />
+        </Routes>
       </BrowserRouter>
     </AccessProvider>
   );

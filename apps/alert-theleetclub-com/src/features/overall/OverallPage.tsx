@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
 import {
   initialCompareSelection,
@@ -763,7 +764,9 @@ export function OverallPage() {
     operatorActivityQ.data?.byMachineId,
   ]);
 
-  if (uiTheme === 'pro') {
+  const location = useLocation();
+  const onV2 = location.pathname.startsWith('/v2');
+  if (uiTheme === 'pro' && !onV2) {
     const salesComparisonNote = presetLabels(compare.preset).caption;
     return (
       <ProOverallView

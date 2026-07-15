@@ -4,21 +4,21 @@
  */
 
 .proWorkspace {
-  --pro-bg: transparent;
-  --pro-card: #0f1a2c;
-  --pro-ink: #e8f0f8;
-  --pro-muted: #8fa3b8;
-  --pro-line: rgba(148, 163, 184, 0.22);
-  --pro-accent: #2dd4bf;
-  --pro-accent-soft: rgba(45, 212, 191, 0.14);
-  --pro-warn: #fbbf24;
-  --pro-warn-soft: rgba(251, 191, 36, 0.12);
-  --pro-danger: #f87171;
-  --pro-danger-soft: rgba(248, 113, 113, 0.12);
-  --pro-good: #34d399;
-  --pro-good-soft: rgba(52, 211, 153, 0.12);
+  --pro-bg: #e9eef4;
+  --pro-card: #ffffff;
+  --pro-ink: #0f172a;
+  --pro-muted: #475569;
+  --pro-line: #cbd5e1;
+  --pro-accent: #0f766e;
+  --pro-accent-soft: #ccfbf1;
+  --pro-warn: #b45309;
+  --pro-warn-soft: #ffedd5;
+  --pro-danger: #b91c1c;
+  --pro-danger-soft: #fee2e2;
+  --pro-good: #15803d;
+  --pro-good-soft: #dcfce7;
   --pro-radius: 16px;
-  --pro-font: 'DM Sans', 'Source Sans 3', system-ui, sans-serif;
+  --pro-font: 'Source Sans 3', system-ui, -apple-system, 'SF Pro Text', sans-serif;
   --pro-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --pro-touch: 48px;
 
@@ -483,7 +483,7 @@
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid var(--pro-line);
-  background: var(--pro-card);
+  background: #fff;
   color: var(--pro-ink);
   font-family: var(--pro-font);
   cursor: pointer;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
 import {
@@ -335,6 +335,7 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
 
 export function RedFlagsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const compareMode = useMemo(() => comparePresetToRedAlertMode(compare.preset), [compare.preset]);
   const setComparePersist = useCallback((next: CompareSelection) => {
@@ -1072,8 +1073,10 @@ export function RedFlagsPage() {
   }, [ticker, generatedAt, snapTime, q.isFetched]);
 
   const uiTheme = useAlertUiTheme();
+  // Alert v2 (/v2/*) uses Manus chrome + classic ops tables — never Pro board layout
+  const onV2 = location.pathname.startsWith('/v2');
 
-  if (uiTheme === 'pro') {
+  if (uiTheme === 'pro' && !onV2) {
     return (
       <>
         <ProRedFlagsView
