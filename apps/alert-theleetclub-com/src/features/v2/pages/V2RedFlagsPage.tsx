@@ -1,5 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { useV2RedFlagsData, V2_RED_FLAGS_COLUMNS } from '@/features/v2/hooks/useV2RedFlagsData';
+import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import {
+  useV2CompareSelection,
+  useV2RedFlagsData,
+  V2_RED_FLAGS_COLUMNS,
+} from '@/features/v2/hooks/useV2RedFlagsData';
 import { V2DataTable } from '@/features/v2/V2DataTable';
 import { V2MetricStack } from '@/features/v2/V2MetricStack';
 import {
@@ -14,9 +19,10 @@ import type { RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColu
 
 type SeverityFilter = 'all' | 'critical' | 'watch';
 
-/** Pure Manus Red Flags — full Classic fields + metric mini-boxes. */
+/** Pure Manus Red Flags — Classic data/sort + Manus metric boxes. */
 export function V2RedFlagsPage() {
-  const data = useV2RedFlagsData();
+  const { compare, setCompare } = useV2CompareSelection();
+  const data = useV2RedFlagsData(compare);
   const [q, setQ] = useState('');
   const [severity, setSeverity] = useState<SeverityFilter>('all');
 
@@ -69,7 +75,7 @@ export function V2RedFlagsPage() {
       <V2SectionHead
         eyebrow="Exception management"
         title="Red Flags"
-        description="Full fleet exception workbook — Classic metrics in Manus boxes, scrollable fleet board."
+        description="Classic ranking (priority tier → frequency) with full enrichment — Manus metric boxes."
         actions={
           <V2GhostBtn onClick={data.refetch} disabled={data.fetching}>
             {data.fetching ? 'Refreshing…' : 'Refresh'}
@@ -82,7 +88,7 @@ export function V2RedFlagsPage() {
         <V2KpiCard
           label="Open critical"
           value={data.critical}
-          detail="requires immediate action"
+          detail="tier 1 — not in cleaning window"
           tone="red"
           icon="red_flags"
         />
@@ -100,7 +106,7 @@ export function V2RedFlagsPage() {
 
       <V2Panel
         title="Exception workbook"
-        subtitle={`${V2_RED_FLAGS_COLUMNS.length} Classic fields · Manus metric boxes`}
+        subtitle={`${V2_RED_FLAGS_COLUMNS.length} Classic fields · Critical (tier 1) first`}
         meta={
           <span className="v2PanelMetaText">
             Showing {filtered.length} of {data.open} · Fleet-wide
@@ -123,9 +129,10 @@ export function V2RedFlagsPage() {
             aria-label="Severity"
           >
             <option value="all">All severities</option>
-            <option value="critical">Critical</option>
-            <option value="watch">Watch</option>
+            <option value="critical">Critical (tier 1)</option>
+            <option value="watch">Watch (cleaning window)</option>
           </select>
+          <ComparePresetPicker value={compare} onChange={setCompare} />
         </div>
 
         {data.error ? (
@@ -142,7 +149,7 @@ export function V2RedFlagsPage() {
                 description="No red flags recorded for machines in your scope."
               />
             }
-            footer="Use ← → or drag to browse every Classic field"
+            footer="Same Classic sort as /red-flags · Use ← → or drag to browse every field"
           />
         )}
       </V2Panel>

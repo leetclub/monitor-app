@@ -1,14 +1,19 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import type { CompareSelection } from '@/components/ComparePresetPicker';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
 import {
+  baselineReasonMap,
   filterSnapshotRows,
   getMachineIdRaw,
   getOperatorDisplayName,
   getStrikeOperatorEmail,
   pickLastCleaningIso,
+  pickLastTransactionTs,
   rankRows,
+  reasonKey,
+  rowHappensForSort,
 } from '@/features/redflags/redFlagsModel';
 import {
   formatKwd,
@@ -31,14 +36,34 @@ import type { SxAccelerationRow } from '@/components/SxAccelerationCell';
 import { formatKuwaitActivityStamp } from '@/lib/formatKuwait';
 import { RED_FLAGS_XLSX_ORDER, type RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColumns';
 import { RED_FLAGS_TABLE_HEADERS } from '@/lib/tableHeaderLabels';
+import {
+  comparePresetToRedAlertMode,
+  initialCompareSelection,
+  persistCompareSelection,
+  presetApiQueryString,
+} from '@/lib/comparePresetBridge';
+import type { DailyIncidentsElapsedResponse } from '@/lib/incidentsDisplay';
+import {
+  fetchCleaningWorkflowMapBatched,
+  fetchMachineAttendanceMapBatched,
+} from '@/lib/leetWorkflowApi';
+import { salesPairForPreset } from '@/lib/presetComparison';
 import type { V2MetricItem, V2MetricTone } from '@/features/v2/V2MetricStack';
 
-type Snapshot = { rows?: RedAlertRow[]; error?: string; generatedAt?: string };
+type Snapshot = {
+  rows?: RedAlertRow[];
+  error?: string;
+  generatedAt?: string;
+  cacheGeneratedAt?: string;
+};
 type CreditsTotals = {
   byMachineId?: Record<
     string,
     { credits_sent?: number; dispense_tests?: number; vends_resolved?: string }
   >;
+};
+type VendonLastTransactionsResponse = {
+  byMachineId?: Record<string, { timestamp?: number; product_name?: string | null }>;
 };
 
 const WIDE_COLS = new Set<RedFlagsColumnKey>([
@@ -59,18 +84,16 @@ export type V2ExceptionRow = {
   machineName: string;
   severity: 'Critical' | 'Watch';
   isNew: boolean;
-  /** Manus display values keyed by Classic workbook column. */
   fields: Record<RedFlagsColumnKey, string>;
-  /** Manus metric stacks for trend-style cells. */
   stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>>;
   reasons: string[];
 };
 
-function isCritical(row: RedAlertRow): boolean {
-  const tier = Number(row.alertPriorityTier);
-  if (Number.isFinite(tier) && tier <= 0) return true;
-  const blob = (row.reasons || []).join(' ').toLowerCase();
-  return /offline|power.?off|\boff\b|dispense|critical|stale.?sale|no.?sale/i.test(blob);
+/** Classic priority: tier 1 = immediate (Critical), tier 2 = cleaning-window Watch. */
+function severityForRow(row: RedAlertRow): 'Critical' | 'Watch' {
+  const pri = Number(row.alertPriorityTier != null ? row.alertPriorityTier : 1);
+  if (pri === 2 || row.duringScheduledCleaningNow) return 'Watch';
+  return 'Critical';
 }
 
 function toneFromPct(pct: number | null | undefined): V2MetricTone {
@@ -105,7 +128,15 @@ export const V2_RED_FLAGS_COLUMNS = RED_FLAGS_XLSX_ORDER.map((key) => ({
   wide: WIDE_COLS.has(key),
 }));
 
-export function useV2RedFlagsData() {
+export function useV2RedFlagsData(compare?: CompareSelection) {
+  const compareSel = compare ?? initialCompareSelection();
+  const compareMode = useMemo(
+    () => comparePresetToRedAlertMode(compareSel.preset),
+    [compareSel.preset],
+  );
+  const prevReasonRef = useRef<Record<string, string>>({});
+  const hasLoadedRef = useRef(false);
+
   const snapQ = useQuery({
     queryKey: ['red-flags-snapshot'],
     queryFn: () => apiGet<Snapshot>('/api/alert/red-flags/snapshot'),
@@ -121,15 +152,46 @@ export function useV2RedFlagsData() {
   }, [snapQ.data?.rows]);
 
   const salesQ = useQuery({
-    queryKey: ['alert-daily-sales-elapsed', 'v2-full'],
+    queryKey: ['alert-daily-sales-elapsed', compareSel.preset, 'v2'],
     queryFn: () => apiGet<DailySalesElapsedResponse>('/api/alert/overall/daily-sales-elapsed'),
     enabled: snapQ.isFetched,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
 
+  const vendonLastTxQ = useQuery({
+    queryKey: ['alert-overall-vendon-last-transactions', 'v2'],
+    queryFn: () => apiGet<VendonLastTransactionsResponse>('/api/alert/overall/last-transactions'),
+    enabled: snapQ.isFetched,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  });
+
+  const vendonSummaryQ = useQuery({
+    queryKey: [
+      'alert-vendon-sales-summary',
+      compareSel.preset,
+      compareSel.a.start,
+      compareSel.a.end,
+      compareSel.b.start,
+      compareSel.b.end,
+      'v2',
+    ],
+    queryFn: () =>
+      apiGet<{
+        labelA?: string | null;
+        labelB?: string | null;
+        byMachineId?: Record<
+          string,
+          { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+        >;
+      }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compareSel.preset, compareSel)}`),
+    enabled: snapQ.isFetched,
+    staleTime: 2 * 60_000,
+  });
+
   const mtdQ = useQuery({
-    queryKey: ['alert-vendon-sales-mtd', 'v2-full'],
+    queryKey: ['alert-vendon-sales-mtd', 'v2'],
     queryFn: () =>
       apiGet<{ byMachineId?: Record<string, { aSalesKwd?: number | null }> }>(
         '/api/alert/overall/vendon-sales-summary?preset=mtd_vs_mtd',
@@ -139,7 +201,7 @@ export function useV2RedFlagsData() {
   });
 
   const mtdYoyQ = useQuery({
-    queryKey: ['alert-vendon-sales-mtd-yoy', 'v2-full'],
+    queryKey: ['alert-vendon-sales-mtd-yoy', 'v2'],
     queryFn: () =>
       apiGet<{
         byMachineId?: Record<
@@ -152,10 +214,18 @@ export function useV2RedFlagsData() {
   });
 
   const sxQ = useQuery({
-    queryKey: ['alert-sales-acceleration', 'v2-full'],
+    queryKey: [
+      'alert-sales-acceleration',
+      compareSel.preset,
+      compareSel.a.start,
+      compareSel.a.end,
+      compareSel.b.start,
+      compareSel.b.end,
+      'v2',
+    ],
     queryFn: () =>
       apiGet<{ byMachineId?: Record<string, SxAccelerationRow> }>(
-        '/api/alert/overall/sales-acceleration?preset=today_vs_yesterday',
+        `/api/alert/overall/sales-acceleration?${presetApiQueryString(compareSel.preset, compareSel)}`,
       ),
     enabled: snapQ.isFetched,
     staleTime: 2 * 60_000,
@@ -196,14 +266,78 @@ export function useV2RedFlagsData() {
   });
 
   const qaQ = useQuery({
-    queryKey: ['alert-qa-summary', 'v2-full'],
+    queryKey: ['alert-qa-summary', 'v2'],
     queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
     enabled: snapQ.isFetched,
     staleTime: 60_000,
   });
 
+  const dailyIncidentsQ = useQuery({
+    queryKey: ['alert-daily-incidents-elapsed', compareSel.preset, machineIdsKey, 'v2'],
+    queryFn: async () => {
+      const base = '/api/alert/red-flags/daily-incidents-elapsed';
+      const ids = machineIdsKey.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!ids.length) return apiGet<DailyIncidentsElapsedResponse>(base);
+      const merged: NonNullable<DailyIncidentsElapsedResponse['byMachineId']> = {};
+      let asOfLocal: string | undefined;
+      let today: string | undefined;
+      let yesterday: string | undefined;
+      let comparisonNote: string | undefined;
+      let timezone: string | undefined;
+      let historyDays: number | undefined;
+      let historyDates: string[] | undefined;
+      for (let i = 0; i < ids.length; i += 12) {
+        const chunk = ids.slice(i, i + 12).join(',');
+        try {
+          const part = await apiGet<DailyIncidentsElapsedResponse>(
+            `${base}?machines=${encodeURIComponent(chunk)}`,
+          );
+          asOfLocal = part.asOfLocal ?? asOfLocal;
+          today = part.today ?? today;
+          yesterday = part.yesterday ?? yesterday;
+          comparisonNote = part.comparisonNote ?? comparisonNote;
+          timezone = part.timezone ?? timezone;
+          historyDays = part.historyDays ?? historyDays;
+          historyDates = part.historyDates ?? historyDates;
+          Object.assign(merged, part.byMachineId ?? {});
+        } catch {
+          /* ignore chunk */
+        }
+        if (i + 12 < ids.length) await new Promise((r) => setTimeout(r, 150));
+      }
+      return {
+        asOfLocal,
+        today,
+        yesterday,
+        comparisonNote,
+        timezone,
+        historyDays,
+        historyDates,
+        byMachineId: merged,
+      };
+    },
+    enabled: snapQ.isFetched && Boolean(machineIdsKey),
+    staleTime: 2 * 60_000,
+  });
+
+  const attendanceQ = useQuery({
+    queryKey: ['leet-workflow-attendance-map', machineIdsKey, 'v2'],
+    queryFn: () =>
+      fetchMachineAttendanceMapBatched(machineIdsKey.split(',').map((s) => s.trim()).filter(Boolean)),
+    enabled: snapQ.isFetched && Boolean(machineIdsKey),
+    staleTime: 2 * 60_000,
+  });
+
+  const cleaningQ = useQuery({
+    queryKey: ['leet-workflow-cleaning-map', machineIdsKey, 'v2'],
+    queryFn: () =>
+      fetchCleaningWorkflowMapBatched(machineIdsKey.split(',').map((s) => s.trim()).filter(Boolean)),
+    enabled: snapQ.isFetched && Boolean(machineIdsKey),
+    staleTime: 2 * 60_000,
+  });
+
   const liveQ = useQuery({
-    queryKey: ['live-dashboard-snapshot', 'v2-full'],
+    queryKey: ['live-dashboard-snapshot', 'v2'],
     queryFn: () =>
       apiGet<{ machines?: Array<{ machineId: string; lastCleaningAt?: string | null }> }>(
         '/api/live-dashboard/snapshot',
@@ -213,7 +347,7 @@ export function useV2RedFlagsData() {
   });
 
   const profilesQ = useQuery({
-    queryKey: ['alert-overall-admin-profiles', 'v2-full'],
+    queryKey: ['alert-overall-admin-profiles', 'v2'],
     queryFn: () =>
       apiGet<{ rows?: { machine_id?: string; machine_name?: string; location_owner?: string | null }[] }>(
         '/api/alert/overall/admin-profiles',
@@ -241,10 +375,39 @@ export function useV2RedFlagsData() {
     return m;
   }, [profilesQ.data?.rows]);
 
-  const ranked = useMemo(() => {
-    const rows = filterSnapshotRows(snapQ.data?.rows || []);
-    return rankRows(rows, {}, 'week');
-  }, [snapQ.data?.rows]);
+  const snapTime = snapQ.data?.generatedAt || snapQ.data?.cacheGeneratedAt || null;
+
+  const [ranked, setRanked] = useState<ReturnType<typeof rankRows>>([]);
+
+  useLayoutEffect(() => {
+    if (!snapQ.data) return;
+    const rows = filterSnapshotRows(snapQ.data.rows || []);
+    if (!rows.length) {
+      prevReasonRef.current = {};
+      setRanked([]);
+      return;
+    }
+    let prevMap = prevReasonRef.current;
+    if (!hasLoadedRef.current) {
+      prevMap = baselineReasonMap(rows);
+      hasLoadedRef.current = true;
+    }
+    const list = rankRows(rows, prevMap, compareMode, dailyIncidentsQ.data?.byMachineId);
+    const nextPrev: Record<string, string> = {};
+    for (const d of list) {
+      nextPrev[String(getMachineIdRaw(d.row) || '')] = reasonKey(d.row);
+    }
+    prevReasonRef.current = nextPrev;
+    setRanked(list);
+  }, [snapQ.data, snapQ.dataUpdatedAt, compareMode, dailyIncidentsQ.data?.byMachineId]);
+
+  const vendonLabels = useMemo(
+    () => ({
+      primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+      baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+    }),
+    [vendonSummaryQ.data?.labelA, vendonSummaryQ.data?.labelB],
+  );
 
   const exceptions = useMemo(() => {
     const out: V2ExceptionRow[] = [];
@@ -255,26 +418,48 @@ export function useV2RedFlagsData() {
       if (!id) continue;
       const name = String(row.machineName || id);
       const sales = salesElapsedForMachine(salesQ.data, id, salesQ.isSuccess);
-      const today = sales?.todayKwd;
-      const yest = salesDayKwd(sales, 1);
+      const vendonSales = vendonSummaryQ.data?.byMachineId?.[id];
+      const salesPair = salesPairForPreset(
+        compareSel.preset,
+        sales,
+        compareSel,
+        vendonSales,
+        vendonLabels,
+      );
+      const today = salesPair.primary ?? sales?.todayKwd;
+      const yest = salesPair.baseline ?? salesDayKwd(sales, 1);
+      const trendPctNum =
+        salesPair.trendPct != null && Number.isFinite(Number(salesPair.trendPct))
+          ? Number(salesPair.trendPct)
+          : sales?.trendPct != null
+            ? Number(sales.trendPct)
+            : null;
       const mtd = mtdQ.data?.byMachineId?.[id]?.aSalesKwd;
       const yoy = mtdYoyQ.data?.byMachineId?.[id];
       const dailyTarget = row.dailyTarget != null ? Number(row.dailyTarget) : NaN;
-      const targetPct =
+      const targetPctNum =
         Number.isFinite(dailyTarget) && dailyTarget > 0 && today != null && Number.isFinite(Number(today))
-          ? `${((Number(today) / dailyTarget) * 100).toFixed(0)}%`
-          : '—';
+          ? (Number(today) / dailyTarget) * 100
+          : null;
+      const targetPct = targetPctNum != null ? `${targetPctNum.toFixed(0)}%` : '—';
       const remain =
         Number.isFinite(dailyTarget) && today != null && Number.isFinite(Number(today))
           ? formatKwd(Math.max(0, dailyTarget - Number(today)))
           : '—';
       const owner = ownerById.get(id) || '—';
+      const incidents = dailyIncidentsQ.data?.byMachineId?.[id];
+      const primaryHits = rowHappensForSort(row, compareMode, incidents);
       const hw = Number(row.happensWeek ?? row.frequency?.totalCriteriaHitsThisWeek ?? 0);
       const lw = Number(row.happenedLastWeek ?? row.frequency?.totalCriteriaHitsLastWeek ?? 0);
-      const trend =
-        sales?.trendPct != null && Number.isFinite(Number(sales.trendPct))
-          ? formatSalesTrendPct(Number(sales.trendPct))
-          : '—';
+      const todayHits = Number(
+        incidents?.todayHits ?? row.happensToday ?? row.frequency?.totalCriteriaHitsToday ?? 0,
+      );
+      const yestHits = Number(
+        incidents?.yesterdaySameElapsedHits ??
+          row.happenedYesterdaySameElapsed ??
+          row.frequency?.totalCriteriaHitsYesterdaySameElapsed ??
+          0,
+      );
       const qa = qaVisitForMachineName(
         name,
         qaQ.data?.byLocationKey,
@@ -282,24 +467,23 @@ export function useV2RedFlagsData() {
         qaQ.data?.latestByMachine,
       );
       const tech = techVisitForMachineName(name, qaQ.data?.byLocationKeyTech);
-      const cleanIso = pickLastCleaningIso(row, liveById.get(id));
-      const lastTxIso =
-        row.lastTransactionAtUtc ||
-        row.last_transaction_at_utc ||
-        row.lastSaleAtUtc ||
-        row.last_sale_at_utc ||
-        '';
+      const cleanWf = cleaningQ.data?.byMachineId?.[id];
+      const cleanIso =
+        pickLastCleaningIso(row, liveById.get(id)) || String(cleanWf?.lastCleaningAt || '').trim();
+      const snapTx = pickLastTransactionTs(row, snapTime);
+      const vendonTx = vendonLastTxQ.data?.byMachineId?.[id];
+      const vendonTxIso =
+        vendonTx?.timestamp != null && Number(vendonTx.timestamp) > 0
+          ? new Date(Number(vendonTx.timestamp) * 1000).toISOString()
+          : '';
+      const lastTxIso = snapTx || vendonTxIso || '';
       const act = resolveLatestOperatorActivity(opActQ.data?.byMachineId?.[id]);
+      const att = attendanceQ.data?.byMachineId?.[id];
       const cred = creditsQ.data?.byMachineId?.[id];
       const strike = getStrikeOperatorEmail(row);
-      const opName = getOperatorDisplayName(row);
-
-      const trendPctNum = sales?.trendPct != null ? Number(sales.trendPct) : null;
+      const opName = getOperatorDisplayName(row, att);
       const yoyPct = yoy?.trendPct != null ? Number(yoy.trendPct) : null;
-      const targetPctNum =
-        Number.isFinite(dailyTarget) && dailyTarget > 0 && today != null && Number.isFinite(Number(today))
-          ? (Number(today) / dailyTarget) * 100
-          : null;
+      const severity = severityForRow(row);
 
       const fields: Record<RedFlagsColumnKey, string> = {
         vendingMachine: name,
@@ -311,7 +495,7 @@ export function useV2RedFlagsData() {
         lastTransaction: lastTxIso ? formatLastTxCompact(String(lastTxIso)) : '—',
         dailySales:
           today != null && Number.isFinite(Number(today))
-            ? `${formatKwd(Number(today))}${yest != null ? ` · ${trend}` : ''}`
+            ? `${formatKwd(Number(today))}${trendPctNum != null ? ` · ${formatSalesTrendPct(trendPctNum)}` : ''}`
             : '—',
         mtdSales: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
         mtdYoySales:
@@ -322,7 +506,10 @@ export function useV2RedFlagsData() {
               : '—',
         dailyTarget: `${targetPct} · rem ${remain} · ${owner}`,
         salesAcceleration: 'SX',
-        frequency: `${Number.isFinite(hw) ? hw : 0} / ${Number.isFinite(lw) ? lw : 0}`,
+        frequency:
+          compareMode === 'yesterday' || compareMode === 'yesterdayVsDayBefore' || compareMode === 'sameWeekdayLw'
+            ? `${Number.isFinite(todayHits) ? todayHits : 0} / ${Number.isFinite(yestHits) ? yestHits : 0}`
+            : `${Number.isFinite(hw) ? hw : 0} / ${Number.isFinite(lw) ? lw : 0}`,
         goCheck: strike ? 'Ready' : '—',
         sendCredit: cred?.credits_sent != null ? String(cred.credits_sent) : '—',
         vendsResolved: cred?.vends_resolved != null ? String(cred.vends_resolved) : '—',
@@ -337,10 +524,15 @@ export function useV2RedFlagsData() {
         callAm: owner !== '—' ? owner : '—',
       };
 
+      const dayMode =
+        compareMode === 'yesterday' ||
+        compareMode === 'yesterdayVsDayBefore' ||
+        compareMode === 'sameWeekdayLw';
+
       const stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>> = {
         dailySales: [
           {
-            label: 'Today',
+            label: salesPair.primaryLabel || 'Primary',
             value: today != null && Number.isFinite(Number(today)) ? formatKwd(Number(today)) : '—',
             tone: 'teal',
           },
@@ -350,7 +542,13 @@ export function useV2RedFlagsData() {
             tone: toneFromPct(trendPctNum),
           },
           ...(yest != null
-            ? [{ label: 'Yest', value: formatKwd(Number(yest)), tone: 'muted' as V2MetricTone }]
+            ? [
+                {
+                  label: salesPair.baselineLabel || 'Baseline',
+                  value: formatKwd(Number(yest)),
+                  tone: 'muted' as V2MetricTone,
+                },
+              ]
             : []),
         ],
         mtdSales: [
@@ -389,10 +587,31 @@ export function useV2RedFlagsData() {
           { label: 'Owner', value: owner, tone: 'violet' },
         ],
         salesAcceleration: sxStack(sxQ.data?.byMachineId?.[id]),
-        frequency: [
-          { label: 'This week', value: String(Number.isFinite(hw) ? hw : 0), tone: hw >= 10 ? 'crit' : 'amber' },
-          { label: 'Last week', value: String(Number.isFinite(lw) ? lw : 0), tone: 'muted' },
-        ],
+        frequency: dayMode
+          ? [
+              {
+                label: 'Today',
+                value: String(Number.isFinite(todayHits) ? todayHits : 0),
+                tone: primaryHits >= 10 ? 'crit' : primaryHits >= 3 ? 'amber' : 'teal',
+              },
+              {
+                label: 'Yest',
+                value: String(Number.isFinite(yestHits) ? yestHits : 0),
+                tone: 'muted',
+              },
+            ]
+          : [
+              {
+                label: 'This week',
+                value: String(Number.isFinite(hw) ? hw : 0),
+                tone: hw >= 10 ? 'crit' : 'amber',
+              },
+              {
+                label: 'Last week',
+                value: String(Number.isFinite(lw) ? lw : 0),
+                tone: 'muted',
+              },
+            ],
         lastTransaction: [
           { label: 'Last tx', value: lastTxIso ? formatLastTxCompact(String(lastTxIso)) : '—', tone: 'teal' },
         ],
@@ -404,7 +623,11 @@ export function useV2RedFlagsData() {
           },
         ],
         lastCleaning: [
-          { label: 'Last clean', value: cleanIso ? formatLastTxCompact(cleanIso) : '—', tone: cleanIso ? 'teal' : 'muted' },
+          {
+            label: 'Last clean',
+            value: cleanIso ? formatLastTxCompact(cleanIso) : '—',
+            tone: cleanIso ? 'teal' : 'muted',
+          },
         ],
         qaVisit: [
           {
@@ -443,7 +666,7 @@ export function useV2RedFlagsData() {
       out.push({
         id,
         machineName: name,
-        severity: isCritical(row) ? 'Critical' : 'Watch',
+        severity,
         isNew,
         fields,
         stacks,
@@ -455,6 +678,10 @@ export function useV2RedFlagsData() {
     ranked,
     salesQ.data,
     salesQ.isSuccess,
+    vendonSummaryQ.data,
+    vendonLabels,
+    compareSel,
+    compareMode,
     mtdQ.data,
     mtdYoyQ.data,
     sxQ.data,
@@ -463,6 +690,11 @@ export function useV2RedFlagsData() {
     qaQ.data,
     liveById,
     ownerById,
+    dailyIncidentsQ.data,
+    attendanceQ.data,
+    cleaningQ.data,
+    vendonLastTxQ.data,
+    snapTime,
   ]);
 
   const machineScope = ranked.length;
@@ -478,12 +710,17 @@ export function useV2RedFlagsData() {
     refetch: () => {
       void snapQ.refetch();
       void salesQ.refetch();
+      void vendonSummaryQ.refetch();
       void mtdQ.refetch();
       void mtdYoyQ.refetch();
       void sxQ.refetch();
       void creditsQ.refetch();
       void opActQ.refetch();
       void qaQ.refetch();
+      void dailyIncidentsQ.refetch();
+      void attendanceQ.refetch();
+      void cleaningQ.refetch();
+      void vendonLastTxQ.refetch();
     },
     generatedAt: snapQ.data?.generatedAt,
     exceptions,
@@ -492,5 +729,15 @@ export function useV2RedFlagsData() {
     critical,
     clear,
     clearPct,
+    compareMode,
   };
+}
+
+export function useV2CompareSelection() {
+  const [compare, setCompareState] = useState<CompareSelection>(() => initialCompareSelection());
+  const setCompare = (next: CompareSelection) => {
+    persistCompareSelection(next);
+    setCompareState(next);
+  };
+  return { compare, setCompare };
 }

@@ -1,8 +1,14 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import type { CompareSelection } from '@/components/ComparePresetPicker';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
-import { filterSnapshotRows, getMachineIdRaw, pickLastCleaningIso } from '@/features/redflags/redFlagsModel';
+import {
+  filterSnapshotRows,
+  getMachineIdRaw,
+  pickLastCleaningIso,
+  pickLastTransactionTs,
+} from '@/features/redflags/redFlagsModel';
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
 import {
   formatKwd,
@@ -22,8 +28,41 @@ import {
 import { formatKuwaitActivityStamp } from '@/lib/formatKuwait';
 import { OVERALL_XLSX_ORDER, type OverallColumnKey } from '@/features/overall/overallWorkbookColumns';
 import { OVERALL_TABLE_HEADERS } from '@/lib/tableHeaderLabels';
-import { fetchMachineAttendanceMapBatched } from '@/lib/leetWorkflowApi';
+import {
+  fetchCleaningWorkflowMapBatched,
+  fetchMachineAttendanceMapBatched,
+} from '@/lib/leetWorkflowApi';
+import {
+  initialCompareSelection,
+  presetApiQueryString,
+} from '@/lib/comparePresetBridge';
+import { footfallDisplayForPreset, salesPairForPreset } from '@/lib/presetComparison';
 import type { V2MetricItem, V2MetricTone } from '@/features/v2/V2MetricStack';
+
+type VendonLastTransactionsResponse = {
+  byMachineId?: Record<string, { timestamp?: number }>;
+};
+
+type VendonSalesRow = {
+  aSalesKwd?: number | null;
+  bSalesKwd?: number | null;
+  trendPct?: number | null;
+  peakHour?: { hour: number; count: number; label: string } | null;
+  peakHourFromYesterday?: boolean;
+  topProduct?: { name: string; count: number } | null;
+  lowProduct?: { name: string; count: number } | null;
+};
+
+function snapshotVendFailSummary(snap: RedAlertRow | undefined): string {
+  const fq = snap?.frequency;
+  if (!fq) return '';
+  const td = fq.dispenseFailsToday;
+  const wtd = fq.dispenseFailsThisWeek;
+  const parts: string[] = [];
+  if (td != null && Number(td) > 0) parts.push(`${td} today`);
+  if (wtd != null && Number(wtd) > 0) parts.push(`${wtd} WTD`);
+  return parts.join(' · ');
+}
 
 type MachinesResponse = {
   machines?: Array<{ id?: string; name?: string; vendon_location_owner?: string }>;
@@ -68,7 +107,9 @@ export const V2_OVERALL_COLUMNS = OVERALL_XLSX_ORDER.map((key) => ({
   wide: WIDE.has(key),
 }));
 
-export function useV2OverallData() {
+export function useV2OverallData(compare?: CompareSelection) {
+  const compareSel = compare ?? initialCompareSelection();
+
   const machinesQ = useQuery({
     queryKey: ['alert-machines'],
     queryFn: () => apiGet<MachinesResponse>('/api/alert/machines'),
@@ -76,14 +117,40 @@ export function useV2OverallData() {
   });
   const snapQ = useQuery({
     queryKey: ['red-flags-snapshot'],
-    queryFn: () => apiGet<{ rows?: RedAlertRow[]; generatedAt?: string }>('/api/alert/red-flags/snapshot'),
+    queryFn: () =>
+      apiGet<{ rows?: RedAlertRow[]; generatedAt?: string; cacheGeneratedAt?: string }>(
+        '/api/alert/red-flags/snapshot',
+      ),
     staleTime: 45_000,
     refetchInterval: 60_000,
   });
   const salesQ = useQuery({
-    queryKey: ['alert-daily-sales-elapsed', 'v2-ov'],
+    queryKey: ['alert-daily-sales-elapsed', compareSel.preset, 'v2-ov'],
     queryFn: () => apiGet<DailySalesElapsedResponse>('/api/alert/overall/daily-sales-elapsed'),
     staleTime: 30_000,
+  });
+  const vendonSummaryQ = useQuery({
+    queryKey: [
+      'alert-vendon-sales-summary',
+      compareSel.preset,
+      compareSel.a.start,
+      compareSel.a.end,
+      compareSel.b.start,
+      compareSel.b.end,
+      'v2-ov',
+    ],
+    queryFn: () =>
+      apiGet<{
+        labelA?: string | null;
+        labelB?: string | null;
+        byMachineId?: Record<string, VendonSalesRow>;
+      }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compareSel.preset, compareSel)}`),
+    staleTime: 2 * 60_000,
+  });
+  const vendonLastTxQ = useQuery({
+    queryKey: ['alert-overall-vendon-last-transactions', 'v2-ov'],
+    queryFn: () => apiGet<VendonLastTransactionsResponse>('/api/alert/overall/last-transactions'),
+    staleTime: 60_000,
   });
   const mtdQ = useQuery({
     queryKey: ['alert-vendon-sales-mtd', 'v2-ov'],
@@ -109,9 +176,13 @@ export function useV2OverallData() {
   const liveQ = useQuery({
     queryKey: ['live-dashboard-snapshot', 'v2-ov'],
     queryFn: () =>
-      apiGet<{ machines?: Array<{ machineId: string; lastCleaningAt?: string | null }> }>(
-        '/api/live-dashboard/snapshot',
-      ),
+      apiGet<{
+        machines?: Array<{
+          machineId: string;
+          lastCleaningAt?: string | null;
+          dailyTarget?: number | null;
+        }>;
+      }>('/api/live-dashboard/snapshot'),
     staleTime: 30_000,
   });
   const profilesQ = useQuery({
@@ -136,11 +207,28 @@ export function useV2OverallData() {
     staleTime: 5 * 60_000,
   });
   const footQ = useQuery({
-    queryKey: ['alert-overall-footfall', 'v2-ov'],
+    queryKey: [
+      'alert-overall-people-footfall',
+      compareSel.preset,
+      compareSel.a.start,
+      compareSel.a.end,
+      compareSel.b.start,
+      compareSel.b.end,
+      'v2-ov',
+    ],
     queryFn: () =>
-      apiGet<{ byMachineId?: Record<string, { aCount?: number | null; trendPct?: number | null }> }>(
-        '/api/alert/overall/people-footfall?preset=today_vs_yesterday',
-      ),
+      apiGet<{
+        byMachineId?: Record<
+          string,
+          {
+            primaryIn?: number | null;
+            baselineIn?: number | null;
+            trendPct?: number | null;
+            aCount?: number | null;
+            bCount?: number | null;
+          }
+        >;
+      }>(`/api/alert/overall/people-footfall?${presetApiQueryString(compareSel.preset, compareSel)}`),
     staleTime: 5 * 60_000,
   });
 
@@ -178,11 +266,20 @@ export function useV2OverallData() {
   });
 
   const attQ = useQuery({
-    queryKey: ['alert-workflow-attendance', machineIdsKey, 'v2-ov'],
+    queryKey: ['leet-workflow-attendance-map', machineIdsKey, 'v2-ov'],
     queryFn: () => fetchMachineAttendanceMapBatched(machineIdsKey.split(',').filter(Boolean)),
     enabled: Boolean(machineIdsKey),
     staleTime: 90_000,
   });
+
+  const cleaningQ = useQuery({
+    queryKey: ['leet-workflow-cleaning-map', machineIdsKey, 'v2-ov'],
+    queryFn: () => fetchCleaningWorkflowMapBatched(machineIdsKey.split(',').filter(Boolean)),
+    enabled: Boolean(machineIdsKey),
+    staleTime: 90_000,
+  });
+
+  const snapTime = snapQ.data?.generatedAt || snapQ.data?.cacheGeneratedAt || null;
 
   const snapById = useMemo(() => {
     const m = new Map<string, RedAlertRow>();
@@ -202,13 +299,26 @@ export function useV2OverallData() {
   }, [snapQ.data?.rows]);
 
   const liveById = useMemo(() => {
-    const m = new Map<string, string | null>();
+    const m = new Map<string, { lastCleaningAt: string | null; dailyTarget: number | null }>();
     for (const row of liveQ.data?.machines || []) {
       const id = String(row.machineId || '').trim();
-      if (id) m.set(id, row.lastCleaningAt ?? null);
+      if (id) {
+        m.set(id, {
+          lastCleaningAt: row.lastCleaningAt ?? null,
+          dailyTarget: row.dailyTarget != null ? Number(row.dailyTarget) : null,
+        });
+      }
     }
     return m;
   }, [liveQ.data?.machines]);
+
+  const vendonLabels = useMemo(
+    () => ({
+      primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+      baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+    }),
+    [vendonSummaryQ.data?.labelA, vendonSummaryQ.data?.labelB],
+  );
 
   const profById = useMemo(() => {
     const m = new Map<string, { operator?: string; hours?: string; owner?: string }>();
@@ -229,18 +339,35 @@ export function useV2OverallData() {
     for (const m of machines) {
       const snap = snapById.get(m.id);
       const sales = salesElapsedForMachine(salesQ.data, m.id, salesQ.isSuccess);
-      const today = sales?.todayKwd;
-      const trend =
-        sales?.trendPct != null && Number.isFinite(Number(sales.trendPct))
-          ? formatSalesTrendPct(Number(sales.trendPct))
-          : '—';
+      const vendon = vendonSummaryQ.data?.byMachineId?.[m.id];
+      const salesPair = salesPairForPreset(
+        compareSel.preset,
+        sales,
+        compareSel,
+        vendon,
+        vendonLabels,
+      );
+      const today = salesPair.primary ?? sales?.todayKwd;
+      const trendPctNum =
+        salesPair.trendPct != null && Number.isFinite(Number(salesPair.trendPct))
+          ? Number(salesPair.trendPct)
+          : sales?.trendPct != null
+            ? Number(sales.trendPct)
+            : null;
       const mtd = mtdQ.data?.byMachineId?.[m.id]?.aSalesKwd;
       const yoy = mtdYoyQ.data?.byMachineId?.[m.id];
-      const dailyTarget = snap?.dailyTarget != null ? Number(snap.dailyTarget) : NaN;
-      const targetPct =
+      const live = liveById.get(m.id);
+      const dailyTarget =
+        live?.dailyTarget != null && Number.isFinite(live.dailyTarget) && live.dailyTarget > 0
+          ? live.dailyTarget
+          : snap?.dailyTarget != null
+            ? Number(snap.dailyTarget)
+            : NaN;
+      const targetPctNum =
         Number.isFinite(dailyTarget) && dailyTarget > 0 && today != null && Number.isFinite(Number(today))
-          ? `${((Number(today) / dailyTarget) * 100).toFixed(0)}%`
-          : '—';
+          ? (Number(today) / dailyTarget) * 100
+          : null;
+      const targetPct = targetPctNum != null ? `${targetPctNum.toFixed(0)}%` : '—';
       const prof = profById.get(m.id);
       const op =
         prof?.operator ||
@@ -254,13 +381,17 @@ export function useV2OverallData() {
               att.operatorName ? ` · ${att.operatorName}` : ''
             }`
           : '—';
-      const cleanIso = pickLastCleaningIso(snap || {}, liveById.get(m.id));
-      const lastTx =
-        snap?.lastTransactionAtUtc ||
-        snap?.last_transaction_at_utc ||
-        snap?.lastSaleAtUtc ||
-        snap?.last_sale_at_utc ||
-        '';
+      const cleanWf = cleaningQ.data?.byMachineId?.[m.id];
+      const cleanIso =
+        pickLastCleaningIso(snap || {}, live?.lastCleaningAt) ||
+        String(cleanWf?.lastCleaningAt || '').trim();
+      const snapTx = pickLastTransactionTs(snap || {}, snapTime);
+      const vendonTx = vendonLastTxQ.data?.byMachineId?.[m.id];
+      const vendonTxIso =
+        vendonTx?.timestamp != null && Number(vendonTx.timestamp) > 0
+          ? new Date(Number(vendonTx.timestamp) * 1000).toISOString()
+          : '';
+      const lastTx = snapTx || vendonTxIso || '';
       const qa = qaVisitForMachineName(
         m.name,
         qaQ.data?.byLocationKey,
@@ -270,15 +401,28 @@ export function useV2OverallData() {
       const tech = techVisitForMachineName(m.name, qaQ.data?.byLocationKeyTech);
       const waste = wasteQ.data?.byMachineId?.[m.id]?.wastePct;
       const foot = footQ.data?.byMachineId?.[m.id];
+      const footPair = footfallDisplayForPreset(
+        compareSel.preset,
+        foot?.primaryIn != null || foot?.baselineIn != null
+          ? foot
+          : {
+              primaryIn: foot?.aCount,
+              baselineIn: foot?.bCount,
+              trendPct: foot?.trendPct,
+            },
+        {
+          todayIn: foot?.aCount ?? foot?.primaryIn,
+          yesterdayIn: foot?.bCount ?? foot?.baselineIn,
+          trendPct: foot?.trendPct,
+        },
+      );
+      const footPct = footPair.trendPct != null ? Number(footPair.trendPct) : null;
       const reasons = snap?.reasons || [];
-
-      const trendPctNum = sales?.trendPct != null ? Number(sales.trendPct) : null;
+      const vendFail = snapshotVendFailSummary(snap);
+      const peakLabel = vendon?.peakHour?.label || '';
+      const topProduct = vendon?.topProduct?.name || '';
+      const lowProduct = vendon?.lowProduct?.name || '';
       const yoyPct = yoy?.trendPct != null ? Number(yoy.trendPct) : null;
-      const targetPctNum =
-        Number.isFinite(dailyTarget) && dailyTarget > 0 && today != null && Number.isFinite(Number(today))
-          ? (Number(today) / dailyTarget) * 100
-          : null;
-      const footPct = foot?.trendPct != null ? Number(foot.trendPct) : null;
 
       const fields: Record<OverallColumnKey, string> = {
         operatingHours: prof?.hours || '—',
@@ -290,10 +434,10 @@ export function useV2OverallData() {
         lastTransaction: lastTx ? formatLastTxCompact(String(lastTx)) : '—',
         attendance: attLabel,
         lastCleaned: cleanIso ? formatLastTxCompact(cleanIso) : '—',
-        lastVendFailed: '—',
+        lastVendFailed: vendFail || '—',
         salesTrend:
           today != null && Number.isFinite(Number(today))
-            ? `${formatKwd(Number(today))} · ${trend}`
+            ? `${formatKwd(Number(today))}${trendPctNum != null ? ` · ${formatSalesTrendPct(trendPctNum)}` : ''}`
             : '—',
         mtdSales: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
         mtdYoySales:
@@ -303,13 +447,15 @@ export function useV2OverallData() {
               ? formatKwd(Number(yoy.aSalesKwd))
               : '—',
         targetAchieved: targetPct,
-        peakHours: '—',
+        peakHours: peakLabel
+          ? `${peakLabel}${vendon?.peakHour?.count != null ? ` · ${vendon.peakHour.count}` : ''}`
+          : '—',
         promotion: '—',
-        highestProduct: '—',
-        lowestProduct: '—',
+        highestProduct: topProduct || '—',
+        lowestProduct: lowProduct || '—',
         peopleCount:
-          foot?.aCount != null
-            ? `${foot.aCount}${footPct != null ? ` · ${formatSalesTrendPct(footPct)}` : ''}`
+          footPair.primary != null
+            ? `${footPair.primary}${footPct != null ? ` · ${formatSalesTrendPct(footPct)}` : ''}`
             : '—',
         customerCalls: '—',
         mostIssue: reasons[0] || '—',
@@ -325,7 +471,7 @@ export function useV2OverallData() {
       const stacks: Partial<Record<OverallColumnKey, V2MetricItem[]>> = {
         salesTrend: [
           {
-            label: 'Today',
+            label: salesPair.primaryLabel || 'Primary',
             value: today != null && Number.isFinite(Number(today)) ? formatKwd(Number(today)) : '—',
             tone: 'teal',
           },
@@ -371,11 +517,11 @@ export function useV2OverallData() {
         peopleCount: [
           {
             label: 'Footfall',
-            value: foot?.aCount != null ? String(foot.aCount) : '—',
+            value: footPair.primary != null ? String(footPair.primary) : '—',
             tone: 'teal',
           },
           {
-            label: 'vs yest',
+            label: 'Trend',
             value: footPct != null && Number.isFinite(footPct) ? formatSalesTrendPct(footPct) : '—',
             tone: toneFromPct(footPct),
           },
@@ -423,6 +569,24 @@ export function useV2OverallData() {
             tone: waste != null && Number(waste) > 5 ? 'down' : 'flat',
           },
         ],
+        lastVendFailed: vendFail
+          ? [{ label: 'Fails', value: vendFail, tone: 'crit' }]
+          : undefined,
+        peakHours: peakLabel
+          ? [
+              {
+                label: vendon?.peakHourFromYesterday ? 'Yest peak' : 'Peak',
+                value: peakLabel,
+                tone: 'teal',
+              },
+            ]
+          : undefined,
+        highestProduct: topProduct
+          ? [{ label: 'Top SKU', value: topProduct, tone: 'teal' }]
+          : undefined,
+        lowestProduct: lowProduct
+          ? [{ label: 'Low SKU', value: lowProduct, tone: 'amber' }]
+          : undefined,
       };
 
       out.push({ id: m.id, name: m.name, flagged: flagged.has(m.id), fields, stacks });
@@ -433,6 +597,9 @@ export function useV2OverallData() {
     snapById,
     salesQ.data,
     salesQ.isSuccess,
+    vendonSummaryQ.data,
+    vendonLabels,
+    compareSel,
     mtdQ.data,
     mtdYoyQ.data,
     qaQ.data,
@@ -440,8 +607,11 @@ export function useV2OverallData() {
     profById,
     opActQ.data,
     attQ.data,
+    cleaningQ.data,
     wasteQ.data,
     footQ.data,
+    vendonLastTxQ.data,
+    snapTime,
     flagged,
   ]);
 
@@ -456,7 +626,14 @@ export function useV2OverallData() {
       void machinesQ.refetch();
       void snapQ.refetch();
       void salesQ.refetch();
+      void vendonSummaryQ.refetch();
+      void vendonLastTxQ.refetch();
+      void mtdQ.refetch();
+      void mtdYoyQ.refetch();
       void qaQ.refetch();
+      void footQ.refetch();
+      void attQ.refetch();
+      void cleaningQ.refetch();
     },
     rows,
     machineCount: machines.length,

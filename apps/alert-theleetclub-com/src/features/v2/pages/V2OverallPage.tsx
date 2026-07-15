@@ -1,4 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import { useV2CompareSelection } from '@/features/v2/hooks/useV2RedFlagsData';
 import { useV2OverallData, V2_OVERALL_COLUMNS } from '@/features/v2/hooks/useV2OverallData';
 import { V2DataTable } from '@/features/v2/V2DataTable';
 import { V2MetricStack } from '@/features/v2/V2MetricStack';
@@ -13,7 +15,8 @@ import type { OverallColumnKey } from '@/features/overall/overallWorkbookColumns
 
 /** Pure Manus Overall — full Classic fields + metric mini-boxes. */
 export function V2OverallPage() {
-  const data = useV2OverallData();
+  const { compare, setCompare } = useV2CompareSelection();
+  const data = useV2OverallData(compare);
   const [q, setQ] = useState('');
   const [onlyFlagged, setOnlyFlagged] = useState(false);
 
@@ -105,6 +108,7 @@ export function V2OverallPage() {
             <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
             Flagged only
           </label>
+          <ComparePresetPicker value={compare} onChange={setCompare} />
         </div>
 
         {data.error ? (
