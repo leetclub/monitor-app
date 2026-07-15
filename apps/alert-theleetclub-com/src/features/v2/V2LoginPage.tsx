@@ -8,9 +8,10 @@ import '@/features/v2/v2-theme.css';
 const NEXT_KEY = 'alert_v2_next';
 
 function gsiButtonWidth(el: HTMLElement | null): number {
-  if (!el) return 280;
+  if (!el) return 320;
   const w = Math.floor(el.getBoundingClientRect().width);
-  return Math.max(220, Math.min(360, w || 280));
+  /* Google cap is 400; keep button filling the panel width. */
+  return Math.max(240, Math.min(400, w || 320));
 }
 
 export function V2LoginPage() {

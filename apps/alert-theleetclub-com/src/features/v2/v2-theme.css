@@ -540,28 +540,37 @@ a.v2NavLink.v2NavLinkActive {
   }
 }
 
-/* —— v2 login gate (Manus landing) —— */
+/* Login must own the viewport — never a centered/shrunk island.
+   Body applies safe-area padding globally; cancel it so login is edge-to-edge. */
+#root:has(.v2LoginShell) {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+}
+
+/* —— v2 login gate — full-viewport split (not a centered card) —— */
 .v2LoginShell {
   box-sizing: border-box;
+  position: relative;
   min-height: 100dvh;
   min-height: 100vh;
-  width: 100%;
-  max-width: 100vw;
+  width: 100vw;
+  max-width: none;
+  margin:
+    calc(-1 * var(--safe-top, 0px))
+    calc(-1 * var(--safe-right, 0px))
+    calc(-1 * var(--safe-bottom, 0px))
+    calc(-1 * var(--safe-left, 0px));
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(min(100%, 300px), 400px);
-  gap: clamp(20px, 4vw, 56px);
-  align-items: center;
-  justify-content: center;
-  padding:
-    max(20px, env(safe-area-inset-top, 0px))
-    max(18px, env(safe-area-inset-right, 0px))
-    max(24px, env(safe-area-inset-bottom, 0px))
-    max(18px, env(safe-area-inset-left, 0px));
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 42vw);
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
   overflow-x: clip;
   background:
-    linear-gradient(rgba(45, 212, 191, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(45, 212, 191, 0.03) 1px, transparent 1px),
-    radial-gradient(900px 500px at 20% 20%, rgba(45, 212, 191, 0.12), transparent 60%),
+    linear-gradient(rgba(45, 212, 191, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 212, 191, 0.035) 1px, transparent 1px),
+    radial-gradient(1100px 620px at 18% 12%, rgba(45, 212, 191, 0.14), transparent 58%),
     #060d19;
   background-size: 48px 48px, 48px 48px, auto, auto;
   color: #e8f0f8;
@@ -579,26 +588,41 @@ a.v2NavLink.v2NavLinkActive {
 .v2LoginShellSolo {
   grid-template-columns: 1fr;
   place-items: center;
+  padding: 24px;
+}
+
+.v2LoginShellSolo .v2LoginCard {
+  width: min(480px, 100%);
+  min-height: auto;
+  border-radius: 22px;
+  border: 1px solid rgba(45, 212, 191, 0.28);
 }
 
 .v2LoginHero {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 560px;
+  justify-content: center;
+  gap: 20px;
   min-width: 0;
+  width: 100%;
+  max-width: none;
+  padding:
+    max(40px, env(safe-area-inset-top, 0px))
+    clamp(28px, 5vw, 72px)
+    max(40px, env(safe-area-inset-bottom, 0px))
+    max(clamp(28px, 5vw, 72px), env(safe-area-inset-left, 0px));
 }
 
 .v2LoginBrand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .v2LoginLogo {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
   object-fit: contain;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(45, 212, 191, 0.25);
@@ -608,7 +632,7 @@ a.v2NavLink.v2NavLinkActive {
 .v2LoginBrandName {
   margin: 0;
   font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -617,7 +641,7 @@ a.v2NavLink.v2NavLinkActive {
 
 .v2LoginBrandSub {
   margin: 2px 0 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -628,7 +652,7 @@ a.v2NavLink.v2NavLinkActive {
   display: inline-flex;
   align-self: flex-start;
   margin: 0;
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid rgba(45, 212, 191, 0.35);
   color: #5eead4;
@@ -639,33 +663,36 @@ a.v2NavLink.v2NavLinkActive {
 .v2LoginHero h1 {
   margin: 0;
   font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
-  font-size: clamp(1.75rem, 4.2vw, 3rem);
+  font-size: clamp(2.2rem, 4.6vw, 3.5rem);
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.12;
+  line-height: 1.08;
   color: #f8fafc;
+  max-width: 18ch;
 }
 
 .v2LoginLead {
   margin: 0;
-  font-size: clamp(0.92rem, 1.6vw, 1.05rem);
+  font-size: clamp(1rem, 1.5vw, 1.15rem);
   line-height: 1.55;
   color: #94a3b8;
-  max-width: 44ch;
+  max-width: 52ch;
 }
 
 .v2LoginFeatures {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 4px;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 720px;
 }
 
 .v2LoginFeatures div {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(15, 23, 42, 0.45);
+  padding: 16px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.5);
   min-width: 0;
 }
 
@@ -673,50 +700,59 @@ a.v2NavLink.v2NavLinkActive {
   display: block;
   color: #2dd4bf;
   font-family: ui-monospace, Menlo, monospace;
-  font-size: 0.85rem;
-  margin-bottom: 4px;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
 }
 
 .v2LoginFeatures span {
-  font-size: 0.78rem;
+  font-size: 0.86rem;
   color: #94a3b8;
   line-height: 1.35;
 }
 
 .v2LoginCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   width: 100%;
-  max-width: 420px;
-  justify-self: end;
-  border-radius: 22px;
-  border: 1px solid rgba(45, 212, 191, 0.28);
-  background: linear-gradient(180deg, rgba(15, 26, 44, 0.96), rgba(8, 14, 24, 0.98));
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.08), 0 28px 80px rgba(0, 0, 0, 0.45);
-  padding: clamp(20px, 3vw, 28px);
+  max-width: none;
+  min-height: 100dvh;
+  min-height: 100vh;
+  justify-self: stretch;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid rgba(45, 212, 191, 0.28);
+  background: linear-gradient(180deg, rgba(12, 22, 38, 0.98), rgba(6, 12, 22, 0.99));
+  box-shadow: -24px 0 80px rgba(0, 0, 0, 0.35);
+  padding:
+    max(40px, env(safe-area-inset-top, 0px))
+    max(clamp(28px, 4vw, 48px), env(safe-area-inset-right, 0px))
+    max(40px, env(safe-area-inset-bottom, 0px))
+    clamp(28px, 4vw, 48px);
   min-width: 0;
 }
 
 .v2LoginCardCenter {
-  justify-self: center;
   text-align: center;
 }
 
 .v2LoginCard h2 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-size: clamp(1.25rem, 2.4vw, 1.45rem);
+  font-size: clamp(1.55rem, 2.4vw, 1.9rem);
   color: #f8fafc;
 }
 
 .v2LoginMuted {
   color: #94a3b8;
-  font-size: 14px;
-  line-height: 1.45;
-  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 20px;
 }
 
 .v2LoginGsiWrap {
   width: 100%;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .v2LoginGsi {
@@ -748,13 +784,13 @@ a.v2NavLink.v2NavLinkActive {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   border-radius: 12px;
   border: 1px solid #2dd4bf;
   background: #2dd4bf;
   color: #041016;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 16px;
   cursor: pointer;
   font-family: inherit;
   text-decoration: none;
@@ -771,8 +807,8 @@ a.v2NavLink.v2NavLinkActive {
 }
 
 .v2LoginFoot {
-  margin: 16px 0 0;
-  font-size: 12px;
+  margin: 18px 0 0;
+  font-size: 13px;
   color: #64748b;
   line-height: 1.45;
 }
@@ -783,38 +819,55 @@ a.v2NavLink.v2NavLinkActive {
   text-underline-offset: 2px;
 }
 
-/* iPad / tablet login: card first for CTA above fold */
+/* iPad / tablet: full-width stack, no narrow max-width cards */
 @media (max-width: 1023px) {
   .v2LoginShell {
     grid-template-columns: 1fr;
-    align-content: start;
-    justify-items: stretch;
-    gap: 22px;
-    padding-top: max(28px, env(safe-area-inset-top, 0px));
+    min-height: 100dvh;
   }
 
   .v2LoginCard {
     order: -1;
-    justify-self: stretch;
-    max-width: 480px;
-    margin-inline: auto;
+    min-height: auto;
     width: 100%;
+    max-width: none;
+    border-left: 0;
+    border-bottom: 1px solid rgba(45, 212, 191, 0.28);
+    box-shadow: none;
+    padding:
+      max(28px, env(safe-area-inset-top, 0px))
+      max(24px, env(safe-area-inset-right, 0px))
+      28px
+      max(24px, env(safe-area-inset-left, 0px));
   }
 
   .v2LoginHero {
-    max-width: 520px;
-    margin-inline: auto;
     width: 100%;
+    max-width: none;
+    padding:
+      28px
+      max(24px, env(safe-area-inset-right, 0px))
+      max(36px, env(safe-area-inset-bottom, 0px))
+      max(24px, env(safe-area-inset-left, 0px));
   }
 
   .v2LoginHero h1 {
-    font-size: clamp(1.65rem, 5vw, 2.35rem);
+    max-width: none;
+    font-size: clamp(2rem, 5.5vw, 2.85rem);
+  }
+
+  .v2LoginFeatures {
+    max-width: none;
   }
 }
 
 @media (max-width: 639px) {
   .v2LoginFeatures {
     grid-template-columns: 1fr;
+  }
+
+  .v2LoginHero h1 {
+    font-size: clamp(1.85rem, 8vw, 2.4rem);
   }
 }
 
