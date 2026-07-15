@@ -615,46 +615,249 @@ a.v2NavLink.v2NavLinkActive {
   max-width: none;
 }
 
-/* Manus board: Classic fields/cells inside Manus panels (not Classic Stitch page chrome) */
-.v2ManusBoard {
+/* Pure Manus exception / fleet cards (never Classic Stitch/ops UI) */
+.v2ExceptionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-width: 0;
+  gap: 10px;
 }
 
-.v2ManusBoard .v2PanelBoard,
-.v2ManusBoard .v2Panel {
+.v2ExceptionCard {
+  border-radius: 14px;
+  border: 1px solid var(--v2-border-soft);
+  background: rgba(6, 13, 25, 0.55);
   overflow: hidden;
 }
 
-.v2ManusBoard .opsPrepCompact,
-.v2ManusBoard .opsPrepRow,
-.v2ManusBoard .opsPrepSalesLine {
-  color: var(--v2-muted);
+.v2ExceptionCard.isCrit {
+  border-color: rgba(248, 113, 113, 0.35);
 }
 
-.v2ManusBoard .opsTableLeadTitle,
-.v2ManusBoard .opsSectionTitleStrong {
-  color: #f1f5f9;
-}
-
-.v2ManusBoard .stitchOpsTable {
+.v2ExceptionMain {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 0;
   background: transparent;
+  color: inherit;
+  padding: 14px 16px;
+  cursor: pointer;
+  font: inherit;
 }
 
-.v2AppRoot .adminAppRootEmbedded {
-  padding: 0;
-  margin: 0;
-  max-width: none;
+.v2ExceptionMain:hover {
+  background: rgba(45, 212, 191, 0.05);
 }
 
-.v2AppRoot .adminAppRootEmbedded .adminAppGrid {
-  margin-top: 0;
-  border-radius: 16px;
+.v2ExceptionTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.v2ExceptionTop strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.v2ExceptionId {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--v2-mono);
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.v2ExceptionAlert {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.v2ExceptionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.v2ExceptionDetail {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--v2-border-soft);
+}
+
+.v2FieldGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.v2FieldGridCompact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-top: 10px;
+}
+
+.v2FieldGrid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
   border: 1px solid var(--v2-border-soft);
-  background: linear-gradient(180deg, rgba(15, 26, 44, 0.72), rgba(9, 16, 28, 0.92));
-  padding: 12px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.v2FieldGrid span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.v2FieldGrid strong {
+  color: #f1f5f9;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.v2Mono {
+  font-family: var(--v2-mono);
+  font-size: 0.78rem !important;
+}
+
+.v2ReasonList {
+  margin: 12px 0 0;
+  padding: 0 0 0 18px;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.v2MachineGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.v2MachineCard {
+  border-radius: 14px;
+  border: 1px solid var(--v2-border-soft);
+  background: rgba(6, 13, 25, 0.5);
+  padding: 14px;
+}
+
+.v2MachineCard.isWarn {
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.v2MachineCard header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.v2MachineCard header strong {
+  color: #f8fafc;
+  font-size: 0.92rem;
+}
+
+.v2MachineCardBtn {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.v2MachineCardBtn:hover {
+  border-color: rgba(45, 212, 191, 0.45);
+}
+
+.v2LeaderList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.v2LeaderList li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--v2-border-soft);
+  background: rgba(6, 13, 25, 0.45);
+}
+
+.v2LeaderRank {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--v2-teal-soft);
+  color: var(--v2-teal);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.v2LeaderList strong {
+  display: block;
+  color: #f1f5f9;
+  font-size: 0.88rem;
+}
+
+.v2LeaderList span {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.v2LeaderList em {
+  font-style: normal;
+  font-weight: 800;
+  color: #99f6e4;
+  font-size: 0.85rem;
+}
+
+.v2AdminManusBody {
+  min-width: 0;
+}
+
+.v2AdminManusBody .adminCard,
+.v2AdminManusBody .panel {
+  background: transparent;
+  border-color: var(--v2-border-soft);
+  color: var(--v2-text);
+}
+
+@media (max-width: 900px) {
+  .v2FieldGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .v2FieldGrid,
+  .v2FieldGridCompact {
+    grid-template-columns: 1fr;
+  }
 }
 
 .v2SectionHead {
@@ -1170,7 +1373,7 @@ a.v2NavLink.v2NavLinkActive {
 
 .v2AdminTabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
 }
 
