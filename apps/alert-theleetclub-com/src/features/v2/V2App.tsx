@@ -14,18 +14,20 @@ export function V2App() {
 
   if (access.isLoading) {
     return (
-      <div className="v2LoginShell" style={{ display: 'grid', placeItems: 'center' }}>
-        <div className="muted">Loading permissions…</div>
+      <div className="v2LoginShell v2LoginShellSolo">
+        <div className="v2LoginCard v2LoginCardCenter">
+          <p className="v2LoginMuted">Loading permissions…</p>
+        </div>
       </div>
     );
   }
 
   if (access.error) {
     return (
-      <div className="v2LoginShell" style={{ display: 'grid', placeItems: 'center', padding: 24 }}>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Permission lookup failed</div>
-          <div className="muted">{(access.error as Error).message}</div>
+      <div className="v2LoginShell v2LoginShellSolo">
+        <div className="v2LoginCard v2LoginCardCenter">
+          <h2>Permission lookup failed</h2>
+          <p className="v2LoginMuted">{(access.error as Error).message}</p>
         </div>
       </div>
     );

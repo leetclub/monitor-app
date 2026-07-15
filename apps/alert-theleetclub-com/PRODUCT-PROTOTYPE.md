@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-15 | **Alert v2 login + iPad responsive:** Login redesigned (brand, adaptive Google button, card-first on tablet). Shell drawer through 1199px (iPad Pro landscape), KPI/filters/Performance stack on tablet; safe-area + overflow-x fixes. Classic/Pro untouched. |
 | 2026-07-15 | **Alert v2 Classic parity pass:** Red Flags/Overall load the same enrichment APIs as Classic (incidents, last-tx, compare vendon/SX, attendance, cleaning). Rank uses `rankRows` (tier 1 critical first + freq mode from compare preset). Performance + QA Visit mount full Classic boards with `variant=manus`. Classic/Pro untouched. |
 | 2026-07-15 | **Alert v2 scroll + metric boxes:** Workbook tables get ← → / drag pan, sticky machine column overlap fixes, and Manus mini metric boxes (sales/trend/SX/freq/target) matching Fleet Intelligence look. Classic/Pro untouched. |
 | 2026-07-15 | **Alert v2 full workbook in Manus:** All Classic Red Flags / Overall / QA / Performance fields rendered as Manus data tables. No Classic Stitch/ops UI. |

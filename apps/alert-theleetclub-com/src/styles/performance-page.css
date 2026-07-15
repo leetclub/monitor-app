@@ -46,7 +46,8 @@
   margin-top: 8px;
 }
 
-@media (max-width: 900px) {
+/* iPad / tablet: stack machine filter above charts */
+@media (max-width: 1199px) {
   .perfLayout {
     grid-template-columns: 1fr;
   }
