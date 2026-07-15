@@ -37,7 +37,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![1 Shell + Home](docs/product-prototype/figures/wire-01-shell-home.svg)
 
-*Figure 1 — **Classic:** dark sidebar. **Pro:** full-bleed iPad shell (tabs + cards use the whole width — not a centered phone column). Toggle Classic · Pro.*
+*Figure 1 — **Classic:** coral Stitch sidebar. **Pro:** Manus fleet-intelligence shell (dark teal sidebar with section blurbs, breadcrumbs, LIVE). Same tabs/APIs. Toggle Classic · Pro.*
 
 ![2 Red Flags](docs/product-prototype/figures/wire-02-red-flags.svg)
 
@@ -95,6 +95,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 | 2026-07-14 | **QA Visit KU CBA / recent visits:** SC short site labels (e.g. `CBA` → `KU CBA`) now match. Scored location inspections count as QC even when officer ≠ Ismail. Alias map `config/qa_machine_aliases.json`. Busts QA caches. Fixes Alert showing 1 Jul while SC shows 14 Jul. |
 | 2026-07-14 | **QA Visit freshness + matching:** SafetyCulture search now **globally sorts newest-first** before capping; last **14 days** of audits are fully processed (no truncating). Richer location keys (site + machine header fields), softer QC detect for scored inspections, shorter caches (~2–3 min). Fixes missing same-day / same-site reports and stale 2–3 day lag. |
 | 2026-07-14 | **QA Visit freshness + same-site matching:** Visit timestamps prefer completed/modified over created (fixes “2–3 days old”). Date filters use **Asia/Kuwait** day bounds. SC search widens by `modified_at` pad so late finishes appear. Sibling machines at one site: exclusive best-match (no shared stolen visits). Shorter QA caches (~90s) + quicker client refetch. |
+| 2026-07-15 | **Pro = Manus fleet shell:** Dark teal sidebar (label + description), breadcrumbs, LIVE pill, login hero. Same routes/APIs as Classic — Red Flags table, Overall, QA, Performance, Admin Targets unchanged functionally. Classic Stitch untouched. |
 | 2026-07-15 | **Targets multi-product + insights + Performance filter:** Each promoted product keeps its own target (JSONB `flag_modified`). Fleet targets expand per location. `GET /api/alert/admin/target-insights` (5 min cache). Performance: Clear always + Only-this; Top/Lowest/All only when full fleet (or >5 selected). |
 | 2026-07-15 | **Performance overview + speed:** Line trajectory (Top/Lowest 5 / All) · period presets · deficit / achievement / growth KPIs · fleet API uses revenue cache + `includeProducts=0` by default. Admin select chevrons / alignment tightened. |
 | 2026-07-14 | **Admin → Targets tab:** Location KD + SX product + cups target moved out of Machines into a dedicated **Targets** section (fleet table + form). Multi-product from Vendon + cups/revenue metric. |
