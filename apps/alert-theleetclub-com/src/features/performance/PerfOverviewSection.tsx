@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
-import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
+import { formatKwd, formatSalesTrendHtml } from '@/lib/salesDisplay';
 import {
   SERIES_PALETTE,
   type FleetMachine,
@@ -62,19 +62,12 @@ function pickMachines(
   mode: PerfViewMode,
   fleetRanking: boolean,
 ): FleetMachine[] {
-  // Subset selection: chart exactly what was selected — Top/Lowest/All-fleet are N/A
+  // Top / Lowest 5 by period sales KD (highest / lowest revenue in the window).
+  const bySales = (a: FleetMachine, b: FleetMachine) => b.totalLocationKwd - a.totalLocationKwd;
   if (!fleetRanking || mode === 'selected') {
-    return [...machines].sort(
-      (a, b) =>
-        (b.periodPctOfTarget ?? -1) - (a.periodPctOfTarget ?? -1) ||
-        b.totalLocationKwd - a.totalLocationKwd,
-    );
+    return [...machines].sort(bySales);
   }
-  const ranked = [...machines].sort(
-    (a, b) =>
-      (b.periodPctOfTarget ?? -1) - (a.periodPctOfTarget ?? -1) ||
-      b.totalLocationKwd - a.totalLocationKwd,
-  );
+  const ranked = [...machines].sort(bySales);
   if (mode === 'top5') return ranked.slice(0, 5);
   if (mode === 'lowest5') return [...ranked].reverse().slice(0, 5);
   return ranked.slice(0, 12);
@@ -248,8 +241,13 @@ export function PerfOverviewSection({
                 `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span>`,
                 `<b>${p.seriesName}</b>: ${formatKwd(Number(p.value))}`,
               ];
-              if (pct != null) tipBits.push(` · ${pct}% of target`);
-              if (g != null) tipBits.push(` · day Δ ${formatSalesTrendPct(g)}`);
+              if (pct != null) {
+                const tgtColor = pct >= 100 ? '#53e16f' : pct < 80 ? '#ff3b30' : '#94a3b8';
+                tipBits.push(
+                  ` · <span style="color:${tgtColor};font-weight:600">${pct}% of target</span>`,
+                );
+              }
+              if (g != null) tipBits.push(` · ${formatSalesTrendHtml(g)}`);
               lines.push(`<div>${tipBits.join('')}</div>`);
             }
             return lines.join('');
@@ -321,7 +319,8 @@ export function PerfOverviewSection({
             Overview trajectory
           </h3>
           <p className="perfSectionHint">
-            Line chart of daily location KD — trading-style crosshair. Default period: last week.
+            Line chart of daily location KD — trading-style crosshair. Top/Lowest 5 ranked by period
+            sales. Default period: last week.
             {windowLabel ? ` · ${windowLabel}` : ''}
             {!fleetRanking
               ? ' · Showing only your selected locations (Top/Lowest 5 need the full fleet).'

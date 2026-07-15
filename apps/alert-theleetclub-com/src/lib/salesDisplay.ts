@@ -114,6 +114,27 @@ export function formatSalesTrendPct(pct: number): string {
   return `${sign}${pct.toFixed(1)}%`;
 }
 
+/** Green / red for positive / negative day-over-day change. */
+export function salesTrendColor(pct: number | null | undefined): string {
+  if (pct == null || !Number.isFinite(pct) || pct === 0) return '#94a3b8';
+  return pct > 0 ? '#53e16f' : '#ff3b30';
+}
+
+/** Plain text: ▲ +28% / ▼ -4.2% */
+export function formatSalesTrendArrow(pct: number): string {
+  if (!Number.isFinite(pct)) return '—';
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
+  return `${arrow} ${formatSalesTrendPct(pct)}`;
+}
+
+/** Colored HTML for chart tooltips — prefix e.g. "day" → `day Δ ▲ +28%` */
+export function formatSalesTrendHtml(pct: number, prefix = 'day'): string {
+  if (!Number.isFinite(pct)) return '';
+  const color = salesTrendColor(pct);
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
+  return `<span style="color:${color};font-weight:600">${prefix} <span style="color:${color}">Δ</span> ${arrow} ${formatSalesTrendPct(pct)}</span>`;
+}
+
 export function salesElapsedForMachine(
   data: DailySalesElapsedResponse | undefined,
   machineId: string,

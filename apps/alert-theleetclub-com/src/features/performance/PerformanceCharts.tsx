@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import * as echarts from 'echarts';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
-import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
+import { formatKwd, formatSalesTrendHtml, formatSalesTrendPct } from '@/lib/salesDisplay';
 import {
   SERIES_PALETTE,
   pctColor,
@@ -1215,7 +1215,7 @@ export function RevenueTrajectoryChart({ days, title }: { days: PerfDay[]; title
             lines.push(`Remaining: ${formatKwd(row.remain)}`);
             if (row.pct != null) lines.push(`Of target: ${row.pct}%`);
           }
-          if (row.growth != null) lines.push(`Day growth: ${formatSalesTrendPct(row.growth)}`);
+          if (row.growth != null) lines.push(formatSalesTrendHtml(row.growth, 'Day'));
           return lines.join('<br/>');
         },
       },

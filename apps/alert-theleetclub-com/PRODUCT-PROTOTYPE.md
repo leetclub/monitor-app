@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-16 | **Performance Overview (Classic `/performance`):** Top 5 / Lowest 5 ranked by **period sales KD** (not % of target). Hover tooltip: green/red **day Δ ▲/▼ +x%** and colored % of target. Same board on `/v2/performance`. |
 | 2026-07-15 | **Performance target discoverability:** Clarified that sales-vs-target **graphs** are on `/performance` (not Red Flags tables). Status banner when fleet has sales but zero configured targets (Admin → Targets or weekly sheet). |
 | 2026-07-15 | **Alert v2 Classic boards for data+popups:** `/v2` Red Flags & Overall mount Classic pages with `variant=manus` (same APIs, cells, sales/trend/target/QA/cleaning/detail popups as `/`). Thin Manus-only tables removed from those routes. Classic/Pro untouched. |
 | 2026-07-15 | **Alert v2 login full-bleed:** Login is edge-to-edge split (hero + sign-in rail), not a shrunk centered card; cancels body safe-area inset. Classic/Pro untouched. |
