@@ -55,6 +55,16 @@ spec:
                 secretKeyRef:
                   name: people-analytics-secrets
                   key: admin-api-key
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: monitoring-app-v2-secrets
+                  key: SLACK_WEBHOOK_URL
+                  optional: true
+            - name: SLACK_ALERT_COOLDOWN_MIN
+              value: "60"
+            - name: MONITOR_SLACK_ENABLED
+              value: "true"
             resources:
               requests:
                 memory: "128Mi"

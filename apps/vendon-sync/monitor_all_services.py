@@ -8,8 +8,9 @@ import sys
 import json
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
+from urllib.parse import quote
 
 # Configure logging
 logging.basicConfig(
@@ -36,8 +37,20 @@ SERVICES = {
         'timeout': 10,
         'health_check': True,  # Mark as health check
         'fallback_url': 'https://historical-api.theleetclub.com/health'  # Try health endpoint if main fails
+    },
+    'alert-app': {
+        'url': 'https://alert.theleetclub.com/',
+        'expected_status': 200,
+        'timeout': 10
     }
 }
+
+SLACK_WEBHOOK_URL = (os.getenv('SLACK_WEBHOOK_URL') or '').strip()
+SLACK_WEBHOOK_PROXY_PREFIX = (os.getenv('SLACK_WEBHOOK_PROXY_PREFIX') or '').strip()
+SLACK_ALERT_COOLDOWN_MIN = int(os.getenv('SLACK_ALERT_COOLDOWN_MIN', '60') or '60')
+MONITOR_SLACK_ENABLED = (os.getenv('MONITOR_SLACK_ENABLED', 'true') or 'true').strip().lower() not in (
+    '0', 'false', 'no', 'off'
+)
 
 # Cronjobs to check (via Kubernetes API or database)
 CRONJOBS = {
@@ -62,6 +75,146 @@ CRONJOBS = {
         'expected_last_run_hours': 26
     }
 }
+
+
+def _get_db_session():
+    """Open a SQLAlchemy session using vendon-sync models."""
+    try:
+        from models import create_engine_and_session
+    except ImportError:
+        sys.path.insert(0, '/app/vendon-sync')
+        from models import create_engine_and_session
+    _, SessionLocal = create_engine_and_session()
+    return SessionLocal()
+
+
+def _ensure_monitor_slack_alert_log_table(session) -> None:
+    from sqlalchemy import text
+
+    session.execute(
+        text(
+            """
+        CREATE TABLE IF NOT EXISTS monitor_slack_alert_log (
+            alert_key TEXT PRIMARY KEY,
+            sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """
+        )
+    )
+    session.commit()
+
+
+def _should_send_slack_alert(session, alert_key: str, cooldown_min: int) -> bool:
+    """Return True when this alert_key has not been sent within cooldown_min."""
+    if not alert_key:
+        return False
+    from sqlalchemy import text
+
+    _ensure_monitor_slack_alert_log_table(session)
+    row = session.execute(
+        text(
+            """
+        SELECT sent_at
+        FROM monitor_slack_alert_log
+        WHERE alert_key = :key
+        """
+        ),
+        {'key': alert_key},
+    ).fetchone()
+    if not row or not row[0]:
+        return True
+    try:
+        sent_at = row[0]
+        if sent_at.tzinfo is None:
+            sent_at = sent_at.replace(tzinfo=timezone.utc)
+        age_min = (datetime.now(timezone.utc) - sent_at.astimezone(timezone.utc)).total_seconds() / 60.0
+        return age_min >= float(max(1, cooldown_min))
+    except Exception:
+        return True
+
+
+def _mark_slack_alert_sent(session, alert_key: str) -> None:
+    from sqlalchemy import text
+
+    _ensure_monitor_slack_alert_log_table(session)
+    session.execute(
+        text(
+            """
+        INSERT INTO monitor_slack_alert_log (alert_key, sent_at)
+        VALUES (:key, NOW())
+        ON CONFLICT (alert_key)
+        DO UPDATE SET sent_at = NOW()
+        """
+        ),
+        {'key': alert_key},
+    )
+    session.commit()
+
+
+def _slack_level_emoji(level: str) -> str:
+    return {
+        'critical': ':rotating_light:',
+        'error': ':x:',
+        'warning': ':warning:',
+    }.get(level, ':bell:')
+
+
+def send_slack_alert(level: str, title: str, message: str, alert_key: str, details: Optional[Dict] = None) -> bool:
+    """Post a compact Slack alert with per-key cooldown (default 60m)."""
+    if not MONITOR_SLACK_ENABLED:
+        logger.info('Slack alerts disabled (MONITOR_SLACK_ENABLED=false)')
+        return False
+    if not SLACK_WEBHOOK_URL:
+        logger.warning('SLACK_WEBHOOK_URL not configured; skipping Slack alert')
+        return False
+    if not alert_key:
+        logger.warning('Missing alert_key; skipping Slack alert')
+        return False
+
+    session = None
+    try:
+        session = _get_db_session()
+        if not _should_send_slack_alert(session, alert_key, SLACK_ALERT_COOLDOWN_MIN):
+            logger.info(f'Slack cooldown active for {alert_key} ({SLACK_ALERT_COOLDOWN_MIN}m)')
+            return False
+
+        checked_at = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        detail_bits = []
+        if details:
+            for key in ('error', 'status_code', 'hours_ago', 'minutes_ago', 'last_run'):
+                if details.get(key) is not None:
+                    detail_bits.append(f'{key}={details[key]}')
+        detail_line = f"\n_{' | '.join(detail_bits)}_" if detail_bits else ''
+        text = (
+            f"{_slack_level_emoji(level)} *{title}*\n"
+            f"{message}{detail_line}\n"
+            f"_checked {checked_at}_"
+        )
+
+        if SLACK_WEBHOOK_PROXY_PREFIX:
+            post_url = SLACK_WEBHOOK_PROXY_PREFIX.rstrip() + quote(SLACK_WEBHOOK_URL, safe='')
+        else:
+            post_url = SLACK_WEBHOOK_URL
+
+        response = requests.post(
+            post_url,
+            json={'text': text},
+            headers={'Content-Type': 'application/json'},
+            timeout=30,
+        )
+        if response.status_code != 200:
+            logger.warning(f'Slack webhook returned {response.status_code}')
+            return False
+
+        _mark_slack_alert_sent(session, alert_key)
+        logger.info(f'Slack alert sent: {alert_key}')
+        return True
+    except Exception as e:
+        logger.error(f'Error sending Slack alert: {str(e)}')
+        return False
+    finally:
+        if session is not None:
+            session.close()
 
 
 def send_alert_to_admin(level: str, title: str, message: str, details: Optional[Dict] = None):
@@ -398,11 +551,19 @@ def main():
         
         if result['status'] == 'unhealthy':
             results['overall_status'] = 'unhealthy'
+            alert_details = {'service': service_name, 'result': result}
             send_alert_to_admin(
                 'error',
                 f'Service Unhealthy: {service_name}',
                 f"Service {service_name} is not responding correctly. {result.get('error', 'Unknown error')}",
-                {'service': service_name, 'result': result}
+                alert_details
+            )
+            send_slack_alert(
+                'error',
+                f'Service Unhealthy: {service_name}',
+                f"{service_name} is not responding correctly. {result.get('error', 'Unknown error')}",
+                f'service:{service_name}:unhealthy',
+                result,
             )
         elif result['status'] == 'healthy':
             logger.info(f"  ✅ {service_name}: Healthy (response time: {result.get('response_time', 0):.2f}s)")
@@ -416,19 +577,35 @@ def main():
         
         if result['status'] == 'error':
             results['overall_status'] = 'unhealthy'
+            alert_details = {'cronjob': cronjob_name, 'result': result}
             send_alert_to_admin(
                 'critical',
                 f'Cronjob Error: {cronjob_name}',
                 f"Error checking cronjob {cronjob_name}: {result.get('error', 'Unknown error')}",
-                {'cronjob': cronjob_name, 'result': result}
+                alert_details
+            )
+            send_slack_alert(
+                'critical',
+                f'Cronjob Error: {cronjob_name}',
+                f"Error checking cronjob {cronjob_name}: {result.get('error', 'Unknown error')}",
+                f'cronjob:{cronjob_name}:error',
+                result,
             )
         elif result['status'] == 'warning':
             results['overall_status'] = 'warning' if results['overall_status'] == 'healthy' else results['overall_status']
+            alert_details = {'cronjob': cronjob_name, 'result': result}
             send_alert_to_admin(
                 'warning',
                 f'Cronjob Warning: {cronjob_name}',
                 f"Cronjob {cronjob_name} may not be running on schedule. {result.get('error', 'Unknown issue')}",
-                {'cronjob': cronjob_name, 'result': result}
+                alert_details
+            )
+            send_slack_alert(
+                'warning',
+                f'Cronjob Warning: {cronjob_name}',
+                f"Cronjob {cronjob_name} may not be running on schedule. {result.get('error', 'Unknown issue')}",
+                f'cronjob:{cronjob_name}:warning',
+                result,
             )
         elif result['status'] == 'healthy':
             logger.info(f"  ✅ {cronjob_name}: Healthy (last run: {result.get('hours_ago', result.get('minutes_ago', 0)):.1f} {'hours' if 'hours_ago' in result else 'minutes'} ago)")
@@ -455,5 +632,12 @@ if __name__ == '__main__':
             'Monitoring Script Error',
             f"The monitoring script encountered a fatal error: {str(e)}",
             {'error': str(e)}
+        )
+        send_slack_alert(
+            'critical',
+            'Monitoring Script Error',
+            f"The monitoring script encountered a fatal error: {str(e)}",
+            'monitoring:fatal',
+            {'error': str(e)},
         )
         sys.exit(1)
