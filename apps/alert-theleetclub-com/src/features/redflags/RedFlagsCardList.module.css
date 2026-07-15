@@ -104,12 +104,12 @@
   background: linear-gradient(135deg, rgba(40, 24, 28, 0.95), rgba(22, 18, 24, 0.98));
 }
 
-:global(html[data-theme='pro']) .card:hover {
+:global(html[data-theme='pro'][data-mode='light']) .card:hover {
   background: #f8fafc;
   border-color: rgba(15, 118, 110, 0.35);
 }
 
-:global(html[data-theme='pro']) .cardFoot {
+:global(html[data-theme='pro'][data-mode='light']) .cardFoot {
   border-top-color: #e2e8f0;
 }
 
@@ -276,33 +276,33 @@
 }
 
 /* Pro light — readable card copy (Classic keeps dark colors above) */
-:global(html[data-theme='pro']) .card {
+:global(html[data-theme='pro'][data-mode='light']) .card {
   color: #121a26;
   box-shadow: 0 8px 24px rgba(18, 26, 38, 0.06);
 }
 
-:global(html[data-theme='pro']) .machineName {
+:global(html[data-theme='pro'][data-mode='light']) .machineName {
   color: #121a26;
   font-size: 1.1rem;
 }
 
-:global(html[data-theme='pro']) .machineId,
-:global(html[data-theme='pro']) .metricLabel,
-:global(html[data-theme='pro']) .freqPillLabel {
+:global(html[data-theme='pro'][data-mode='light']) .machineId,
+:global(html[data-theme='pro'][data-mode='light']) .metricLabel,
+:global(html[data-theme='pro'][data-mode='light']) .freqPillLabel {
   color: #3d4d5f;
 }
 
-:global(html[data-theme='pro']) .alertLead {
+:global(html[data-theme='pro'][data-mode='light']) .alertLead {
   color: #991b1b;
 }
 
-:global(html[data-theme='pro']) .metricVal,
-:global(html[data-theme='pro']) .freqPillVal {
+:global(html[data-theme='pro'][data-mode='light']) .metricVal,
+:global(html[data-theme='pro'][data-mode='light']) .freqPillVal {
   color: #121a26;
   font-size: 0.95rem;
 }
 
-:global(html[data-theme='pro']) .freqPill {
+:global(html[data-theme='pro'][data-mode='light']) .freqPill {
   background: #f4f7fb;
   border: 1px solid #c5ceda;
   min-height: 52px;
@@ -310,25 +310,25 @@
   border-radius: 12px;
 }
 
-:global(html[data-theme='pro']) .chipNew {
+:global(html[data-theme='pro'][data-mode='light']) .chipNew {
   color: #991b1b;
   background: #fef2f2;
   border-color: #fca5a5;
 }
 
-:global(html[data-theme='pro']) .chipUpd {
+:global(html[data-theme='pro'][data-mode='light']) .chipUpd {
   color: #92400e;
   background: #fffbeb;
   border-color: #fcd34d;
 }
 
-:global(html[data-theme='pro']) .chipP2 {
+:global(html[data-theme='pro'][data-mode='light']) .chipP2 {
   color: #3d4d5f;
   border-color: #c5ceda;
   background: #f4f7fb;
 }
 
-:global(html[data-theme='pro']) .goBtn {
+:global(html[data-theme='pro'][data-mode='light']) .goBtn {
   color: #991b1b;
   background: #fef2f2;
   border-color: #fca5a5;
@@ -337,11 +337,47 @@
   font-size: 0.9rem;
 }
 
-:global(html[data-theme='pro']) .goBtn:hover {
+:global(html[data-theme='pro'][data-mode='light']) .goBtn:hover {
   background: #fee2e2;
 }
 
-:global(html[data-theme='pro']) .list {
+:global(html[data-theme='pro'][data-mode='light']) .list {
+  gap: 14px;
+  padding: 14px;
+}
+
+/* Pro dark — cards follow dark shell tokens */
+:global(html[data-theme='pro'][data-mode='dark']) .card {
+  color: #e2e8f0;
+  background: #111827;
+  border-color: #334155;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+:global(html[data-theme='pro'][data-mode='dark']) .machineName,
+:global(html[data-theme='pro'][data-mode='dark']) .metricVal,
+:global(html[data-theme='pro'][data-mode='dark']) .freqPillVal {
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='pro'][data-mode='dark']) .machineId,
+:global(html[data-theme='pro'][data-mode='dark']) .metricLabel,
+:global(html[data-theme='pro'][data-mode='dark']) .freqPillLabel {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='pro'][data-mode='dark']) .freqPill {
+  background: #0f172a;
+  border: 1px solid #334155;
+}
+
+:global(html[data-theme='pro'][data-mode='dark']) .chipP2 {
+  color: #94a3b8;
+  border-color: #334155;
+  background: #0f172a;
+}
+
+:global(html[data-theme='pro'][data-mode='dark']) .list {
   gap: 14px;
   padding: 14px;
 }

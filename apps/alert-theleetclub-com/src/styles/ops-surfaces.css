@@ -164,10 +164,16 @@
   white-space: nowrap;
 }
 
-html[data-theme='pro'] .opsStatusPill {
+html[data-theme='pro'][data-mode='light'] .opsStatusPill {
   background: #f1f5f9;
   color: #475569;
   border-color: #e2e8f0;
+}
+
+html[data-theme='pro'][data-mode='dark'] .opsStatusPill {
+  background: #0f172a;
+  color: #94a3b8;
+  border-color: #334155;
 }
 
 .opsStatusPill--ok {

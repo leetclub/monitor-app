@@ -11,6 +11,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { NoAccessPage } from '@/pages/NoAccessPage';
 import { NavIcon } from '@/components/NavIcon';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ColorModeToggle } from '@/components/ColorModeToggle';
 import { useAlertUiTheme } from '@/lib/useAlertUiTheme';
 import { V2App } from '@/features/v2/V2App';
 import { V2LoginPage } from '@/features/v2/V2LoginPage';
@@ -244,6 +245,7 @@ function UserSessionControls() {
   return (
     <>
       <ThemeToggle compact />
+      <ColorModeToggle compact />
       <span className="topBarSignedIn">
         <NavIcon name="account_circle" />
         <strong>{user.email}</strong>

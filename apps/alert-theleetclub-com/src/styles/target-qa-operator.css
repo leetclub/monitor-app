@@ -420,17 +420,30 @@
 }
 
 /* Pro light surfaces — activity kind must stay readable */
-html[data-theme='pro'] .operatorActivityKind {
+html[data-theme='pro'][data-mode='light'] .operatorActivityKind {
   color: #0f766e;
 }
 
-html[data-theme='pro'] .operatorActivityExact {
+html[data-theme='pro'][data-mode='light'] .operatorActivityExact {
   color: #0f172a;
   max-width: none;
 }
 
-html[data-theme='pro'] .operatorActivityMuted {
+html[data-theme='pro'][data-mode='light'] .operatorActivityMuted {
   color: #64748b;
+}
+
+html[data-theme='pro'][data-mode='dark'] .operatorActivityKind {
+  color: #2dd4bf;
+}
+
+html[data-theme='pro'][data-mode='dark'] .operatorActivityExact {
+  color: #e2e8f0;
+  max-width: none;
+}
+
+html[data-theme='pro'][data-mode='dark'] .operatorActivityMuted {
+  color: #94a3b8;
 }
 
 .attendanceWorkflowBtn {

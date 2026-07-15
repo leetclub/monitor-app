@@ -1,0 +1,326 @@
+/**
+ * Light / dark color modes for Classic + Pro shells.
+ * Shell: data-theme=classic|pro · Mode: data-mode=light|dark
+ */
+
+/* —— Classic dark (default Stitch) — reinforce when mode explicit —— */
+html[data-theme='classic'][data-mode='dark'] {
+  color-scheme: dark;
+  --bg: #111318;
+  --bg-elevated: #0c0e13;
+  --panel: #1e1f25;
+  --panel2: #1a1b21;
+  --surface-container-low: #1a1b21;
+  --surface-container-high: #282a2f;
+  --surface-variant: #33353a;
+  --text: #e2e2e9;
+  --muted: #ad8883;
+  --on-surface-variant: #e7bdb7;
+  --border: #30363d;
+  --border-soft: rgba(48, 54, 61, 0.85);
+  --outline-variant: #5d3f3b;
+  --accent: #53e16f;
+  --accent-blue: #4b8eff;
+  --primary-salmon: #ffb4aa;
+  --danger: #ff3b30;
+  --warn: #ffcc00;
+  --link: #adc6ff;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* —— Classic light —— */
+html[data-theme='classic'][data-mode='light'] {
+  color-scheme: light;
+  --bg: #f4f1ec;
+  --bg-elevated: #ffffff;
+  --panel: #ffffff;
+  --panel2: #faf8f5;
+  --surface-container-low: #f0ebe4;
+  --surface-container-high: #e7e0d6;
+  --surface-variant: #ddd5c8;
+  --text: #1c1917;
+  --muted: #78716c;
+  --on-surface-variant: #9a3412;
+  --border: #d6d3d1;
+  --border-soft: rgba(214, 211, 209, 0.9);
+  --outline-variant: #c4b5a5;
+  --accent: #15803d;
+  --accent-blue: #1d4ed8;
+  --primary-salmon: #c2410c;
+  --danger: #b91c1c;
+  --warn: #b45309;
+  --link: #1d4ed8;
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.06);
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme='classic'][data-mode='light'] body,
+html[data-theme='classic'][data-mode='light'] #root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme='classic'][data-mode='light'] .sideNav,
+html[data-theme='classic'][data-mode='light'] .topBar,
+html[data-theme='classic'][data-mode='light'] .panel,
+html[data-theme='classic'][data-mode='light'] .adminCard {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme='classic'][data-mode='light'] .muted {
+  color: var(--muted);
+}
+
+html[data-theme='classic'][data-mode='light'] .navLink {
+  color: var(--muted);
+}
+
+html[data-theme='classic'][data-mode='light'] .navLinkActive,
+html[data-theme='classic'][data-mode='light'] a.navLink.navLinkActive {
+  color: var(--text);
+  background: var(--surface-container-low);
+}
+
+html[data-theme='classic'][data-mode='light'] input,
+html[data-theme='classic'][data-mode='light'] select,
+html[data-theme='classic'][data-mode='light'] textarea {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme='classic'][data-mode='light'] table th {
+  color: var(--muted);
+  background: var(--panel2);
+}
+
+html[data-theme='classic'][data-mode='light'] table td {
+  color: var(--text);
+  border-color: var(--border-soft);
+}
+
+/* —— Pro light (existing chrome defaults stay in theme-pro.css) —— */
+html[data-theme='pro'][data-mode='light'] {
+  color-scheme: light;
+}
+
+/* —— Pro dark —— */
+html[data-theme='pro'][data-mode='dark'] {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --bg-elevated: #111827;
+  --panel: #111827;
+  --panel2: #0f172a;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #334155;
+  --border-soft: rgba(51, 65, 85, 0.85);
+  --accent: #2dd4bf;
+  --link: #5eead4;
+  --pro-teal: #2dd4bf;
+  --pro-teal-soft: rgba(45, 212, 191, 0.16);
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] body,
+html[data-theme='pro'][data-mode='dark'] #root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro {
+  background: var(--bg);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppHeader {
+  background: var(--panel);
+  border-bottom-color: var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppBrandName,
+html[data-theme='pro'][data-mode='dark'] .proAppBrandSub {
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppBrandSub {
+  color: var(--muted);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppTabStripWrap {
+  background: var(--panel2);
+  border-top-color: var(--border-soft);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppTabStrip .navLink {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppTabStrip .navLink:hover {
+  background: var(--panel2);
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppTabStrip .navLink.navLinkActive,
+html[data-theme='pro'][data-mode='dark'] .proAppTabStrip a.navLink.navLinkActive {
+  background: var(--pro-teal-soft);
+  color: var(--pro-teal);
+  border-color: rgba(45, 212, 191, 0.4);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppClock {
+  background: var(--panel2);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppMenuBtn {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppMobileNav {
+  background: var(--panel);
+  border-top-color: var(--border);
+}
+
+html[data-theme='pro'][data-mode='dark'] .proAppMobileNavList .navLink {
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro .proAppMain,
+html[data-theme='pro'][data-mode='dark'] .appShellPro .content.contentMain.appMain.proAppMain {
+  background: var(--bg);
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro .topBarSignOut {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .themeToggle {
+  border-color: var(--border);
+  background: var(--panel2);
+}
+
+html[data-theme='pro'][data-mode='dark'] .themeToggleBtn {
+  color: var(--muted);
+}
+
+html[data-theme='pro'][data-mode='dark'] .themeToggleBtn--active {
+  background: var(--pro-teal);
+  color: #041016;
+}
+
+html[data-theme='pro'][data-mode='dark'] .loginShell {
+  background: linear-gradient(180deg, #0b1220 0%, #111827 100%);
+}
+
+html[data-theme='pro'][data-mode='dark'] .loginCard {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme='pro'][data-mode='dark'] .loginTitle {
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .loginSubtitle,
+html[data-theme='pro'][data-mode='dark'] .muted {
+  color: var(--muted);
+}
+
+html[data-theme='pro'][data-mode='dark'] .primary,
+html[data-theme='pro'][data-mode='dark'] button.primary {
+  background: var(--pro-teal);
+  border-color: var(--pro-teal);
+  color: #041016;
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro .panel,
+html[data-theme='pro'][data-mode='dark'] .appShellPro .adminCard {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro input,
+html[data-theme='pro'][data-mode='dark'] .appShellPro select,
+html[data-theme='pro'][data-mode='dark'] .appShellPro textarea,
+html[data-theme='pro'][data-mode='dark'] .appShellPro .adminAppRoot input:not([type='checkbox']):not([type='radio']),
+html[data-theme='pro'][data-mode='dark'] .appShellPro .adminAppRoot select,
+html[data-theme='pro'][data-mode='dark'] .appShellPro .adminAppRoot textarea {
+  background-color: var(--bg-elevated) !important;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro .adminAppRoot select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2394a3b8' d='M1.2 1.2L6 6l4.8-4.8'/%3E%3C/svg%3E") !important;
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro table th {
+  color: var(--muted);
+  background: var(--panel2);
+}
+
+html[data-theme='pro'][data-mode='dark'] .appShellPro table td {
+  color: var(--text);
+  border-color: var(--border-soft);
+}
+
+/* Pro workspace cards */
+html[data-theme='pro'][data-mode='dark'] .proWorkspace {
+  --pro-bg: transparent;
+  --pro-card: #111827;
+  --pro-ink: #e2e8f0;
+  --pro-muted: #94a3b8;
+  --pro-line: #334155;
+  --pro-accent: #2dd4bf;
+  --pro-accent-soft: rgba(45, 212, 191, 0.16);
+  --pro-warn: #fbbf24;
+  --pro-warn-soft: rgba(251, 191, 36, 0.14);
+  --pro-danger: #f87171;
+  --pro-danger-soft: rgba(248, 113, 113, 0.14);
+  --pro-good: #34d399;
+  --pro-good-soft: rgba(52, 211, 153, 0.14);
+  color: var(--pro-ink);
+}
+
+/* Color mode toggle spacing next to shell toggle */
+.colorModeToggle {
+  margin-left: 2px;
+}
+
+html[data-mode='light'] .themeToggle,
+html[data-mode='dark'] .themeToggle {
+  /* shared pill chrome uses CSS vars */
+  border-color: var(--border-soft, var(--border));
+  background: var(--panel2, var(--panel));
+}
+
+html[data-mode='light'] .themeToggleBtn--active {
+  background: var(--accent, #0f766e);
+  color: #fff;
+}
+
+html[data-theme='classic'][data-mode='light'] .themeToggleBtn--active {
+  background: var(--primary-salmon, #c2410c);
+  color: #fff;
+}
+
+html[data-theme='classic'][data-mode='dark'] .themeToggleBtn--active {
+  background: var(--surface-variant, #33353a);
+  color: var(--text);
+}

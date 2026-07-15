@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
 import { loadGsiScript } from '@/lib/gsi';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ColorModeToggle } from '@/components/ColorModeToggle';
 
 export function LoginPage() {
   const { user, loading, signIn, completeGoogleCredential } = useAuth();
@@ -67,6 +68,7 @@ export function LoginPage() {
       <div className="loginCard panel">
         <div className="loginThemeRow">
           <ThemeToggle />
+          <ColorModeToggle />
         </div>
         <div className="loginBrand">
           <img src="/leet.png" alt="" width={64} height={64} className="loginLogo" />

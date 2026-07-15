@@ -19,6 +19,7 @@ import './styles/ops-cell-boxes.css';
 import './styles/ops-revenue-totals.css';
 import './styles/data-freshness.css';
 import './styles/theme-pro.css';
+import './styles/color-modes.css';
 import './styles/performance-page.css';
 
 bootAlertUiTheme();

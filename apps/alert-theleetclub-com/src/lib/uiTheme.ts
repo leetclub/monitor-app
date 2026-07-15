@@ -1,4 +1,6 @@
-/** Alert UI theme: classic (tactical Stitch) vs pro (light professional workspace). */
+/** Alert UI shell: classic (tactical Stitch) vs pro (iPad workspace). Color mode is separate. */
+
+import { applyColorMode, bootColorMode, resolveColorMode } from '@/lib/colorMode';
 
 export type AlertUiThemeId = 'classic' | 'pro';
 
@@ -28,11 +30,8 @@ export function readAlertUiTheme(): AlertUiThemeId {
 export function applyAlertUiTheme(theme: AlertUiThemeId): void {
   const root = document.documentElement;
   root.setAttribute('data-theme', theme);
-  root.style.colorScheme = theme === 'pro' ? 'light' : 'dark';
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) {
-    meta.setAttribute('content', theme === 'pro' ? '#e8edf3' : '#0c0f14');
-  }
+  // Color mode owns colorScheme / theme-color
+  applyColorMode(resolveColorMode(theme));
 }
 
 export function persistAlertUiTheme(theme: AlertUiThemeId): void {
@@ -62,6 +61,8 @@ export function subscribeAlertUiTheme(cb: () => void): () => void {
 /** Call before first paint / React mount. */
 export function bootAlertUiTheme(): AlertUiThemeId {
   const theme = readAlertUiTheme();
-  applyAlertUiTheme(theme);
+  const root = document.documentElement;
+  root.setAttribute('data-theme', theme);
+  bootColorMode(theme);
   return theme;
 }

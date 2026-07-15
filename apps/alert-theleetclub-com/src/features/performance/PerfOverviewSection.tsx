@@ -27,8 +27,13 @@ const FLEET_VIEWS: { id: PerfViewMode; label: string }[] = [
 ];
 
 function readTheme() {
-  const isPro = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'pro';
-  if (isPro) {
+  const dark =
+    typeof document === 'undefined'
+      ? true
+      : document.documentElement.getAttribute('data-mode') === 'dark' ||
+        (document.documentElement.getAttribute('data-mode') !== 'light' &&
+          document.documentElement.getAttribute('data-theme') !== 'pro');
+  if (!dark) {
     return {
       text: '#0f172a',
       muted: '#64748b',
