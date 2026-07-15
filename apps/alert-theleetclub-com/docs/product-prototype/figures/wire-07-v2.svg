@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="320" viewBox="0 0 800 320" font-family="Segoe UI, Helvetica, Arial, sans-serif">
   <rect width="800" height="320" fill="#060d19"/>
-  <text x="16" y="22" fill="#2dd4bf" font-size="11" font-weight="700" letter-spacing="0.12em">ALERT V2  /v2 (MANUS FLEET INTELLIGENCE)</text>
-  <text x="16" y="40" fill="#64748b" font-size="10">Dedicated page layouts + live APIs  not Classic boards inside a frame. Classic + Pro unchanged at /.</text>
+  <text x="16" y="22" fill="#2dd4bf" font-size="11" font-weight="700" letter-spacing="0.12em">ALERT V2 - /v2 (MANUS FLEET INTELLIGENCE)</text>
+  <text x="16" y="40" fill="#64748b" font-size="10">Manus chrome + full Classic boards underneath. Classic + Pro unchanged at /.</text>
 
   <!-- sidebar -->
   <rect x="16" y="56" width="150" height="248" rx="10" fill="#0a1322" stroke="rgba(148,163,184,0.22)"/>
