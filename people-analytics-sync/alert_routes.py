@@ -2967,7 +2967,7 @@ def register_alert_routes(app) -> None:
     def alert_performance_fleet():
         """
         Multi-machine Performance graphs (Areas-style).
-        Query: machineIds=id1,id2 (max 24) OR empty = top revenue machines from cache window
+        Query: machineIds=id1,id2 (max 48) OR empty = top revenue machines from cache window
                preset=last_week|this_week|last_2_weeks|this_month|last_month|today|yesterday
                days=14 (rolling fallback)
                includeProducts=0|1 (default 0 for speed — location KD only)
@@ -2990,8 +2990,9 @@ def register_alert_routes(app) -> None:
         raw_ids = (request.args.get("machineIds") or request.args.get("machine_ids") or "").strip()
         requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
         explicit_machine_ids = bool(requested)
-        if len(requested) > 24:
-            requested = requested[:24]
+        # Match auto-mode cache cap (top revenue). Higher = slower fleet scans / more chart series.
+        if len(requested) > 48:
+            requested = requested[:48]
 
         from alert_targets_lib import resolve_perf_window
 
@@ -3008,7 +3009,7 @@ def register_alert_routes(app) -> None:
         fetch_hi = max(win_end, today)
 
         cache_key = (
-            f"perf:fleet:v4:{','.join(sorted(requested)) or 'auto'}:"
+            f"perf:fleet:v5:{','.join(sorted(requested)) or 'auto'}:"
             f"{preset_id}:{win_start}:{win_end}:p{int(include_products)}"
         )
         cached = _alert_cache_get(cache_key, 120)

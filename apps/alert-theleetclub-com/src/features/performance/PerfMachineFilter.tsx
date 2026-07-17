@@ -13,7 +13,7 @@ function isChecked(id: string, selected: Set<string> | null): boolean {
 }
 
 /** Areas-style checkbox machine filter for Performance multi-graphs. */
-export function PerfMachineFilter({ machines, selected, onChange, maxSelect = 24 }: Props) {
+export function PerfMachineFilter({ machines, selected, onChange, maxSelect = 48 }: Props) {
   const allSelected = selected === null;
   const count = allSelected ? Math.min(machines.length, maxSelect) : selected.size;
   const allIds = machines.slice(0, maxSelect).map((m) => m.id);
