@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-18 | **Performance growth KPIs clearer:** Big number is signed **Growth** (+/−%). Labels **vs prior period** / **vs same dates last year** (not “% of last year” — that implied full-year YTD). Index (period ÷ compare) stays as secondary. |
 | 2026-07-18 | **Performance layout polish:** Locations is a compact top bar (no empty sidebar). PNG sits in the Trajectory header (not over the legend). Page **‹ ›** flank the chart left/right. **Mix machines** modal: Top6+Lowest6, ranks, search — combine any machines across pages without duplicate chips. |
 | 2026-07-17 | **Performance dropdown names + legend arrows:** Locations dropdown shows location **names** (fixed empty labels). Removed duplicate series chip buttons; use the chart legend (line icons) with clearer **scroll ‹ ›** for all series on the page, plus page ‹ › for the next 12 machines. |
 | 2026-07-17 | **Performance names not IDs:** Fleet batches with `machineIds` were labeling charts with raw Vendon IDs (name map skipped). API resolves/caches Vendon names again; UI overlays names from `/api/alert/machines`. Locations dropdown shows **names only**. |

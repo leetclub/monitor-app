@@ -32,6 +32,7 @@ export function GrowthCompareModal({
   title,
   subtitle,
   compareLabel,
+  indexLabel = 'Index',
   windowLabel,
   groups,
   onClose,
@@ -39,6 +40,8 @@ export function GrowthCompareModal({
   title: string;
   subtitle?: string;
   compareLabel: string;
+  /** Column / summary for period ÷ compare × 100. */
+  indexLabel?: string;
   windowLabel?: string;
   groups: Partial<Record<GrowthGroupKey, GrowthGroupSlice | null | undefined>>;
   onClose: () => void;
@@ -64,7 +67,7 @@ export function GrowthCompareModal({
               {title}
             </h2>
             {subtitle ? <p className="salesHistorySub">{subtitle}</p> : null}
-            {windowLabel ? <p className="salesHistorySub">{windowLabel}</p> : null}
+            {windowLabel ? <p className="salesHistorySub">Selected period: {windowLabel}</p> : null}
           </div>
           <button type="button" className="salesHistoryClose" onClick={onClose} aria-label="Close">
             ×
@@ -80,6 +83,9 @@ export function GrowthCompareModal({
                 <header className="perfGrowthGroupHead">
                   <h3>{GROUP_LABEL[key]}</h3>
                   <div className="perfGrowthGroupSummary">
+                    <span className={rateTone(g.ratePct)}>
+                      Growth <strong>{growthDeltaPct(g.ratePct)}</strong>
+                    </span>
                     <span>
                       Period <strong>{formatKwd(g.periodKd)}</strong>
                     </span>
@@ -87,10 +93,7 @@ export function GrowthCompareModal({
                       {compareLabel} <strong>{formatKwd(g.compareKd)}</strong>
                     </span>
                     <span className={rateTone(g.ratePct)}>
-                      % of compare <strong>{g.ratePct != null ? `${g.ratePct}%` : '—'}</strong>
-                    </span>
-                    <span className={rateTone(g.ratePct)}>
-                      Growth <strong>{growthDeltaPct(g.ratePct)}</strong>
+                      {indexLabel} <strong>{g.ratePct != null ? `${g.ratePct}%` : '—'}</strong>
                     </span>
                   </div>
                 </header>
@@ -102,8 +105,8 @@ export function GrowthCompareModal({
                           <th>Machine</th>
                           <th>Period KD</th>
                           <th>{compareLabel}</th>
-                          <th>% of compare</th>
                           <th>Growth</th>
+                          <th>{indexLabel}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -112,10 +115,10 @@ export function GrowthCompareModal({
                             <td>{row.machineName}</td>
                             <td>{formatKwd(row.periodKd)}</td>
                             <td>{formatKwd(row.compareKd)}</td>
+                            <td className={rateTone(row.ratePct)}>{growthDeltaPct(row.ratePct)}</td>
                             <td className={rateTone(row.ratePct)}>
                               {row.ratePct != null ? `${row.ratePct}%` : '—'}
                             </td>
-                            <td className={rateTone(row.ratePct)}>{growthDeltaPct(row.ratePct)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -128,9 +131,9 @@ export function GrowthCompareModal({
             );
           })}
           <p className="perfGrowthFoot">
-            <strong>% of compare</strong> = period ÷ compare × 100 (100% = flat).{' '}
-            <strong>Growth</strong> = (period − compare) ÷ compare × 100 (e.g. 98.8% → −1.2%). Top /
-            Lowest 5 ranked by period sales KD.
+            <strong>Growth</strong> is the signed change people expect (e.g. −1.2%).{' '}
+            <strong>Index</strong> is period ÷ compare × 100 (100 = flat). Top / Lowest 5 ranked by
+            period sales KD.
           </p>
         </div>
       </div>

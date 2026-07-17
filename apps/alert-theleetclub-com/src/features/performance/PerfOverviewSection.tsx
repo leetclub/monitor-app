@@ -79,18 +79,21 @@ function viewToGrowthKey(view: PerfViewMode, fleetRanking: boolean): GrowthGroup
   return 'all';
 }
 
-/** Index: current ÷ compare × 100 (100 = flat). */
-function formatIndexPct(rate: number | null | undefined): string {
+/** Signed growth: (current − compare) ÷ compare × 100 ≡ index − 100. */
+function formatGrowthDeltaPct(rate: number | null | undefined): string {
   if (rate == null || !Number.isFinite(rate)) return '—';
-  return `${rate}%`;
-}
-
-/** Growth change: (current − compare) ÷ compare × 100 ≡ index − 100. */
-function formatGrowthDeltaPct(rate: number | null | undefined): string | null {
-  if (rate == null || !Number.isFinite(rate)) return null;
   const d = Math.round((rate - 100) * 10) / 10;
   const sign = d > 0 ? '+' : '';
   return `${sign}${d}%`;
+}
+
+/** Index line for secondary: “105% of prior”. */
+function formatIndexOfCompare(
+  rate: number | null | undefined,
+  ofWord: string,
+): string | null {
+  if (rate == null || !Number.isFinite(rate)) return null;
+  return `${rate}% of ${ofWord}`;
 }
 
 function KpiBox({
@@ -104,7 +107,7 @@ function KpiBox({
 }: {
   label: string;
   value: string;
-  /** Secondary metric label (e.g. Growth). */
+  /** Secondary metric label (e.g. Index). */
   subLabel?: string;
   subValue?: string | null;
   hint?: string;
@@ -806,20 +809,20 @@ export function PerfOverviewSection({
           tone={achTone}
         />
         <KpiBox
-          label="% of prior period"
-          value={formatIndexPct(growthPrevPct)}
-          subLabel="Growth"
-          subValue={formatGrowthDeltaPct(growthPrevPct)}
-          hint={`${growthGroupHint} · period ÷ prior × 100`}
+          label="vs prior period"
+          value={formatGrowthDeltaPct(growthPrevPct)}
+          subLabel="Index"
+          subValue={formatIndexOfCompare(growthPrevPct, 'prior')}
+          hint={`${growthGroupHint} · compare window ${prevWin}`}
           tone={growthTone}
           onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
         />
         <KpiBox
-          label="% of last year"
-          value={formatIndexPct(growthYoyPct)}
-          subLabel="Growth"
-          subValue={formatGrowthDeltaPct(growthYoyPct)}
-          hint="vs same dates last year · tap for details"
+          label="vs same dates last year"
+          value={formatGrowthDeltaPct(growthYoyPct)}
+          subLabel="Index"
+          subValue={formatIndexOfCompare(growthYoyPct, 'then')}
+          hint={`Same calendar dates one year ago (${yoyWin}) — not full-year YTD`}
           tone={yoyTone}
           onClick={kpis?.growthVsYoy ? () => setGrowthModal('yoy') : undefined}
         />
@@ -837,9 +840,10 @@ export function PerfOverviewSection({
 
       {growthModal === 'prev' && kpis?.growthVsPrev ? (
         <GrowthCompareModal
-          title="vs previous period"
-          subtitle={`% of prior = period ÷ previous (${prevWin}) × 100 · Growth = (period − previous) ÷ previous × 100`}
-          compareLabel="Prev KD"
+          title="vs prior period"
+          subtitle={`Growth = (this period − prior) ÷ prior × 100. Index = this ÷ prior × 100 (100 = flat). Prior window: ${prevWin}.`}
+          compareLabel="Prior KD"
+          indexLabel="% of prior"
           windowLabel={windowLabel}
           groups={kpis.growthVsPrev}
           onClose={() => setGrowthModal(null)}
@@ -847,9 +851,10 @@ export function PerfOverviewSection({
       ) : null}
       {growthModal === 'yoy' && kpis?.growthVsYoy ? (
         <GrowthCompareModal
-          title="vs last year"
-          subtitle={`% of last year = period ÷ YoY (${yoyWin}) × 100 · Growth = (period − YoY) ÷ YoY × 100`}
-          compareLabel="YoY KD"
+          title="vs same dates last year"
+          subtitle={`Growth = (this period − then) ÷ then × 100. Index = this ÷ then × 100. Compare dates: ${yoyWin} — not full calendar year.`}
+          compareLabel="Then KD"
+          indexLabel="% of then"
           windowLabel={windowLabel}
           groups={kpis.growthVsYoy}
           onClose={() => setGrowthModal(null)}
