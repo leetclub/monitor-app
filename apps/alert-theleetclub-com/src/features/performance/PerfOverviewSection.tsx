@@ -809,7 +809,7 @@ export function PerfOverviewSection({
           tone={achTone}
         />
         <KpiBox
-          label="vs prior period"
+          label="Growth vs prior period"
           value={formatGrowthDeltaPct(growthPrevPct)}
           subLabel="Index"
           subValue={formatIndexOfCompare(growthPrevPct, 'prior')}
@@ -818,7 +818,7 @@ export function PerfOverviewSection({
           onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
         />
         <KpiBox
-          label="vs same dates last year"
+          label="Growth vs same dates last year"
           value={formatGrowthDeltaPct(growthYoyPct)}
           subLabel="Index"
           subValue={formatIndexOfCompare(growthYoyPct, 'then')}
@@ -840,7 +840,7 @@ export function PerfOverviewSection({
 
       {growthModal === 'prev' && kpis?.growthVsPrev ? (
         <GrowthCompareModal
-          title="vs prior period"
+          title="Growth vs prior period"
           subtitle={`Growth = (this period − prior) ÷ prior × 100. Index = this ÷ prior × 100 (100 = flat). Prior window: ${prevWin}.`}
           compareLabel="Prior KD"
           indexLabel="% of prior"
@@ -851,7 +851,7 @@ export function PerfOverviewSection({
       ) : null}
       {growthModal === 'yoy' && kpis?.growthVsYoy ? (
         <GrowthCompareModal
-          title="vs same dates last year"
+          title="Growth vs same dates last year"
           subtitle={`Growth = (this period − then) ÷ then × 100. Index = this ÷ then × 100. Compare dates: ${yoyWin} — not full calendar year.`}
           compareLabel="Then KD"
           indexLabel="% of then"
