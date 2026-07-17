@@ -427,9 +427,9 @@ export function PerfOverviewSection({
         tooltip: {
           trigger: 'axis',
           axisPointer: {
-            type: 'cross',
-            crossStyle: { color: theme.cross },
+            type: 'line',
             lineStyle: { color: theme.cross, type: 'dashed' },
+            label: { show: false },
           },
           backgroundColor: theme.tipBg,
           borderWidth: 0,
@@ -443,11 +443,13 @@ export function PerfOverviewSection({
               color?: string;
             }[];
             const i = arr[0]?.dataIndex ?? 0;
-            const dateStr = seriesMachines[0]?.days?.[i]?.date || '';
+            const tipDay = seriesMachines[0]?.days?.[i] || aggregateDays[i];
+            const wd = (tipDay?.weekday || '').slice(0, 3);
+            const dateStr = tipDay?.date || '';
+            const head =
+              wd && dateStr ? `${wd} · ${dateStr}` : dateStr || labels[i] || '';
             const lines = [
-              `<div style="font-weight:700;margin-bottom:6px">${labels[i] || ''}${
-                dateStr ? ` · ${dateStr}` : ''
-              }</div>`,
+              `<div style="font-weight:700;margin-bottom:6px">${head}</div>`,
             ];
             for (const p of arr) {
               if (p.value == null || !Number.isFinite(Number(p.value))) continue;
@@ -519,7 +521,7 @@ export function PerfOverviewSection({
       { notMerge: true },
     );
     chart.resize();
-  }, [seriesMachines, labels, combined]);
+  }, [seriesMachines, labels, combined, aggregateDays]);
 
   const onExport = useCallback(() => {
     const c = chartInst.current;
