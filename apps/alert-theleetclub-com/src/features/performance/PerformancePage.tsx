@@ -276,23 +276,6 @@ export function PerformancePage({
   const boardInner = (
     <>
         <div className="perfToolbar">
-          <div className="perfModePills" role="group" aria-label="Extra chart views">
-            <button
-              type="button"
-              className={`perfSegPill ${showCompare ? 'active' : ''}`}
-              onClick={() => setShowCompare((v) => !v)}
-            >
-              {showCompare ? 'Hide compare lines' : 'Daily compare lines'}
-            </button>
-            <button
-              type="button"
-              className={`perfSegPill ${loadProducts ? 'active' : ''}`}
-              onClick={() => setLoadProducts((v) => !v)}
-              title="Product cups need Vendon reads — slower. Leave off for fast location KD."
-            >
-              {loadProducts ? 'Product cups on' : 'Load product cups'}
-            </button>
-          </div>
           <Link className="perfBackLink" to={manus ? '/v2/red-flags' : '/red-flags'}>
             ← Red Flags
           </Link>
@@ -338,10 +321,38 @@ export function PerformancePage({
 
             {fleetMachines.length ? (
               <>
+                <div className="perfMoreChartsBar" aria-label="Optional charts below">
+                  <div className="perfMoreChartsBarText">
+                    <h3 className="perfSectionTitle">More charts</h3>
+                    <p className="perfSectionHint">
+                      Controls for the ranking / daily / product sections below — not for Trajectory
+                      above.
+                    </p>
+                  </div>
+                  <div className="perfModePills" role="group" aria-label="Optional lower charts">
+                    <button
+                      type="button"
+                      className={`perfSegPill ${loadProducts ? 'active' : ''}`}
+                      onClick={() => setLoadProducts((v) => !v)}
+                      title="Product cups need Vendon reads — slower. Leave off for fast location KD."
+                    >
+                      {loadProducts ? 'Product cups on' : 'Load product cups'}
+                    </button>
+                    <button
+                      type="button"
+                      className={`perfSegPill ${showCompare ? 'active' : ''}`}
+                      onClick={() => setShowCompare((v) => !v)}
+                    >
+                      {showCompare ? 'Hide daily compare' : 'Show daily compare lines'}
+                    </button>
+                  </div>
+                </div>
+
                 <FleetPerformanceOverview
                   machines={fleetMachines}
                   aggregateDays={aggregateDays}
                   productLabel={productLabel}
+                  productCupsEnabled={loadProducts}
                 />
 
                 {showCompare ? (

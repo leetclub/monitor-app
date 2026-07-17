@@ -8,9 +8,36 @@
 .perfToolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: flex-end;
   gap: 12px 16px;
   margin-bottom: 8px;
+}
+
+.perfMoreChartsBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin: 8px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+}
+
+.perfMoreChartsBarText {
+  min-width: 0;
+  flex: 1;
+}
+
+.perfMoreChartsBar .perfSectionTitle {
+  margin: 0 0 4px;
+}
+
+.perfMoreChartsBar .perfSectionHint {
+  margin: 0;
 }
 
 .perfModePills {

@@ -1534,10 +1534,13 @@ export function FleetPerformanceOverview({
   machines,
   aggregateDays,
   productLabel,
+  productCupsEnabled = false,
 }: {
   machines: FleetMachine[];
   aggregateDays: PerfDay[];
   productLabel?: string;
+  /** When false, product charts stay hidden until user loads cups below Trajectory. */
+  productCupsEnabled?: boolean;
 }) {
   const [machineSort, setMachineSort] = useState<MachineSort>('achievement');
   const [productSort, setProductSort] = useState<MachineSort>('achievement');
@@ -1615,10 +1618,11 @@ export function FleetPerformanceOverview({
       </div>
 
       <h4 className="perfGroupTitle">Promoted product{prodTitle}</h4>
-      {!hasProductData ? (
+      {!productCupsEnabled || !hasProductData ? (
         <p className="perfMuted">
-          Product cups are off by default for speed. Use <strong>Load product cups</strong> in the
-          toolbar (or open a single machine for detail charts).
+          {productCupsEnabled
+            ? 'No product cup data for this selection yet.'
+            : 'Product cups stay off until you turn on Load product cups above (slower Vendon reads).'}
         </p>
       ) : (
         <div className="perfOverviewGrid">
