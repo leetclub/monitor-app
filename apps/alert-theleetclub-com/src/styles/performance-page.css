@@ -555,31 +555,6 @@
   font-weight: 600;
   color: var(--muted);
   text-align: center;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 10px 14px;
-}
-
-.perfGraphPageLink {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-weight: 700;
-  font-size: 0.75rem;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.perfGraphPageLink:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  text-decoration: none;
 }
 
 .perfGraphLegend {
@@ -628,6 +603,64 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 11rem;
+}
+
+.perfGraphStage {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  gap: 6px;
+  align-items: stretch;
+  margin: 0 0 4px;
+  touch-action: pan-y;
+}
+
+.perfGraphSideBtn {
+  appearance: none;
+  align-self: center;
+  width: 40px;
+  height: min(220px, 55%);
+  min-height: 72px;
+  max-height: 280px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.perfGraphSideBtn:hover:not(:disabled),
+.perfGraphSideBtn:focus-visible:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.55);
+  background: rgba(45, 212, 191, 0.12);
+  outline: none;
+}
+
+.perfGraphSideBtn:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.perfGraphStage .perfEchartOverview {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .perfGraphStage {
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    gap: 4px;
+  }
+  .perfGraphSideBtn {
+    width: 36px;
+    min-height: 64px;
+    font-size: 1.5rem;
+  }
 }
 
 .perfGraphPickQuick {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import * as echarts from 'echarts';
 import { createPortal } from 'react-dom';
 import { ChartExportButton } from '@/components/ChartExportWrap';
@@ -614,6 +614,28 @@ export function PerfOverviewSection({
       : 'same dates last year';
 
   const canPage = !customIds?.length && view !== 'top5' && view !== 'lowest5' && pageCount > 1;
+  const touchStartX = useRef<number | null>(null);
+
+  const goPrevPage = useCallback(() => {
+    setPage((p) => Math.max(0, p - 1));
+  }, []);
+  const goNextPage = useCallback(() => {
+    setPage((p) => Math.min(pageCount - 1, p + 1));
+  }, [pageCount]);
+
+  const onGraphTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (!canPage) return;
+    touchStartX.current = e.changedTouches[0]?.clientX ?? null;
+  };
+  const onGraphTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (!canPage || touchStartX.current == null) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartX.current;
+    const dx = endX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 56) return;
+    if (dx < 0) goNextPage();
+    else goPrevPage();
+  };
 
   return (
     <section className="perfOverviewHero" aria-labelledby="perf-hero-title">
@@ -623,8 +645,8 @@ export function PerfOverviewSection({
             Performance Trajectory
           </h3>
           <p className="perfSectionHint">
-            Daily location KD — up to {GRAPH_PAGE} lines shown above the graph. Use{' '}
-            <strong>Mix machines</strong> to combine any ranks on one graph.
+            Daily location KD — up to {GRAPH_PAGE} lines listed above the graph. Use side arrows (or
+            swipe on iPad) to change pages; <strong>Mix machines</strong> for any custom set.
             {windowLabel ? ` · ${windowLabel}` : ''}
             {!fleetRanking
               ? ` · ${selectionLabel || 'Selected locations'} (Top/Lowest need a larger set).`
@@ -692,33 +714,11 @@ export function PerfOverviewSection({
       </div>
 
       <div className="perfGraphPageMeta" aria-live="polite">
-        {customIds?.length ? (
-          <span>Custom mix · {pagePool.length} machines</span>
-        ) : canPage ? (
-          <>
-            <button
-              type="button"
-              className="perfGraphPageLink"
-              disabled={page <= 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              Earlier ranks
-            </button>
-            <span>
-              Showing {page * GRAPH_PAGE + 1}–{page * GRAPH_PAGE + pagePool.length} of {ranked.length}
-            </span>
-            <button
-              type="button"
-              className="perfGraphPageLink"
-              disabled={page >= pageCount - 1}
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-            >
-              Later ranks
-            </button>
-          </>
-        ) : (
-          <span>{pagePool.length} machines on graph</span>
-        )}
+        {customIds?.length
+          ? `Custom mix · ${pagePool.length} machines`
+          : canPage
+            ? `Page ${page + 1} / ${pageCount} · ranks ${page * GRAPH_PAGE + 1}–${page * GRAPH_PAGE + pagePool.length} of ${ranked.length} · swipe or use side arrows`
+            : `${pagePool.length} machines on graph`}
       </div>
 
       {pagePool.length > 0 ? (
@@ -754,11 +754,35 @@ export function PerfOverviewSection({
       {loading ? <p className="perfMuted">Loading overview…</p> : null}
 
       <div
-        ref={chartRef}
-        className="perfEchart perfEchartOverview"
-        role="img"
-        aria-label="Performance Trajectory"
-      />
+        className="perfGraphStage"
+        onTouchStart={onGraphTouchStart}
+        onTouchEnd={onGraphTouchEnd}
+      >
+        <button
+          type="button"
+          className="perfGraphSideBtn"
+          disabled={!canPage || page <= 0}
+          onClick={goPrevPage}
+          aria-label="Previous graph page"
+        >
+          ‹
+        </button>
+        <div
+          ref={chartRef}
+          className="perfEchart perfEchartOverview"
+          role="img"
+          aria-label="Performance Trajectory"
+        />
+        <button
+          type="button"
+          className="perfGraphSideBtn"
+          disabled={!canPage || page >= pageCount - 1}
+          onClick={goNextPage}
+          aria-label="Next graph page"
+        >
+          ›
+        </button>
+      </div>
 
       <div className="perfKpiRow perfKpiRowHero">
         <KpiBox

@@ -182,8 +182,8 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
         ) : null}
       </div>
       <p className="perfMachineFilterHint">
-        Data scope for all charts. Trajectory lists up to 12 locations above the graph — use{' '}
-        <strong>Mix machines</strong> to combine ranks from different pages.
+        Data scope for all charts. Trajectory lists up to 12 locations above the graph — side arrows
+        or swipe change pages; <strong>Mix machines</strong> combines ranks across pages.
       </p>
     </section>
   );
