@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { createPortal } from 'react-dom';
-import { ChartExportWrap } from '@/components/ChartExportWrap';
+import { ChartExportButton } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendHtml } from '@/lib/salesDisplay';
 import { GrowthCompareModal } from '@/features/performance/GrowthCompareModal';
@@ -119,11 +119,14 @@ function KpiBox({
 function GraphMachinePickerModal({
   machines,
   selectedIds,
+  pageIds,
   onApply,
   onClose,
 }: {
   machines: FleetMachine[];
   selectedIds: string[];
+  /** Machines currently on the graph page (for quick add). */
+  pageIds: string[];
   onApply: (ids: string[]) => void;
   onClose: () => void;
 }) {
@@ -133,6 +136,11 @@ function GraphMachinePickerModal({
   const [q, setQ] = useState('');
   const [pick, setPick] = useState<Set<string>>(() => new Set(selectedIds));
   const ranked = useMemo(() => [...machines].sort(bySales), [machines]);
+  const rankById = useMemo(() => {
+    const m = new Map<string, number>();
+    ranked.forEach((row, i) => m.set(row.machineId, i + 1));
+    return m;
+  }, [ranked]);
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
     if (!n) return ranked;
@@ -148,16 +156,30 @@ function GraphMachinePickerModal({
     });
   };
 
+  const applyTopLowest = () => {
+    const top = ranked.slice(0, 6).map((m) => m.machineId);
+    const low = [...ranked].reverse().slice(0, 6).map((m) => m.machineId);
+    const merged: string[] = [];
+    for (const id of [...top, ...low]) {
+      if (!merged.includes(id) && merged.length < GRAPH_PAGE) merged.push(id);
+    }
+    setPick(new Set(merged));
+  };
+
+  const applyThisPage = () => {
+    setPick(new Set(pageIds.slice(0, GRAPH_PAGE)));
+  };
+
   return createPortal(
     <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
       <div className="salesHistoryModal perfGrowthModal" {...panel}>
         <div className="salesHistoryHead">
           <div>
             <p className="salesHistoryEyebrow">Performance Trajectory</p>
-            <h2 className="salesHistoryTitle">Choose machines for the graph</h2>
+            <h2 className="salesHistoryTitle">Mix machines on one graph</h2>
             <p className="salesHistorySub">
-              Up to {GRAPH_PAGE} lines. Mix top and lowest (or any set). {pick.size}/{GRAPH_PAGE}{' '}
-              selected.
+              Pick any up to {GRAPH_PAGE} — e.g. a top seller with a low performer from another page.{' '}
+              {pick.size}/{GRAPH_PAGE} selected.
             </p>
           </div>
           <button type="button" className="salesHistoryClose" onClick={onClose} aria-label="Close">
@@ -165,10 +187,21 @@ function GraphMachinePickerModal({
           </button>
         </div>
         <div className="perfGrowthModalBody">
+          <div className="perfGraphPickQuick" role="group" aria-label="Quick picks">
+            <button type="button" className="perfSegPill" onClick={applyTopLowest}>
+              Top 6 + Lowest 6
+            </button>
+            <button type="button" className="perfSegPill" onClick={applyThisPage} disabled={!pageIds.length}>
+              Use current page
+            </button>
+            <button type="button" className="perfSegPill" onClick={() => setPick(new Set())}>
+              Clear pick
+            </button>
+          </div>
           <input
             type="search"
             className="perfLocSearch"
-            placeholder="Search machine…"
+            placeholder="Search by name…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             autoFocus
@@ -177,6 +210,7 @@ function GraphMachinePickerModal({
             {filtered.map((m) => {
               const on = pick.has(m.machineId);
               const blocked = !on && pick.size >= GRAPH_PAGE;
+              const rank = rankById.get(m.machineId);
               return (
                 <label key={m.machineId} className={`perfMachineRow ${on ? 'perfMachineRowSolo' : ''}`}>
                   <input
@@ -185,6 +219,7 @@ function GraphMachinePickerModal({
                     disabled={blocked}
                     onChange={() => toggle(m.machineId)}
                   />
+                  <span className="perfGraphPickRank">#{rank}</span>
                   <span className="perfMachineRowName">{m.machineName}</span>
                   <span className="perfMachineRowId">{formatKwd(m.totalLocationKwd)}</span>
                 </label>
@@ -192,9 +227,6 @@ function GraphMachinePickerModal({
             })}
           </div>
           <div className="perfGraphPickActions">
-            <button type="button" className="perfSegPill" onClick={() => setPick(new Set())}>
-              Clear pick
-            </button>
             <button
               type="button"
               className="perfSegPill active"
@@ -575,13 +607,13 @@ export function PerfOverviewSection({
   return (
     <section className="perfOverviewHero" aria-labelledby="perf-hero-title">
       <header className="perfOverviewHead">
-        <div>
+        <div className="perfOverviewHeadText">
           <h3 id="perf-hero-title" className="perfSectionTitle">
             Performance Trajectory
           </h3>
           <p className="perfSectionHint">
-            Daily location KD — up to {GRAPH_PAGE} lines. Page through all machines or pick a custom
-            mix (e.g. top + lowest).
+            Daily location KD — up to {GRAPH_PAGE} lines. Side arrows page through ranks;{' '}
+            <strong>Mix machines</strong> combines any set (e.g. top + lowest) on one graph.
             {windowLabel ? ` · ${windowLabel}` : ''}
             {!fleetRanking
               ? ` · ${selectionLabel || 'Selected locations'} (Top/Lowest need a larger set).`
@@ -589,6 +621,7 @@ export function PerfOverviewSection({
             {customIds?.length ? ` · Custom ${customIds.length} on graph` : ''}
           </p>
         </div>
+        <ChartExportButton onExport={onExport} label="Download Performance Trajectory as PNG" />
       </header>
 
       <div className="perfToolbarRow">
@@ -619,12 +652,17 @@ export function PerfOverviewSection({
           >
             {combined ? 'Combined line on' : 'Combined line'}
           </button>
-          <button type="button" className={`perfSegPill ${customIds ? 'active' : ''}`} onClick={() => setPickOpen(true)}>
-            Customize graph
+          <button
+            type="button"
+            className={`perfSegPill perfSegPillEmphasis ${customIds ? 'active' : ''}`}
+            onClick={() => setPickOpen(true)}
+            title="Pick any machines from the full list (across pages) — up to 12 lines"
+          >
+            Mix machines
           </button>
           {customIds ? (
             <button type="button" className="perfSegPill" onClick={() => setCustomIds(null)}>
-              Clear custom
+              Clear mix
             </button>
           ) : null}
         </div>
@@ -642,26 +680,35 @@ export function PerfOverviewSection({
         </div>
       </div>
 
-      <div className="perfGraphNav">
+      <p className="perfGraphPageMeta" aria-live="polite">
+        {customIds?.length
+          ? `Custom mix · ${seriesMachines.length} machines`
+          : canPage
+            ? `Page ${page + 1} / ${pageCount} · ${pagePool.length} of ${ranked.length} machines`
+            : `${pagePool.length} machines on graph`}
+      </p>
+
+      {loading ? <p className="perfMuted">Loading overview…</p> : null}
+
+      <div className="perfGraphStage">
         <button
           type="button"
-          className="perfGraphNavBtn"
+          className="perfGraphSideBtn"
           disabled={!canPage || page <= 0}
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           aria-label="Previous 12 machines"
         >
           ‹
         </button>
-        <span className="perfGraphNavLabel">
-          {customIds?.length
-            ? `Custom set · ${seriesMachines.length} machines`
-            : canPage
-              ? `Page ${page + 1} / ${pageCount} · ${pagePool.length} of ${ranked.length} machines`
-              : `${pagePool.length} machines on graph`}
-        </span>
+        <div
+          ref={chartRef}
+          className="perfEchart perfEchartOverview"
+          role="img"
+          aria-label="Performance Trajectory"
+        />
         <button
           type="button"
-          className="perfGraphNavBtn"
+          className="perfGraphSideBtn"
           disabled={!canPage || page >= pageCount - 1}
           onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
           aria-label="Next 12 machines"
@@ -669,17 +716,6 @@ export function PerfOverviewSection({
           ›
         </button>
       </div>
-
-      {loading ? <p className="perfMuted">Loading overview…</p> : null}
-
-      <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
-        <div
-          ref={chartRef}
-          className="perfEchart perfEchartOverview"
-          role="img"
-          aria-label="Performance Trajectory"
-        />
-      </ChartExportWrap>
 
       <div className="perfKpiRow perfKpiRowHero">
         <KpiBox
@@ -752,6 +788,7 @@ export function PerfOverviewSection({
         <GraphMachinePickerModal
           machines={ranked}
           selectedIds={customIds || pagePool.map((m) => m.machineId)}
+          pageIds={pagePool.map((m) => m.machineId)}
           onApply={(ids) => setCustomIds(ids)}
           onClose={() => setPickOpen(false)}
         />

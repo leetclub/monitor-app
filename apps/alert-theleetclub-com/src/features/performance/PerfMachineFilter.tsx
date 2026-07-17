@@ -17,7 +17,7 @@ function displayName(m: MachineRow): string {
   return n || 'Unnamed location';
 }
 
-/** Searchable multi-select for Performance locations (Select all = full fleet, loaded in batches). */
+/** Compact searchable Locations bar (full width — not a tall empty sidebar). */
 export function PerfMachineFilter({ machines, selected, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -81,33 +81,89 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
         : `${count} locations`;
 
   return (
-    <section className="perfMachineFilter perfMachineFilterDropdown" aria-label="Filter machines for graphs">
-      <div className="perfMachineFilterHead">
-        <h3 className="perfMachineFilterTitle">Locations</h3>
-        <span className="perfMachineFilterCount">{summary}</span>
-      </div>
-      <p className="perfMachineFilterHint">
-        Search and pick locations for data. Graphs show up to 12 lines — use trajectory paging or
-        custom pick on the chart.
-      </p>
+    <section className="perfMachineFilter perfMachineFilterBar" aria-label="Filter machines for graphs">
+      <div className="perfLocBarMain" ref={rootRef}>
+        <div className="perfLocBarLabel">
+          <h3 className="perfMachineFilterTitle">Locations</h3>
+          <span className="perfMachineFilterCount">{summary}</span>
+        </div>
+        <div className="perfLocSelect">
+          <button
+            type="button"
+            className={`perfLocSelectTrigger ${open ? 'open' : ''}`}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-haspopup="listbox"
+          >
+            <span className="perfLocSelectSummary">{summary}</span>
+            <span className="perfLocSelectChevron" aria-hidden>
+              ▾
+            </span>
+          </button>
 
-      <div className="perfLocSelect" ref={rootRef}>
-        <button
-          type="button"
-          className={`perfLocSelectTrigger ${open ? 'open' : ''}`}
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-haspopup="listbox"
-        >
-          <span className="perfLocSelectSummary">{summary}</span>
-          <span className="perfLocSelectChevron" aria-hidden>
-            ▾
-          </span>
-        </button>
-
+          {open ? (
+            <div className="perfLocDropdown" role="listbox">
+              <div className="perfLocDropdownToolbar">
+                <input
+                  type="search"
+                  className="perfLocSearch"
+                  placeholder="Search location…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  autoFocus
+                />
+                <div className="perfMachineFilterActions">
+                  <button
+                    type="button"
+                    className={`perfSegPill ${allSelected ? 'active' : ''}`}
+                    onClick={() => onChange(null)}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className={`perfSegPill ${empty ? 'active' : ''}`}
+                    onClick={() => onChange(new Set())}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="perfLocDropdownList">
+                {filtered.length === 0 ? (
+                  <p className="perfMuted">No matches.</p>
+                ) : (
+                  filtered.map((m) => {
+                    const checked = isChecked(m.id, selected);
+                    const solo = selected !== null && selected.size === 1 && selected.has(m.id);
+                    const label = displayName(m);
+                    return (
+                      <div key={m.id} className={`perfLocRow ${solo ? 'perfLocRowSolo' : ''}`}>
+                        <label className="perfLocRowMain">
+                          <input type="checkbox" checked={checked} onChange={() => toggle(m.id)} />
+                          <span className="perfLocRowName" title={label}>
+                            {label}
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          className={`perfMachineOnlyBtn ${solo ? 'active' : ''}`}
+                          onClick={() => onlyThis(m.id)}
+                          title="Show only this location"
+                        >
+                          Only
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
         {!allSelected && selectedRows.length > 0 ? (
           <div className="perfLocChips">
-            {selectedRows.slice(0, 8).map((m) => (
+            {selectedRows.slice(0, 10).map((m) => (
               <button
                 key={m.id}
                 type="button"
@@ -119,71 +175,16 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
                 <span aria-hidden>×</span>
               </button>
             ))}
-            {selectedRows.length > 8 ? (
-              <span className="perfLocChipMore">+{selectedRows.length - 8}</span>
+            {selectedRows.length > 10 ? (
+              <span className="perfLocChipMore">+{selectedRows.length - 10}</span>
             ) : null}
           </div>
         ) : null}
-
-        {open ? (
-          <div className="perfLocDropdown" role="listbox">
-            <div className="perfLocDropdownToolbar">
-              <input
-                type="search"
-                className="perfLocSearch"
-                placeholder="Search location…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                autoFocus
-              />
-              <div className="perfMachineFilterActions">
-                <button type="button" className={`perfSegPill ${allSelected ? 'active' : ''}`} onClick={() => onChange(null)}>
-                  Select all
-                </button>
-                <button
-                  type="button"
-                  className={`perfSegPill ${empty ? 'active' : ''}`}
-                  onClick={() => onChange(new Set())}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div className="perfLocDropdownList">
-              {filtered.length === 0 ? (
-                <p className="perfMuted">No matches.</p>
-              ) : (
-                filtered.map((m) => {
-                  const checked = isChecked(m.id, selected);
-                  const solo = selected !== null && selected.size === 1 && selected.has(m.id);
-                  const label = displayName(m);
-                  return (
-                    <div
-                      key={m.id}
-                      className={`perfLocRow ${solo ? 'perfLocRowSolo' : ''}`}
-                    >
-                      <label className="perfLocRowMain">
-                        <input type="checkbox" checked={checked} onChange={() => toggle(m.id)} />
-                        <span className="perfLocRowName" title={label}>
-                          {label}
-                        </span>
-                      </label>
-                      <button
-                        type="button"
-                        className={`perfMachineOnlyBtn ${solo ? 'active' : ''}`}
-                        onClick={() => onlyThis(m.id)}
-                        title="Show only this location"
-                      >
-                        Only
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ) : null}
       </div>
+      <p className="perfMachineFilterHint">
+        Data scope for all charts. Trajectory shows 12 lines at a time — use side arrows or{' '}
+        <strong>Mix machines</strong> to combine ranks from different pages.
+      </p>
     </section>
   );
 }

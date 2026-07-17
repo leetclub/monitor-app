@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-18 | **Performance layout polish:** Locations is a compact top bar (no empty sidebar). PNG sits in the Trajectory header (not over the legend). Page **‹ ›** flank the chart left/right. **Mix machines** modal: Top6+Lowest6, ranks, search — combine any machines across pages without duplicate chips. |
 | 2026-07-17 | **Performance dropdown names + legend arrows:** Locations dropdown shows location **names** (fixed empty labels). Removed duplicate series chip buttons; use the chart legend (line icons) with clearer **scroll ‹ ›** for all series on the page, plus page ‹ › for the next 12 machines. |
 | 2026-07-17 | **Performance names not IDs:** Fleet batches with `machineIds` were labeling charts with raw Vendon IDs (name map skipped). API resolves/caches Vendon names again; UI overlays names from `/api/alert/machines`. Locations dropdown shows **names only**. |
 | 2026-07-17 | **Performance Trajectory UX:** Locations = searchable dropdown; Select all loads **all** machines via batched fleet fetches. Graph renamed **Performance Trajectory** — default All shows top **12** by sales with **‹ ›** pages; series chips toggle lines; **Customize graph** picks any ≤12 from full list. API `machineIds` batch size 30 / server max 120 per request. |

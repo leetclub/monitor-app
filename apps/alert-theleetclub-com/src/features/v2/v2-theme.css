@@ -513,7 +513,8 @@ a.v2NavLink.v2NavLinkActive {
   }
 
   .v2AppRoot .perfLayout {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
   }
 
   .v2AppRoot .perfFilter {

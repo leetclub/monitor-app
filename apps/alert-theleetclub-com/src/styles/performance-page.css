@@ -39,17 +39,17 @@
 }
 
 .perfLayout {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
   margin-top: 8px;
 }
 
-/* iPad / tablet: stack machine filter above charts */
+/* iPad / tablet: same stacked layout */
 @media (max-width: 1199px) {
   .perfLayout {
-    grid-template-columns: 1fr;
+    gap: 10px;
   }
 }
 
@@ -59,6 +59,41 @@
   background: var(--panel2);
   padding: 10px 12px;
   min-width: 0;
+}
+
+.perfMachineFilterBar {
+  position: static;
+  align-self: stretch;
+  width: 100%;
+}
+
+.perfLocBarMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.perfLocBarLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 7rem;
+}
+
+.perfMachineFilterBar .perfLocSelect {
+  flex: 1 1 240px;
+  max-width: 420px;
+  min-width: min(240px, 100%);
+}
+
+.perfMachineFilterBar .perfLocChips {
+  flex: 1 1 100%;
+  margin-top: 0;
+}
+
+.perfMachineFilterBar .perfMachineFilterHint {
+  margin: 8px 0 0;
 }
 
 .perfMachineFilterHead {
@@ -94,9 +129,8 @@
 }
 
 .perfMachineFilterDropdown {
-  position: sticky;
-  top: 8px;
-  align-self: start;
+  position: static;
+  align-self: stretch;
 }
 
 .perfLocSelect {
@@ -383,6 +417,10 @@
   margin-top: 10px;
 }
 
+.perfGraphPickList .perfMachineRow {
+  grid-template-columns: 18px 2rem minmax(0, 1fr) auto;
+}
+
 .perfGraphPickActions {
   display: flex;
   justify-content: flex-end;
@@ -489,7 +527,102 @@
 }
 
 .perfOverviewHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.perfOverviewHeadText {
+  min-width: 0;
+  flex: 1;
+}
+
+.perfOverviewHead .chartExportBtn {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.perfSegPillEmphasis {
+  border-color: rgba(45, 212, 191, 0.45);
+  color: var(--text);
+}
+
+.perfGraphPageMeta {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+}
+
+.perfGraphStage {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  gap: 6px;
+  align-items: stretch;
+  margin: 0 0 4px;
+}
+
+.perfGraphSideBtn {
+  appearance: none;
+  align-self: center;
+  width: 40px;
+  height: min(220px, 55%);
+  min-height: 72px;
+  max-height: 280px;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.perfGraphSideBtn:hover:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.55);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.perfGraphSideBtn:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.perfGraphStage .perfEchartOverview {
+  min-width: 0;
+}
+
+.perfGraphPickQuick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.perfGraphPickRank {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 1.75rem;
+}
+
+@media (max-width: 720px) {
+  .perfGraphStage {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    gap: 4px;
+  }
+  .perfGraphSideBtn {
+    width: 32px;
+    font-size: 1.4rem;
+  }
 }
 
 .perfOverviewHero {
