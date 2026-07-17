@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; **Live operator** — Task Manager name in metric box + attendance badge (Late / Absent / Missing); column **not sortable**; **one tap** → schedule + **icon-only** contacts (no email/phone in table or modal body). **Last / tx** — weekday + date + time (3 lines; sortable via Vendon timestamp). Sales / Target / Trend / QA popups; fleet bar on Today vs Yesterday adds **Yest. full day** KD + **−2d full day** KD + **vs −2d** %. Last clean + tech visit use snapshot/SafetyCulture. |
 | `/overall` | Overall | Workbook columns; **sortable headers** (⇅/▼/▲) on all columns with real data; **Operator Activity** column; **Attendance** from Task Manager (`GET /api/alert/workflow/machine-attendance-map` + tap → `operator-schedule` modal); **Sales** uses `GET /api/alert/overall/daily-sales-elapsed` — **Today vs Yesterday** or **Yesterday vs Day Before** per compare preset; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | **Sales vs target graphs** (Targets Areas parity): overview trajectory + dashed **Avg daily target** line; **Performance charts** grid — period target vs actual bars, achievement ranking (100% line), daily revenue + cumulative pace; single machine → Revenue / Product trajectory (stacked achieved + remaining + target line). Presets WTD/MTD/…; filter Select all / Clear / **Only**. Product cups optional. Banner when no Admin/sheet targets. Red Flags **Target** column is today % only (tap modal) — not graphs. |
+| `/performance` | Performance | **Sales vs target graphs** (Targets Areas parity): **Performance Trajectory** (up to 12 lines) with **‹ › page** through all machines, series chips to hide/show, and **Customize graph** (pick any ≤12, e.g. top + lowest). Locations = searchable dropdown (Select all loads full fleet in batches). Dashed **Avg daily target**; **Performance charts** grid; single machine → Revenue / Product trajectory. Presets WTD/MTD/…; Product cups optional. Banner when no Admin/sheet targets. Red Flags **Target** = today % only. |
 | `/admin` → Targets | Admin · Targets | Location target once (KD or cups). Promote **1..N Vendon products**, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** (avg / last week / suggest) on hover-click. |
 | `/v2` … `/v2/*` | **Alert v2** | Pure Manus **Fleet Intelligence** UI with **full Classic workbook fields** (Red Flags / Overall / QA / Performance) in Manus tables/cards — no Classic Stitch chrome. Classic + Pro at `/`. Login `/v2/login`. |
 | `/admin` | Admin | User-entered data **not on Vendon**. **Machines** (cleaning, operators, hours), **Targets** (location KD + SX product cups + period), **Area owners**, **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
@@ -58,7 +58,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
-*Figure 6 — Performance: multi-select location KD + product cups charts (Targets Areas style).*
+*Figure 6 — Performance: searchable locations, Performance Trajectory (page of 12 + customize), Areas charts.*
 
 ![7 Alert v2](docs/product-prototype/figures/wire-07-v2.svg)
 
@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-17 | **Performance Trajectory UX:** Locations = searchable dropdown; Select all loads **all** machines via batched fleet fetches. Graph renamed **Performance Trajectory** — default All shows top **12** by sales with **‹ ›** pages; series chips toggle lines; **Customize graph** picks any ≤12 from full list. API `machineIds` batch size 30 / server max 120 per request. |
 | 2026-07-17 | **Performance location cap 24→48:** Multi-select / API `machineIds` max raised to **48** (same as auto top-revenue load). Chart “All machines” still plots top **12** lines for readability. |
 | 2026-07-17 | **Performance growth + combined line:** Growth KPI follows All/Top5/Lowest5 (by sales); click opens popup with all three groups + per-machine table. New **YoY growth** KPI (same dates last year) with the same popup. **Combined line** toggle sums shown machines into one trajectory. |
 | 2026-07-16 | **Performance Overview (Classic `/performance`):** Top 5 / Lowest 5 ranked by **period sales KD** (not % of target). Hover tooltip: green/red **day Δ ▲/▼ +x%** and colored % of target. Same board on `/v2/performance`. |

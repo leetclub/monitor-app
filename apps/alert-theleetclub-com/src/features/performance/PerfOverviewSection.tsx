@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
+import { createPortal } from 'react-dom';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendHtml } from '@/lib/salesDisplay';
 import { GrowthCompareModal } from '@/features/performance/GrowthCompareModal';
+import {
+  getAlertModalPortal,
+  modalBackdropHandlers,
+  modalPanelHandlers,
+  useAlertModal,
+} from '@/lib/useAlertModal';
 import {
   SERIES_PALETTE,
   type FleetMachine,
@@ -27,6 +34,8 @@ const FLEET_VIEWS: { id: PerfViewMode; label: string }[] = [
   { id: 'top5', label: 'Top 5' },
   { id: 'lowest5', label: 'Lowest 5' },
 ];
+
+const GRAPH_PAGE = 12;
 
 function readTheme() {
   const dark =
@@ -59,19 +68,8 @@ function dayLabel(d: PerfDay): string {
   return wd ? `${wd} ${md}` : md;
 }
 
-function pickMachines(
-  machines: FleetMachine[],
-  mode: PerfViewMode,
-  fleetRanking: boolean,
-): FleetMachine[] {
-  const bySales = (a: FleetMachine, b: FleetMachine) => b.totalLocationKwd - a.totalLocationKwd;
-  if (!fleetRanking || mode === 'selected') {
-    return [...machines].sort(bySales);
-  }
-  const ranked = [...machines].sort(bySales);
-  if (mode === 'top5') return ranked.slice(0, 5);
-  if (mode === 'lowest5') return [...ranked].reverse().slice(0, 5);
-  return ranked.slice(0, 12);
+function bySales(a: FleetMachine, b: FleetMachine) {
+  return b.totalLocationKwd - a.totalLocationKwd;
 }
 
 function viewToGrowthKey(view: PerfViewMode, fleetRanking: boolean): GrowthGroupKey {
@@ -118,6 +116,108 @@ function KpiBox({
   return <div className={`perfKpi perfKpiWide ${cls}`}>{body}</div>;
 }
 
+function GraphMachinePickerModal({
+  machines,
+  selectedIds,
+  onApply,
+  onClose,
+}: {
+  machines: FleetMachine[];
+  selectedIds: string[];
+  onApply: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  useAlertModal(onClose);
+  const backdrop = modalBackdropHandlers(onClose);
+  const panel = modalPanelHandlers();
+  const [q, setQ] = useState('');
+  const [pick, setPick] = useState<Set<string>>(() => new Set(selectedIds));
+  const ranked = useMemo(() => [...machines].sort(bySales), [machines]);
+  const filtered = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    if (!n) return ranked;
+    return ranked.filter(
+      (m) =>
+        m.machineName.toLowerCase().includes(n) ||
+        String(m.machineId).toLowerCase().includes(n),
+    );
+  }, [ranked, q]);
+
+  const toggle = (id: string) => {
+    setPick((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < GRAPH_PAGE) next.add(id);
+      return next;
+    });
+  };
+
+  return createPortal(
+    <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
+      <div className="salesHistoryModal perfGrowthModal" {...panel}>
+        <div className="salesHistoryHead">
+          <div>
+            <p className="salesHistoryEyebrow">Performance Trajectory</p>
+            <h2 className="salesHistoryTitle">Choose machines for the graph</h2>
+            <p className="salesHistorySub">
+              Up to {GRAPH_PAGE} lines. Mix top and lowest (or any set). {pick.size}/{GRAPH_PAGE}{' '}
+              selected.
+            </p>
+          </div>
+          <button type="button" className="salesHistoryClose" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <div className="perfGrowthModalBody">
+          <input
+            type="search"
+            className="perfLocSearch"
+            placeholder="Search machine…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            autoFocus
+          />
+          <div className="perfLocDropdownList perfGraphPickList">
+            {filtered.map((m) => {
+              const on = pick.has(m.machineId);
+              const blocked = !on && pick.size >= GRAPH_PAGE;
+              return (
+                <label key={m.machineId} className={`perfMachineRow ${on ? 'perfMachineRowSolo' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={blocked}
+                    onChange={() => toggle(m.machineId)}
+                  />
+                  <span className="perfMachineRowName">{m.machineName}</span>
+                  <span className="perfMachineRowId">{formatKwd(m.totalLocationKwd)}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="perfGraphPickActions">
+            <button type="button" className="perfSegPill" onClick={() => setPick(new Set())}>
+              Clear pick
+            </button>
+            <button
+              type="button"
+              className="perfSegPill active"
+              onClick={() => {
+                onApply([...pick]);
+                onClose();
+              }}
+              disabled={pick.size === 0}
+            >
+              Show on graph
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    getAlertModalPortal(),
+  );
+}
+
 export function PerfOverviewSection({
   machines,
   aggregateDays,
@@ -148,20 +248,56 @@ export function PerfOverviewSection({
   fleetRanking?: boolean;
   selectionLabel?: string;
 }) {
-  const [view, setView] = useState<PerfViewMode>('top5');
+  const [view, setView] = useState<PerfViewMode>('all');
   const [combined, setCombined] = useState(false);
   const [growthModal, setGrowthModal] = useState<'prev' | 'yoy' | null>(null);
+  const [page, setPage] = useState(0);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
+  const [customIds, setCustomIds] = useState<string[] | null>(null);
+  const [pickOpen, setPickOpen] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
     if (!fleetRanking) setView('selected');
-    else setView((v) => (v === 'selected' ? 'top5' : v));
+    else setView((v) => (v === 'selected' ? 'all' : v));
   }, [fleetRanking]);
 
+  const ranked = useMemo(() => [...machines].sort(bySales), [machines]);
+
+  const pagePool = useMemo(() => {
+    if (customIds?.length) {
+      const map = new Map(ranked.map((m) => [m.machineId, m]));
+      return customIds.map((id) => map.get(id)).filter((m): m is FleetMachine => Boolean(m));
+    }
+    if (!fleetRanking || view === 'selected') {
+      const start = page * GRAPH_PAGE;
+      return ranked.slice(start, start + GRAPH_PAGE);
+    }
+    if (view === 'top5') return ranked.slice(0, 5);
+    if (view === 'lowest5') return [...ranked].reverse().slice(0, 5);
+    const start = page * GRAPH_PAGE;
+    return ranked.slice(start, start + GRAPH_PAGE);
+  }, [ranked, view, fleetRanking, page, customIds]);
+
+  const pageCount = useMemo(() => {
+    if (customIds?.length) return 1;
+    if (view === 'top5' || view === 'lowest5') return 1;
+    return Math.max(1, Math.ceil(ranked.length / GRAPH_PAGE));
+  }, [ranked.length, view, customIds]);
+
+  useEffect(() => {
+    setPage(0);
+    setHiddenIds(new Set());
+  }, [view, machines, customIds]);
+
+  useEffect(() => {
+    if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1));
+  }, [page, pageCount]);
+
   const seriesMachines = useMemo(
-    () => pickMachines(machines, fleetRanking ? view : 'selected', fleetRanking),
-    [machines, view, fleetRanking],
+    () => pagePool.filter((m) => !hiddenIds.has(m.machineId)),
+    [pagePool, hiddenIds],
   );
 
   const labels = useMemo(() => {
@@ -247,8 +383,7 @@ export function PerfOverviewSection({
         });
       }
     } else {
-      for (let i = 0; i < seriesMachines.length; i++) {
-        const m = seriesMachines[i];
+      seriesMachines.forEach((m, i) => {
         const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
         const days = m.days || [];
         series.push({
@@ -263,7 +398,7 @@ export function PerfOverviewSection({
           emphasis: { focus: 'series', lineStyle: { width: 3.2 } },
           data: days.map((d) => Number(d.locationKwd) || 0),
         });
-      }
+      });
       const tgtByIdx: (number | null)[] = labels.map((_, i) => {
         let sum = 0;
         let n = 0;
@@ -392,7 +527,11 @@ export function PerfOverviewSection({
 
   const onExport = useCallback(() => {
     const c = chartInst.current;
-    if (c) downloadChartPng(c, chartFilename(['perf-overview', preset, view, combined ? 'combined' : 'multi']));
+    if (c)
+      downloadChartPng(
+        c,
+        chartFilename(['perf-trajectory', preset, view, combined ? 'combined' : 'multi']),
+      );
   }, [preset, view, combined]);
 
   const deficitTone =
@@ -423,19 +562,23 @@ export function PerfOverviewSection({
       ? `${windowMeta.yoyStart} → ${windowMeta.yoyEnd}`
       : 'same dates last year';
 
+  const canPage = !customIds?.length && view !== 'top5' && view !== 'lowest5' && pageCount > 1;
+
   return (
     <section className="perfOverviewHero" aria-labelledby="perf-hero-title">
       <header className="perfOverviewHead">
         <div>
           <h3 id="perf-hero-title" className="perfSectionTitle">
-            Overview trajectory
+            Performance Trajectory
           </h3>
           <p className="perfSectionHint">
-            Daily location KD. Top/Lowest 5 by period sales. Optional combined single line.
+            Daily location KD — up to {GRAPH_PAGE} lines. Page through all machines or pick a custom
+            mix (e.g. top + lowest).
             {windowLabel ? ` · ${windowLabel}` : ''}
             {!fleetRanking
-              ? ' · Showing only your selected locations (Top/Lowest 5 need the full fleet).'
+              ? ` · ${selectionLabel || 'Selected locations'} (Top/Lowest need a larger set).`
               : ''}
+            {customIds?.length ? ` · Custom ${customIds.length} on graph` : ''}
           </p>
         </div>
       </header>
@@ -447,14 +590,17 @@ export function PerfOverviewSection({
               <button
                 key={v.id}
                 type="button"
-                className={`perfSegPill ${view === v.id ? 'active' : ''}`}
-                onClick={() => setView(v.id)}
+                className={`perfSegPill ${view === v.id && !customIds ? 'active' : ''}`}
+                onClick={() => {
+                  setCustomIds(null);
+                  setView(v.id);
+                }}
               >
                 {v.label}
               </button>
             ))
           ) : (
-            <span className="perfSegPill active" title="Ranking modes apply to the full fleet only">
+            <span className="perfSegPill active">
               {selectionLabel || `Selected (${machines.length})`}
             </span>
           )}
@@ -462,10 +608,17 @@ export function PerfOverviewSection({
             type="button"
             className={`perfSegPill ${combined ? 'active' : ''}`}
             onClick={() => setCombined((c) => !c)}
-            title="One line = sum of machines currently shown"
           >
             {combined ? 'Combined line on' : 'Combined line'}
           </button>
+          <button type="button" className={`perfSegPill ${customIds ? 'active' : ''}`} onClick={() => setPickOpen(true)}>
+            Customize graph
+          </button>
+          {customIds ? (
+            <button type="button" className="perfSegPill" onClick={() => setCustomIds(null)}>
+              Clear custom
+            </button>
+          ) : null}
         </div>
         <div className="perfModePills" role="group" aria-label="Time period">
           {PRESETS.map((p) => (
@@ -481,6 +634,63 @@ export function PerfOverviewSection({
         </div>
       </div>
 
+      <div className="perfGraphNav">
+        <button
+          type="button"
+          className="perfGraphNavBtn"
+          disabled={!canPage || page <= 0}
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          aria-label="Previous 12 machines"
+        >
+          ‹
+        </button>
+        <span className="perfGraphNavLabel">
+          {customIds?.length
+            ? `Custom set · ${seriesMachines.length} of ${customIds.length} visible`
+            : canPage
+              ? `Page ${page + 1} / ${pageCount} · ${pagePool.length} machines (${ranked.length} total)`
+              : `${pagePool.length} machines on graph`}
+        </span>
+        <button
+          type="button"
+          className="perfGraphNavBtn"
+          disabled={!canPage || page >= pageCount - 1}
+          onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+          aria-label="Next 12 machines"
+        >
+          ›
+        </button>
+      </div>
+
+      {pagePool.length > 0 ? (
+        <div className="perfGraphSeriesToggles" role="group" aria-label="Toggle series on graph">
+          {pagePool.map((m, i) => {
+            const on = !hiddenIds.has(m.machineId);
+            const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
+            return (
+              <button
+                key={m.machineId}
+                type="button"
+                className={`perfSeriesChip ${on ? 'active' : ''}`}
+                style={{ ['--series-color' as string]: color }}
+                onClick={() =>
+                  setHiddenIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(m.machineId)) next.delete(m.machineId);
+                    else next.add(m.machineId);
+                    return next;
+                  })
+                }
+                title={on ? 'Hide from graph' : 'Show on graph'}
+              >
+                <span className="perfSeriesDot" />
+                {m.machineName}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {loading ? <p className="perfMuted">Loading overview…</p> : null}
 
       <ChartExportWrap onExport={onExport} className="chartExportWrapBlock">
@@ -488,7 +698,7 @@ export function PerfOverviewSection({
           ref={chartRef}
           className="perfEchart perfEchartOverview"
           role="img"
-          aria-label="Performance overview trajectory"
+          aria-label="Performance Trajectory"
         />
       </ChartExportWrap>
 
@@ -518,11 +728,7 @@ export function PerfOverviewSection({
           value={growthPrevPct != null ? `${growthPrevPct}%` : '—'}
           hint={growthGroupHint}
           tone={growthTone}
-          onClick={
-            kpis?.growthVsPrev
-              ? () => setGrowthModal('prev')
-              : undefined
-          }
+          onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
         />
         <KpiBox
           label="YoY growth"
@@ -561,6 +767,14 @@ export function PerfOverviewSection({
           windowLabel={windowLabel}
           groups={kpis.growthVsYoy}
           onClose={() => setGrowthModal(null)}
+        />
+      ) : null}
+      {pickOpen ? (
+        <GraphMachinePickerModal
+          machines={ranked}
+          selectedIds={customIds || pagePool.map((m) => m.machineId)}
+          onApply={(ids) => setCustomIds(ids)}
+          onClose={() => setPickOpen(false)}
         />
       ) : null}
     </section>

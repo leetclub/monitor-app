@@ -8,6 +8,8 @@ import { V2Panel } from '@/features/v2/v2Ui';
 import { PromoSwipeDeck } from '@/features/performance/PromoSwipeDeck';
 import { PerfMachineFilter } from '@/features/performance/PerfMachineFilter';
 import { PerfOverviewSection } from '@/features/performance/PerfOverviewSection';
+import { fetchFleetBatched } from '@/features/performance/fetchFleetBatched';
+import { rebuildFleetKpis } from '@/features/performance/rebuildFleetKpis';
 import {
   FleetCompareChart,
   FleetPerformanceOverview,
@@ -44,8 +46,7 @@ function parseIds(raw: string | null): string[] {
   return raw
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 48);
+    .filter(Boolean);
 }
 
 export function PerformancePage({
@@ -102,11 +103,14 @@ export function PerformancePage({
   }, [apiMachines, snapQ.data?.rows]);
 
   const selectedIds = useMemo(() => {
-    if (selected === null) return [];
-    return [...selected].slice(0, 48);
-  }, [selected]);
+    if (selected === null) return machineRows.map((m) => m.id);
+    return [...selected];
+  }, [selected, machineRows]);
 
-  const selectedKey = selectedIds.slice().sort().join(',');
+  const selectedKey = useMemo(() => {
+    if (selected === null) return `all:${machineRows.map((m) => m.id).sort().join(',')}`;
+    return selectedIds.slice().sort().join(',');
+  }, [selected, selectedIds, machineRows]);
 
   const syncUrl = (next: Set<string> | null) => {
     setSelected(next);
@@ -135,20 +139,33 @@ export function PerformancePage({
       preset,
       loadProducts ? 'prod' : 'loc',
     ],
-    queryFn: () => {
-      const qs = new URLSearchParams();
-      qs.set('preset', preset);
-      qs.set('includeProducts', loadProducts ? '1' : '0');
-      if (selected !== null && selectedKey) qs.set('machineIds', selectedKey);
-      return apiGet<FleetPayload>(`/api/alert/performance/fleet?${qs.toString()}`);
+    queryFn: async (): Promise<FleetPayload> => {
+      const ids =
+        selected === null
+          ? machineRows.map((m) => m.id)
+          : selectedIds;
+      if (!ids.length) return { machines: [], aggregateDays: [], machineCount: 0 };
+      const payload = await fetchFleetBatched({
+        machineIds: ids,
+        preset,
+        includeProducts: loadProducts,
+      });
+      return {
+        ...payload,
+        kpis: rebuildFleetKpis(payload.machines || [], payload.kpis),
+      };
     },
-    enabled: selected === null || selectedIds.length > 0,
+    enabled: (selected === null && machineRows.length > 0) || selectedIds.length > 0,
     staleTime: 90_000,
     refetchInterval: 3 * 60_000,
   });
 
   const singleId =
-    selectedIds.length === 1 ? selectedIds[0] : focusId && selectedIds.includes(focusId) ? focusId : '';
+    selected !== null && selectedIds.length === 1
+      ? selectedIds[0]
+      : focusId && selected !== null && selectedIds.includes(focusId)
+        ? focusId
+        : '';
 
   const detailQ = useQuery({
     queryKey: ['alert-performance', singleId, preset],
@@ -164,12 +181,11 @@ export function PerformancePage({
   const aggregateDays = fleetQ.data?.aggregateDays || [];
   const kpis = fleetQ.data?.kpis;
   const detail = detailQ.data;
-  const multi = selectedIds.length !== 1;
-  // All/Top5/Lowest5 only make sense for the full fleet (or a large explicit set)
+  const multi = selected === null || selectedIds.length !== 1;
   const fleetRanking = selected === null || selectedIds.length > 5;
   const selectionLabel =
     selected === null
-      ? undefined
+      ? `All (${machineRows.length})`
       : selectedIds.length === 1
         ? '1 location'
         : `${selectedIds.length} locations`;
@@ -363,7 +379,7 @@ export function PerformancePage({
     <div className="perfPage">
       <StitchOpsPanel
         title="Performance"
-        subtitle="Overview trajectory · Target vs actual · Ranking — Targets Areas style"
+        subtitle="Performance Trajectory · Target vs actual · Ranking"
         iconName="performance"
       >
         {boardInner}

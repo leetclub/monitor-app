@@ -93,6 +93,261 @@
   line-height: 1.35;
 }
 
+.perfMachineFilterDropdown {
+  position: sticky;
+  top: 8px;
+  align-self: start;
+}
+
+.perfLocSelect {
+  position: relative;
+}
+
+.perfLocSelectTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.perfLocSelectTrigger:hover,
+.perfLocSelectTrigger.open {
+  border-color: rgba(45, 212, 191, 0.45);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+}
+
+.perfLocSelectSummary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.perfLocSelectChevron {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.perfLocSelectTrigger.open .perfLocSelectChevron {
+  transform: rotate(180deg);
+}
+
+.perfLocChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.perfLocChip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.1);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.perfLocChip span {
+  opacity: 0.7;
+}
+
+.perfLocChip:hover {
+  background: rgba(45, 212, 191, 0.18);
+}
+
+.perfLocChipMore {
+  font-size: 0.68rem;
+  color: var(--muted);
+  align-self: center;
+  padding: 0 4px;
+}
+
+.perfLocDropdown {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.perfLocDropdownToolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.perfLocSearch {
+  width: 100%;
+  box-sizing: border-box;
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.perfLocSearch:focus {
+  outline: none;
+  border-color: rgba(45, 212, 191, 0.55);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12);
+}
+
+.perfLocDropdownList {
+  max-height: min(360px, 52vh);
+  overflow: auto;
+  padding: 6px;
+}
+
+.perfLocOption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  grid-template-columns: none;
+  cursor: default;
+}
+
+.perfLocOptionMain {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.perfGraphNav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 10px 0 8px;
+}
+
+.perfGraphNavBtn {
+  appearance: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.perfGraphNavBtn:hover:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.5);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.perfGraphNavBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.perfGraphNavLabel {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: center;
+  min-width: 12rem;
+}
+
+.perfGraphSeriesToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.perfSeriesChip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.25;
+  opacity: 0.55;
+}
+
+.perfSeriesChip.active {
+  opacity: 1;
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--series-color, #2dd4bf) 55%, transparent);
+  background: color-mix(in srgb, var(--series-color, #2dd4bf) 14%, transparent);
+}
+
+.perfSeriesDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--series-color, #2dd4bf);
+  flex-shrink: 0;
+}
+
+.perfSeriesChip:not(.active) .perfSeriesDot {
+  opacity: 0.35;
+}
+
+.perfGraphPickList {
+  max-height: min(420px, 55vh);
+  margin-top: 10px;
+}
+
+.perfGraphPickActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
 .perfMachineList {
   max-height: 420px;
   overflow: auto;
