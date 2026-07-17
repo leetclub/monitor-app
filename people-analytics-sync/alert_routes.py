@@ -3009,7 +3009,7 @@ def register_alert_routes(app) -> None:
         fetch_hi = max(win_end, today)
 
         cache_key = (
-            f"perf:fleet:v6:{','.join(sorted(requested)) or 'auto'}:"
+            f"perf:fleet:v7:{','.join(sorted(requested)) or 'auto'}:"
             f"{preset_id}:{win_start}:{win_end}:p{int(include_products)}"
         )
         cached = _alert_cache_get(cache_key, 120)
@@ -3026,16 +3026,33 @@ def register_alert_routes(app) -> None:
 
         name_by_id: Dict[str, str] = {}
         fleet_err: Optional[str] = None
-        if explicit_machine_ids:
-            name_by_id = {mid: mid for mid in requested}
-        else:
-            fleet_rows, fleet_err = vendon_fetch_machine_list(_vendon_get)
-            if fleet_err:
-                return jsonify({"error": fleet_err, "machines": []}), 502
+
+        def _vendon_name_map() -> Tuple[Dict[str, str], Optional[str]]:
+            """id → display name; cached so batched machineIds requests do not re-scan Vendon each time."""
+            cached = _alert_cache_get("perf:vendon-machine-names:v1", 600)
+            if isinstance(cached, dict) and cached:
+                return {str(k): str(v) for k, v in cached.items() if k and v}, None
+            fleet_rows, err = vendon_fetch_machine_list(_vendon_get)
+            if err:
+                return {}, err
+            out: Dict[str, str] = {}
             for m in fleet_rows or []:
                 mid = str(m.get("id") or "").strip()
-                if mid:
-                    name_by_id[mid] = str(m.get("name") or mid).strip() or mid
+                if not mid:
+                    continue
+                out[mid] = str(m.get("name") or mid).strip() or mid
+            if out:
+                _alert_cache_set("perf:vendon-machine-names:v1", out)
+            return out, None
+
+        vendon_names, fleet_err = _vendon_name_map()
+        if explicit_machine_ids:
+            # Prefer real location names — never leave charts labeled with raw Vendon IDs.
+            name_by_id = {mid: (vendon_names.get(mid) or mid) for mid in requested}
+        else:
+            if fleet_err and not vendon_names:
+                return jsonify({"error": fleet_err, "machines": []}), 502
+            name_by_id = dict(vendon_names)
 
         db = _pa_session()
         try:

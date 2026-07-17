@@ -248,6 +248,11 @@
   cursor: pointer;
 }
 
+.perfLocOptionMain .perfMachineRowName {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .perfGraphNav {
   display: flex;
   align-items: center;

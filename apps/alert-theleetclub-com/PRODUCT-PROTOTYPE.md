@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-17 | **Performance names not IDs:** Fleet batches with `machineIds` were labeling charts with raw Vendon IDs (name map skipped). API resolves/caches Vendon names again; UI overlays names from `/api/alert/machines`. Locations dropdown shows **names only**. |
 | 2026-07-17 | **Performance Trajectory UX:** Locations = searchable dropdown; Select all loads **all** machines via batched fleet fetches. Graph renamed **Performance Trajectory** — default All shows top **12** by sales with **‹ ›** pages; series chips toggle lines; **Customize graph** picks any ≤12 from full list. API `machineIds` batch size 30 / server max 120 per request. |
 | 2026-07-17 | **Performance location cap 24→48:** Multi-select / API `machineIds` max raised to **48** (same as auto top-revenue load). Chart “All machines” still plots top **12** lines for readability. |
 | 2026-07-17 | **Performance growth + combined line:** Growth KPI follows All/Top5/Lowest5 (by sales); click opens popup with all three groups + per-machine table. New **YoY growth** KPI (same dates last year) with the same popup. **Combined line** toggle sums shown machines into one trajectory. |

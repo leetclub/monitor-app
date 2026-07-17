@@ -35,6 +35,8 @@ export async function fetchFleetBatched(opts: {
   machineIds: string[];
   preset: string;
   includeProducts: boolean;
+  /** Prefer display names from /api/alert/machines over raw IDs from fleet batches. */
+  nameById?: Record<string, string>;
 }): Promise<FleetPayload> {
   const ids = [...new Set(opts.machineIds.map((x) => String(x).trim()).filter(Boolean))];
   if (!ids.length) {
@@ -65,11 +67,17 @@ export async function fetchFleetBatched(opts: {
       byId.set(String(m.machineId), m);
     }
   }
-  const machines = [...byId.values()].sort(
-    (a, b) =>
-      (b.totalLocationKwd || 0) - (a.totalLocationKwd || 0) ||
-      a.machineName.localeCompare(b.machineName),
-  );
+  const nameById = opts.nameById || {};
+  const machines = [...byId.values()]
+    .map((m) => {
+      const name = nameById[String(m.machineId)];
+      return name ? { ...m, machineName: name } : m;
+    })
+    .sort(
+      (a, b) =>
+        (b.totalLocationKwd || 0) - (a.totalLocationKwd || 0) ||
+        a.machineName.localeCompare(b.machineName),
+    );
   const aggregateDays = mergeDays(machines);
   // Prefer richest KPI payload (last batch still has growth groups for its slice).
   // For full-fleet KPIs, UI uses machines; re-aggregate growth on client when needed.

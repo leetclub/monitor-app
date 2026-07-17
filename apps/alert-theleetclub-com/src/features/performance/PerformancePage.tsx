@@ -145,10 +145,12 @@ export function PerformancePage({
           ? machineRows.map((m) => m.id)
           : selectedIds;
       if (!ids.length) return { machines: [], aggregateDays: [], machineCount: 0 };
+      const nameById = Object.fromEntries(machineRows.map((m) => [m.id, m.name]));
       const payload = await fetchFleetBatched({
         machineIds: ids,
         preset,
         includeProducts: loadProducts,
+        nameById,
       });
       return {
         ...payload,
@@ -177,9 +179,42 @@ export function PerformancePage({
     staleTime: 60_000,
   });
 
-  const fleetMachines = fleetQ.data?.machines || [];
+  const fleetMachines = useMemo(() => {
+    const rows = fleetQ.data?.machines || [];
+    if (!rows.length || !machineRows.length) return rows;
+    const byId = new Map(machineRows.map((m) => [m.id, m.name]));
+    return rows.map((m) => {
+      const name = byId.get(String(m.machineId));
+      return name ? { ...m, machineName: name } : m;
+    });
+  }, [fleetQ.data?.machines, machineRows]);
   const aggregateDays = fleetQ.data?.aggregateDays || [];
-  const kpis = fleetQ.data?.kpis;
+  const kpis = useMemo(() => {
+    const base = fleetQ.data?.kpis;
+    if (!base?.growthVsPrev && !base?.growthVsYoy) return base;
+    const byId = new Map(fleetMachines.map((m) => [String(m.machineId), m.machineName]));
+    const fixGroup = (g: typeof base.growthVsPrev) => {
+      if (!g) return g;
+      const next = { ...g };
+      for (const key of Object.keys(next) as Array<keyof typeof next>) {
+        const slice = next[key];
+        if (!slice?.machines?.length) continue;
+        next[key] = {
+          ...slice,
+          machines: slice.machines.map((row) => {
+            const name = byId.get(String(row.machineId));
+            return name ? { ...row, machineName: name } : row;
+          }),
+        };
+      }
+      return next;
+    };
+    return {
+      ...base,
+      growthVsPrev: fixGroup(base.growthVsPrev),
+      growthVsYoy: fixGroup(base.growthVsYoy),
+    };
+  }, [fleetQ.data?.kpis, fleetMachines]);
   const detail = detailQ.data;
   const multi = selected === null || selectedIds.length !== 1;
   const fleetRanking = selected === null || selectedIds.length > 5;
