@@ -182,7 +182,7 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
         ) : null}
       </div>
       <p className="perfMachineFilterHint">
-        Data scope for all charts. Trajectory shows 12 lines at a time — use side arrows or{' '}
+        Data scope for all charts. Trajectory lists up to 12 locations above the graph — use{' '}
         <strong>Mix machines</strong> to combine ranks from different pages.
       </p>
     </section>

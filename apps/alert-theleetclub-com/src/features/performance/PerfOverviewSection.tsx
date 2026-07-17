@@ -79,15 +79,34 @@ function viewToGrowthKey(view: PerfViewMode, fleetRanking: boolean): GrowthGroup
   return 'all';
 }
 
+/** Index: current ÷ compare × 100 (100 = flat). */
+function formatIndexPct(rate: number | null | undefined): string {
+  if (rate == null || !Number.isFinite(rate)) return '—';
+  return `${rate}%`;
+}
+
+/** Growth change: (current − compare) ÷ compare × 100 ≡ index − 100. */
+function formatGrowthDeltaPct(rate: number | null | undefined): string | null {
+  if (rate == null || !Number.isFinite(rate)) return null;
+  const d = Math.round((rate - 100) * 10) / 10;
+  const sign = d > 0 ? '+' : '';
+  return `${sign}${d}%`;
+}
+
 function KpiBox({
   label,
   value,
+  subLabel,
+  subValue,
   hint,
   tone,
   onClick,
 }: {
   label: string;
   value: string;
+  /** Secondary metric label (e.g. Growth). */
+  subLabel?: string;
+  subValue?: string | null;
   hint?: string;
   tone?: 'up' | 'down' | 'neutral';
   onClick?: () => void;
@@ -98,6 +117,12 @@ function KpiBox({
     <>
       <span className="perfKpiLabel">{label}</span>
       <strong>{value}</strong>
+      {subLabel && subValue ? (
+        <span className="perfKpiSub">
+          <span className="perfKpiSubLabel">{subLabel}</span>
+          <span className="perfKpiSubValue">{subValue}</span>
+        </span>
+      ) : null}
       {hint ? <span className="perfKpiHint">{hint}</span> : null}
     </>
   );
@@ -280,6 +305,7 @@ export function PerfOverviewSection({
   const [combined, setCombined] = useState(false);
   const [growthModal, setGrowthModal] = useState<'prev' | 'yoy' | null>(null);
   const [page, setPage] = useState(0);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [customIds, setCustomIds] = useState<string[] | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -315,13 +341,17 @@ export function PerfOverviewSection({
 
   useEffect(() => {
     setPage(0);
+    setHiddenIds(new Set());
   }, [view, machines, customIds]);
 
   useEffect(() => {
     if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1));
   }, [page, pageCount]);
 
-  const seriesMachines = pagePool;
+  const seriesMachines = useMemo(
+    () => pagePool.filter((m) => !hiddenIds.has(m.machineId)),
+    [pagePool, hiddenIds],
+  );
 
   const labels = useMemo(() => {
     const first = seriesMachines[0]?.days?.length ? seriesMachines[0].days : aggregateDays;
@@ -512,27 +542,8 @@ export function PerfOverviewSection({
             return lines.join('');
           },
         },
-        legend: {
-          type: 'scroll',
-          orient: 'horizontal',
-          top: 4,
-          left: 'center',
-          width: '92%',
-          itemWidth: 22,
-          itemHeight: 10,
-          itemGap: 16,
-          pageIconSize: 16,
-          pageIconColor: theme.text,
-          pageIconInactiveColor: theme.muted,
-          pageButtonItemGap: 10,
-          pageButtonGap: 14,
-          pageButtonPosition: 'end',
-          pageFormatter: '{current}/{total}',
-          pageTextStyle: { color: theme.muted, fontSize: 11 },
-          textStyle: { color: theme.text, fontSize: 11, fontWeight: 600 },
-          inactiveColor: theme.muted,
-        },
-        grid: { left: 52, right: 18, top: 48, bottom: 36 },
+        legend: { show: false },
+        grid: { left: 52, right: 18, top: 16, bottom: 36 },
         xAxis: {
           type: 'category',
           data: labels,
@@ -612,8 +623,8 @@ export function PerfOverviewSection({
             Performance Trajectory
           </h3>
           <p className="perfSectionHint">
-            Daily location KD — up to {GRAPH_PAGE} lines. Side arrows page through ranks;{' '}
-            <strong>Mix machines</strong> combines any set (e.g. top + lowest) on one graph.
+            Daily location KD — up to {GRAPH_PAGE} lines shown above the graph. Use{' '}
+            <strong>Mix machines</strong> to combine any ranks on one graph.
             {windowLabel ? ` · ${windowLabel}` : ''}
             {!fleetRanking
               ? ` · ${selectionLabel || 'Selected locations'} (Top/Lowest need a larger set).`
@@ -680,42 +691,74 @@ export function PerfOverviewSection({
         </div>
       </div>
 
-      <p className="perfGraphPageMeta" aria-live="polite">
-        {customIds?.length
-          ? `Custom mix · ${seriesMachines.length} machines`
-          : canPage
-            ? `Page ${page + 1} / ${pageCount} · ${pagePool.length} of ${ranked.length} machines`
-            : `${pagePool.length} machines on graph`}
-      </p>
+      <div className="perfGraphPageMeta" aria-live="polite">
+        {customIds?.length ? (
+          <span>Custom mix · {pagePool.length} machines</span>
+        ) : canPage ? (
+          <>
+            <button
+              type="button"
+              className="perfGraphPageLink"
+              disabled={page <= 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              Earlier ranks
+            </button>
+            <span>
+              Showing {page * GRAPH_PAGE + 1}–{page * GRAPH_PAGE + pagePool.length} of {ranked.length}
+            </span>
+            <button
+              type="button"
+              className="perfGraphPageLink"
+              disabled={page >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              Later ranks
+            </button>
+          </>
+        ) : (
+          <span>{pagePool.length} machines on graph</span>
+        )}
+      </div>
+
+      {pagePool.length > 0 ? (
+        <div className="perfGraphLegend" role="list" aria-label="Machines on this graph">
+          {pagePool.map((m, i) => {
+            const on = !hiddenIds.has(m.machineId);
+            const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
+            return (
+              <button
+                key={m.machineId}
+                type="button"
+                role="listitem"
+                className={`perfGraphLegendItem ${on ? 'active' : ''}`}
+                style={{ ['--series-color' as string]: color }}
+                onClick={() =>
+                  setHiddenIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(m.machineId)) next.delete(m.machineId);
+                    else next.add(m.machineId);
+                    return next;
+                  })
+                }
+                title={on ? 'Hide line' : 'Show line'}
+              >
+                <span className="perfGraphLegendLine" aria-hidden />
+                <span className="perfGraphLegendName">{m.machineName}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {loading ? <p className="perfMuted">Loading overview…</p> : null}
 
-      <div className="perfGraphStage">
-        <button
-          type="button"
-          className="perfGraphSideBtn"
-          disabled={!canPage || page <= 0}
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          aria-label="Previous 12 machines"
-        >
-          ‹
-        </button>
-        <div
-          ref={chartRef}
-          className="perfEchart perfEchartOverview"
-          role="img"
-          aria-label="Performance Trajectory"
-        />
-        <button
-          type="button"
-          className="perfGraphSideBtn"
-          disabled={!canPage || page >= pageCount - 1}
-          onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-          aria-label="Next 12 machines"
-        >
-          ›
-        </button>
-      </div>
+      <div
+        ref={chartRef}
+        className="perfEchart perfEchartOverview"
+        role="img"
+        aria-label="Performance Trajectory"
+      />
 
       <div className="perfKpiRow perfKpiRowHero">
         <KpiBox
@@ -739,16 +782,20 @@ export function PerfOverviewSection({
           tone={achTone}
         />
         <KpiBox
-          label="Growth rate"
-          value={growthPrevPct != null ? `${growthPrevPct}%` : '—'}
-          hint={growthGroupHint}
+          label="% of prior period"
+          value={formatIndexPct(growthPrevPct)}
+          subLabel="Growth"
+          subValue={formatGrowthDeltaPct(growthPrevPct)}
+          hint={`${growthGroupHint} · period ÷ prior × 100`}
           tone={growthTone}
           onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
         />
         <KpiBox
-          label="YoY growth"
-          value={growthYoyPct != null ? `${growthYoyPct}%` : '—'}
-          hint="vs same period last year · tap for details"
+          label="% of last year"
+          value={formatIndexPct(growthYoyPct)}
+          subLabel="Growth"
+          subValue={formatGrowthDeltaPct(growthYoyPct)}
+          hint="vs same dates last year · tap for details"
           tone={yoyTone}
           onClick={kpis?.growthVsYoy ? () => setGrowthModal('yoy') : undefined}
         />
@@ -766,8 +813,8 @@ export function PerfOverviewSection({
 
       {growthModal === 'prev' && kpis?.growthVsPrev ? (
         <GrowthCompareModal
-          title="Growth vs previous period"
-          subtitle={`Selected period ÷ previous period (${prevWin}) × 100`}
+          title="vs previous period"
+          subtitle={`% of prior = period ÷ previous (${prevWin}) × 100 · Growth = (period − previous) ÷ previous × 100`}
           compareLabel="Prev KD"
           windowLabel={windowLabel}
           groups={kpis.growthVsPrev}
@@ -776,8 +823,8 @@ export function PerfOverviewSection({
       ) : null}
       {growthModal === 'yoy' && kpis?.growthVsYoy ? (
         <GrowthCompareModal
-          title="Growth vs last year"
-          subtitle={`Selected period ÷ same dates last year (${yoyWin}) × 100`}
+          title="vs last year"
+          subtitle={`% of last year = period ÷ YoY (${yoyWin}) × 100 · Growth = (period − YoY) ÷ YoY × 100`}
           compareLabel="YoY KD"
           windowLabel={windowLabel}
           groups={kpis.growthVsYoy}
