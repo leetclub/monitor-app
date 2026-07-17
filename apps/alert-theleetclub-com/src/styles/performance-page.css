@@ -242,6 +242,114 @@
   color: inherit;
 }
 
+.perfKpiClickable {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.perfKpiClickable:hover,
+.perfKpiClickable:focus-visible {
+  border-color: color-mix(in srgb, var(--accent, #2dd4bf) 55%, var(--border-soft));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #2dd4bf) 35%, transparent);
+  outline: none;
+}
+
+.perfKpiClickable .perfKpiHint::after {
+  content: ' · details';
+  opacity: 0.85;
+}
+
+.perfGrowthModal {
+  width: min(720px, 96vw);
+  max-height: min(88vh, 900px);
+}
+
+.perfGrowthModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.perfGrowthGroup {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md, 10px);
+  padding: 10px 12px 12px;
+  background: var(--panel2);
+}
+
+.perfGrowthGroupHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.perfGrowthGroupHead h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.perfGrowthGroupSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.perfGrowthTableWrap {
+  overflow: auto;
+  max-height: 220px;
+}
+
+.perfGrowthTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.perfGrowthTable th,
+.perfGrowthTable td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.perfGrowthTable th {
+  position: sticky;
+  top: 0;
+  background: var(--panel2);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.perfGrowthTable td:nth-child(2),
+.perfGrowthTable td:nth-child(3),
+.perfGrowthTable td:nth-child(4),
+.perfGrowthTable th:nth-child(2),
+.perfGrowthTable th:nth-child(3),
+.perfGrowthTable th:nth-child(4) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.perfGrowthFoot {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 @media (max-width: 720px) {
   .perfEchartOverview {
     height: 300px;

@@ -3008,7 +3008,7 @@ def register_alert_routes(app) -> None:
         fetch_hi = max(win_end, today)
 
         cache_key = (
-            f"perf:fleet:v3:{','.join(sorted(requested)) or 'auto'}:"
+            f"perf:fleet:v4:{','.join(sorted(requested)) or 'auto'}:"
             f"{preset_id}:{win_start}:{win_end}:p{int(include_products)}"
         )
         cached = _alert_cache_get(cache_key, 120)
@@ -3173,34 +3173,98 @@ def register_alert_routes(app) -> None:
                     except Exception:
                         logger.exception("alert_performance_fleet machine %s", mid)
 
-            # Previous-period totals (cache only — for growth KPI)
-            prev_kwd_by_mid: Dict[str, float] = {mid: 0.0 for mid in requested}
-            if prev_start <= prev_end:
-                prev_rows = (
+            # Previous-period + YoY totals (cache only — for growth KPIs / popup)
+            def _sum_kwd_by_mid(d0: date, d1: date) -> Dict[str, float]:
+                out_map: Dict[str, float] = {mid: 0.0 for mid in requested}
+                if d0 > d1 or not requested:
+                    return out_map
+                rows_sum = (
                     db.query(
                         VendonDailyMachineRevenueCache.machine_id,
                         func.sum(VendonDailyMachineRevenueCache.total_sales_kwd).label("tot"),
                     )
                     .filter(
                         VendonDailyMachineRevenueCache.machine_id.in_(requested),
-                        VendonDailyMachineRevenueCache.cache_date >= prev_start,
-                        VendonDailyMachineRevenueCache.cache_date <= prev_end,
+                        VendonDailyMachineRevenueCache.cache_date >= d0,
+                        VendonDailyMachineRevenueCache.cache_date <= d1,
                     )
                     .group_by(VendonDailyMachineRevenueCache.machine_id)
                     .all()
                 )
-                for r in prev_rows:
+                for r in rows_sum:
                     mid = str(r.machine_id or "").strip()
                     if mid:
-                        prev_kwd_by_mid[mid] = float(r.tot or 0)
+                        out_map[mid] = float(r.tot or 0)
+                return out_map
 
-            # Rank by period achievement then revenue
+            prev_kwd_by_mid = _sum_kwd_by_mid(prev_start, prev_end)
+            yoy_start = win_start - timedelta(days=365)
+            yoy_end = win_end - timedelta(days=365)
+            yoy_kwd_by_mid = _sum_kwd_by_mid(yoy_start, yoy_end)
+
+            for m in machines_out:
+                mid = str(m.get("machineId") or "").strip()
+                m["prevPeriodLocationKwd"] = round(prev_kwd_by_mid.get(mid, 0.0), 4)
+                m["yoyPeriodLocationKwd"] = round(yoy_kwd_by_mid.get(mid, 0.0), 4)
+                cur = float(m.get("totalLocationKwd") or 0)
+                prev_m = float(m.get("prevPeriodLocationKwd") or 0)
+                yoy_m = float(m.get("yoyPeriodLocationKwd") or 0)
+                m["prevPeriodGrowthPct"] = (
+                    round((cur / prev_m) * 100, 1) if prev_m > 0 else None
+                )
+                m["yoyGrowthPct"] = round((cur / yoy_m) * 100, 1) if yoy_m > 0 else None
+
+            def _growth_group(
+                rows: List[Dict[str, Any]],
+                compare_key: str,
+            ) -> Dict[str, Any]:
+                period = sum(float(m.get("totalLocationKwd") or 0) for m in rows)
+                compare = sum(float(m.get(compare_key) or 0) for m in rows)
+                rate = round((period / compare) * 100, 1) if compare > 0 else None
+                details = []
+                for m in rows:
+                    mid = str(m.get("machineId") or "")
+                    cur = float(m.get("totalLocationKwd") or 0)
+                    cmp_v = float(m.get(compare_key) or 0)
+                    details.append(
+                        {
+                            "machineId": mid,
+                            "machineName": m.get("machineName") or mid,
+                            "periodKd": round(cur, 4),
+                            "compareKd": round(cmp_v, 4),
+                            "ratePct": round((cur / cmp_v) * 100, 1) if cmp_v > 0 else None,
+                        }
+                    )
+                return {
+                    "ratePct": rate,
+                    "periodKd": round(period, 4),
+                    "compareKd": round(compare, 4),
+                    "machineCount": len(rows),
+                    "machines": details,
+                }
+
+            # Rank by period sales (matches Overview Top/Lowest 5)
             machines_out.sort(
                 key=lambda m: (
-                    -(m.get("periodPctOfTarget") if m.get("periodPctOfTarget") is not None else -1),
                     -float(m.get("totalLocationKwd") or 0),
+                    str(m.get("machineName") or ""),
                 )
             )
+            by_sales = list(machines_out)
+            top5 = by_sales[:5]
+            lowest5 = list(reversed(by_sales[-5:])) if by_sales else []
+
+            growth_prev = {
+                "all": _growth_group(by_sales, "prevPeriodLocationKwd"),
+                "top5": _growth_group(top5, "prevPeriodLocationKwd"),
+                "lowest5": _growth_group(lowest5, "prevPeriodLocationKwd"),
+            }
+            growth_yoy = {
+                "all": _growth_group(by_sales, "yoyPeriodLocationKwd"),
+                "top5": _growth_group(top5, "yoyPeriodLocationKwd"),
+                "lowest5": _growth_group(lowest5, "yoyPeriodLocationKwd"),
+            }
+
             aggregate_days = aggregate_fleet_days(machines_out)
             product_names = sorted(
                 {
@@ -3212,7 +3276,8 @@ def register_alert_routes(app) -> None:
 
             period_actual = sum(float(m.get("totalLocationKwd") or 0) for m in machines_out)
             period_target = sum(float(m.get("periodTargetKd") or 0) for m in machines_out)
-            prev_actual = sum(prev_kwd_by_mid.get(str(m.get("machineId") or ""), 0.0) for m in machines_out)
+            prev_actual = float(growth_prev["all"]["compareKd"] or 0)
+            yoy_actual = float(growth_yoy["all"]["compareKd"] or 0)
             with_tgt = [
                 m
                 for m in machines_out
@@ -3226,9 +3291,8 @@ def register_alert_routes(app) -> None:
             achievement_rate = (
                 round((hit_count / len(with_tgt)) * 100, 1) if with_tgt else None
             )
-            growth_pct = None
-            if prev_actual > 0:
-                growth_pct = round((period_actual / prev_actual) * 100, 1)
+            growth_pct = growth_prev["all"].get("ratePct")
+            yoy_growth_pct = growth_yoy["all"].get("ratePct")
             deficit = round(period_actual - period_target, 4) if period_target > 0 else None
 
             body = {
@@ -3239,6 +3303,8 @@ def register_alert_routes(app) -> None:
                     "end": win_end.isoformat(),
                     "prevStart": prev_start.isoformat(),
                     "prevEnd": prev_end.isoformat(),
+                    "yoyStart": yoy_start.isoformat(),
+                    "yoyEnd": yoy_end.isoformat(),
                 },
                 "includeProducts": bool(include_products),
                 "asOf": now_local.replace(microsecond=0).isoformat(),
@@ -3256,6 +3322,10 @@ def register_alert_routes(app) -> None:
                     "machinesWithTarget": len(with_tgt),
                     "growthRatePct": growth_pct,
                     "prevPeriodActualKd": round(prev_actual, 4),
+                    "yoyGrowthRatePct": yoy_growth_pct,
+                    "yoyPeriodActualKd": round(yoy_actual, 4),
+                    "growthVsPrev": growth_prev,
+                    "growthVsYoy": growth_yoy,
                 },
             }
             _alert_cache_set(cache_key, body)

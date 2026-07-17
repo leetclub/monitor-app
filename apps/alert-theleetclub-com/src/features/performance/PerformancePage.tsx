@@ -250,6 +250,7 @@ export function PerformancePage({
               preset={preset}
               onPresetChange={setPreset}
               windowLabel={windowLabel}
+              windowMeta={win}
               loading={fleetQ.isLoading}
               fleetRanking={fleetRanking}
               selectionLabel={selectionLabel}

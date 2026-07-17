@@ -96,6 +96,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-17 | **Performance growth + combined line:** Growth KPI follows All/Top5/Lowest5 (by sales); click opens popup with all three groups + per-machine table. New **YoY growth** KPI (same dates last year) with the same popup. **Combined line** toggle sums shown machines into one trajectory. |
 | 2026-07-16 | **Performance Overview (Classic `/performance`):** Top 5 / Lowest 5 ranked by **period sales KD** (not % of target). Hover tooltip: green/red **day Δ ▲/▼ +x%** and colored % of target. Same board on `/v2/performance`. |
 | 2026-07-15 | **Performance target discoverability:** Clarified that sales-vs-target **graphs** are on `/performance` (not Red Flags tables). Status banner when fleet has sales but zero configured targets (Admin → Targets or weekly sheet). |
 | 2026-07-15 | **Alert v2 Classic boards for data+popups:** `/v2` Red Flags & Overall mount Classic pages with `variant=manus` (same APIs, cells, sales/trend/target/QA/cleaning/detail popups as `/`). Thin Manus-only tables removed from those routes. Classic/Pro untouched. |

@@ -13,6 +13,24 @@ export type PerfDay = {
   productPctOfTarget?: number | null;
 };
 
+export type GrowthGroupKey = 'all' | 'top5' | 'lowest5';
+
+export type GrowthMachineRow = {
+  machineId: string;
+  machineName: string;
+  periodKd: number;
+  compareKd: number;
+  ratePct?: number | null;
+};
+
+export type GrowthGroupSlice = {
+  ratePct?: number | null;
+  periodKd: number;
+  compareKd: number;
+  machineCount?: number;
+  machines?: GrowthMachineRow[];
+};
+
 export type FleetMachine = {
   machineId: string;
   machineName: string;
@@ -25,6 +43,10 @@ export type FleetMachine = {
   periodProductPctOfTarget?: number | null;
   locationSxPct?: number | null;
   productSxPct?: number | null;
+  prevPeriodLocationKwd?: number | null;
+  yoyPeriodLocationKwd?: number | null;
+  prevPeriodGrowthPct?: number | null;
+  yoyGrowthPct?: number | null;
   days: PerfDay[];
 };
 
@@ -37,6 +59,10 @@ export type FleetKpis = {
   machinesWithTarget?: number;
   growthRatePct?: number | null;
   prevPeriodActualKd?: number | null;
+  yoyGrowthRatePct?: number | null;
+  yoyPeriodActualKd?: number | null;
+  growthVsPrev?: Partial<Record<GrowthGroupKey, GrowthGroupSlice>>;
+  growthVsYoy?: Partial<Record<GrowthGroupKey, GrowthGroupSlice>>;
 };
 
 export type PerfPreset =
@@ -54,7 +80,14 @@ export type PerfViewMode = 'all' | 'top5' | 'lowest5' | 'selected';
 export type FleetPayload = {
   historyDays?: number;
   preset?: string;
-  window?: { start?: string; end?: string; prevStart?: string; prevEnd?: string };
+  window?: {
+    start?: string;
+    end?: string;
+    prevStart?: string;
+    prevEnd?: string;
+    yoyStart?: string;
+    yoyEnd?: string;
+  };
   includeProducts?: boolean;
   machineCount?: number;
   productName?: string | null;
