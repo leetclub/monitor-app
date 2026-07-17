@@ -81,23 +81,36 @@ export function PerformancePage({
 
   const apiMachines = useMemo(() => {
     const raw = machinesQ.data?.machines || machinesQ.data?.rows || [];
-    return raw
-      .map((m) => ({ id: String(m.id), name: String(m.name || m.id) }))
-      .filter((m) => m.id);
+    const out: MachineRow[] = [];
+    for (const m of raw as Array<Record<string, unknown>>) {
+      const id = String(m.id ?? m.machineId ?? m.machine_id ?? '').trim();
+      if (!id) continue;
+      const name = String(m.name ?? m.machineName ?? m.machine_name ?? '').trim();
+      out.push({ id, name: name || id });
+    }
+    return out;
   }, [machinesQ.data]);
 
   const machineRows = useMemo(() => {
-    if (apiMachines.length > 0) return apiMachines;
+    const byId = new Map<string, MachineRow>();
+    for (const m of apiMachines) byId.set(m.id, m);
+
     const rows = snapQ.data?.rows;
-    if (!Array.isArray(rows) || !rows.length) return [];
-    const seen = new Set<string>();
-    const out: MachineRow[] = [];
-    for (const r of rows) {
-      const id = String(r.machineId ?? r.machine_id ?? '').trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      out.push({ id, name: String(r.machineName || id) });
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        const id = String(r.machineId ?? r.machine_id ?? '').trim();
+        if (!id) continue;
+        const snapName = String(r.machineName || '').trim();
+        const prev = byId.get(id);
+        if (!prev) {
+          byId.set(id, { id, name: snapName || id });
+        } else if (snapName && (prev.name === prev.id || !prev.name.trim())) {
+          byId.set(id, { id, name: snapName });
+        }
+      }
     }
+
+    const out = [...byId.values()];
     out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
   }, [apiMachines, snapQ.data?.rows]);
@@ -188,6 +201,22 @@ export function PerformancePage({
       return name ? { ...m, machineName: name } : m;
     });
   }, [fleetQ.data?.machines, machineRows]);
+
+  /** Prefer real names for the Locations dropdown (API + snapshot + fleet). */
+  const filterMachines = useMemo(() => {
+    const byId = new Map(machineRows.map((m) => [m.id, { ...m }]));
+    for (const m of fleetMachines) {
+      const id = String(m.machineId || '').trim();
+      if (!id) continue;
+      const fleetName = String(m.machineName || '').trim();
+      if (!fleetName || fleetName === id) continue;
+      const prev = byId.get(id);
+      if (!prev) byId.set(id, { id, name: fleetName });
+      else if (!prev.name.trim() || prev.name === id) byId.set(id, { id, name: fleetName });
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [machineRows, fleetMachines]);
+
   const aggregateDays = fleetQ.data?.aggregateDays || [];
   const kpis = useMemo(() => {
     const base = fleetQ.data?.kpis;
@@ -220,7 +249,7 @@ export function PerformancePage({
   const fleetRanking = selected === null || selectedIds.length > 5;
   const selectionLabel =
     selected === null
-      ? `All (${machineRows.length})`
+      ? `All (${filterMachines.length || machineRows.length})`
       : selectedIds.length === 1
         ? '1 location'
         : `${selectedIds.length} locations`;
@@ -274,7 +303,7 @@ export function PerformancePage({
         ) : null}
 
         <div className="perfLayout">
-          <PerfMachineFilter machines={machineRows} selected={selected} onChange={syncUrl} />
+          <PerfMachineFilter machines={filterMachines} selected={selected} onChange={syncUrl} />
 
           <div className="perfMain">
             {selected !== null && selected.size === 0 ? (

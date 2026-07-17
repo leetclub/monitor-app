@@ -12,6 +12,11 @@ function isChecked(id: string, selected: Set<string> | null): boolean {
   return selected === null || selected.has(id);
 }
 
+function displayName(m: MachineRow): string {
+  const n = (m.name || '').trim();
+  return n || 'Unnamed location';
+}
+
 /** Searchable multi-select for Performance locations (Select all = full fleet, loaded in batches). */
 export function PerfMachineFilter({ machines, selected, onChange }: Props) {
   const [open, setOpen] = useState(false);
@@ -24,7 +29,7 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return machines;
-    return machines.filter((m) => m.name.toLowerCase().includes(needle));
+    return machines.filter((m) => displayName(m).toLowerCase().includes(needle));
   }, [machines, q]);
 
   const selectedRows = useMemo(() => {
@@ -72,7 +77,7 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
     : allSelected
       ? `All locations (${machines.length})`
       : count === 1
-        ? selectedRows[0]?.name || '1 location'
+        ? displayName(selectedRows[0] || { id: '', name: '1 location' })
         : `${count} locations`;
 
   return (
@@ -108,9 +113,9 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
                 type="button"
                 className="perfLocChip"
                 onClick={() => toggle(m.id)}
-                title={`Remove ${m.name}`}
+                title={`Remove ${displayName(m)}`}
               >
-                {m.name}
+                {displayName(m)}
                 <span aria-hidden>×</span>
               </button>
             ))}
@@ -151,14 +156,17 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
                 filtered.map((m) => {
                   const checked = isChecked(m.id, selected);
                   const solo = selected !== null && selected.size === 1 && selected.has(m.id);
+                  const label = displayName(m);
                   return (
                     <div
                       key={m.id}
-                      className={`perfMachineRow perfLocOption ${solo ? 'perfMachineRowSolo' : ''}`}
+                      className={`perfLocRow ${solo ? 'perfLocRowSolo' : ''}`}
                     >
-                      <label className="perfLocOptionMain">
+                      <label className="perfLocRowMain">
                         <input type="checkbox" checked={checked} onChange={() => toggle(m.id)} />
-                        <span className="perfMachineRowName">{m.name}</span>
+                        <span className="perfLocRowName" title={label}>
+                          {label}
+                        </span>
                       </label>
                       <button
                         type="button"

@@ -248,7 +248,6 @@ export function PerfOverviewSection({
   const [combined, setCombined] = useState(false);
   const [growthModal, setGrowthModal] = useState<'prev' | 'yoy' | null>(null);
   const [page, setPage] = useState(0);
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [customIds, setCustomIds] = useState<string[] | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -284,17 +283,13 @@ export function PerfOverviewSection({
 
   useEffect(() => {
     setPage(0);
-    setHiddenIds(new Set());
   }, [view, machines, customIds]);
 
   useEffect(() => {
     if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1));
   }, [page, pageCount]);
 
-  const seriesMachines = useMemo(
-    () => pagePool.filter((m) => !hiddenIds.has(m.machineId)),
-    [pagePool, hiddenIds],
-  );
+  const seriesMachines = pagePool;
 
   const labels = useMemo(() => {
     const first = seriesMachines[0]?.days?.length ? seriesMachines[0].days : aggregateDays;
@@ -487,10 +482,25 @@ export function PerfOverviewSection({
         },
         legend: {
           type: 'scroll',
-          top: 0,
-          textStyle: { color: theme.muted, fontSize: 11 },
+          orient: 'horizontal',
+          top: 4,
+          left: 'center',
+          width: '92%',
+          itemWidth: 22,
+          itemHeight: 10,
+          itemGap: 16,
+          pageIconSize: 16,
+          pageIconColor: theme.text,
+          pageIconInactiveColor: theme.muted,
+          pageButtonItemGap: 10,
+          pageButtonGap: 14,
+          pageButtonPosition: 'end',
+          pageFormatter: '{current}/{total}',
+          pageTextStyle: { color: theme.muted, fontSize: 11 },
+          textStyle: { color: theme.text, fontSize: 11, fontWeight: 600 },
+          inactiveColor: theme.muted,
         },
-        grid: { left: 52, right: 18, top: 40, bottom: 36 },
+        grid: { left: 52, right: 18, top: 48, bottom: 36 },
         xAxis: {
           type: 'category',
           data: labels,
@@ -644,9 +654,9 @@ export function PerfOverviewSection({
         </button>
         <span className="perfGraphNavLabel">
           {customIds?.length
-            ? `Custom set · ${seriesMachines.length} of ${customIds.length} visible`
+            ? `Custom set · ${seriesMachines.length} machines`
             : canPage
-              ? `Page ${page + 1} / ${pageCount} · ${pagePool.length} machines (${ranked.length} total)`
+              ? `Page ${page + 1} / ${pageCount} · ${pagePool.length} of ${ranked.length} machines`
               : `${pagePool.length} machines on graph`}
         </span>
         <button
@@ -659,35 +669,6 @@ export function PerfOverviewSection({
           ›
         </button>
       </div>
-
-      {pagePool.length > 0 ? (
-        <div className="perfGraphSeriesToggles" role="group" aria-label="Toggle series on graph">
-          {pagePool.map((m, i) => {
-            const on = !hiddenIds.has(m.machineId);
-            const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
-            return (
-              <button
-                key={m.machineId}
-                type="button"
-                className={`perfSeriesChip ${on ? 'active' : ''}`}
-                style={{ ['--series-color' as string]: color }}
-                onClick={() =>
-                  setHiddenIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(m.machineId)) next.delete(m.machineId);
-                    else next.add(m.machineId);
-                    return next;
-                  })
-                }
-                title={on ? 'Hide from graph' : 'Show on graph'}
-              >
-                <span className="perfSeriesDot" />
-                {m.machineName}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
 
       {loading ? <p className="perfMuted">Loading overview…</p> : null}
 
