@@ -20,6 +20,14 @@ function rateTone(rate: number | null | undefined): string {
   return 'alertSalesDown';
 }
 
+/** Growth change % from index (current ÷ compare × 100). */
+function growthDeltaPct(rate: number | null | undefined): string {
+  if (rate == null || !Number.isFinite(rate)) return '—';
+  const d = Math.round((rate - 100) * 10) / 10;
+  const sign = d > 0 ? '+' : '';
+  return `${sign}${d}%`;
+}
+
 export function GrowthCompareModal({
   title,
   subtitle,
@@ -51,7 +59,7 @@ export function GrowthCompareModal({
       <div className="salesHistoryModal perfGrowthModal" {...panel}>
         <div className="salesHistoryHead">
           <div>
-            <p className="salesHistoryEyebrow">Performance · growth</p>
+            <p className="salesHistoryEyebrow">Performance · period compare</p>
             <h2 id="perf-growth-modal-title" className="salesHistoryTitle">
               {title}
             </h2>
@@ -79,7 +87,10 @@ export function GrowthCompareModal({
                       {compareLabel} <strong>{formatKwd(g.compareKd)}</strong>
                     </span>
                     <span className={rateTone(g.ratePct)}>
-                      Rate <strong>{g.ratePct != null ? `${g.ratePct}%` : '—'}</strong>
+                      % of compare <strong>{g.ratePct != null ? `${g.ratePct}%` : '—'}</strong>
+                    </span>
+                    <span className={rateTone(g.ratePct)}>
+                      Growth <strong>{growthDeltaPct(g.ratePct)}</strong>
                     </span>
                   </div>
                 </header>
@@ -91,7 +102,8 @@ export function GrowthCompareModal({
                           <th>Machine</th>
                           <th>Period KD</th>
                           <th>{compareLabel}</th>
-                          <th>Rate</th>
+                          <th>% of compare</th>
+                          <th>Growth</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -103,6 +115,7 @@ export function GrowthCompareModal({
                             <td className={rateTone(row.ratePct)}>
                               {row.ratePct != null ? `${row.ratePct}%` : '—'}
                             </td>
+                            <td className={rateTone(row.ratePct)}>{growthDeltaPct(row.ratePct)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -115,8 +128,9 @@ export function GrowthCompareModal({
             );
           })}
           <p className="perfGrowthFoot">
-            Rate = period sales ÷ compare period × 100. 100% = flat · above 100% = higher · below =
-            lower. Top / Lowest 5 ranked by period sales KD.
+            <strong>% of compare</strong> = period ÷ compare × 100 (100% = flat).{' '}
+            <strong>Growth</strong> = (period − compare) ÷ compare × 100 (e.g. 98.8% → −1.2%). Top /
+            Lowest 5 ranked by period sales KD.
           </p>
         </div>
       </div>
