@@ -240,7 +240,7 @@
 
 .perfLocOptionMain {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 6px 8px;
   align-items: center;
   flex: 1;

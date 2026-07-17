@@ -136,11 +136,7 @@ function GraphMachinePickerModal({
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
     if (!n) return ranked;
-    return ranked.filter(
-      (m) =>
-        m.machineName.toLowerCase().includes(n) ||
-        String(m.machineId).toLowerCase().includes(n),
-    );
+    return ranked.filter((m) => m.machineName.toLowerCase().includes(n));
   }, [ranked, q]);
 
   const toggle = (id: string) => {

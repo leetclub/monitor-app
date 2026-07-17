@@ -408,7 +408,6 @@ export function FleetTargetActualChart({
             const target = m.periodTargetKd ?? 0;
             return [
               `<strong>${m.machineName}</strong>`,
-              `${m.machineId}`,
               `Target: ${target > 0 ? formatKwd(target) : '—'}`,
               `Actual: ${formatKwd(m.totalLocationKwd)}`,
               `Achievement: ${m.periodPctOfTarget != null ? `${m.periodPctOfTarget}%` : '—'}`,

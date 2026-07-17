@@ -24,9 +24,7 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return machines;
-    return machines.filter(
-      (m) => m.name.toLowerCase().includes(needle) || m.id.toLowerCase().includes(needle),
-    );
+    return machines.filter((m) => m.name.toLowerCase().includes(needle));
   }, [machines, q]);
 
   const selectedRows = useMemo(() => {
@@ -128,7 +126,7 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
               <input
                 type="search"
                 className="perfLocSearch"
-                placeholder="Search location or id…"
+                placeholder="Search location…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 autoFocus
@@ -161,7 +159,6 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
                       <label className="perfLocOptionMain">
                         <input type="checkbox" checked={checked} onChange={() => toggle(m.id)} />
                         <span className="perfMachineRowName">{m.name}</span>
-                        <span className="perfMachineRowId">{m.id}</span>
                       </label>
                       <button
                         type="button"
