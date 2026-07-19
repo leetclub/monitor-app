@@ -28,6 +28,7 @@ export const OVERALL_PRESET_OPS: OverallColumnKey[] = [
   'operatorActivity',
   'lastCleaned',
   'lastVendFailed',
+  'downtime',
   'lastTransaction',
   'mostIssue',
   'lastQaCheck',
@@ -65,11 +66,12 @@ export const OVERALL_COLUMN_GROUPS: Record<
   },
   ops: {
     label: 'Ops & quality',
-    help: 'Hours, cleaning, vend fails, last tx, issues, QA/Tech, wastage.',
+    help: 'Hours, cleaning, vend fails, downtime, last tx, issues, QA/Tech, wastage.',
     keys: [
       'operatingHours',
       'lastCleaned',
       'lastVendFailed',
+      'downtime',
       'lastTransaction',
       'mostIssue',
       'lastQaCheck',

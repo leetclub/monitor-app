@@ -1,0 +1,38 @@
+import { formatDowntimeSec, type DowntimeMachineRow } from '@/lib/downtimeDisplay';
+
+/**
+ * Two-box downtime stack: Today + compare primary period (cumulative).
+ * Reuses salesStack layout so cell height matches Sales / Target columns.
+ */
+export function DowntimeStack({
+  row,
+  todayLabel = 'Today',
+  periodLabel = 'Period',
+  title,
+}: {
+  row?: DowntimeMachineRow | null;
+  todayLabel?: string;
+  periodLabel?: string;
+  title?: string;
+}) {
+  const todaySec = row?.todaySec != null && Number.isFinite(Number(row.todaySec)) ? Number(row.todaySec) : 0;
+  const periodSec =
+    row?.periodSec != null && Number.isFinite(Number(row.periodSec)) ? Number(row.periodSec) : 0;
+  const hasAny = todaySec > 0 || periodSec > 0;
+  const tip =
+    title ||
+    `Operational downtime (Vendon Machine OFF / KNet OFF / Vendon OFF). Cleaning windows subtracted. ${todayLabel}: ${formatDowntimeSec(todaySec)}. ${periodLabel}: ${formatDowntimeSec(periodSec)}.`;
+
+  return (
+    <div className="salesStack" title={tip}>
+      <div className={`salesStackBox salesStackBoxToday${todaySec > 0 ? '' : ' salesStackBoxMuted'}`}>
+        <span className="salesStackLabel">{todayLabel}</span>
+        <span className="salesStackVal">{hasAny || row ? formatDowntimeSec(todaySec) : '—'}</span>
+      </div>
+      <div className={`salesStackBox salesStackBoxYest${periodSec > 0 ? '' : ' salesStackBoxMuted'}`}>
+        <span className="salesStackLabel">{periodLabel}</span>
+        <span className="salesStackVal">{hasAny || row ? formatDowntimeSec(periodSec) : '—'}</span>
+      </div>
+    </div>
+  );
+}

@@ -30,6 +30,7 @@ export const OVERALL_SORTABLE_COLUMNS = new Set<OverallColumnKey>([
   'lastTechCheck',
   'wastagePct',
   'lastVendFailed',
+  'downtime',
   'peakHours',
   'highestProduct',
   'lowestProduct',
@@ -110,6 +111,7 @@ export type OverallSortContext = {
   >;
   qaSummary?: QaSummaryResponse;
   operatorActivityByMachine?: Record<string, { latestAt?: string | null }>;
+  downtimeByMachine?: Record<string, { todaySec?: number | null; periodSec?: number | null }>;
 };
 
 function operatorName(m: FleetMachine, ctx: OverallSortContext): string {
@@ -271,6 +273,12 @@ function compareFleetMachine(
       );
     case 'lastVendFailed':
       return compareNumbers(snapshotVendFailCount(snapA), snapshotVendFailCount(snapB), dir);
+    case 'downtime':
+      return compareNumbers(
+        ctx.downtimeByMachine?.[a.id]?.periodSec ?? ctx.downtimeByMachine?.[a.id]?.todaySec,
+        ctx.downtimeByMachine?.[b.id]?.periodSec ?? ctx.downtimeByMachine?.[b.id]?.todaySec,
+        dir,
+      );
     case 'peakHours':
       return compareNumbers(
         ctx.vendonByMachine?.[a.id]?.peakHour?.count,

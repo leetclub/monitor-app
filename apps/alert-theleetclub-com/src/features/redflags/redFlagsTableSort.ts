@@ -27,6 +27,7 @@ export const RED_FLAGS_SORTABLE_COLUMNS = new Set<RedFlagsColumnKey>([
   'dailyTarget',
   'salesAcceleration',
   'frequency',
+  'downtime',
   'sendCredit',
   'testCredits',
   'lastCleaning',
@@ -77,6 +78,7 @@ export type RedFlagsSortContext = {
   lastTxByMachine?: Record<string, { timestamp: number }>;
   sxByMachine?: Record<string, { location?: { sxPct?: number | null } | null }>;
   sxReady?: boolean;
+  downtimeByMachine?: Record<string, { todaySec?: number | null; periodSec?: number | null }>;
   operatorActivityByMachine?: Record<string, { latestAt?: string | null }>;
 };
 
@@ -178,6 +180,12 @@ function compareRedFlagsRow(
         dir,
       );
     }
+    case 'downtime':
+      return compareNumbers(
+        ctx.downtimeByMachine?.[idA]?.periodSec ?? ctx.downtimeByMachine?.[idA]?.todaySec,
+        ctx.downtimeByMachine?.[idB]?.periodSec ?? ctx.downtimeByMachine?.[idB]?.todaySec,
+        dir,
+      );
     case 'sendCredit':
       return compareNumbers(ctx.creditsByMachine?.[idA]?.credits_sent, ctx.creditsByMachine?.[idB]?.credits_sent, dir);
     case 'testCredits':

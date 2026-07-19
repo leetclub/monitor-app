@@ -40,6 +40,7 @@ from vendon_proxy_routes import (
 from red_alert_routes import compute_daily_incidents_elapsed
 from models import PeopleAnalyticsRecord, VendonDailyMachineRevenueCache, create_engine_and_session
 from sqlalchemy import func, text
+from alert_downtime_lib import compute_machine_downtime_summary
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ _DAILY_SALES_DB_STALE_SEC = int(os.environ.get("ALERT_DAILY_SALES_DB_STALE_SEC",
 _DAILY_SALES_ELAPSED_HISTORY_DAYS = int(os.environ.get("ALERT_DAILY_SALES_ELAPSED_HISTORY_DAYS", "8"))
 _DAILY_INCIDENTS_ELAPSED_CACHE_SEC = int(os.environ.get("ALERT_DAILY_INCIDENTS_ELAPSED_CACHE_SEC", "120"))
 _ALERT_REVENUE_CACHE_SEED_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_SEED_TTL_SEC", "900"))
+_ALERT_DOWNTIME_CACHE_SEC = int(os.environ.get("ALERT_DOWNTIME_CACHE_SEC", "120"))
 
 
 def _vendon_revenue_cache_has_day(db: Session, day: date) -> bool:
@@ -2671,6 +2673,57 @@ def register_alert_routes(app) -> None:
             return jsonify({"error": "failed", "message": str(ex)}), 500
         finally:
             db.close()
+
+    @app.route("/api/alert/overall/downtime-summary", methods=["GET", "OPTIONS"])
+    def alert_overall_downtime_summary():
+        """
+        Per-machine operational downtime (Today + compare primary period).
+
+        Sums Vendon Machine OFF / KNet OFF / Vendon OFF episode overlap with each window,
+        subtracting Admin cleaning windows (same operational-time math as Red Alert).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        preset = (request.args.get("preset") or "today_vs_yesterday").strip()
+        tz = ZoneInfo("Asia/Kuwait")
+        today_kw = datetime.now(tz).date()
+        (a_lo, a_hi), _b, label_a, _label_b = _alert_preset_periods(
+            preset,
+            today_kw,
+            request.args.get("aStart"),
+            request.args.get("aEnd"),
+            request.args.get("bStart"),
+            request.args.get("bEnd"),
+        )
+
+        cache_key = (
+            f"alert-downtime:{preset}:{a_lo.isoformat()}:{a_hi.isoformat()}:"
+            f"{request.args.get('aStart') or ''}:{request.args.get('aEnd') or ''}"
+        )
+        cached = _alert_cache_get(cache_key, _ALERT_DOWNTIME_CACHE_SEC)
+        if cached is not None:
+            return jsonify(cached)
+
+        try:
+            from red_alert_routes import _fetch_events_window
+
+            payload = compute_machine_downtime_summary(
+                period_lo=a_lo,
+                period_hi_excl=a_hi,
+                period_label=label_a,
+                vendon_get=_vendon_get,
+                fetch_events_window=_fetch_events_window,
+            )
+            payload["preset"] = preset
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
+        except Exception as ex:
+            logger.exception("alert overall downtime summary")
+            return jsonify({"ok": False, "error": "failed", "message": str(ex), "byMachineId": {}}), 500
 
     @app.route("/api/alert/overall/sales-acceleration", methods=["GET", "OPTIONS"])
     def alert_overall_sales_acceleration():

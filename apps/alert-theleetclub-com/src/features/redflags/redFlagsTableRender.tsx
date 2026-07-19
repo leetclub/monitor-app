@@ -10,11 +10,13 @@ import { MtdSalesCell } from '@/components/MtdSalesCell';
 import { MtdYoySalesCell } from '@/components/MtdYoySalesCell';
 import { QaVisitCell } from '@/components/QaVisitCell';
 import { SalesElapsedStack } from '@/components/SalesElapsedStack';
+import { DowntimeStack } from '@/components/DowntimeStack';
 import { SxAccelerationCell, type SxAccelerationRow } from '@/components/SxAccelerationCell';
 import { TargetElapsedStack } from '@/components/TargetElapsedStack';
 import { presetBoxLabels } from '@/lib/presetComparison';
 import { buildFreqColumnContext, type FreqColumnContext } from '@/lib/freqColumnContext';
 import { canOpenSalesHistory, type SalesElapsedRow } from '@/lib/salesDisplay';
+import type { DowntimeMachineRow } from '@/lib/downtimeDisplay';
 import type { QaFindingRow, QaVisitRow } from '@/lib/qaVisitDisplay';
 import type { ComparePresetId } from '@/components/ComparePresetPicker';
 import type { CompareMetricPair } from '@/lib/presetComparison';
@@ -99,6 +101,9 @@ export type RedFlagsRowBundle = {
   mtdYoyLyKwd?: number | null;
   mtdYoyTrendPct?: number | null;
   sxRow?: SxAccelerationRow | null;
+  downtimeRow?: DowntimeMachineRow | null;
+  downtimeTodayLabel?: string;
+  downtimePeriodLabel?: string;
   qaVisit?: QaVisitRow | null;
   techVisit?: QaVisitRow | null;
   qaFindings?: QaFindingRow[];
@@ -144,6 +149,8 @@ export function redFlagsHeaderClass(key: RedFlagsColumnKey): string {
       return `${styles.thSales} ${styles.thYoy}`;
     case 'frequency':
       return styles.thFreq;
+    case 'downtime':
+      return styles.thSales;
     case 'goCheck':
       return `${styles.thAction} alertThCenter`;
     case 'sendCredit':
@@ -178,6 +185,8 @@ export function redFlagsBodyCellClass(key: RedFlagsColumnKey): string {
       return 'alertSalesCell alertSalesCellYoy';
     case 'frequency':
       return `${styles.td} ${styles.tdFreqTriple}`;
+    case 'downtime':
+      return 'alertSalesCell';
     case 'sendCredit':
     case 'vendsResolved':
     case 'testCredits':
@@ -303,6 +312,16 @@ export function renderRedFlagsHeaderCell(key: RedFlagsColumnKey, ctx: RedFlagsHe
           key={key}
           label={{ main: ctx.freqHeading.title, sub: 'trend' }}
           title={`${ctx.freqHeading.title} — ${ctx.freqHeading.sub}`}
+          className={className}
+          {...sortProps}
+        />
+      );
+    case 'downtime':
+      return (
+        <AlertTableHeader
+          key={key}
+          label={RED_FLAGS_TABLE_HEADERS.downtime}
+          title={RED_FLAGS_COLUMNS.downtime.placeholderNote || redFlagsHeaderTooltip('downtime')}
           className={className}
           {...sortProps}
         />
@@ -588,6 +607,15 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
         </div>
       );
     }
+    case 'downtime':
+      return (
+        <DowntimeStack
+          row={b.downtimeRow}
+          todayLabel={b.downtimeTodayLabel || 'Today'}
+          periodLabel={b.downtimePeriodLabel || 'Period'}
+          title={RED_FLAGS_COLUMNS.downtime.placeholderNote}
+        />
+      );
     case 'goCheck':
       return machId ? (
         <button type="button" className={styles.linkGo} {...bindStopRowClick(b.onGoCheck)}>

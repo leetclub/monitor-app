@@ -8,6 +8,7 @@ import { lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
 import { CleaningStatusCell } from '@/components/CleaningStatusCell';
 import { QaVisitCell } from '@/components/QaVisitCell';
 import { SalesElapsedStack } from '@/components/SalesElapsedStack';
+import { DowntimeStack } from '@/components/DowntimeStack';
 import { OperatorActivityCell } from '@/components/OperatorActivityCell';
 import { OperatorCell } from '@/components/OperatorCell';
 import { AttendanceWorkflowCell } from '@/components/AttendanceWorkflowCell';
@@ -88,6 +89,9 @@ export type FleetRowBundle = {
   cleanStatus: ReturnType<typeof lastCleanedStatus> | null;
   vendFailSummary: string;
   mostIssue: string;
+  downtimeRow?: import('@/lib/downtimeDisplay').DowntimeMachineRow | null;
+  downtimeTodayLabel?: string;
+  downtimePeriodLabel?: string;
   operator: string;
   txRaw: unknown;
   minsOk: boolean;
@@ -155,6 +159,7 @@ export function overallBodyCellClass(key: OverallColumnKey): string {
     case 'salesTrend':
     case 'mtdSales':
     case 'targetAchieved':
+    case 'downtime':
       return 'alertSalesCell';
     case 'mtdYoySales':
       return 'alertSalesCell alertSalesCellYoy';
@@ -184,6 +189,7 @@ export function overallHeaderClass(key: OverallColumnKey): string {
     case 'salesTrend':
     case 'mtdSales':
     case 'targetAchieved':
+    case 'downtime':
       return rfStyles.thSales;
     case 'mtdYoySales':
       return `${rfStyles.thSales} ${rfStyles.thYoy}`;
@@ -310,6 +316,15 @@ function renderOverallColumn(
       );
     case 'lastVendFailed':
       return b.vendFailSummary ? b.vendFailSummary : <span className="opsCellMuted">—</span>;
+    case 'downtime':
+      return (
+        <DowntimeStack
+          row={b.downtimeRow}
+          todayLabel={b.downtimeTodayLabel || 'Today'}
+          periodLabel={b.downtimePeriodLabel || 'Period'}
+          title={headerTooltip('downtime')}
+        />
+      );
     case 'lastTransaction':
       return (
         <LastTxLines

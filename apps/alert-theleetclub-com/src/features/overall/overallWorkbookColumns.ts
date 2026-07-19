@@ -12,6 +12,7 @@ export const OVERALL_XLSX_ORDER = [
   'attendance',
   'lastCleaned',
   'lastVendFailed',
+  'downtime',
   'salesTrend',
   'mtdSales',
   'mtdYoySales',
@@ -59,6 +60,7 @@ export const OVERALL_HEADER_SHORT: Record<OverallColumnKey, string> = {
   attendance: 'Attendance',
   lastCleaned: 'Last cleaned',
   lastVendFailed: 'Vend failed',
+  downtime: 'Downtime',
   lastTransaction: 'Last tx',
   salesTrend: 'Daily sales',
   mtdSales: 'MTD sales',
@@ -97,6 +99,11 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   lastVendFailed: {
     title: 'Last Vend Failed',
     note: 'Dispense fail counts from Red Alert snapshot frequency (today / WTD), not a single timestamp.',
+  },
+  downtime: {
+    title: 'Downtime',
+    note:
+      'Operational OFF time (Machine OFF / KNet OFF / Vendon OFF) with Admin cleaning windows subtracted. Today (Kuwait) and cumulative for the selected compare period.',
   },
   lastTransaction: { title: 'Last Transaction' },
   salesTrend: {

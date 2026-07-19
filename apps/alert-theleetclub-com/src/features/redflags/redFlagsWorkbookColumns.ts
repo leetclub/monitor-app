@@ -11,6 +11,7 @@ export const RED_FLAGS_XLSX_ORDER = [
   'dailyTarget',
   'salesAcceleration',
   'frequency',
+  'downtime',
   'goCheck',
   'sendCredit',
   'vendsResolved',
@@ -42,6 +43,7 @@ export const RED_FLAGS_HEADER_SHORT: Record<RedFlagsColumnKey, string> = {
   dailyTarget: 'Target',
   salesAcceleration: 'SX',
   frequency: 'Frequency',
+  downtime: 'Downtime',
   goCheck: 'GO CHECK',
   sendCredit: 'Credits sent',
   vendsResolved: 'Vends resolved',
@@ -121,6 +123,12 @@ export const RED_FLAGS_COLUMNS: Record<
   frequency: {
     title: 'Frequency',
     sub: 'Score · trend · gap — follows compare preset',
+  },
+  downtime: {
+    title: 'Downtime',
+    sub: 'Today · period',
+    placeholderNote:
+      'Operational OFF time (Machine OFF / KNet OFF / Vendon OFF) with Admin cleaning windows subtracted. Top = Kuwait today; bottom = selected compare period (primary window).',
   },
   goCheck: {
     title: 'GO CHECK',

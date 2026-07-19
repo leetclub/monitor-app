@@ -337,6 +337,23 @@ export function OverallPage({
     refetchInterval: 5 * 60_000,
   });
 
+  const downtimeQ = useQuery({
+    queryKey: [
+      'alert-overall-downtime-summary',
+      compare.preset,
+      compare.a.start,
+      compare.a.end,
+      compare.b.start,
+      compare.b.end,
+    ],
+    queryFn: () =>
+      apiGet<import('@/lib/downtimeDisplay').DowntimeSummaryResponse>(
+        `/api/alert/overall/downtime-summary?${presetApiQueryString(compare.preset, compare)}`,
+      ),
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
+  });
+
   const dailySalesQ = useQuery({
     queryKey: ['alert-overall-daily-sales-elapsed', compare.preset],
     queryFn: () => apiGet<DailySalesElapsedResponse>('/api/alert/overall/daily-sales-elapsed'),
@@ -547,6 +564,7 @@ export function OverallPage({
       footfallByMachine: peopleFootfallQ.data?.byMachineId,
       qaSummary: qaSummaryQ.data,
       operatorActivityByMachine: operatorActivityQ.data?.byMachineId,
+      downtimeByMachine: downtimeQ.data?.byMachineId,
     }),
     [
       compare,
@@ -565,6 +583,7 @@ export function OverallPage({
       peopleFootfallQ.data?.byMachineId,
       qaSummaryQ.data,
       operatorActivityQ.data?.byMachineId,
+      downtimeQ.data?.byMachineId,
     ],
   );
 
@@ -1013,6 +1032,9 @@ export function OverallPage({
                   cleanStatus,
                   vendFailSummary,
                   mostIssue,
+                  downtimeRow: downtimeQ.data?.byMachineId?.[m.id] ?? null,
+                  downtimeTodayLabel: downtimeQ.data?.labelToday?.trim() || 'Today',
+                  downtimePeriodLabel: downtimeQ.data?.labelPeriod?.trim() || 'Period',
                   operator,
                   txRaw,
                   minsOk,

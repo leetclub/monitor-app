@@ -32,6 +32,7 @@ export const RED_FLAGS_PRESET_ALERTS: RedFlagsColumnKey[] = [
   'operatorActivity',
   'lastTransaction',
   'frequency',
+  'downtime',
   'goCheck',
   'sendCredit',
   'vendsResolved',
@@ -63,11 +64,12 @@ export const RED_FLAGS_COLUMN_GROUPS: Record<
   alerts: {
     label: 'Alerts, trend & ops',
     help:
-      'Why the machine is flagged, Frequency (score · trend · gap — follows compare preset), GO CHECK, credits sent, vends resolved, dispense tests, cleaning, QA/Tech visits, Call OP/AM.',
+      'Why the machine is flagged, Frequency (score · trend · gap — follows compare preset), Downtime (today · period), GO CHECK, credits sent, vends resolved, dispense tests, cleaning, QA/Tech visits, Call OP/AM.',
     keys: [
       'alertType',
       'lastTransaction',
       'frequency',
+      'downtime',
       'goCheck',
       'sendCredit',
       'vendsResolved',
@@ -85,7 +87,7 @@ export const RED_FLAGS_SALES_FOCUS_HELP =
   'Sales focus — Today vs yesterday (elapsed Kuwait clock), month-to-date, YoY month MTD with % vs same days last year, and daily target progress. Tap Sales today / MTD headers to sort high→low.';
 
 export const RED_FLAGS_ALERTS_FOCUS_HELP =
-  'Alerts focus — Why the machine is flagged, Frequency (score · trend · gap), GO CHECK, credits, vends resolved, dispense tests, cleaning, QA/Tech visits, Call OP/AM. Includes operator columns for follow-up.';
+  'Alerts focus — Why the machine is flagged, Frequency (score · trend · gap), Downtime (today · period), GO CHECK, credits, vends resolved, dispense tests, cleaning, QA/Tech visits, Call OP/AM. Includes operator columns for follow-up.';
 
 export type StoredRedFlagsColumns = {
   preset: RedFlagsColumnPreset;

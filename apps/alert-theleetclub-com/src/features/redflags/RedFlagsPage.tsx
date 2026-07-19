@@ -602,6 +602,24 @@ export function RedFlagsPage({
     staleTime: 2 * 60_000,
   });
 
+  const downtimeQ = useQuery({
+    queryKey: [
+      'alert-downtime-summary',
+      compare.preset,
+      compare.a.start,
+      compare.a.end,
+      compare.b.start,
+      compare.b.end,
+    ],
+    queryFn: () =>
+      apiGet<import('@/lib/downtimeDisplay').DowntimeSummaryResponse>(
+        `/api/alert/overall/downtime-summary?${presetApiQueryString(compare.preset, compare)}`,
+      ),
+    enabled: q.isFetched,
+    refetchInterval: 2 * 60_000,
+    staleTime: 60_000,
+  });
+
   const liveSnapQ = useQuery({
     queryKey: ['live-dashboard-snapshot'],
     queryFn: () => apiGet<LiveDashboardSnapshotResponse>('/api/live-dashboard/snapshot'),
@@ -944,6 +962,7 @@ export function RedFlagsPage({
       lastTxByMachine: vendonLastTxQ.data?.byMachineId,
       sxByMachine: sxQ.data?.byMachineId,
       sxReady: sxQ.isSuccess && Boolean(sxQ.data?.byMachineId),
+      downtimeByMachine: downtimeQ.data?.byMachineId,
       operatorActivityByMachine: operatorActivityQ.data?.byMachineId,
     }),
     [
@@ -964,6 +983,7 @@ export function RedFlagsPage({
       vendonLastTxQ.data?.byMachineId,
       sxQ.data?.byMachineId,
       sxQ.isSuccess,
+      downtimeQ.data?.byMachineId,
       operatorActivityQ.data?.byMachineId,
     ],
   );
@@ -1456,6 +1476,9 @@ export function RedFlagsPage({
                       mtdYoyLyKwd: mtdYoyVendonQ.data?.byMachineId?.[machId]?.bSalesKwd,
                       mtdYoyTrendPct: mtdYoyVendonQ.data?.byMachineId?.[machId]?.trendPct,
                       sxRow: sxQ.data?.byMachineId?.[machId] ?? null,
+                      downtimeRow: downtimeQ.data?.byMachineId?.[machId] ?? null,
+                      downtimeTodayLabel: downtimeQ.data?.labelToday?.trim() || 'Today',
+                      downtimePeriodLabel: downtimeQ.data?.labelPeriod?.trim() || 'Period',
                       qaVisit,
                       techVisit,
                       qaFindings,

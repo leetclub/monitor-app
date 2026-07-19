@@ -23,6 +23,7 @@ import {
   type DailySalesElapsedResponse,
 } from '@/lib/salesDisplay';
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
+import { formatDowntimeSec } from '@/lib/downtimeDisplay';
 import {
   qaVisitForMachineName,
   techVisitForMachineName,
@@ -73,6 +74,7 @@ const WIDE_COLS = new Set<RedFlagsColumnKey>([
   'dailyTarget',
   'salesAcceleration',
   'frequency',
+  'downtime',
   'qaVisit',
   'lastTransaction',
   'operatorActivity',
@@ -229,6 +231,25 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
       ),
     enabled: snapQ.isFetched,
     staleTime: 2 * 60_000,
+  });
+
+  const downtimeQ = useQuery({
+    queryKey: [
+      'alert-downtime-summary',
+      compareSel.preset,
+      compareSel.a.start,
+      compareSel.a.end,
+      compareSel.b.start,
+      compareSel.b.end,
+      'v2',
+    ],
+    queryFn: () =>
+      apiGet<import('@/lib/downtimeDisplay').DowntimeSummaryResponse>(
+        `/api/alert/overall/downtime-summary?${presetApiQueryString(compareSel.preset, compareSel)}`,
+      ),
+    enabled: snapQ.isFetched,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
   });
 
   const creditsQ = useQuery({
@@ -510,6 +531,11 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
           compareMode === 'yesterday' || compareMode === 'yesterdayVsDayBefore' || compareMode === 'sameWeekdayLw'
             ? `${Number.isFinite(todayHits) ? todayHits : 0} / ${Number.isFinite(yestHits) ? yestHits : 0}`
             : `${Number.isFinite(hw) ? hw : 0} / ${Number.isFinite(lw) ? lw : 0}`,
+        downtime: (() => {
+          const dt = downtimeQ.data?.byMachineId?.[id];
+          if (!dt) return '—';
+          return `${formatDowntimeSec(dt.todaySec)} · ${formatDowntimeSec(dt.periodSec)}`;
+        })(),
         goCheck: strike ? 'Ready' : '—',
         sendCredit: cred?.credits_sent != null ? String(cred.credits_sent) : '—',
         vendsResolved: cred?.vends_resolved != null ? String(cred.vends_resolved) : '—',
@@ -612,6 +638,23 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
                 tone: 'muted',
               },
             ],
+        downtime: (() => {
+          const dt = downtimeQ.data?.byMachineId?.[id];
+          const todayL = downtimeQ.data?.labelToday?.trim() || 'Today';
+          const periodL = downtimeQ.data?.labelPeriod?.trim() || 'Period';
+          return [
+            {
+              label: todayL,
+              value: dt ? formatDowntimeSec(dt.todaySec) : '—',
+              tone: (dt?.todaySec ?? 0) > 0 ? ('amber' as V2MetricTone) : ('muted' as V2MetricTone),
+            },
+            {
+              label: periodL,
+              value: dt ? formatDowntimeSec(dt.periodSec) : '—',
+              tone: (dt?.periodSec ?? 0) > 0 ? ('amber' as V2MetricTone) : ('muted' as V2MetricTone),
+            },
+          ];
+        })(),
         lastTransaction: [
           { label: 'Last tx', value: lastTxIso ? formatLastTxCompact(String(lastTxIso)) : '—', tone: 'teal' },
         ],
@@ -685,6 +728,7 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
     mtdQ.data,
     mtdYoyQ.data,
     sxQ.data,
+    downtimeQ.data,
     creditsQ.data,
     opActQ.data,
     qaQ.data,

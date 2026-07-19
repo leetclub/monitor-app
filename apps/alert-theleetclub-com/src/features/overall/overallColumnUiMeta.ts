@@ -17,6 +17,7 @@ export const OVERALL_COLUMN_UI: Record<OverallColumnKey, OverallColumnUiMeta> = 
   attendance: { abbr: 'Att', label: 'Attendance', family: 'people' },
   lastCleaned: { abbr: 'Clean', label: 'Last cleaned', family: 'ops' },
   lastVendFailed: { abbr: 'Fail', label: 'Vend failed', family: 'ops' },
+  downtime: { abbr: 'Down', label: 'Downtime', family: 'ops' },
   lastTransaction: { abbr: 'Tx', label: 'Last tx', family: 'ops' },
   salesTrend: { abbr: 'Today', label: 'Daily sales', family: 'sales' },
   mtdSales: { abbr: 'MTD', label: 'MTD sales', family: 'sales' },

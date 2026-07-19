@@ -21,6 +21,7 @@ export const RED_FLAGS_COLUMN_UI: Record<RedFlagsColumnKey, RedFlagsColumnUiMeta
   dailyTarget: { abbr: 'Tgt', label: 'Target', family: 'sales' },
   salesAcceleration: { abbr: 'SX', label: 'Sales accel.', family: 'sales' },
   frequency: { abbr: 'Freq', label: 'Frequency', family: 'alerts' },
+  downtime: { abbr: 'Down', label: 'Downtime', family: 'alerts' },
   goCheck: { abbr: 'GO', label: 'GO CHECK', family: 'action' },
   sendCredit: { abbr: 'Cr', label: 'Credits', family: 'alerts' },
   vendsResolved: { abbr: 'Vend', label: 'Vends OK', family: 'alerts' },

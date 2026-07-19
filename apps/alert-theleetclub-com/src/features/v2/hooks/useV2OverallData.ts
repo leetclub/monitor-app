@@ -10,6 +10,7 @@ import {
   pickLastTransactionTs,
 } from '@/features/redflags/redFlagsModel';
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
+import { formatDowntimeSec } from '@/lib/downtimeDisplay';
 import {
   formatKwd,
   formatSalesTrendPct,
@@ -74,6 +75,7 @@ const WIDE = new Set<OverallColumnKey>([
   'mtdSales',
   'mtdYoySales',
   'targetAchieved',
+  'downtime',
   'peopleCount',
   'lastQaCheck',
   'lastTechCheck',
@@ -146,6 +148,23 @@ export function useV2OverallData(compare?: CompareSelection) {
         byMachineId?: Record<string, VendonSalesRow>;
       }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compareSel.preset, compareSel)}`),
     staleTime: 2 * 60_000,
+  });
+  const downtimeQ = useQuery({
+    queryKey: [
+      'alert-overall-downtime-summary',
+      compareSel.preset,
+      compareSel.a.start,
+      compareSel.a.end,
+      compareSel.b.start,
+      compareSel.b.end,
+      'v2-ov',
+    ],
+    queryFn: () =>
+      apiGet<import('@/lib/downtimeDisplay').DowntimeSummaryResponse>(
+        `/api/alert/overall/downtime-summary?${presetApiQueryString(compareSel.preset, compareSel)}`,
+      ),
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
   });
   const vendonLastTxQ = useQuery({
     queryKey: ['alert-overall-vendon-last-transactions', 'v2-ov'],
@@ -435,6 +454,11 @@ export function useV2OverallData(compare?: CompareSelection) {
         attendance: attLabel,
         lastCleaned: cleanIso ? formatLastTxCompact(cleanIso) : '—',
         lastVendFailed: vendFail || '—',
+        downtime: (() => {
+          const dt = downtimeQ.data?.byMachineId?.[m.id];
+          if (!dt) return '—';
+          return `${formatDowntimeSec(dt.todaySec)} · ${formatDowntimeSec(dt.periodSec)}`;
+        })(),
         salesTrend:
           today != null && Number.isFinite(Number(today))
             ? `${formatKwd(Number(today))}${trendPctNum != null ? ` · ${formatSalesTrendPct(trendPctNum)}` : ''}`
@@ -469,6 +493,23 @@ export function useV2OverallData(compare?: CompareSelection) {
       };
 
       const stacks: Partial<Record<OverallColumnKey, V2MetricItem[]>> = {
+        downtime: (() => {
+          const dt = downtimeQ.data?.byMachineId?.[m.id];
+          const todayL = downtimeQ.data?.labelToday?.trim() || 'Today';
+          const periodL = downtimeQ.data?.labelPeriod?.trim() || 'Period';
+          return [
+            {
+              label: todayL,
+              value: dt ? formatDowntimeSec(dt.todaySec) : '—',
+              tone: (dt?.todaySec ?? 0) > 0 ? ('amber' as V2MetricTone) : ('muted' as V2MetricTone),
+            },
+            {
+              label: periodL,
+              value: dt ? formatDowntimeSec(dt.periodSec) : '—',
+              tone: (dt?.periodSec ?? 0) > 0 ? ('amber' as V2MetricTone) : ('muted' as V2MetricTone),
+            },
+          ];
+        })(),
         salesTrend: [
           {
             label: salesPair.primaryLabel || 'Primary',
@@ -598,6 +639,7 @@ export function useV2OverallData(compare?: CompareSelection) {
     salesQ.data,
     salesQ.isSuccess,
     vendonSummaryQ.data,
+    downtimeQ.data,
     vendonLabels,
     compareSel,
     mtdQ.data,
