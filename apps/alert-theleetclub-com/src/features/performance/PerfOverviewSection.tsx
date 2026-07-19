@@ -87,29 +87,15 @@ function formatGrowthDeltaPct(rate: number | null | undefined): string {
   return `${sign}${d}%`;
 }
 
-/** Index line for secondary: “105% of prior”. */
-function formatIndexOfCompare(
-  rate: number | null | undefined,
-  ofWord: string,
-): string | null {
-  if (rate == null || !Number.isFinite(rate)) return null;
-  return `${rate}% of ${ofWord}`;
-}
-
 function KpiBox({
   label,
   value,
-  subLabel,
-  subValue,
   hint,
   tone,
   onClick,
 }: {
   label: string;
   value: string;
-  /** Secondary metric label (e.g. Index). */
-  subLabel?: string;
-  subValue?: string | null;
   hint?: string;
   tone?: 'up' | 'down' | 'neutral';
   onClick?: () => void;
@@ -120,12 +106,6 @@ function KpiBox({
     <>
       <span className="perfKpiLabel">{label}</span>
       <strong>{value}</strong>
-      {subLabel && subValue ? (
-        <span className="perfKpiSub">
-          <span className="perfKpiSubLabel">{subLabel}</span>
-          <span className="perfKpiSubValue">{subValue}</span>
-        </span>
-      ) : null}
       {hint ? <span className="perfKpiHint">{hint}</span> : null}
     </>
   );
@@ -811,8 +791,6 @@ export function PerfOverviewSection({
         <KpiBox
           label="Growth vs prior period"
           value={formatGrowthDeltaPct(growthPrevPct)}
-          subLabel="Index"
-          subValue={formatIndexOfCompare(growthPrevPct, 'prior')}
           hint={`${growthGroupHint} · compare window ${prevWin}`}
           tone={growthTone}
           onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
@@ -820,8 +798,6 @@ export function PerfOverviewSection({
         <KpiBox
           label="Growth vs same dates last year"
           value={formatGrowthDeltaPct(growthYoyPct)}
-          subLabel="Index"
-          subValue={formatIndexOfCompare(growthYoyPct, 'then')}
           hint={`Same calendar dates one year ago (${yoyWin}) — not full-year YTD`}
           tone={yoyTone}
           onClick={kpis?.growthVsYoy ? () => setGrowthModal('yoy') : undefined}
