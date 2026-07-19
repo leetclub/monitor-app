@@ -6,6 +6,7 @@ import { getMonitorAppUrl } from '@/config/runtimeEnv';
 import { chipLabelForAccessKey, friendlyAccessSummary } from '@/lib/accessLabels';
 import { MachineProfileSection } from '@/features/admin/MachineProfileSection';
 import { TargetsAdminSection } from '@/features/admin/TargetsAdminSection';
+import { PromoAdminSection } from '@/features/admin/PromoAdminSection';
 import { AreaOwnerAdminSection } from '@/features/admin/AreaOwnerAdminSection';
 import { QaVisitAdminSection } from '@/features/admin/QaVisitAdminSection';
 import { AlertPeopleManager } from '@/features/admin/AlertPeopleManager';
@@ -23,7 +24,7 @@ type CleaningScheduleRow = {
 
 type CleaningScheduleListResponse = { rows: CleaningScheduleRow[] };
 
-type AdminTab = 'machines' | 'targets' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
+type AdminTab = 'machines' | 'targets' | 'promo' | 'owners' | 'people' | 'qa-visit' | 'account' | 'advanced';
 
 export function AdminPage({
   variant = 'classic',
@@ -148,6 +149,11 @@ export function AdminPage({
             'Location daily KD target, SX product name, product cups target, and period.',
           )}
           {navBtn(
+            'promo',
+            'Promo',
+            'Promo product assignment, calendar day cup targets, and swipe instrument names.',
+          )}
+          {navBtn(
             'owners',
             'Area owners',
             'Assign Vendon users to machines and Areas login.',
@@ -174,6 +180,7 @@ export function AdminPage({
         <main className="adminAppMain" id="admin-main-panel" tabIndex={-1}>
           {tab === 'machines' ? <MachineProfileSection /> : null}
           {tab === 'targets' ? <TargetsAdminSection /> : null}
+          {tab === 'promo' ? <PromoAdminSection /> : null}
           {tab === 'owners' ? <AreaOwnerAdminSection /> : null}
           {tab === 'qa-visit' ? <QaVisitAdminSection /> : null}
 

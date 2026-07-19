@@ -18,6 +18,12 @@ export const V2_NAV: V2NavItem[] = [
     icon: 'performance',
   },
   {
+    to: '/v2/promo',
+    title: 'Promo',
+    description: 'Campaign cups',
+    icon: 'promo',
+  },
+  {
     to: '/v2/admin',
     title: 'Admin',
     description: 'Fleet configuration',

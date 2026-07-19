@@ -21,6 +21,7 @@ import './styles/data-freshness.css';
 import './styles/theme-pro.css';
 import './styles/color-modes.css';
 import './styles/performance-page.css';
+import './styles/promo-page.css';
 
 bootAlertUiTheme();
 

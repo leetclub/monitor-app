@@ -16,15 +16,17 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/overall` | Overall | Workbook columns; **sortable headers** (⇅/▼/▲) on all columns with real data; **Operator Activity** column; **Attendance** from Task Manager (`GET /api/alert/workflow/machine-attendance-map` + tap → `operator-schedule` modal); **Sales** uses `GET /api/alert/overall/daily-sales-elapsed` — **Today vs Yesterday** or **Yesterday vs Day Before** per compare preset; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
 | `/performance` | Performance | **Sales vs target graphs** (Targets Areas parity): **Performance Trajectory** (up to 12 lines) with **‹ › page** through all machines, series chips to hide/show, and **Customize graph** (pick any ≤12, e.g. top + lowest). Locations = searchable dropdown (Select all loads full fleet in batches). Dashed **Avg daily target**; **Performance charts** grid; single machine → Revenue / Product trajectory. Presets WTD/MTD/…; Product cups optional. Banner when no Admin/sheet targets. Red Flags **Target** = today % only. |
+| `/promo` · `/v2/promo` | Promo | **Campaign cups** by location: date range → daily achieved/remaining bars (default product **Americano Max**). Same `target_promo_*` tables as Targets site. Configure under **Admin → Promo** (not Admin → Targets). Swipe instruments still on Performance + Area owners / Promo admin. |
 | `/admin` → Targets | Admin · Targets | Location target once (KD or cups). Promote **1..N Vendon products**, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** (avg / last week / suggest) on hover-click. |
-| `/v2` … `/v2/*` | **Alert v2** | Pure Manus **Fleet Intelligence** UI with **full Classic workbook fields** (Red Flags / Overall / QA / Performance) in Manus tables/cards — no Classic Stitch chrome. Classic + Pro at `/`. Login `/v2/login`. |
-| `/admin` | Admin | User-entered data **not on Vendon**. **Machines** (cleaning, operators, hours), **Targets** (location KD + SX product cups + period), **Area owners**, **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
+| `/admin` → Promo | Admin · Promo | Product assignment (owner or machine), calendar **day cup targets**, swipe instrument names. Separate from KD/SX Targets. |
+| `/v2` … `/v2/*` | **Alert v2** | Pure Manus **Fleet Intelligence** UI with **full Classic workbook fields** (Red Flags / Overall / QA / Performance / Promo) in Manus tables/cards — no Classic Stitch chrome. Classic + Pro at `/`. Login `/v2/login`. |
+| `/admin` | Admin | User-entered data **not on Vendon**. **Machines** (cleaning, operators, hours), **Targets** (location KD + SX product cups + period), **Promo** (campaign cups), **Area owners**, **QA visit**, **Who can use Alert**, **My access**, **Advanced**. |
 
 ---
 
 ## Permissions (summary)
 
-**people-api** rules (same store as Monitor): view → Red Flags + Overall + **QA Visit** + **Performance**; **leetAlertAdmin** → Admin and edit **Who can use Alert** (same session rules API as Monitor **admin**); optional Monitor grid in **Advanced**. Adding people is limited to your Google Workspace domain(s): env **`ACCESS_ALLOWED_EMAIL_DOMAINS`** / **`DASHBOARD_ACCESS_EMAIL_DOMAINS`**, else the signed-in admin’s domain. No entitlements → **No access** after sign-in until an admin grants access.
+**people-api** rules (same store as Monitor): view → Red Flags + Overall + **QA Visit** + **Performance** + **Promo**; **leetAlertAdmin** → Admin and edit **Who can use Alert** (same session rules API as Monitor **admin**); optional Monitor grid in **Advanced**. Adding people is limited to your Google Workspace domain(s): env **`ACCESS_ALLOWED_EMAIL_DOMAINS`** / **`DASHBOARD_ACCESS_EMAIL_DOMAINS`**, else the signed-in admin’s domain. No entitlements → **No access** after sign-in until an admin grants access.
 
 ---
 
@@ -60,6 +62,10 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 *Figure 6 — Performance: searchable locations, Performance Trajectory (page of 12 + customize), Areas charts.*
 
+![8 Promo](docs/product-prototype/figures/wire-08-promo.svg)
+
+*Figure 8 — Promo: date range + location cup bars (Admin → Promo configures targets).*
+
 ![7 Alert v2](docs/product-prototype/figures/wire-07-v2.svg)
 
 *Figure 7 — **Alert v2 (`/v2`):** Manus Fleet Intelligence chrome + full Classic boards underneath. Not Pro.*
@@ -71,7 +77,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 ## PO quick facts
 
 - Lists refetch ~**1 min**; **Refresh now** on each screen.
-- Admin order: **Machines → Targets → Area owners → QA visit → Who can use Alert → My access → Advanced** (team tab only if org admin).
+- Admin order: **Machines → Targets → Promo → Area owners → QA visit → Who can use Alert → My access → Advanced** (team tab only if org admin).
 
 ---
 
@@ -96,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-19 | **Promo Phase 1 on Alert:** New **/promo** and **/v2/promo** tab (daily achieved/remaining cup bars; default Americano Max). **Admin → Promo** for product assignment + calendar day targets + instruments (separate from Targets KD/SX). people-api aliases /api/alert/promo/assignments, /day-targets, /performance sharing 	arget_promo_* tables. |
 | 2026-07-18 | **Performance growth KPIs clearer:** Big number is signed **Growth** (+/−%). Labels **vs prior period** / **vs same dates last year** (not “% of last year” — that implied full-year YTD). Index (period ÷ compare) stays as secondary. |
 | 2026-07-18 | **Performance layout polish:** Locations is a compact top bar (no empty sidebar). PNG sits in the Trajectory header (not over the legend). Page **‹ ›** flank the chart left/right. **Mix machines** modal: Top6+Lowest6, ranks, search — combine any machines across pages without duplicate chips. |
 | 2026-07-17 | **Performance dropdown names + legend arrows:** Locations dropdown shows location **names** (fixed empty labels). Removed duplicate series chip buttons; use the chart legend (line icons) with clearer **scroll ‹ ›** for all series on the page, plus page ‹ › for the next 12 machines. |

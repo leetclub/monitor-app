@@ -25,18 +25,20 @@
     <text x="16" y="108" class="label" font-size="9px">Sections</text>
     <rect class="navOff" x="16" y="116" width="168" height="28" rx="6"/>
     <text x="28" y="134" class="label" font-size="9px">Machines</text>
-    <rect class="navOn" x="16" y="150" width="168" height="28" rx="6"/>
+    <rect class="navOff" x="16" y="150" width="168" height="28" rx="6"/>
     <text x="28" y="168" class="label" font-size="9px">Targets</text>
-    <rect class="navOff" x="16" y="184" width="168" height="28" rx="6"/>
-    <text x="28" y="202" class="label" font-size="9px">Area owners</text>
+    <rect class="navOn" x="16" y="184" width="168" height="28" rx="6"/>
+    <text x="28" y="202" class="label" font-size="9px">Promo</text>
     <rect class="navOff" x="16" y="218" width="168" height="28" rx="6"/>
-    <text x="28" y="236" class="label" font-size="9px">Who can use Alert</text>
+    <text x="28" y="236" class="label" font-size="9px">Area owners</text>
     <rect class="navOff" x="16" y="252" width="168" height="28" rx="6"/>
-    <text x="28" y="270" class="label" font-size="9px">My access</text>
+    <text x="28" y="270" class="label" font-size="9px">Who can use Alert</text>
+    <rect class="navOff" x="16" y="286" width="168" height="28" rx="6"/>
+    <text x="28" y="304" class="label" font-size="9px">My access</text>
 
     <rect class="boxMuted" x="200" y="100" width="568" height="288" rx="6"/>
-    <text x="216" y="128" class="label" font-size="10px">Targets — location once + multi-product</text>
-    <text x="216" y="146" class="hint" font-size="8px">Loc KD/cups · promote 1..N products each with own target · sales insights.</text>
+    <text x="216" y="128" class="label" font-size="10px">Promo — product + day cups + instruments</text>
+    <text x="216" y="146" class="hint" font-size="8px">Separate from Targets (KD/SX). Default product Americano Max.</text>
 
     <rect class="box" x="216" y="158" width="320" height="28" rx="4"/>
     <text x="228" y="176" class="tiny">Machine dropdown</text>

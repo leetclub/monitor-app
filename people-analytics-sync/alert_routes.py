@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta, time as dt_time, date
 from zoneinfo import ZoneInfo
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlencode
 
 import requests
@@ -3496,6 +3496,282 @@ def register_alert_routes(app) -> None:
             db.rollback()
             logger.exception("alert_promo_swipe")
             return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/assignments", methods=["GET", "POST", "OPTIONS"])
+    def alert_promo_assignments():
+        """Promo product assignments — same tables as target-site (Alert auth)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        if request.method == "GET":
+            _, denied = _require_alert_admin()
+            if denied:
+                return denied
+            db = _pa_session()
+            try:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT id, scope_type, machine_id, vendon_user_id, product_name, updated_by, updated_at
+                        FROM target_promo_assignment
+                        ORDER BY updated_at DESC
+                        """
+                    )
+                ).mappings().all()
+                out = []
+                for r in rows:
+                    d = dict(r)
+                    if d.get("updated_at") is not None:
+                        d["updated_at"] = str(d["updated_at"])
+                    out.append(d)
+                return jsonify({"ok": True, "assignments": out})
+            except Exception as ex:
+                logger.exception("alert_promo_assignments GET")
+                return jsonify({"ok": False, "error": str(ex), "assignments": []}), 500
+            finally:
+                db.close()
+
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        body = request.get_json(silent=True) or {}
+        scope_type = str(body.get("scopeType") or body.get("scope_type") or "").strip().lower()
+        machine_id = str(body.get("machineId") or body.get("machine_id") or "").strip() or None
+        vendon_user_id = str(body.get("vendonUserId") or body.get("vendon_user_id") or "").strip() or None
+        product_name = str(body.get("productName") or body.get("product_name") or "Americano Max").strip()
+        updated_by = str(body.get("updatedBy") or email or "alert-admin").strip()
+        if scope_type not in ("machine", "owner"):
+            return jsonify({"ok": False, "error": "scopeType must be machine or owner"}), 400
+        if scope_type == "machine" and not machine_id:
+            return jsonify({"ok": False, "error": "machineId required for machine scope"}), 400
+        if scope_type == "owner" and not vendon_user_id:
+            return jsonify({"ok": False, "error": "vendonUserId required for owner scope"}), 400
+        db = _pa_session()
+        try:
+            if scope_type == "machine":
+                db.execute(
+                    text("DELETE FROM target_promo_assignment WHERE scope_type = 'machine' AND machine_id = :mid"),
+                    {"mid": machine_id},
+                )
+            else:
+                db.execute(
+                    text(
+                        "DELETE FROM target_promo_assignment WHERE scope_type = 'owner' AND vendon_user_id = :uid"
+                    ),
+                    {"uid": vendon_user_id},
+                )
+            db.execute(
+                text(
+                    """
+                    INSERT INTO target_promo_assignment
+                      (scope_type, machine_id, vendon_user_id, product_name, updated_by, updated_at)
+                    VALUES (:scope_type, :machine_id, :vendon_user_id, :product_name, :updated_by, NOW())
+                    """
+                ),
+                {
+                    "scope_type": scope_type,
+                    "machine_id": machine_id,
+                    "vendon_user_id": vendon_user_id,
+                    "product_name": product_name or "Americano Max",
+                    "updated_by": updated_by,
+                },
+            )
+            db.commit()
+            return jsonify({"ok": True})
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_promo_assignments POST")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/day-targets", methods=["GET", "POST", "OPTIONS"])
+    def alert_promo_day_targets():
+        if request.method == "OPTIONS":
+            return "", 204
+        if request.method == "GET":
+            _, denied = _require_alert_admin()
+            if denied:
+                return denied
+            start = (request.args.get("start_date") or request.args.get("startDate") or "").strip()
+            end = (request.args.get("end_date") or request.args.get("endDate") or "").strip()
+            machine_id = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+            db = _pa_session()
+            try:
+                q = """
+                    SELECT id, machine_id, target_date::text AS target_date, target_cups, updated_by, updated_at
+                    FROM target_promo_day_target
+                    WHERE 1=1
+                """
+                params: Dict[str, Any] = {}
+                if start:
+                    q += " AND target_date >= CAST(:start AS date)"
+                    params["start"] = start
+                if end:
+                    q += " AND target_date <= CAST(:end AS date)"
+                    params["end"] = end
+                if machine_id:
+                    q += " AND machine_id = :mid"
+                    params["mid"] = machine_id
+                q += " ORDER BY target_date, machine_id"
+                rows = db.execute(text(q), params).mappings().all()
+                out = []
+                for r in rows:
+                    d = dict(r)
+                    if d.get("updated_at") is not None:
+                        d["updated_at"] = str(d["updated_at"])
+                    out.append(d)
+                return jsonify({"ok": True, "dayTargets": out})
+            except Exception as ex:
+                logger.exception("alert_promo_day_targets GET")
+                return jsonify({"ok": False, "error": str(ex), "dayTargets": []}), 500
+            finally:
+                db.close()
+
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        body = request.get_json(silent=True) or {}
+        machine_id = str(body.get("machineId") or body.get("machine_id") or "").strip()
+        target_date = str(body.get("targetDate") or body.get("target_date") or "").strip()
+        try:
+            target_cups = int(body.get("targetCups") or body.get("target_cups") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "targetCups must be an integer"}), 400
+        updated_by = str(body.get("updatedBy") or email or "alert-admin").strip()
+        if not machine_id or not target_date:
+            return jsonify({"ok": False, "error": "machineId and targetDate required"}), 400
+        db = _pa_session()
+        try:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO target_promo_day_target (machine_id, target_date, target_cups, updated_by, updated_at)
+                    VALUES (:mid, CAST(:d AS date), :cups, :by, NOW())
+                    ON CONFLICT (machine_id, target_date)
+                    DO UPDATE SET target_cups = EXCLUDED.target_cups, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+                    """
+                ),
+                {"mid": machine_id, "d": target_date, "cups": max(0, target_cups), "by": updated_by},
+            )
+            db.commit()
+            return jsonify({"ok": True})
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_promo_day_targets POST")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/day-targets/bulk", methods=["POST", "OPTIONS"])
+    def alert_promo_day_targets_bulk():
+        if request.method == "OPTIONS":
+            return "", 204
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        body = request.get_json(silent=True) or {}
+        machine_ids: List[str] = [
+            str(x).strip() for x in (body.get("machineIds") or body.get("machine_ids") or []) if str(x).strip()
+        ]
+        dates: List[str] = [str(x).strip() for x in (body.get("dates") or []) if str(x).strip()]
+        try:
+            target_cups = int(body.get("targetCups") or body.get("target_cups") or 0)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "targetCups must be an integer"}), 400
+        updated_by = str(body.get("updatedBy") or email or "alert-admin").strip()
+        if not machine_ids or not dates:
+            return jsonify({"ok": False, "error": "machineIds and dates required"}), 400
+        db = _pa_session()
+        try:
+            for mid in machine_ids:
+                for d in dates:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO target_promo_day_target (machine_id, target_date, target_cups, updated_by, updated_at)
+                            VALUES (:mid, CAST(:d AS date), :cups, :by, NOW())
+                            ON CONFLICT (machine_id, target_date)
+                            DO UPDATE SET target_cups = EXCLUDED.target_cups, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+                            """
+                        ),
+                        {"mid": mid, "d": d, "cups": max(0, target_cups), "by": updated_by},
+                    )
+            db.commit()
+            return jsonify({"ok": True, "saved": len(machine_ids) * len(dates)})
+        except Exception as ex:
+            db.rollback()
+            logger.exception("alert_promo_day_targets_bulk")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/promo/performance", methods=["GET", "OPTIONS"])
+    def alert_promo_performance():
+        """Promo cups vs calendar day targets — same engine as target-site (Alert auth)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from promo_lib import fetch_promo_performance, kuwait_today
+
+        start = (request.args.get("start_date") or request.args.get("startDate") or "").strip()
+        end = (request.args.get("end_date") or request.args.get("endDate") or "").strip()
+        if not start or not end:
+            today = kuwait_today().isoformat()
+            start = start or today
+            end = end or today
+        raw_ids = (request.args.get("machine_ids") or request.args.get("machineIds") or "").strip()
+        machine_ids: Optional[Set[str]] = (
+            {x.strip() for x in raw_ids.split(",") if x.strip()} if raw_ids else None
+        )
+
+        rows, err = vendon_fetch_machine_list(_vendon_get)
+        if err:
+            return jsonify({"ok": False, "error": err, "locations": []}), 502
+        machines = []
+        for m in rows:
+            if m.get("id") is None:
+                continue
+            mid = str(m.get("id")).strip()
+            if not mid:
+                continue
+            machines.append({"id": mid, "name": m.get("name") or mid})
+
+        db = _pa_session()
+        try:
+            # Default: only machines with day targets in the window (avoids full-fleet vend scans).
+            if machine_ids is None:
+                tgt_rows = db.execute(
+                    text(
+                        """
+                        SELECT DISTINCT machine_id
+                        FROM target_promo_day_target
+                        WHERE target_date >= CAST(:start AS date)
+                          AND target_date <= CAST(:end AS date)
+                        """
+                    ),
+                    {"start": start, "end": end},
+                ).mappings().all()
+                machine_ids = {str(r["machine_id"]).strip() for r in tgt_rows if r.get("machine_id")}
+
+            def _fetch_vends(from_ts: int, to_ts: int, mid: str):
+                return _fetch_vends_machine_day(mid, from_ts, to_ts)
+
+            payload = fetch_promo_performance(
+                db,
+                machines,
+                start,
+                end,
+                _fetch_vends,
+                machine_ids=machine_ids,
+            )
+            return jsonify({"ok": True, **payload})
+        except Exception as ex:
+            logger.exception("alert_promo_performance")
+            return jsonify({"ok": False, "error": str(ex), "locations": []}), 500
         finally:
             db.close()
 

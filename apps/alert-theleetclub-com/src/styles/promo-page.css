@@ -1,0 +1,201 @@
+/* Promo tab + Admin → Promo */
+
+.promoPage {
+  padding: 0.5rem 0 1.5rem;
+  max-width: 1100px;
+}
+
+.promoPageManus {
+  max-width: none;
+}
+
+.promoPageHead {
+  margin-bottom: 1rem;
+}
+
+.promoPageEyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, #64748b);
+}
+
+.promoPageTitle {
+  margin: 0 0 0.35rem;
+  font-size: 1.45rem;
+  font-weight: 750;
+}
+
+.promoPageTagline {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--muted, #64748b);
+  max-width: 42rem;
+}
+
+.promoPerfSection {
+  margin-bottom: 1rem;
+}
+
+.promoAdminGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.1rem;
+}
+
+.adminCardSubtitle {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.promoField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.85rem;
+}
+
+.promoField input,
+.promoField select,
+.promoField textarea {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.promoChipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
+  min-height: 1.5rem;
+}
+
+.promoChip {
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface-2, #f8fafc);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.promoDateRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.promoDateRow label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.promoDateRow input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.promoState {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  font-size: 0.9rem;
+}
+
+.promoStateError {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.promoLocGrid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.promoLocCard {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: var(--surface, #fff);
+}
+
+.promoLocHead h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.promoLocProduct,
+.promoLocPct {
+  margin: 0.15rem 0;
+  font-size: 0.82rem;
+  color: var(--muted, #64748b);
+}
+
+.promoDayGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.promoDayBar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: stretch;
+}
+
+.promoDayBarTrack {
+  display: flex;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.promoDayBarFill {
+  height: 100%;
+  min-width: 0;
+  transition: width 0.2s ease;
+}
+
+.promoDayBarRemain {
+  height: 100%;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f8fafc,
+    #f8fafc 4px,
+    #e2e8f0 4px,
+    #e2e8f0 8px
+  );
+}
+
+.promoDayBarLabel,
+.promoDayBarVal {
+  font-size: 0.7rem;
+  color: var(--muted, #64748b);
+  text-align: center;
+}
+
+.promoDayBarVal {
+  font-weight: 700;
+  color: inherit;
+}

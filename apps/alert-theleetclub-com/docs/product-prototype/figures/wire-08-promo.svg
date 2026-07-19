@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="320" viewBox="0 0 800 320" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <style><![CDATA[
+      .box { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+      .boxMuted { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1; }
+      .label { fill: #0f172a; font-size: 11px; font-weight: 600; }
+      .hint { fill: #64748b; font-size: 9px; }
+      .title { fill: #0f172a; font-size: 14px; font-weight: 700; }
+      .cap { fill: #475569; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
+      .fill { fill: #16a34a; }
+      .remain { fill: #e2e8f0; }
+    ]]></style>
+  </defs>
+  <text x="8" y="18" class="cap">FIGURE 8 - PROMO (CAMPAIGN CUPS BY LOCATION)</text>
+  <g transform="translate(8, 28)">
+    <rect class="box" x="0" y="0" width="784" height="280" rx="8"/>
+    <text x="16" y="28" class="hint" font-size="9px">Campaign cups</text>
+    <text x="16" y="50" class="title">Promo</text>
+    <text x="16" y="70" class="hint" font-size="9px">Default product Americano Max - configure in Admin - Promo (not Targets).</text>
+
+    <rect class="boxMuted" x="16" y="86" width="120" height="28" rx="6"/>
+    <text x="28" y="104" class="label" font-size="9px">From - date</text>
+    <rect class="boxMuted" x="148" y="86" width="120" height="28" rx="6"/>
+    <text x="160" y="104" class="label" font-size="9px">To - date</text>
+
+    <rect class="boxMuted" x="16" y="130" width="752" height="130" rx="6"/>
+    <text x="28" y="152" class="label" font-size="10px">Location A - Americano Max</text>
+    <text x="28" y="168" class="hint" font-size="8px">Period: 42 / 60 cups (70%)</text>
+    <rect class="fill" x="28" y="184" width="48" height="22" rx="3"/>
+    <rect class="remain" x="76" y="184" width="20" height="22" rx="0"/>
+    <text x="28" y="222" class="hint" font-size="8px">07-17</text>
+    <rect class="fill" x="110" y="184" width="36" height="22" rx="3"/>
+    <rect class="remain" x="146" y="184" width="32" height="22" rx="0"/>
+    <text x="110" y="222" class="hint" font-size="8px">07-18</text>
+    <rect class="fill" x="192" y="184" width="56" height="22" rx="3"/>
+    <rect class="remain" x="248" y="184" width="12" height="22" rx="0"/>
+    <text x="192" y="222" class="hint" font-size="8px">07-19</text>
+    <text x="28" y="248" class="hint" font-size="8px">Daily bars = achieved (solid) vs remaining (hatched).</text>
+  </g>
+</svg>

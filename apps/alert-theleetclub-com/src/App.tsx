@@ -5,6 +5,7 @@ import { RedFlagsPage } from './features/redflags/RedFlagsPage';
 import { OverallPage } from './features/overall/OverallPage';
 import { QaVisitPage } from './features/qavisit/QaVisitPage';
 import { PerformancePage } from './features/performance/PerformancePage';
+import { PromoPage } from './features/promo/PromoPage';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AccessProvider, useAccess } from '@/context/AccessContext';
 import { LoginPage } from '@/pages/LoginPage';
@@ -129,6 +130,15 @@ function NavLinks({ onNavigate, className }: { onNavigate?: () => void; classNam
         <NavIcon name="performance" />
         <span className="navLinkTitle">Performance</span>
       </NavLink>
+      <NavLink
+        to="/promo"
+        title="Promo"
+        className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
+        onClick={onNavigate}
+      >
+        <NavIcon name="promo" />
+        <span className="navLinkTitle">Promo</span>
+      </NavLink>
       {canSeeTab('leetAlertAdmin') ? (
         <NavLink
           to="/admin"
@@ -233,6 +243,7 @@ function AppRoutesOutlet() {
       <Route path="/overall" element={<OverallPage />} />
       <Route path="/qa-visit" element={<QaVisitPage />} />
       <Route path="/performance" element={<PerformancePage />} />
+      <Route path="/promo" element={<PromoPage />} />
       <Route path="*" element={<DefaultRedirect />} />
     </Routes>
   );
