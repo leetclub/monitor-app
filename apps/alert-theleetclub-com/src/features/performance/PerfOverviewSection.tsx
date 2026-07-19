@@ -580,13 +580,6 @@ export function PerfOverviewSection({
         ? 'up'
         : 'down';
 
-  const growthGroupHint =
-    growthKey === 'top5'
-      ? 'Top 5 sales · tap for All / Lowest 5'
-      : growthKey === 'lowest5'
-        ? 'Lowest 5 sales · tap for All / Top 5'
-        : 'All selected · tap for Top / Lowest 5';
-
   const prevWin =
     windowMeta?.prevStart && windowMeta?.prevEnd
       ? `${windowMeta.prevStart} → ${windowMeta.prevEnd}`
@@ -595,6 +588,13 @@ export function PerfOverviewSection({
     windowMeta?.yoyStart && windowMeta?.yoyEnd
       ? `${windowMeta.yoyStart} → ${windowMeta.yoyEnd}`
       : 'same dates last year';
+
+  const growthScopeNote =
+    growthKey === 'top5'
+      ? 'Figures below follow the Top 5 by period sales (switch All / Lowest 5 in the groups).'
+      : growthKey === 'lowest5'
+        ? 'Figures below follow the Lowest 5 by period sales (switch All / Top 5 in the groups).'
+        : 'Figures below follow all machines in the current selection (see All / Top 5 / Lowest 5 groups).';
 
   const canPage = !customIds?.length && view !== 'top5' && view !== 'lowest5' && pageCount > 1;
   const touchStartX = useRef<number | null>(null);
@@ -791,14 +791,14 @@ export function PerfOverviewSection({
         <KpiBox
           label="Growth vs prior period"
           value={formatGrowthDeltaPct(growthPrevPct)}
-          hint={`${growthGroupHint} · compare window ${prevWin}`}
+          hint="Tap for details"
           tone={growthTone}
           onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
         />
         <KpiBox
           label="Growth vs same dates last year"
           value={formatGrowthDeltaPct(growthYoyPct)}
-          hint={`Same calendar dates one year ago (${yoyWin}) — not full-year YTD`}
+          hint="Tap for details"
           tone={yoyTone}
           onClick={kpis?.growthVsYoy ? () => setGrowthModal('yoy') : undefined}
         />
@@ -817,10 +817,15 @@ export function PerfOverviewSection({
       {growthModal === 'prev' && kpis?.growthVsPrev ? (
         <GrowthCompareModal
           title="Growth vs prior period"
-          subtitle={`Growth = (this period − prior) ÷ prior × 100. Index = this ÷ prior × 100 (100 = flat). Prior window: ${prevWin}.`}
+          subtitle={`Selected period: ${windowLabel || '—'}. Compare (prior) window: ${prevWin}.`}
+          explain={[
+            growthScopeNote,
+            'Growth (big number on the card) = (this period KD − prior KD) ÷ prior KD × 100. Example: −1.2% means sales are 1.2% below the prior window.',
+            'Index (% of prior) = this period ÷ prior × 100. 100 = flat, above 100 = higher than prior, below 100 = lower.',
+            'Top 5 / Lowest 5 groups are ranked by this period’s sales KD, not by growth.',
+          ]}
           compareLabel="Prior KD"
           indexLabel="% of prior"
-          windowLabel={windowLabel}
           groups={kpis.growthVsPrev}
           onClose={() => setGrowthModal(null)}
         />
@@ -828,10 +833,16 @@ export function PerfOverviewSection({
       {growthModal === 'yoy' && kpis?.growthVsYoy ? (
         <GrowthCompareModal
           title="Growth vs same dates last year"
-          subtitle={`Growth = (this period − then) ÷ then × 100. Index = this ÷ then × 100. Compare dates: ${yoyWin} — not full calendar year.`}
+          subtitle={`Selected period: ${windowLabel || '—'}. Same calendar dates last year: ${yoyWin}.`}
+          explain={[
+            growthScopeNote,
+            'This is not full-year or YTD. It compares the selected date range to the same dates one year earlier.',
+            'Growth (big number on the card) = (this period KD − then KD) ÷ then KD × 100. Example: +5% means sales are 5% above those same dates last year.',
+            'Index (% of then) = this period ÷ then × 100. 100 = flat vs last year.',
+            'Top 5 / Lowest 5 groups are ranked by this period’s sales KD, not by growth.',
+          ]}
           compareLabel="Then KD"
           indexLabel="% of then"
-          windowLabel={windowLabel}
           groups={kpis.growthVsYoy}
           onClose={() => setGrowthModal(null)}
         />

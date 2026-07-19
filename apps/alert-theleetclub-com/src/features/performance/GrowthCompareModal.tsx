@@ -31,18 +31,19 @@ function growthDeltaPct(rate: number | null | undefined): string {
 export function GrowthCompareModal({
   title,
   subtitle,
+  explain,
   compareLabel,
   indexLabel = 'Index',
-  windowLabel,
   groups,
   onClose,
 }: {
   title: string;
   subtitle?: string;
+  /** Longer explanations shown under the title (card stays short). */
+  explain?: string[];
   compareLabel: string;
   /** Column / summary for period ÷ compare × 100. */
   indexLabel?: string;
-  windowLabel?: string;
   groups: Partial<Record<GrowthGroupKey, GrowthGroupSlice | null | undefined>>;
   onClose: () => void;
 }) {
@@ -67,7 +68,6 @@ export function GrowthCompareModal({
               {title}
             </h2>
             {subtitle ? <p className="salesHistorySub">{subtitle}</p> : null}
-            {windowLabel ? <p className="salesHistorySub">Selected period: {windowLabel}</p> : null}
           </div>
           <button type="button" className="salesHistoryClose" onClick={onClose} aria-label="Close">
             ×
@@ -75,6 +75,13 @@ export function GrowthCompareModal({
         </div>
 
         <div className="perfGrowthModalBody">
+          {explain?.length ? (
+            <ul className="perfGrowthExplain">
+              {explain.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
           {keys.map((key) => {
             const g = groups[key];
             if (!g) return null;
@@ -130,11 +137,6 @@ export function GrowthCompareModal({
               </section>
             );
           })}
-          <p className="perfGrowthFoot">
-            <strong>Growth</strong> is the signed change people expect (e.g. −1.2%).{' '}
-            <strong>Index</strong> is period ÷ compare × 100 (100 = flat). Top / Lowest 5 ranked by
-            period sales KD.
-          </p>
         </div>
       </div>
     </div>,

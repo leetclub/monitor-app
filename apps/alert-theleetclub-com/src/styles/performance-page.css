@@ -733,7 +733,7 @@
 }
 
 .perfKpiWide {
-  min-height: 88px;
+  min-height: 78px;
 }
 
 .perfKpiHint {
@@ -800,9 +800,23 @@
   outline: none;
 }
 
-.perfKpiClickable .perfKpiHint::after {
-  content: ' · details';
-  opacity: 0.85;
+.perfGrowthExplain {
+  margin: 0;
+  padding: 10px 12px 10px 1.4rem;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-soft);
+  background: var(--panel);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.perfGrowthExplain li {
+  margin: 0 0 6px;
+}
+
+.perfGrowthExplain li:last-child {
+  margin-bottom: 0;
 }
 
 .perfGrowthModal {
