@@ -8,10 +8,10 @@ import {
 } from '@/features/promo/promoApi';
 
 function pctColor(pct: number | null): string {
-  if (pct == null) return '#94a3b8';
-  if (pct >= 100) return '#16a34a';
-  if (pct >= 70) return '#ca8a04';
-  return '#dc2626';
+  if (pct == null) return 'var(--muted, #94a3b8)';
+  if (pct >= 100) return 'var(--ops-good, var(--accent, #34d399))';
+  if (pct >= 70) return 'var(--warn, #fbbf24)';
+  return 'var(--ops-bad, var(--danger, #f87171))';
 }
 
 function DayAchievementBar({

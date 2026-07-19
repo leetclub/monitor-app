@@ -1,8 +1,9 @@
-/* Promo tab + Admin → Promo */
+/* Promo tab + Admin → Promo — theme tokens (Classic / Pro / Manus) */
 
 .promoPage {
   padding: 0.5rem 0 1.5rem;
   max-width: 1100px;
+  color: var(--text, #e2e8f0);
 }
 
 .promoPageManus {
@@ -19,21 +20,27 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted, #64748b);
+  color: var(--muted, #94a3b8);
 }
 
 .promoPageTitle {
   margin: 0 0 0.35rem;
   font-size: 1.45rem;
   font-weight: 750;
+  color: var(--text, #e2e8f0);
 }
 
 .promoPageTagline {
   margin: 0;
   font-size: 0.9rem;
   line-height: 1.45;
-  color: var(--muted, #64748b);
+  color: var(--muted, #94a3b8);
   max-width: 42rem;
+}
+
+.promoPageTagline strong {
+  color: var(--text, #e2e8f0);
+  font-weight: 650;
 }
 
 .promoPerfSection {
@@ -50,6 +57,7 @@
   margin: 0 0 0.65rem;
   font-size: 0.95rem;
   font-weight: 700;
+  color: var(--text, #e2e8f0);
 }
 
 .promoField {
@@ -58,17 +66,24 @@
   gap: 0.35rem;
   margin-bottom: 0.65rem;
   font-size: 0.85rem;
+  color: var(--muted, #94a3b8);
 }
 
 .promoField input,
 .promoField select,
 .promoField textarea {
   padding: 0.45rem 0.55rem;
-  border: 1px solid var(--border, #e2e8f0);
+  border: 1px solid var(--border, #334155);
   border-radius: 8px;
-  background: var(--surface, #fff);
-  color: inherit;
+  background: var(--bg-elevated, var(--panel2, #0f172a));
+  color: var(--text, #e2e8f0);
   font: inherit;
+}
+
+.promoField input::placeholder,
+.promoField textarea::placeholder {
+  color: var(--muted, #94a3b8);
+  opacity: 0.85;
 }
 
 .promoChipRow {
@@ -80,8 +95,9 @@
 }
 
 .promoChip {
-  border: 1px solid var(--border, #e2e8f0);
-  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border, #334155);
+  background: var(--panel2, #0f172a);
+  color: var(--text, #e2e8f0);
   border-radius: 999px;
   padding: 0.2rem 0.55rem;
   font-size: 0.78rem;
@@ -100,28 +116,39 @@
   flex-direction: column;
   gap: 0.3rem;
   font-size: 0.85rem;
+  color: var(--muted, #94a3b8);
 }
 
 .promoDateRow input {
   padding: 0.4rem 0.5rem;
-  border: 1px solid var(--border, #e2e8f0);
+  border: 1px solid var(--border, #334155);
   border-radius: 8px;
+  background: var(--bg-elevated, var(--panel2, #0f172a));
+  color: var(--text, #e2e8f0);
   font: inherit;
+  color-scheme: dark;
+}
+
+html[data-mode='light'] .promoDateRow input,
+html[data-theme='classic'][data-mode='light'] .promoDateRow input {
+  color-scheme: light;
 }
 
 .promoState {
   margin: 0 0 1rem;
   padding: 0.75rem 0.9rem;
   border-radius: 8px;
-  background: var(--surface-2, #f8fafc);
-  border: 1px solid var(--border, #e2e8f0);
+  background: var(--panel2, #0f172a);
+  border: 1px solid var(--border, #334155);
+  color: var(--text, #e2e8f0);
   font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .promoStateError {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
+  border-color: color-mix(in srgb, var(--danger, #f87171) 45%, var(--border, #334155));
+  background: color-mix(in srgb, var(--danger, #f87171) 12%, var(--panel2, #0f172a));
+  color: var(--ops-bad, var(--danger, #fca5a5));
 }
 
 .promoLocGrid {
@@ -130,22 +157,24 @@
 }
 
 .promoLocCard {
-  border: 1px solid var(--border, #e2e8f0);
+  border: 1px solid var(--border, #334155);
   border-radius: 10px;
   padding: 0.85rem 1rem;
-  background: var(--surface, #fff);
+  background: var(--panel, #111827);
+  color: var(--text, #e2e8f0);
 }
 
 .promoLocHead h3 {
   margin: 0 0 0.25rem;
   font-size: 1rem;
+  color: var(--text, #e2e8f0);
 }
 
 .promoLocProduct,
 .promoLocPct {
   margin: 0.15rem 0;
   font-size: 0.82rem;
-  color: var(--muted, #64748b);
+  color: var(--muted, #94a3b8);
 }
 
 .promoDayGrid {
@@ -167,8 +196,8 @@
   height: 28px;
   border-radius: 6px;
   overflow: hidden;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: var(--panel2, #0f172a);
+  border: 1px solid var(--border-soft, var(--border, #334155));
 }
 
 .promoDayBarFill {
@@ -181,21 +210,45 @@
   height: 100%;
   background: repeating-linear-gradient(
     -45deg,
-    #f8fafc,
-    #f8fafc 4px,
-    #e2e8f0 4px,
-    #e2e8f0 8px
+    color-mix(in srgb, var(--muted, #94a3b8) 8%, transparent),
+    color-mix(in srgb, var(--muted, #94a3b8) 8%, transparent) 4px,
+    color-mix(in srgb, var(--border, #334155) 55%, transparent) 4px,
+    color-mix(in srgb, var(--border, #334155) 55%, transparent) 8px
   );
 }
 
 .promoDayBarLabel,
 .promoDayBarVal {
   font-size: 0.7rem;
-  color: var(--muted, #64748b);
+  color: var(--muted, #94a3b8);
   text-align: center;
 }
 
 .promoDayBarVal {
   font-weight: 700;
-  color: inherit;
+  color: var(--text, #e2e8f0);
+}
+
+/* Light mode: keep readable surfaces without hardcoding white-on-white */
+html[data-mode='light'] .promoPage,
+html[data-theme='classic'][data-mode='light'] .promoPage {
+  color: var(--text, #1c1917);
+}
+
+html[data-mode='light'] .promoState,
+html[data-theme='classic'][data-mode='light'] .promoState {
+  background: var(--panel2, #f0ebe4);
+  border-color: var(--border, #d6d3d1);
+  color: var(--text, #1c1917);
+}
+
+html[data-mode='light'] .promoLocCard,
+html[data-theme='classic'][data-mode='light'] .promoLocCard {
+  background: var(--panel, #fff);
+  border-color: var(--border, #d6d3d1);
+}
+
+html[data-mode='light'] .promoDayBarTrack,
+html[data-theme='classic'][data-mode='light'] .promoDayBarTrack {
+  background: var(--surface-container-low, #f0ebe4);
 }
