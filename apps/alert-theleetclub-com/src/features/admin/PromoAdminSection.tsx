@@ -50,11 +50,16 @@ export function PromoAdminSection() {
   const owners = ownersQ.data?.rows ?? [];
   const users = usersQ.data?.users ?? [];
 
+  /** Prefer selected machine/owner machine; else first fleet machine (Targets-style fast path). */
   const catalogMachineId = useMemo(() => {
-    if (scopeType === 'machine') return machineId;
-    const area = owners.find((o) => o.vendonUserId === vendonUserId);
-    return (area?.machineIds ?? []).find(Boolean) || '';
-  }, [scopeType, machineId, owners, vendonUserId]);
+    if (scopeType === 'machine' && machineId) return machineId;
+    if (scopeType === 'owner' && vendonUserId) {
+      const area = owners.find((o) => o.vendonUserId === vendonUserId);
+      const mid = (area?.machineIds ?? []).find(Boolean);
+      if (mid) return mid;
+    }
+    return machines[0]?.id ?? '';
+  }, [scopeType, machineId, owners, vendonUserId, machines]);
 
   const vendonQ = useQuery({
     queryKey: ['alert-vendon-products', catalogMachineId || 'fleet'],
@@ -63,21 +68,30 @@ export function PromoAdminSection() {
       if (catalogMachineId) qs.set('machineId', catalogMachineId);
       return apiGet<{ products?: VendonProduct[] }>(`/api/alert/admin/vendon-products?${qs}`);
     },
+    // Wait for machines so we can use a single-machine sample; fleet (no id) only if list empty.
+    enabled: Boolean(catalogMachineId) || machinesQ.isSuccess,
     staleTime: 5 * 60_000,
   });
 
   const catalog = useMemo(() => {
-    const list = [...(vendonQ.data?.products || [])].sort(
-      (a, b) => b.vendCount - a.vendCount || a.name.localeCompare(b.name),
-    );
+    const raw = vendonQ.data?.products || [];
+    const list = raw
+      .map((p) => ({
+        name: (p.name || (p as { productName?: string }).productName || '').trim(),
+        vendCount: Number(p.vendCount) || 0,
+      }))
+      .filter((p) => p.name)
+      .sort((a, b) => b.vendCount - a.vendCount || a.name.localeCompare(b.name));
+    // Only inject default after a successful fetch — otherwise the select looks "loaded" with one item.
     if (
+      vendonQ.isSuccess &&
       DEFAULT_PROMO_PRODUCT &&
       !list.some((p) => p.name.toLowerCase() === DEFAULT_PROMO_PRODUCT.toLowerCase())
     ) {
       list.unshift({ name: DEFAULT_PROMO_PRODUCT, vendCount: 0 });
     }
     return list;
-  }, [vendonQ.data?.products]);
+  }, [vendonQ.data?.products, vendonQ.isSuccess]);
 
   useEffect(() => {
     if (!catalog.length) return;
@@ -184,13 +198,17 @@ export function PromoAdminSection() {
           <label className="promoField">
             Product (from Vendon)
             <select
-              value={productName}
+              value={catalog.some((p) => p.name === productName) ? productName : catalog[0]?.name || ''}
               onChange={(e) => setProductName(e.target.value)}
-              disabled={vendonQ.isLoading && !catalog.length}
+              disabled={(vendonQ.isLoading || vendonQ.isFetching) && !catalog.length}
             >
               {!catalog.length ? (
-                <option value={DEFAULT_PROMO_PRODUCT}>
-                  {vendonQ.isLoading ? 'Loading Vendon products…' : DEFAULT_PROMO_PRODUCT}
+                <option value="">
+                  {vendonQ.isLoading || vendonQ.isFetching
+                    ? 'Loading Vendon products…'
+                    : vendonQ.isError
+                      ? 'Catalog unavailable'
+                      : 'No products found'}
                 </option>
               ) : (
                 catalog.map((p) => (
@@ -203,7 +221,12 @@ export function PromoAdminSection() {
           </label>
           {vendonQ.isError ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
-              Could not load Vendon catalog — check machine/owner selection.
+              Could not load Vendon catalog. Try again or pick a machine/owner.
+            </p>
+          ) : vendonQ.isSuccess && catalog.length > 0 ? (
+            <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
+              {catalog.filter((p) => p.vendCount > 0).length} products from Vendon
+              {catalogMachineId ? ' (sample machine)' : ' (fleet sample)'}.
             </p>
           ) : null}
           <button

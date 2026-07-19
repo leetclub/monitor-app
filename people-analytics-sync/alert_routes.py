@@ -2090,7 +2090,7 @@ def register_alert_routes(app) -> None:
             lookback = max(3, min(45, int(request.args.get("days") or 21)))
         except (TypeError, ValueError):
             lookback = 21
-        cache_key = f"perf:vendon-products:v1:{mid or 'fleet'}:{lookback}"
+        cache_key = f"perf:vendon-products:v2:{mid or 'fleet'}:{lookback}"
         cached = _alert_cache_get(cache_key, 300)
         if cached is not None:
             return jsonify(cached)
@@ -2101,24 +2101,13 @@ def register_alert_routes(app) -> None:
         from vendon_proxy_routes import _stats_vend_product_fields
 
         names: Dict[str, int] = {}
-        machine_ids: List[str] = []
-        if mid:
-            machine_ids = [mid]
-        else:
-            fleet_rows, _ferr = vendon_fetch_machine_list(_vendon_get)
-            machine_ids = [str(m.get("id") or "").strip() for m in (fleet_rows or []) if m.get("id")]
-            machine_ids = machine_ids[:18]
-
         try:
             from_ts, _ = _kuwait_day_bounds_utc(start.isoformat())
             _, to_ts = _kuwait_day_bounds_utc(today.isoformat())
         except Exception:
             from_ts = to_ts = 0
-        for machine_id in machine_ids:
-            if not from_ts or not to_ts:
-                break
-            # One window per machine (much faster than per-day paging)
-            vends, _err = _fetch_vends_machine_day(machine_id, from_ts, to_ts)
+
+        def _accumulate_vends(vends: Optional[List[Any]]) -> None:
             for v in vends or []:
                 if not isinstance(v, dict):
                     continue
@@ -2128,8 +2117,19 @@ def register_alert_routes(app) -> None:
                     continue
                 names[pn] = names.get(pn, 0) + 1
 
+        if from_ts and to_ts:
+            if mid:
+                # One window for the selected machine (same path Admin → Targets uses)
+                vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
+                _accumulate_vends(vends)
+            else:
+                # Fleet sample: one paginated /stats/vends window — avoid N sequential
+                # machine calls (was timing out Admin → Promo on open).
+                vends, _err = _fetch_all_vends(from_ts, to_ts, max_rows=8000)
+                _accumulate_vends(vends)
+
         products = [
-            {"name": n, "vendCount": c}
+            {"name": n, "productName": n, "vendCount": c}
             for n, c in sorted(names.items(), key=lambda kv: (-kv[1], kv[0].lower()))
         ]
         body = {
@@ -2211,7 +2211,7 @@ def register_alert_routes(app) -> None:
             names = want_products or [p["productName"] for p in promoted if p.get("productName")]
             if not names:
                 # light fallback: reuse vendon-products cache if warm
-                vp = _alert_cache_get(f"perf:vendon-products:v1:{mid}:21", 300) or {}
+                vp = _alert_cache_get(f"perf:vendon-products:v2:{mid}:21", 300) or {}
                 names = [x.get("name") for x in (vp.get("products") or [])[:5] if x.get("name")]
 
             # One Vendon window for the lookback — bucket cups by product×day (fast + cacheable)
