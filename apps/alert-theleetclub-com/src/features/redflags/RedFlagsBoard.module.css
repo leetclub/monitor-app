@@ -1198,14 +1198,14 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .detailMachineId {
   margin: 4px 0 0;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .detailCloseBtn {
@@ -1260,7 +1260,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   border: 1px solid var(--outline-variant);
   background: #252a32;
 }
@@ -1278,7 +1278,7 @@
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .detailAlertLead {
@@ -1318,7 +1318,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   margin-bottom: 4px;
 }
 
@@ -1336,7 +1336,7 @@
   margin-top: 4px;
   font-size: 0.75rem;
   line-height: 1.35;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .detailFreqRow {
@@ -1363,7 +1363,7 @@
 .detailFootNote {
   margin: 12px 0 0;
   font-size: 0.78rem;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   line-height: 1.4;
 }
 

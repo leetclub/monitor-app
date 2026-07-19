@@ -80,7 +80,7 @@
 .detailBtn {
   border: none;
   background: transparent;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   font-size: 0.75rem;
   cursor: pointer;
   padding: 0;
@@ -169,8 +169,8 @@
 }
 
 .chipP2 {
-  color: #ad8883;
-  border: 1px solid #5d3f3b;
+  color: var(--ops-label-color, #ad8883);
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
 }
 
 .machineName {
@@ -183,7 +183,7 @@
 .machineId {
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   margin-top: 2px;
 }
 
@@ -213,7 +213,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   margin-bottom: 2px;
 }
 
@@ -245,7 +245,7 @@
   font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   margin-bottom: 2px;
 }
 

@@ -3,17 +3,28 @@
  * KPI cards, compare bar, column composer, sales banner, alerts — one visual language.
  */
 .stitchOpsPanel {
-  --ops-surface-bg: #171c23;
-  --ops-surface-bg-hover: #1e1f25;
-  --ops-surface-border: #5d3f3b;
+  /* Derive from theme tokens so Pro / Manus cool palette flows into Red Flags cells.
+     Classic Stitch keeps warm rose / brown via --muted / --outline-variant. */
+  --ops-surface-bg: var(--panel2, #171c23);
+  --ops-surface-bg-hover: var(--panel, #1e1f25);
+  --ops-surface-border: var(--outline-variant, var(--border, #5d3f3b));
   --ops-surface-radius: 8px;
   --ops-surface-pad-y: 10px;
   --ops-surface-pad-x: 12px;
   --ops-surface-gap: 10px;
   --ops-inset-x: 14px;
+  /* Terracotta on Classic; Pro/Manus override --ops-accent to teal */
   --ops-accent: #c45c4a;
-  --ops-label-color: #ad8883;
-  --ops-title-color: #dee2ec;
+  --ops-label-color: var(--muted, #ad8883);
+  --ops-title-color: var(--text, #dee2ec);
+  --ops-good: var(--accent, #53e16f);
+  --ops-bad: var(--danger, #ff3b30);
+  --ops-good-soft: color-mix(in srgb, var(--ops-good) 14%, transparent);
+  --ops-good-border: color-mix(in srgb, var(--ops-good) 35%, transparent);
+  --ops-bad-soft: color-mix(in srgb, var(--ops-bad) 12%, transparent);
+  --ops-bad-border: color-mix(in srgb, var(--ops-bad) 35%, transparent);
+  --ops-good-glow: color-mix(in srgb, var(--ops-good) 18%, transparent);
+  --ops-bad-glow: color-mix(in srgb, var(--ops-bad) 14%, transparent);
 }
 
 .opsInset {

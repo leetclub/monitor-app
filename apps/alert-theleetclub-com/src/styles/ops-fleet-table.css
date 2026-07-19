@@ -44,14 +44,14 @@
   margin-top: 3px;
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .stitchOpsTable.opsFleetTable .opsCellSub {
   margin-top: 4px;
   font-size: 0.76rem;
   line-height: 1.35;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .stitchOpsTable.opsFleetTable .opsCellMuted {
@@ -173,7 +173,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   text-align: center;
 }
 

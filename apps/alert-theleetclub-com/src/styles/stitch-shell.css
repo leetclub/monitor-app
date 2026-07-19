@@ -436,8 +436,8 @@
   color: #53e16f;
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(83, 225, 111, 0.35);
-  background: rgba(83, 225, 111, 0.08);
+  border: 1px solid var(--ops-good-border);
+  background: var(--ops-good-soft);
 }
 
 .stitchOpsLiveDot {
@@ -445,7 +445,7 @@
   height: 6px;
   border-radius: 50%;
   background: #53e16f;
-  box-shadow: 0 0 8px rgba(83, 225, 111, 0.55);
+  box-shadow: 0 0 8px var(--ops-good-glow);
 }
 
 .stitchOpsRefresh {
@@ -508,7 +508,7 @@
   margin: 10px var(--ops-inset-x, 14px) 0;
   padding: var(--ops-surface-pad-y, 10px) var(--ops-surface-pad-x, 12px);
   border-radius: var(--ops-surface-radius, 8px);
-  border: 1px solid rgba(255, 59, 48, 0.35);
+  border: 1px solid var(--ops-bad-border);
   background: rgba(147, 0, 10, 0.18);
   font-size: 0.82rem;
   line-height: 1.45;

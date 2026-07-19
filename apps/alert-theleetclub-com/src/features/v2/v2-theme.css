@@ -428,8 +428,19 @@ a.v2NavLink.v2NavLinkActive {
   --muted: var(--v2-muted);
   --border: var(--v2-border);
   --border-soft: var(--v2-border-soft);
+  --outline-variant: rgba(148, 163, 184, 0.22);
   --accent: var(--v2-teal);
+  --danger: #f87171;
+  --warn: #fbbf24;
   --link: #5eead4;
+  --ops-accent: var(--v2-teal);
+  --ops-label-color: var(--v2-muted);
+  --ops-surface-border: rgba(148, 163, 184, 0.22);
+  --ops-surface-bg: var(--v2-panel2);
+  --ops-surface-bg-hover: var(--v2-panel);
+  --ops-title-color: var(--v2-text);
+  --ops-good: #34d399;
+  --ops-bad: #f87171;
 }
 
 /* Classic boards hosted under Manus shell — full data + popups */

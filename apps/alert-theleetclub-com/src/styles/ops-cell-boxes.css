@@ -169,9 +169,9 @@
 }
 
 .stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxUp {
-  border-color: rgba(83, 225, 111, 0.4);
-  background: rgba(83, 225, 111, 0.12);
-  box-shadow: 0 0 10px rgba(83, 225, 111, 0.18);
+  border-color: var(--ops-good-border);
+  background: var(--ops-good-soft);
+  box-shadow: 0 0 10px var(--ops-good-glow);
 }
 
 .stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxUp .salesStackVal {
@@ -179,9 +179,9 @@
 }
 
 .stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxDown {
-  border-color: rgba(255, 59, 48, 0.38);
-  background: rgba(255, 59, 48, 0.1);
-  box-shadow: 0 0 10px rgba(255, 59, 48, 0.14);
+  border-color: var(--ops-bad-border);
+  background: var(--ops-bad-soft);
+  box-shadow: 0 0 10px var(--ops-bad-glow);
 }
 
 .stitchOpsTable .salesStackTarget .salesStackBoxToday.salesStackBoxDown .salesStackVal {
@@ -241,11 +241,11 @@
 }
 
 .stitchOpsTable .salesStackTrend.alertSalesUp {
-  color: #53e16f;
+  color: var(--ops-good, var(--accent, #53e16f));
 }
 
 .stitchOpsTable .salesStackTrend.alertSalesDown {
-  color: #ff3b30;
+  color: var(--ops-bad, var(--danger, #ff3b30));
 }
 
 .stitchOpsTable .salesStackBoxToday .salesStackVal {
@@ -290,7 +290,7 @@
 .stitchOpsTable .mtdYoyPrimary {
   font-size: 0.62rem;
   font-weight: 600;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -542,7 +542,7 @@
 .stitchOpsTable .lastTxLineWd {
   font-size: 0.64rem;
   font-weight: 700;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }

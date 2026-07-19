@@ -119,10 +119,14 @@ html[data-theme='pro'][data-mode='dark'] {
   --muted: #94a3b8;
   --border: #334155;
   --border-soft: rgba(51, 65, 85, 0.85);
+  --outline-variant: #334155;
   --accent: #2dd4bf;
+  --danger: #f87171;
+  --warn: #fbbf24;
   --link: #5eead4;
   --pro-teal: #2dd4bf;
   --pro-teal-soft: rgba(45, 212, 191, 0.16);
+  --ops-accent: #2dd4bf;
   background: var(--bg);
   color: var(--text);
 }
@@ -278,6 +282,19 @@ html[data-theme='pro'][data-mode='dark'] .appShellPro table th {
 html[data-theme='pro'][data-mode='dark'] .appShellPro table td {
   color: var(--text);
   border-color: var(--border-soft);
+}
+
+/* Red Flags / Overall ops cells: cool slate–teal (not Stitch rose / terracotta) */
+html[data-theme='pro'][data-mode='dark'] .stitchOpsPanel,
+html[data-theme='pro'][data-mode='dark'] .appShellPro {
+  --ops-accent: #2dd4bf;
+  --ops-label-color: var(--muted);
+  --ops-surface-border: var(--outline-variant);
+  --ops-surface-bg: var(--panel2);
+  --ops-surface-bg-hover: var(--panel);
+  --ops-title-color: var(--text);
+  --ops-good: #34d399;
+  --ops-bad: #f87171;
 }
 
 /* Pro workspace cards */

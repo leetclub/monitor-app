@@ -14,7 +14,7 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 600;
@@ -30,7 +30,7 @@
 .opsViewToggleBtnActive {
   color: #dee2ec;
   background: #30353d;
-  box-shadow: inset 0 0 0 1px #5d3f3b;
+  box-shadow: inset 0 0 0 1px var(--ops-surface-border, #5d3f3b);
 }
 
 /* Red Flags — column composer (uses opsInset / opsSelectCard from ops-surfaces.css) */
@@ -87,7 +87,7 @@
   background: #c4845a;
 }
 .rfColPresetBar--action.rfColPresetBar--lit {
-  background: #c45c4a;
+  background: var(--ops-accent, #c45c4a);
 }
 .rfColPresetBar--machine.rfColPresetBar--lit {
   background: #8ab4f8;
@@ -366,7 +366,7 @@
 
 .rfColPill--on.rfColPill--action {
   background: linear-gradient(180deg, #4a2828 0%, #351e1e 100%);
-  border-color: #c45c4a;
+  border-color: var(--ops-accent, #c45c4a);
   color: #f0c0b8;
 }
 

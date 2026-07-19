@@ -57,8 +57,8 @@
 }
 
 .salesStackBoxUp {
-  border-color: rgba(83, 225, 111, 0.35);
-  background: rgba(83, 225, 111, 0.1);
+  border-color: var(--ops-good-border);
+  background: var(--ops-good-soft);
 }
 
 .salesStackBoxUp .salesStackVal {
@@ -66,8 +66,8 @@
 }
 
 .salesStackBoxDown {
-  border-color: rgba(255, 59, 48, 0.35);
-  background: rgba(255, 59, 48, 0.1);
+  border-color: var(--ops-bad-border);
+  background: var(--ops-bad-soft);
 }
 
 .salesStackBoxDown .salesStackVal {
@@ -97,7 +97,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .salesStackVal {
@@ -152,7 +152,7 @@
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   border-radius: 10px;
-  border: 1px solid #5d3f3b;
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
   background: linear-gradient(165deg, #1a1b21, #121016);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
   padding: 1rem 1.15rem 1.2rem;
@@ -172,7 +172,7 @@
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .salesHistoryTitle {
@@ -186,7 +186,7 @@
   margin: 4px 0 0;
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .salesHistoryClose {
@@ -205,7 +205,7 @@
   margin: 0 0 12px;
   font-size: 0.78rem;
   line-height: 1.45;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .salesHistoryTodayHero {
@@ -216,8 +216,8 @@
   margin-bottom: 12px;
   padding: 12px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(83, 225, 111, 0.28);
-  background: rgba(83, 225, 111, 0.08);
+  border: 1px solid var(--ops-good-border);
+  background: var(--ops-good-soft);
 }
 
 .salesHistoryTodayLabel {
@@ -227,7 +227,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   margin-bottom: 2px;
 }
 
@@ -267,7 +267,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .salesHistoryCompareGrid {
@@ -284,7 +284,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   margin-bottom: 2px;
 }
 
@@ -319,13 +319,13 @@
 }
 
 .salesHistoryRowUp {
-  border-color: rgba(83, 225, 111, 0.3);
-  background: rgba(83, 225, 111, 0.08);
+  border-color: var(--ops-good-border);
+  background: var(--ops-good-soft);
 }
 
 .salesHistoryRowDown {
-  border-color: rgba(255, 59, 48, 0.3);
-  background: rgba(255, 59, 48, 0.08);
+  border-color: var(--ops-bad-border);
+  background: var(--ops-bad-soft);
 }
 
 .salesHistoryRowDate {
@@ -341,7 +341,7 @@
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
 }
 
 .salesHistoryDate {
@@ -357,7 +357,7 @@
   text-transform: uppercase;
   padding: 2px 6px;
   border-radius: 999px;
-  border: 1px solid #5d3f3b;
+  border: 1px solid var(--ops-surface-border, #5d3f3b);
   color: #dee2ec;
 }
 
@@ -381,7 +381,7 @@
 
 .salesHistoryEmpty {
   margin: 0;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   font-size: 0.85rem;
 }
 
@@ -413,13 +413,13 @@
 }
 
 .trendHistoryRowUp {
-  border-color: rgba(255, 59, 48, 0.3);
-  background: rgba(255, 59, 48, 0.08);
+  border-color: var(--ops-bad-border);
+  background: var(--ops-bad-soft);
 }
 
 .trendHistoryRowDown {
-  border-color: rgba(83, 225, 111, 0.3);
-  background: rgba(83, 225, 111, 0.08);
+  border-color: var(--ops-good-border);
+  background: var(--ops-good-soft);
 }
 
 .historyModalContact {

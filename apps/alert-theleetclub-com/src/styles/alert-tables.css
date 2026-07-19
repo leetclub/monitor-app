@@ -8,7 +8,7 @@
   text-align: left;
   padding: 8px 10px;
   background: #171c23;
-  border-bottom: 1px solid #5d3f3b;
+  border-bottom: 1px solid var(--ops-surface-border, #5d3f3b);
   min-width: 0;
   line-height: 1.15;
 }
@@ -57,7 +57,7 @@
 }
 
 .alertThSortIconActive {
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   opacity: 1;
 }
 
@@ -85,7 +85,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -127,11 +127,11 @@
 }
 
 .alertSalesUp {
-  color: #53e16f;
+  color: var(--ops-good, var(--accent, #53e16f));
 }
 
 .alertSalesDown {
-  color: #ff3b30;
+  color: var(--ops-bad, var(--danger, #ff3b30));
 }
 
 .alertSalesBanner {
@@ -222,7 +222,7 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #ad8883;
+    color: var(--ops-label-color, #ad8883);
     text-align: center;
   }
 }
@@ -269,7 +269,7 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #ad8883;
+    color: var(--ops-label-color, #ad8883);
     text-align: center;
   }
 }

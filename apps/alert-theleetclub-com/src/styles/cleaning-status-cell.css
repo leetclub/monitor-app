@@ -55,7 +55,7 @@
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 500;
-  color: #ad8883;
+  color: var(--ops-label-color, #ad8883);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }

@@ -114,10 +114,10 @@ export function formatSalesTrendPct(pct: number): string {
   return `${sign}${pct.toFixed(1)}%`;
 }
 
-/** Green / red for positive / negative day-over-day change. */
+/** Green / red for positive / negative day-over-day change (theme tokens). */
 export function salesTrendColor(pct: number | null | undefined): string {
-  if (pct == null || !Number.isFinite(pct) || pct === 0) return '#94a3b8';
-  return pct > 0 ? '#53e16f' : '#ff3b30';
+  if (pct == null || !Number.isFinite(pct) || pct === 0) return 'var(--muted, #94a3b8)';
+  return pct > 0 ? 'var(--ops-good, var(--accent, #53e16f))' : 'var(--ops-bad, var(--danger, #ff3b30))';
 }
 
 /** Plain text: ▲ +28% / ▼ -4.2% */
