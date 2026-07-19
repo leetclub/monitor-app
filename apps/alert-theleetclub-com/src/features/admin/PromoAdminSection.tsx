@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
 import { HelpTip } from '@/components/HelpTip';
@@ -17,6 +17,7 @@ type AreaOwnerRow = {
   machineIds: string[];
 };
 type VendonUser = { id: string; name: string };
+type VendonProduct = { name: string; vendCount: number };
 
 /** Admin → Promo: product assignment, calendar day cups targets, swipe instrument names. */
 export function PromoAdminSection() {
@@ -48,6 +49,46 @@ export function PromoAdminSection() {
   const machines = machinesQ.data?.machines ?? [];
   const owners = ownersQ.data?.rows ?? [];
   const users = usersQ.data?.users ?? [];
+
+  const catalogMachineId = useMemo(() => {
+    if (scopeType === 'machine') return machineId;
+    const area = owners.find((o) => o.vendonUserId === vendonUserId);
+    return (area?.machineIds ?? []).find(Boolean) || '';
+  }, [scopeType, machineId, owners, vendonUserId]);
+
+  const vendonQ = useQuery({
+    queryKey: ['alert-vendon-products', catalogMachineId || 'fleet'],
+    queryFn: () => {
+      const qs = new URLSearchParams({ days: '21' });
+      if (catalogMachineId) qs.set('machineId', catalogMachineId);
+      return apiGet<{ products?: VendonProduct[] }>(`/api/alert/admin/vendon-products?${qs}`);
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const catalog = useMemo(() => {
+    const list = [...(vendonQ.data?.products || [])].sort(
+      (a, b) => b.vendCount - a.vendCount || a.name.localeCompare(b.name),
+    );
+    if (
+      DEFAULT_PROMO_PRODUCT &&
+      !list.some((p) => p.name.toLowerCase() === DEFAULT_PROMO_PRODUCT.toLowerCase())
+    ) {
+      list.unshift({ name: DEFAULT_PROMO_PRODUCT, vendCount: 0 });
+    }
+    return list;
+  }, [vendonQ.data?.products]);
+
+  useEffect(() => {
+    if (!catalog.length) return;
+    const hit = catalog.find((p) => p.name.toLowerCase() === productName.toLowerCase());
+    if (!hit) {
+      const preferred =
+        catalog.find((p) => p.name.toLowerCase() === DEFAULT_PROMO_PRODUCT.toLowerCase()) ??
+        catalog[0];
+      if (preferred) setProductName(preferred.name);
+    }
+  }, [catalog, productName]);
 
   const assignMut = useMutation({
     mutationFn: savePromoAssignment,
@@ -81,15 +122,19 @@ export function PromoAdminSection() {
     setSelectedDates((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort()));
   }
 
+  const canSaveAssignment =
+    Boolean(productName.trim()) &&
+    (scopeType === 'machine' ? Boolean(machineId) : Boolean(vendonUserId));
+
   return (
     <div className="adminCard adminCardFlush">
       <div className="adminCardHeadRow">
         <h2 className="adminCardTitle">Promo</h2>
-        <HelpTip text="Separate from Admin → Targets (KD / SX). Assign which product counts toward promo cups, set calendar-day cup targets, and name swipe instruments. Default product: Americano Max." />
+        <HelpTip text="Separate from Admin → Targets (KD / SX). Pick a Vendon product that counts toward promo cups, set calendar-day cup targets, and name swipe instruments." />
       </div>
       <p className="muted" style={{ marginTop: 0, marginBottom: 14, fontSize: '0.9rem', lineHeight: 1.5 }}>
-        Promo uses the same cup-target tables as target.theleetclub.com. Configure product + day targets here; operators
-        track progress on the Promo tab. Swipe logging stays on Performance for a selected machine.
+        Promo uses the same cup-target tables as target.theleetclub.com. Product names come from Vendon (same catalog
+        as Admin → Targets). Operators track progress on the Promo tab.
       </p>
 
       {message ? (
@@ -137,13 +182,34 @@ export function PromoAdminSection() {
             </label>
           )}
           <label className="promoField">
-            Product
-            <input value={productName} onChange={(e) => setProductName(e.target.value)} />
+            Product (from Vendon)
+            <select
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              disabled={vendonQ.isLoading && !catalog.length}
+            >
+              {!catalog.length ? (
+                <option value={DEFAULT_PROMO_PRODUCT}>
+                  {vendonQ.isLoading ? 'Loading Vendon products…' : DEFAULT_PROMO_PRODUCT}
+                </option>
+              ) : (
+                catalog.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.vendCount > 0 ? `${p.name} (${p.vendCount})` : p.name}
+                  </option>
+                ))
+              )}
+            </select>
           </label>
+          {vendonQ.isError ? (
+            <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
+              Could not load Vendon catalog — check machine/owner selection.
+            </p>
+          ) : null}
           <button
             type="button"
             className="primary"
-            disabled={assignMut.isPending}
+            disabled={assignMut.isPending || !canSaveAssignment}
             onClick={() => {
               setMessage(null);
               void assignMut.mutateAsync({
