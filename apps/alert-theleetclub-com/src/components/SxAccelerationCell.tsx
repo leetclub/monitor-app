@@ -43,7 +43,7 @@ function formatSideAmount(side: SxSideMetrics | null | undefined): string {
   return formatKwd(n).replace(' KD', '');
 }
 
-/** YoY-style lead SX pts + Loc/Prod amounts (Target + YoY hybrid). Tap opens Performance. */
+/** YoY-style lead SX pts + Loc/Prod amounts. Tap opens SX detail popup. */
 export function SxAccelerationCell({
   row,
   title,
@@ -93,7 +93,7 @@ export function SxAccelerationCell({
     row?.labels?.current && row?.labels?.previous
       ? `Windows: ${row.labels.current} vs ${row.labels.previous} vs ${row.labels.prior || 'prior'}`
       : null,
-    interactive ? 'Tap for Performance' : null,
+    interactive ? 'Tap for SX details' : null,
   ]
     .filter(Boolean)
     .join(' · ');

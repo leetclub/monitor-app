@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
 import {
@@ -49,6 +49,8 @@ import { SalesHistoryModal } from '@/components/SalesHistoryModal';
 import { TrendHistoryModal } from '@/components/TrendHistoryModal';
 import { OperatorContactSection } from '@/components/OperatorContactSection';
 import { TargetDetailModal } from '@/components/TargetDetailModal';
+import { SxDetailModal } from '@/components/SxDetailModal';
+import type { SxAccelerationRow } from '@/components/SxAccelerationCell';
 import { isRowInteractiveTarget, captureRowTapTarget, handleRowClickActivate } from '@/lib/stopRowClick';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 import { buildFreqColumnContext, type FreqColumnContext } from '@/lib/freqColumnContext';
@@ -341,7 +343,6 @@ export function RedFlagsPage({
   variant?: 'classic' | 'manus';
 } = {}) {
   const manus = variant === 'manus';
-  const navigate = useNavigate();
   const location = useLocation();
   const [compare, setCompare] = useState<CompareSelection>(() => initialCompareSelection());
   const compareMode = useMemo(() => comparePresetToRedAlertMode(compare.preset), [compare.preset]);
@@ -393,6 +394,11 @@ export function RedFlagsPage({
     yesterdayKwd?: number;
     dailyTargetKd?: number | null;
     locationOwnerName?: string | null;
+  } | null>(null);
+  const [sxDetail, setSxDetail] = useState<{
+    machineName: string;
+    machineId: string;
+    sxRow?: SxAccelerationRow | null;
   } | null>(null);
   const [goCheckDetail, setGoCheckDetail] = useState<{
     machineId: string;
@@ -1208,6 +1214,15 @@ export function RedFlagsPage({
             onClose={() => setTargetDetail(null)}
           />
         ) : null}
+        {sxDetail ? (
+          <SxDetailModal
+            machineName={sxDetail.machineName}
+            machineId={sxDetail.machineId}
+            sxRow={sxDetail.sxRow}
+            performancePath={manus ? '/v2/performance' : '/performance'}
+            onClose={() => setSxDetail(null)}
+          />
+        ) : null}
         {goCheckDetail ? (
           <GoCheckWorkflowModal
             machineId={goCheckDetail.machineId}
@@ -1530,8 +1545,11 @@ export function RedFlagsPage({
                       },
                       onOpenPerformance: () => {
                         if (!machId) return;
-                        const base = manus ? '/v2/performance' : '/performance';
-                        navigate(`${base}?machineId=${encodeURIComponent(machId)}`);
+                        setSxDetail({
+                          machineName: String(row.machineName || machId),
+                          machineId: machId,
+                          sxRow: sxQ.data?.byMachineId?.[machId] ?? null,
+                        });
                       },
                       onGoCheck: () => {
                         setGoCheckDetail({
@@ -1646,6 +1664,15 @@ export function RedFlagsPage({
           dailyTargetKd={targetDetail.dailyTargetKd}
           locationOwnerName={targetDetail.locationOwnerName}
           onClose={() => setTargetDetail(null)}
+        />
+      ) : null}
+      {sxDetail ? (
+        <SxDetailModal
+          machineName={sxDetail.machineName}
+          machineId={sxDetail.machineId}
+          sxRow={sxDetail.sxRow}
+          performancePath={manus ? '/v2/performance' : '/performance'}
+          onClose={() => setSxDetail(null)}
         />
       ) : null}
       {goCheckDetail ? (

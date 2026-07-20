@@ -2079,6 +2079,72 @@ def register_alert_routes(app) -> None:
         finally:
             db.close()
 
+    @app.route("/api/alert/admin/targets/bulk-location", methods=["POST", "OPTIONS"])
+    def alert_admin_targets_bulk_location():
+        """
+        Apply the same LOCATION target fields to many machines.
+        Does NOT touch promotedProducts / SX product cups (those stay per machine).
+        Body: { machineIds: [], locationTargetMetric?, dailySalesTarget?, dailyLocationCupsTarget?, sxTargetPeriod? }
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        email, denied = _require_alert_admin()
+        if denied:
+            return denied
+        from alert_targets_lib import normalize_metric, normalize_period
+
+        body = request.get_json(silent=True) or {}
+        machine_ids: List[str] = [
+            str(x).strip()
+            for x in (body.get("machineIds") or body.get("machine_ids") or [])
+            if str(x).strip()
+        ]
+        if not machine_ids:
+            return jsonify({"error": "machineIds required"}), 400
+        if len(machine_ids) > 200:
+            return jsonify({"error": "machineIds max 200"}), 400
+
+        has_metric = "locationTargetMetric" in body or "location_target_metric" in body
+        has_kd = "dailySalesTarget" in body or "daily_sales_target" in body
+        has_cups = "dailyLocationCupsTarget" in body or "daily_location_cups_target" in body
+        has_period = "sxTargetPeriod" in body or "sx_target_period" in body
+        if not (has_metric or has_kd or has_cups or has_period):
+            return jsonify({"error": "provide at least one location target field"}), 400
+
+        db = _dash_session()
+        try:
+            updated = 0
+            for mid in machine_ids:
+                lmc = db.query(LiveMachineConfig).filter(LiveMachineConfig.machine_id == mid).first()
+                if not lmc:
+                    lmc = LiveMachineConfig(machine_id=mid)
+                    db.add(lmc)
+                if has_metric:
+                    lmc.location_target_metric = normalize_metric(
+                        body.get("locationTargetMetric", body.get("location_target_metric")), "revenue"
+                    )
+                if has_kd:
+                    lmc.daily_sales_target = _decimal_or_none(
+                        body.get("dailySalesTarget", body.get("daily_sales_target"))
+                    )
+                if has_cups:
+                    lmc.daily_location_cups_target = _decimal_or_none(
+                        body.get("dailyLocationCupsTarget", body.get("daily_location_cups_target"))
+                    )
+                if has_period:
+                    lmc.sx_target_period = normalize_period(
+                        body.get("sxTargetPeriod", body.get("sx_target_period")), "daily"
+                    )
+                updated += 1
+            db.commit()
+            return jsonify({"ok": True, "updated": updated, "updatedBy": email})
+        except Exception as ex:
+            logger.exception("alert_admin_targets_bulk_location")
+            db.rollback()
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
+
     @app.route("/api/alert/admin/vendon-products", methods=["GET", "OPTIONS"])
     def alert_admin_vendon_products():
         """Distinct product names from recent Vendon vends (per machine or fleet sample)."""

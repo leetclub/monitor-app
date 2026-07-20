@@ -1216,10 +1216,14 @@
 
 .sxBoxSub {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.5rem;
   font-weight: 600;
   opacity: 0.85;
-  line-height: 1.1;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .promoSwipeDeck {

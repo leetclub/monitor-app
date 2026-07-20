@@ -143,6 +143,8 @@ export function TargetsAdminSection() {
   const [filter, setFilter] = useState('');
   const [addProductName, setAddProductName] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [bulkMachineIds, setBulkMachineIds] = useState<string[]>([]);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
 
   const machinesQ = useQuery({
     queryKey: ['alert-machines'],
@@ -330,6 +332,25 @@ export function TargetsAdminSection() {
     },
   });
 
+  const bulkLocMut = useMutation({
+    mutationFn: async () => {
+      if (!bulkMachineIds.length) throw new Error('Select at least one machine for bulk location target.');
+      return apiJson<{ ok?: boolean; updated?: number }>('/api/alert/admin/targets/bulk-location', {
+        machineIds: bulkMachineIds,
+        locationTargetMetric: locMetric,
+        dailySalesTarget: dailySalesTarget.trim() === '' ? null : Number(dailySalesTarget),
+        dailyLocationCupsTarget: dailyLocCups.trim() === '' ? null : Number(dailyLocCups),
+        sxTargetPeriod: defaultPeriod,
+      });
+    },
+    onSuccess: async (res) => {
+      setBulkMsg(`Location target applied to ${res.updated ?? bulkMachineIds.length} machine(s). Products unchanged.`);
+      await qc.invalidateQueries({ queryKey: ['alert-admin-targets'] });
+      await qc.invalidateQueries({ queryKey: ['alert-performance-fleet'] });
+    },
+    onError: (e: Error) => setBulkMsg(e.message),
+  });
+
   const locIns = insightsQ.data?.location;
   const prodInsByName = useMemo(() => {
     const m = new Map<string, ProdInsights>();
@@ -379,8 +400,9 @@ export function TargetsAdminSection() {
   return (
     <>
       <p className="muted" style={{ margin: '0 0 14px', fontSize: '0.9rem' }}>
-        Set the <strong>location</strong> target once (KD or cups). Promote <strong>one or many</strong>{' '}
-        Vendon products — each keeps its own target. Insights use cached sales to guide the numbers.
+        Set the <strong>location</strong> target once (KD or cups) — optionally apply to many machines at once.
+        Promote <strong>one or many</strong> Vendon products <strong>per location</strong> — each keeps its own
+        target. Insights use cached sales to guide the numbers.
       </p>
 
       <div className="adminCard">
@@ -499,6 +521,59 @@ export function TargetsAdminSection() {
                 />
               ) : null}
             </div>
+          ) : null}
+        </div>
+
+        <div className="adminGroup">
+          <div className="adminGroupLabelRow">
+            <div className="adminGroupLabel">1b · Apply location target to many machines</div>
+            <HelpTip text="Sets the same location KD/cups + period on every selected machine. Does not change promoted products — those stay per location." />
+          </div>
+          <label className="adminFieldCell" style={{ maxWidth: 480 }}>
+            <span className="adminFieldCaption">Machines (multi-select)</span>
+            <select
+              multiple
+              size={6}
+              value={bulkMachineIds}
+              onChange={(e) => setBulkMachineIds(Array.from(e.target.selectedOptions, (o) => o.value))}
+              aria-label="Machines for bulk location target"
+            >
+              {machines.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="adminSaveBar" style={{ marginTop: 10, borderTop: 'none', paddingTop: 0 }}>
+            <button
+              type="button"
+              className="primary"
+              disabled={!bulkMachineIds.length || bulkLocMut.isPending}
+              onClick={() => {
+                setBulkMsg(null);
+                bulkLocMut.mutate();
+              }}
+            >
+              {bulkLocMut.isPending
+                ? 'Applying…'
+                : `Apply location target to ${bulkMachineIds.length || '…'} machine(s)`}
+            </button>
+            <button
+              type="button"
+              disabled={!machines.length}
+              onClick={() => setBulkMachineIds(machines.map((m) => m.id))}
+            >
+              Select all
+            </button>
+            <button type="button" disabled={!bulkMachineIds.length} onClick={() => setBulkMachineIds([])}>
+              Clear selection
+            </button>
+          </div>
+          {bulkMsg ? (
+            <p className="muted" style={{ marginTop: 8, fontSize: '0.85rem' }} role="status">
+              {bulkMsg}
+            </p>
           ) : null}
         </div>
 
