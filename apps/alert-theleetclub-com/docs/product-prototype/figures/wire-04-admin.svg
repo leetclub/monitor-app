@@ -25,9 +25,9 @@
     <text x="16" y="108" class="label" font-size="9px">Sections</text>
     <rect class="navOff" x="16" y="116" width="168" height="28" rx="6"/>
     <text x="28" y="134" class="label" font-size="9px">Machines</text>
-    <rect class="navOff" x="16" y="150" width="168" height="28" rx="6"/>
+    <rect class="navOn" x="16" y="150" width="168" height="28" rx="6"/>
     <text x="28" y="168" class="label" font-size="9px">Targets</text>
-    <rect class="navOn" x="16" y="184" width="168" height="28" rx="6"/>
+    <rect class="navOff" x="16" y="184" width="168" height="28" rx="6"/>
     <text x="28" y="202" class="label" font-size="9px">Promo</text>
     <rect class="navOff" x="16" y="218" width="168" height="28" rx="6"/>
     <text x="28" y="236" class="label" font-size="9px">Area owners</text>
@@ -37,23 +37,25 @@
     <text x="28" y="304" class="label" font-size="9px">My access</text>
 
     <rect class="boxMuted" x="200" y="100" width="568" height="288" rx="6"/>
-    <text x="216" y="128" class="label" font-size="10px">Promo — product + day cups + instruments</text>
-    <text x="216" y="146" class="hint" font-size="8px">Separate from Targets (KD/SX). Default product Americano Max.</text>
+    <text x="216" y="128" class="label" font-size="10px">Targets — location KD/SX (not Promo day cups)</text>
+    <text x="216" y="146" class="hint" font-size="8px">1 · Single machine: location + per-location products. 1b · Bulk location only.</text>
 
     <rect class="box" x="216" y="158" width="320" height="28" rx="4"/>
-    <text x="228" y="176" class="tiny">Machine dropdown</text>
+    <text x="228" y="176" class="tiny">Machine (single edit)</text>
     <text x="216" y="208" class="label" font-size="9px">Location target (KD)</text>
     <rect class="box" x="216" y="214" width="140" height="26" rx="4"/>
     <text x="228" y="231" class="tiny">e.g. 45 · Insight ▾</text>
-    <text x="370" y="208" class="label" font-size="9px">Promoted products</text>
+    <text x="370" y="208" class="label" font-size="9px">Products (per location)</text>
     <rect class="box" x="370" y="214" width="180" height="26" rx="4"/>
-    <text x="382" y="231" class="tiny">Americano · Latte · …</text>
-    <text x="216" y="268" class="label" font-size="9px">Each product target</text>
-    <rect class="box" x="216" y="274" width="140" height="26" rx="4"/>
-    <text x="228" y="291" class="tiny">own cups / KD</text>
-    <text x="370" y="268" class="label" font-size="9px">Fleet table</text>
-    <rect class="box" x="370" y="274" width="120" height="26" rx="4"/>
-    <text x="382" y="291" class="tiny">1 row · expand ▾</text>
-    <text x="216" y="330" class="hint" font-size="8px">Expand a location to see all promoted products + targets.</text>
+    <text x="382" y="231" class="tiny">not changed by bulk</text>
+    <text x="216" y="268" class="label" font-size="9px">1b · Multi-select machines</text>
+    <rect class="box" x="216" y="274" width="200" height="48" rx="4"/>
+    <text x="228" y="292" class="tiny">☑ Vend-A12  ☑ Vend-B3 …</text>
+    <text x="228" y="308" class="tiny">Select all · Apply same KD/cups</text>
+    <text x="430" y="268" class="label" font-size="9px">Bulk applies</text>
+    <rect class="box" x="430" y="274" width="160" height="48" rx="4"/>
+    <text x="442" y="292" class="tiny">location fields only</text>
+    <text x="442" y="308" class="tiny">products stay per machine</text>
+    <text x="216" y="350" class="hint" font-size="8px">Promo tab remains separate (campaign day cups). Products always edited per location.</text>
   </g>
 </svg>
