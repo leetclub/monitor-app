@@ -534,16 +534,16 @@ html[data-theme='pro'][data-mode='dark'] .operatorActivityMuted {
   font-weight: 500;
 }
 
-/* Sales Acceleration (SX) — lead + Loc/Prod stack, same footprint as sales boxes */
+/* Sales Acceleration (SX) — lead + Loc/Prod stack; boxes match sales/target size (widen, don't shrink type) */
 .sxCell {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 2px;
-  min-width: var(--ops-stack-box-w, 4.75rem);
-  max-width: 7.5rem;
-  width: 100%;
+  gap: 3px;
+  width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px));
+  min-width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px));
+  max-width: none;
   box-sizing: border-box;
 }
 
@@ -566,10 +566,10 @@ html[data-theme='pro'][data-mode='dark'] .operatorActivityMuted {
 
 .sxStack {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: var(--ops-stack-box-w, 4.75rem) var(--ops-stack-box-w, 4.75rem);
   gap: var(--ops-stack-gap, 4px);
-  min-width: 0;
-  width: 100%;
+  width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px));
+  min-width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px));
 }
 
 .sxBox {
@@ -577,36 +577,37 @@ html[data-theme='pro'][data-mode='dark'] .operatorActivityMuted {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  padding: 2px 3px;
-  height: calc(var(--ops-cell-box-h, 64px) * 0.72);
-  min-height: 42px;
+  gap: 1px;
+  padding: 3px 4px;
+  width: var(--ops-stack-box-w, 4.75rem);
+  min-width: var(--ops-stack-box-w, 4.75rem);
+  height: var(--ops-cell-box-h, 64px);
+  min-height: var(--ops-cell-box-h, 64px);
   max-height: var(--ops-cell-box-h, 64px);
-  border-radius: 5px;
+  border-radius: 6px;
   border: 1px solid var(--ops-surface-border, rgba(93, 63, 59, 0.85));
   background: var(--ops-surface-bg-hover, #1e1f25);
-  min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
 }
 
 .sxBoxLabel {
   font-family: var(--font-mono);
-  font-size: 0.5rem;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ops-label-color, #ad8883);
-  line-height: 1;
+  line-height: 1.1;
   flex-shrink: 0;
 }
 
 .sxBoxVal {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
-  font-weight: 700;
+  font-size: 0.72rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: 1.12;
   color: inherit;
   white-space: nowrap;
   overflow: hidden;
@@ -616,14 +617,15 @@ html[data-theme='pro'][data-mode='dark'] .operatorActivityMuted {
 
 .sxBoxSub {
   font-family: var(--font-mono);
-  font-size: 0.5rem;
+  font-size: clamp(0.54rem, 2.2vw, 0.62rem);
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.9;
   line-height: 1.05;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  font-variant-numeric: tabular-nums;
 }
 
 /* SX detail modal */

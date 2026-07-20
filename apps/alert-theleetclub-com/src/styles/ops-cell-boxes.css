@@ -252,6 +252,32 @@
   font-size: 0.68rem;
 }
 
+/* SX Loc/Prod — same box footprint as sales stack (full height + stack width) */
+.stitchOpsTable tbody td:has(.sxCell) {
+  min-width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+}
+
+.stitchOpsTable .sxCell,
+.stitchOpsTable .sxCellBtn {
+  width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  min-width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+}
+
+.stitchOpsTable .sxBox {
+  width: var(--ops-stack-box-w);
+  min-width: var(--ops-stack-box-w);
+  height: var(--ops-cell-box-h);
+  min-height: var(--ops-cell-box-h);
+  max-height: var(--ops-cell-box-h);
+  padding: 3px 4px;
+}
+
+.stitchOpsTable .sxBoxVal {
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.12;
+}
+
 /* MTD YoY — column width follows widest %; every cell stretches to match */
 .stitchOpsTable tbody td.alertSalesCellYoy {
   width: 1%;

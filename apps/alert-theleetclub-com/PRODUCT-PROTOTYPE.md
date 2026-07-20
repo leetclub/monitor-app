@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-20 | **SX boxes enlarged:** Loc/Prod SX cells use full sales-box height/width and matching type size (widen boxes; do not shrink text). |
 | 2026-07-20 | **SX detail popup + bulk location targets:** SX cell opens comparison popup (windows, most/least SX pts + target % with dates); Performance via icon. SX boxes sized to fit. Admin → Targets: apply same location KD/cups to many machines without changing per-location products. |
 | 2026-07-19 | **Downtime column (Red Flags + Overall):** Per-machine **Today** + **period cumulative** operational OFF time (`GET /api/alert/overall/downtime-summary`). Source = Vendon Machine OFF / KNet OFF / Vendon OFF; Admin cleaning windows subtracted. Period follows compare preset primary window. Sortable by period seconds. |
 | 2026-07-19 | **Admin → Promo Vendon products:** Product dropdown loads on open (sample machine / fast fleet API) and refreshes when machine or owner changes — same catalog endpoint as Targets. |
