@@ -252,15 +252,15 @@
   font-size: 0.68rem;
 }
 
-/* SX Loc/Prod — same box footprint as sales stack (full height + stack width) */
+/* SX Loc — same single-box footprint as sales / last-tx */
 .stitchOpsTable tbody td:has(.sxCell) {
-  min-width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  min-width: var(--ops-stack-box-w);
 }
 
 .stitchOpsTable .sxCell,
 .stitchOpsTable .sxCellBtn {
-  width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
-  min-width: calc(var(--ops-stack-box-w) * 2 + var(--ops-stack-gap));
+  width: var(--ops-stack-box-w);
+  min-width: var(--ops-stack-box-w);
 }
 
 .stitchOpsTable .sxBox {
@@ -270,12 +270,49 @@
   min-height: var(--ops-cell-box-h);
   max-height: var(--ops-cell-box-h);
   padding: 3px 4px;
+  align-items: center;
+  text-align: center;
 }
 
 .stitchOpsTable .sxBoxVal {
   font-size: 0.72rem;
   font-weight: 800;
   line-height: 1.12;
+  text-align: center;
+}
+
+/* Center all metric box text (Sales / Target / SX / Freq / Last tx / MTD YoY / …) */
+.stitchOpsTable .salesStackBox,
+.stitchOpsTable .targetStackBox,
+.stitchOpsTable .freqBox,
+.stitchOpsTable .lastTxBox,
+.stitchOpsTable .mtdYoyCell,
+.stitchOpsTable .downtimeBox,
+.stitchOpsTable .creditsBox,
+.stitchOpsTable .qaVisitCellBtn,
+.stitchOpsTable .cleaningCell,
+.stitchOpsTable .cleaningCellBtn,
+.stitchOpsTable .linkGo,
+.stitchOpsTable .opsMetricCell {
+  align-items: center;
+  text-align: center;
+  justify-content: center;
+}
+
+.stitchOpsTable .salesStackLabel,
+.stitchOpsTable .salesStackVal,
+.stitchOpsTable .salesStackSub,
+.stitchOpsTable .salesStackTrend,
+.stitchOpsTable .salesStackValLeft,
+.stitchOpsTable .salesStackValOwner,
+.stitchOpsTable .targetStackLabel,
+.stitchOpsTable .targetStackVal,
+.stitchOpsTable .freqBoxVal,
+.stitchOpsTable .sxBoxLabel,
+.stitchOpsTable .sxBoxVal,
+.stitchOpsTable .sxBoxSub {
+  text-align: center;
+  width: 100%;
 }
 
 /* MTD YoY — column width follows widest %; every cell stretches to match */

@@ -1219,6 +1219,7 @@ export function RedFlagsPage({
             machineName={sxDetail.machineName}
             machineId={sxDetail.machineId}
             sxRow={sxDetail.sxRow}
+            presetQuery={presetApiQueryString(compare.preset, compare)}
             performancePath={manus ? '/v2/performance' : '/performance'}
             onClose={() => setSxDetail(null)}
           />
@@ -1671,6 +1672,7 @@ export function RedFlagsPage({
           machineName={sxDetail.machineName}
           machineId={sxDetail.machineId}
           sxRow={sxDetail.sxRow}
+          presetQuery={presetApiQueryString(compare.preset, compare)}
           performancePath={manus ? '/v2/performance' : '/performance'}
           onClose={() => setSxDetail(null)}
         />

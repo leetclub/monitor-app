@@ -56,6 +56,6 @@
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
     <text x="20" y="228" class="hint" font-size="8px">(more rows)</text>
     <text x="520" y="228" class="tiny">Swipe / drag · ◀ ▶ pan</text>
-    <text x="20" y="246" class="tiny">SX cell → detail popup (windows · most/least SX pts + target % w/ dates · icon → Performance). Workbook: Live operator · Last / tx · Sales · Target · Frequency · Downtime · … QA cell → history + PDF.</text>
+    <text x="20" y="246" class="tiny">SX cell = Loc KD only → popup lists all promoted products · Performance icon. Workbook: Live operator · Last / tx · Sales · Target · Frequency · Downtime · … QA cell → history + PDF.</text>
   </g>
 </svg>

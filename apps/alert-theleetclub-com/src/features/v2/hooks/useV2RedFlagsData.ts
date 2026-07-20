@@ -107,17 +107,11 @@ function toneFromPct(pct: number | null | undefined): V2MetricTone {
 
 function sxStack(sx?: SxAccelerationRow | null): V2MetricItem[] {
   const loc = sx?.location?.sxPct;
-  const prod = sx?.product?.sxPct;
   return [
     {
       label: 'Loc SX',
       value: loc != null && Number.isFinite(Number(loc)) ? formatSalesTrendPct(Number(loc)).replace(/%$/, ' pts') : '—',
       tone: toneFromPct(loc != null ? Number(loc) : null),
-    },
-    {
-      label: 'Prod SX',
-      value: prod != null && Number.isFinite(Number(prod)) ? formatSalesTrendPct(Number(prod)).replace(/%$/, ' pts') : '—',
-      tone: toneFromPct(prod != null ? Number(prod) : null),
     },
   ];
 }

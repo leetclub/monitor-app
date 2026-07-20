@@ -15,7 +15,7 @@
   background: transparent;
   font: inherit;
   color: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   touch-action: manipulation;
   border-radius: 6px;
@@ -39,7 +39,9 @@
 .salesStackBox {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 1px;
   padding: 5px 7px;
   border-radius: 6px;

@@ -11,12 +11,20 @@ export type SxSideMetrics = {
   unit?: 'kwd' | 'cups' | string | null;
 };
 
+export type SxProductRow = SxSideMetrics & {
+  productName?: string | null;
+  productTargetCups?: number | null;
+};
+
 export type SxAccelerationRow = {
   productName?: string | null;
+  productNames?: string[] | null;
   locationTargetKd?: number | null;
   productTargetCups?: number | null;
   location?: SxSideMetrics | null;
+  /** @deprecated Fleet no longer returns a single product; use `products`. */
   product?: SxSideMetrics | null;
+  products?: SxProductRow[] | null;
   labels?: {
     current?: string;
     previous?: string;
@@ -36,14 +44,15 @@ function toneClass(pct: number | null | undefined): string {
   return 'sxToneFlat';
 }
 
-function formatSideAmount(side: SxSideMetrics | null | undefined): string {
+function formatLocAmount(side: SxSideMetrics | null | undefined): string {
   if (!side || side.current == null || !Number.isFinite(Number(side.current))) return '—';
-  const n = Number(side.current);
-  if (side.unit === 'cups') return `${Math.round(n)} c`;
-  return formatKwd(n).replace(' KD', '');
+  return formatKwd(Number(side.current)).replace(' KD', '');
 }
 
-/** YoY-style lead SX pts + Loc/Prod amounts. Tap opens SX detail popup. */
+/**
+ * Location SX only on the dashboard (KD acceleration).
+ * Promoted-product SX lives in the detail popup (supports many SKUs).
+ */
 export function SxAccelerationCell({
   row,
   title,
@@ -56,15 +65,16 @@ export function SxAccelerationCell({
   onOpenDetail?: () => void;
 }) {
   const loc = row?.location;
-  const prod = row?.product;
   const locSx = loc?.sxPct;
-  const prodSx = prod?.sxPct;
   const hasLocAmt = loc?.current != null && Number.isFinite(Number(loc.current));
-  const hasProdAmt = prod?.current != null && Number.isFinite(Number(prod.current));
   const hasLoc = (locSx != null && Number.isFinite(Number(locSx))) || hasLocAmt;
-  const hasProd = (prodSx != null && Number.isFinite(Number(prodSx))) || hasProdAmt;
+  const productCount = Array.isArray(row?.products)
+    ? row!.products!.length
+    : Array.isArray(row?.productNames)
+      ? row!.productNames!.length
+      : 0;
 
-  if (!hasLoc && !hasProd) {
+  if (!hasLoc) {
     if (interactive && onOpenDetail) {
       return (
         <button type="button" className="sxCell sxCellBtn sxCellEmpty" {...bindStopRowClick(onOpenDetail)}>
@@ -75,51 +85,22 @@ export function SxAccelerationCell({
     return <span className="mtdSalesEmpty">—</span>;
   }
 
-  const lead =
-    locSx != null && Number.isFinite(Number(locSx))
-      ? Number(locSx)
-      : prodSx != null && Number.isFinite(Number(prodSx))
-        ? Number(prodSx)
-        : loc?.growthCurrentPct != null
-          ? Number(loc.growthCurrentPct)
-          : null;
-  const leadUp = lead != null && lead >= 0;
   const tip = [
     title,
-    hasLocAmt ? `Loc ${formatSideAmount(loc)} KD` : null,
+    hasLocAmt ? `Loc ${formatLocAmount(loc)} KD` : null,
     locSx != null ? `Loc SX ${formatSxPts(locSx)}` : null,
-    hasProdAmt ? `Prod ${formatSideAmount(prod)} cups${row?.productName ? ` (${row.productName})` : ''}` : null,
-    prodSx != null ? `Prod SX ${formatSxPts(prodSx)}` : null,
-    row?.labels?.current && row?.labels?.previous
-      ? `Windows: ${row.labels.current} vs ${row.labels.previous} vs ${row.labels.prior || 'prior'}`
-      : null,
-    interactive ? 'Tap for SX details' : null,
+    productCount > 0 ? `${productCount} promoted product${productCount === 1 ? '' : 's'} in detail` : null,
+    interactive ? 'Tap for SX details (all promoted products)' : null,
   ]
     .filter(Boolean)
     .join(' · ');
 
   const body = (
-    <>
-      <span className={`sxLead ${toneClass(lead)}`}>
-        {lead != null ? `${leadUp ? '▲ ' : '▼ '}${formatSxPts(lead)}` : '—'}
-      </span>
-      <div className="sxStack">
-        <div className={`sxBox ${toneClass(locSx ?? loc?.growthCurrentPct)}`}>
-          <span className="sxBoxLabel">Loc</span>
-          <span className="sxBoxVal">{hasLocAmt ? formatSideAmount(loc) : '—'}</span>
-          <span className="sxBoxSub">
-            {locSx != null ? formatSxPts(locSx) : loc?.growthCurrentPct != null ? formatSalesTrendPct(Number(loc.growthCurrentPct)) : '—'}
-          </span>
-        </div>
-        <div className={`sxBox ${toneClass(prodSx ?? prod?.growthCurrentPct)}`}>
-          <span className="sxBoxLabel">Prod</span>
-          <span className="sxBoxVal">{hasProdAmt ? formatSideAmount(prod) : '—'}</span>
-          <span className="sxBoxSub">
-            {prodSx != null ? formatSxPts(prodSx) : prod?.growthCurrentPct != null ? formatSalesTrendPct(Number(prod.growthCurrentPct)) : '—'}
-          </span>
-        </div>
-      </div>
-    </>
+    <div className={`sxBox ${toneClass(locSx ?? loc?.growthCurrentPct)}`}>
+      <span className="sxBoxLabel">Loc</span>
+      <span className="sxBoxVal">{locSx != null ? formatSxPts(locSx) : '—'}</span>
+      <span className="sxBoxSub">{hasLocAmt ? `${formatLocAmount(loc)} KD` : '—'}</span>
+    </div>
   );
 
   if (interactive && onOpenDetail) {

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertModalAnticipate } from '@/components/AlertModalAnticipate';
-import type { SxAccelerationRow, SxSideMetrics } from '@/components/SxAccelerationCell';
+import type { SxAccelerationRow, SxProductRow, SxSideMetrics } from '@/components/SxAccelerationCell';
 import { apiGet } from '@/lib/api';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
@@ -13,16 +13,10 @@ type PerfDay = {
   weekday?: string;
   locationKwd?: number;
   locationPctOfTarget?: number | null;
-  locationGrowthPct?: number | null;
-  productCups?: number;
-  productPctOfTarget?: number | null;
 };
 
 type PerfDetail = {
   days?: PerfDay[];
-  locationSxPct?: number | null;
-  productSxPct?: number | null;
-  productName?: string | null;
   error?: string;
 };
 
@@ -87,9 +81,7 @@ function extremeFrom(
 
 function formatExtreme(ex: Extreme | null, asPts: boolean): string {
   if (!ex) return '—';
-  const val = asPts
-    ? formatSxPts(ex.value)
-    : `${Number(ex.value).toFixed(1)}%`;
+  const val = asPts ? formatSxPts(ex.value) : `${Number(ex.value).toFixed(1)}%`;
   const d = ex.date.length >= 10 ? ex.date.slice(5) : ex.date;
   const wd = ex.weekday ? `${ex.weekday} ` : '';
   return `${val} · ${wd}${d}`;
@@ -156,19 +148,22 @@ function SideCompare({
 }
 
 /**
- * SX detail popup — comparison windows + extremes from recent days.
+ * SX detail popup — Loc comparison + every promoted product + extremes.
  * Secondary CTA opens Performance for deeper charts.
  */
 export function SxDetailModal({
   machineName,
   machineId,
   sxRow,
+  presetQuery,
   performancePath,
   onClose,
 }: {
   machineName: string;
   machineId: string;
   sxRow?: SxAccelerationRow | null;
+  /** Compare preset query string (no leading ?) for product SX windows. */
+  presetQuery: string;
   /** e.g. `/performance` or `/v2/performance` */
   performancePath: string;
   onClose: () => void;
@@ -176,6 +171,16 @@ export function SxDetailModal({
   useAlertModal(onClose);
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
+
+  const detailQ = useQuery({
+    queryKey: ['alert-sx-detail-products', machineId, presetQuery],
+    queryFn: () =>
+      apiGet<{ byMachineId?: Record<string, SxAccelerationRow> }>(
+        `/api/alert/overall/sales-acceleration?${presetQuery}&machines=${encodeURIComponent(machineId)}&includeProducts=1`,
+      ),
+    enabled: Boolean(machineId && presetQuery),
+    staleTime: 60_000,
+  });
 
   const histQ = useQuery({
     queryKey: ['alert-sx-history', machineId],
@@ -186,6 +191,23 @@ export function SxDetailModal({
     enabled: Boolean(machineId),
     staleTime: 60_000,
   });
+
+  const detailRow = detailQ.data?.byMachineId?.[machineId] ?? sxRow ?? null;
+  const products: SxProductRow[] = useMemo(() => {
+    const list = detailRow?.products;
+    if (Array.isArray(list) && list.length) return list;
+    // Legacy fallback if API still returns a single product side
+    if (detailRow?.product && (detailRow.productName || detailRow.product.current != null)) {
+      return [
+        {
+          productName: detailRow.productName,
+          productTargetCups: detailRow.productTargetCups,
+          ...detailRow.product,
+        },
+      ];
+    }
+    return [];
+  }, [detailRow]);
 
   const extremes = useMemo(() => {
     const days = histQ.data?.days || [];
@@ -211,8 +233,7 @@ export function SxDetailModal({
   }, [histQ.data?.days]);
 
   const perfHref = `${performancePath}?machineId=${encodeURIComponent(machineId)}`;
-  const locSx = sxRow?.location?.sxPct;
-  const prodSx = sxRow?.product?.sxPct;
+  const locSx = detailRow?.location?.sxPct;
 
   return createPortal(
     <div
@@ -256,23 +277,38 @@ export function SxDetailModal({
             <span className="sxDetailCompareLabel">Location SX</span>
             <span className="sxDetailLeadVal">{formatSxPts(locSx)}</span>
           </div>
-          <div className={`sxDetailLeadCard ${toneClass(prodSx)}`}>
-            <span className="sxDetailCompareLabel">
-              Product SX{sxRow?.productName ? ` · ${sxRow.productName}` : ''}
-            </span>
-            <span className="sxDetailLeadVal">{formatSxPts(prodSx)}</span>
+          <div className="sxDetailLeadCard">
+            <span className="sxDetailCompareLabel">Promoted products</span>
+            <span className="sxDetailLeadVal">{products.length || '—'}</span>
+            <span className="sxDetailCompareSub">SX per SKU below</span>
           </div>
         </div>
 
-        <SideCompare title="Location (KD)" side={sxRow?.location} labels={sxRow?.labels} />
-        <SideCompare
-          title={`Product cups${sxRow?.productName ? ` · ${sxRow.productName}` : ''}`}
-          side={sxRow?.product}
-          labels={sxRow?.labels}
-        />
+        <SideCompare title="Location (KD)" side={detailRow?.location} labels={detailRow?.labels} />
+
+        <section className="sxDetailProducts">
+          <h3 className="sxDetailSideTitle">Promoted products</h3>
+          {detailQ.isLoading ? <p className="salesHistorySub">Loading product SX…</p> : null}
+          {detailQ.isError ? <p className="salesHistorySub">Could not load product SX.</p> : null}
+          {!detailQ.isLoading && !products.length ? (
+            <p className="salesHistorySub">No promoted products configured for this machine (Admin → Targets).</p>
+          ) : null}
+          {products.map((p) => (
+            <SideCompare
+              key={String(p.productName || 'product')}
+              title={`Product · ${p.productName || '—'}${
+                p.productTargetCups != null && Number.isFinite(Number(p.productTargetCups))
+                  ? ` · target ${Math.round(Number(p.productTargetCups))} cups`
+                  : ''
+              }`}
+              side={p}
+              labels={detailRow?.labels}
+            />
+          ))}
+        </section>
 
         <section className="sxDetailExtremes">
-          <h3 className="sxDetailSideTitle">Recent extremes (21 days)</h3>
+          <h3 className="sxDetailSideTitle">Recent extremes (21 days · location)</h3>
           {histQ.isLoading ? <p className="salesHistorySub">Loading day history…</p> : null}
           {histQ.isError || histQ.data?.error ? (
             <p className="salesHistorySub">Could not load day history for extremes.</p>

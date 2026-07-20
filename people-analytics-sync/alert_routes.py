@@ -2794,9 +2794,9 @@ def register_alert_routes(app) -> None:
     @app.route("/api/alert/overall/sales-acceleration", methods=["GET", "OPTIONS"])
     def alert_overall_sales_acceleration():
         """
-        Sales Acceleration (SX) per machine — location KD + optional linked product cups.
-        Same compare presets as vendon-sales-summary. SX = G_current − G_previous
-        where G = (cur − prev) / prev.
+        Sales Acceleration (SX) per machine — location KD on the fleet table.
+        Optional includeProducts=1 with machines=… returns every Admin promoted product
+        (cups SX) for the detail popup. SX = G_current − G_previous where G = (cur − prev) / prev.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2842,11 +2842,24 @@ def register_alert_routes(app) -> None:
             want = {x.strip() for x in scope.split(",") if x.strip()}
             machine_ids = [m for m in machine_ids if m in want]
 
+        include_products = str(request.args.get("includeProducts") or request.args.get("include_products") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        # Product SX is for the detail popup only (can be many promoted SKUs). Fleet table is Loc KD.
+        if include_products and not scope:
+            # Avoid scanning every machine's product cups unless explicitly scoped.
+            include_products = False
+
         dash = _dash_session()
         try:
+            from alert_targets_lib import products_from_lmc_row
+
             cfg_by_mid: Dict[str, Dict[str, Any]] = {}
             for lmc in dash.query(LiveMachineConfig).all():
                 mid = str(lmc.machine_id)
+                products = products_from_lmc_row(lmc)
                 cfg_by_mid[mid] = {
                     "daily_sales_target": (
                         float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None
@@ -2855,6 +2868,7 @@ def register_alert_routes(app) -> None:
                     "daily_product_target": (
                         float(lmc.daily_product_target) if lmc.daily_product_target is not None else None
                     ),
+                    "promoted_products": products,
                 }
             for r in dash.query(AlertMachineProfile).all():
                 mid = str(r.machine_id)
@@ -2942,8 +2956,9 @@ def register_alert_routes(app) -> None:
                 today=today,
                 now_local=now_local,
                 elapsed_for_today=elapsed_for_today,
-                fetch_vends_fn=_fetch_vends,
+                fetch_vends_fn=_fetch_vends if include_products else None,
                 daily_target_fallback_fn=_fallback_target,
+                include_products=include_products,
             )
             out["preset"] = preset
             return jsonify(out)

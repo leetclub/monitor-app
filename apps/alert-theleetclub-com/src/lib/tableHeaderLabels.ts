@@ -13,7 +13,7 @@ export const RED_FLAGS_TABLE_HEADERS: Record<RedFlagsColumnKey, HeaderDisplay> =
   mtdSales: { main: 'Sales', sub: 'MTD' },
   mtdYoySales: { main: 'YoY', sub: 'month MTD' },
   dailyTarget: { main: 'Target', sub: 'today' },
-  salesAcceleration: { main: 'SX', sub: 'Loc · Prod' },
+  salesAcceleration: { main: 'SX', sub: 'Loc · tap detail' },
   frequency: { main: 'Frequency', sub: 'trend' },
   downtime: { main: 'Down', sub: 'time' },
   goCheck: { main: 'GO', sub: 'check' },

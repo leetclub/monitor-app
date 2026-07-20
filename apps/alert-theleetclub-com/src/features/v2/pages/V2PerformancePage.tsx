@@ -34,7 +34,7 @@ const PERF_COLS = [
   { key: 'cups', label: 'Cups', wide: true },
   { key: 'cupTarget', label: 'Cup target' },
   { key: 'cupPct', label: 'Cup %', wide: true },
-  { key: 'sx', label: 'SX', sub: 'Loc · Prod', wide: true },
+  { key: 'sx', label: 'SX', sub: 'Loc', wide: true },
 ];
 
 /** Pure Manus Performance — full fleet ranking workbook + trajectory. */

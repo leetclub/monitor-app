@@ -116,9 +116,9 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   salesAcceleration: {
     title: 'Sales Acceleration',
-    sub: 'SX Loc · Prod — follows compare preset',
+    sub: 'Loc SX — tap for all promoted products',
     placeholderNote:
-      'SX = current growth − previous growth. Growth = (cur − prev) / prev. Loc shows KD + SX pts; Prod shows cups for Admin product (default Americano Max). Tap opens SX detail popup (Performance via icon).',
+      'SX = current growth − previous growth. Growth = (cur − prev) / prev. Table shows location KD SX only. Tap for comparison popup with every Admin promoted product + extremes; Performance via icon.',
   },
   frequency: {
     title: 'Frequency',

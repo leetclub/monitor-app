@@ -1,7 +1,8 @@
 .cleaningCell {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   gap: 6px;
   min-width: 6.75rem;
   max-width: 10.5rem;
