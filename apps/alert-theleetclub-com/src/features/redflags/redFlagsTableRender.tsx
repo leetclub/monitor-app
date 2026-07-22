@@ -618,19 +618,19 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
       );
     case 'goCheck':
       return machId ? (
-        <button type="button" className="linkGo linkGoStack" {...bindStopRowClick(b.onGoCheck)}>
-          <span className="linkGoLine">GO</span>
-          <span className="linkGoLine linkGoLineStrong">CHECK</span>
+        <button type="button" className="linkGo goCheckBtn" {...bindStopRowClick(b.onGoCheck)}>
+          <span className="goCheckBtnLine">GO</span>
+          <span className="goCheckBtnLine goCheckBtnLineStrong">CHECK</span>
         </button>
       ) : b.goUrl ? (
         <a
           href={b.goUrl}
-          className="linkGo linkGoStack"
+          className="linkGo goCheckBtn"
           {...bindStopRowClick()}
           {...(b.goUrl.toLowerCase().startsWith('mailto:') ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
         >
-          <span className="linkGoLine">GO</span>
-          <span className="linkGoLine linkGoLineStrong">CHECK</span>
+          <span className="goCheckBtnLine">GO</span>
+          <span className="goCheckBtnLine goCheckBtnLineStrong">CHECK</span>
         </a>
       ) : (
         '—'

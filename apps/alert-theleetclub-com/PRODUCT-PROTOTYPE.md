@@ -102,7 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-07-22 | **GO CHECK overlap fix:** action uses global boxed `linkGo` (GO / CHECK stack) so text no longer spills into Downtime. |
+| 2026-07-22 | **GO CHECK only:** restore shared Call OP/AM `linkGo` sizing; GO CHECK uses dedicated `goCheckBtn` two-line label so it no longer spills into Downtime. |
 | 2026-07-20 | **SX Loc-only + multi-product popup:** Red Flags SX cell shows location KD SX only; popup lists every Admin promoted product. Metric boxes center text. |
 | 2026-07-20 | **SX boxes enlarged:** Loc/Prod SX cells use full sales-box height/width and matching type size (widen boxes; do not shrink text). |
 | 2026-07-20 | **SX detail popup + bulk location targets:** SX cell opens comparison popup (windows, most/least SX pts + target % with dates); Performance via icon. SX boxes sized to fit. Admin → Targets: apply same location KD/cups to many machines without changing per-location products. |

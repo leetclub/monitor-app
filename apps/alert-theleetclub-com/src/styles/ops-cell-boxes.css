@@ -368,14 +368,7 @@
   white-space: nowrap;
 }
 
-/* GO CHECK / call actions — same box footprint; keep inside cell (no spill into Downtime) */
-.stitchOpsTable tbody td:has(.linkGo) {
-  min-width: var(--ops-stack-box-w);
-  width: var(--ops-stack-box-w);
-  max-width: calc(var(--ops-stack-box-w) + 8px);
-  overflow: hidden;
-}
-
+/* GO CHECK / call actions — same box footprint */
 .stitchOpsTable .linkGo,
 .stitchOpsTable .opsActionBox {
   display: inline-flex;
@@ -383,7 +376,6 @@
   justify-content: center;
   width: var(--ops-stack-box-w);
   min-width: var(--ops-stack-box-w);
-  max-width: var(--ops-stack-box-w);
   height: var(--ops-cell-box-h);
   min-height: var(--ops-cell-box-h);
   padding: 4px 6px;
@@ -403,7 +395,31 @@
   -webkit-tap-highlight-color: rgba(96, 165, 250, 0.25);
   overflow: hidden;
   color: #7dd3fc;
+}
+
+/* GO CHECK only — two-line label so it fits the action box without spilling left */
+.stitchOpsTable .goCheckBtn.linkGo {
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 4px;
   white-space: normal;
+}
+
+.stitchOpsTable .goCheckBtn .goCheckBtnLine {
+  display: block;
+  width: 100%;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.05;
+  color: #bae6fd;
+}
+
+.stitchOpsTable .goCheckBtn .goCheckBtnLineStrong {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #7dd3fc;
 }
 
 .stitchOpsTable .linkGoStack {
