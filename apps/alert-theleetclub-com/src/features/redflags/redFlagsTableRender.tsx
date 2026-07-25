@@ -121,6 +121,7 @@ export type RedFlagsRowBundle = {
   locationTagOwner?: string | null;
   /** Admin Machines → inactive (still listed, shaded). */
   machineInactive?: boolean;
+  machineInactiveLabel?: string | null;
   workflowAttendance?: import('@/lib/leetWorkflowApi').MachineAttendanceSummary;
   workflowCleaning?: import('@/lib/leetWorkflowApi').CleaningWorkflowPayload | null;
   workflowConfigured?: boolean;
@@ -437,7 +438,7 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           )}
           {b.machineInactive ? (
             <span className={`${styles.chip} opsInactiveChip`} title="Marked inactive in Alert Admin → Machines">
-              Inactive
+              {b.machineInactiveLabel || 'Inactive'}
             </span>
           ) : null}
           <div className={styles.machineName}>{row.machineName || machId}</div>

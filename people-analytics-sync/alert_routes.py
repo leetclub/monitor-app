@@ -1567,7 +1567,7 @@ def register_alert_routes(app) -> None:
             if len(requested) > 500:
                 requested = requested[:500]
 
-            cache_key = f"op-act:v3:{history_days}:{','.join(sorted(requested)) if requested else 'all'}"
+            cache_key = f"op-act:v5:{history_days}:{','.join(sorted(requested)) if requested else 'all'}"
             cached = _alert_cache_get(cache_key, 90)
             if cached is not None:
                 return jsonify(cached)
@@ -1827,6 +1827,7 @@ def register_alert_routes(app) -> None:
                             "qa_schedule": r.qa_schedule,
                             "timezone": r.timezone,
                             "is_active": bool(getattr(r, "is_active", True)),
+                            "inactive_schedule": getattr(r, "inactive_schedule", None) or {},
                             "priority": priority_out,
                             "daily_sales_target": lmc_fields.get("daily_sales_target"),
                             "sx_product_name": lmc_fields.get("sx_product_name"),
@@ -1876,6 +1877,9 @@ def register_alert_routes(app) -> None:
                     "yes",
                     "active",
                 )
+            from alert_inactive_lib import normalize_inactive_schedule
+
+            inactive_sched = normalize_inactive_schedule(body.get("inactive_schedule"))
             priority = int(body.get("priority") or 10)
             daily_target_raw = body.get("daily_sales_target")
             sx_product_name_raw = body.get("sx_product_name")
@@ -1895,6 +1899,7 @@ def register_alert_routes(app) -> None:
                 row.qa_schedule = qa
                 row.timezone = tz_s
                 row.is_active = is_active_val
+                row.inactive_schedule = inactive_sched
                 row.updated_by = email
                 row.updated_at = now
             else:
@@ -1910,6 +1915,7 @@ def register_alert_routes(app) -> None:
                     qa_schedule=qa,
                     timezone=tz_s,
                     is_active=is_active_val,
+                    inactive_schedule=inactive_sched,
                     updated_by=email,
                     updated_at=now,
                 )
@@ -2364,12 +2370,20 @@ def register_alert_routes(app) -> None:
         try:
             rows = db.query(AlertMachineProfile).all()
             out: List[Dict[str, Any]] = []
+            from alert_inactive_lib import machine_inactive_on
+
             for r in rows:
                 op0 = None
                 if isinstance(r.operator_hours, list) and r.operator_hours:
                     first = r.operator_hours[0]
                     if isinstance(first, dict):
                         op0 = (first.get("name") or "").strip() or None
+                is_active_val = bool(getattr(r, "is_active", True))
+                inactive_sched = getattr(r, "inactive_schedule", None) or {}
+                inactive_now = machine_inactive_on(
+                    is_active=is_active_val,
+                    inactive_schedule=inactive_sched,
+                )
                 out.append(
                     {
                         "machine_id": r.machine_id,
@@ -2383,7 +2397,10 @@ def register_alert_routes(app) -> None:
                         "operator_hours": r.operator_hours,
                         "technician_schedule": r.technician_schedule,
                         "qa_schedule": r.qa_schedule,
-                        "is_active": bool(getattr(r, "is_active", True)),
+                        "is_active": is_active_val,
+                        "inactive_schedule": inactive_sched,
+                        "inactiveToday": bool(inactive_now.get("inactive")),
+                        "inactiveLabel": inactive_now.get("label") or None,
                         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                     }
                 )

@@ -495,18 +495,18 @@ export function RedFlagsPage({
   });
 
   const operatorActivityQ = useQuery({
-    queryKey: ['alert-operator-activity', creditsMachineIdsKey],
+    queryKey: ['alert-operator-activity', creditsMachineIdsKey, 21],
     queryFn: async () => {
       const base = '/api/alert/operator-activity';
       const ids = creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean);
       if (!ids.length) {
         return apiGet<{
           byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
-        }>(base);
+        }>(`${base}?days=21`);
       }
       return apiGet<{
         byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
-      }>(`${base}?machines=${encodeURIComponent(ids.join(','))}`);
+      }>(`${base}?machines=${encodeURIComponent(ids.join(','))}&days=21`);
     },
     enabled: q.isFetched && Boolean(creditsMachineIdsKey),
     refetchInterval: 3 * 60_000,
@@ -533,9 +533,16 @@ export function RedFlagsPage({
   const profilesQ = useQuery({
     queryKey: ['alert-overall-admin-profiles'],
     queryFn: () =>
-      apiGet<{ rows?: { machine_id?: string; machine_name?: string; location_owner?: string | null; is_active?: boolean }[] }>(
-        '/api/alert/overall/admin-profiles',
-      ),
+      apiGet<{
+        rows?: {
+          machine_id?: string;
+          machine_name?: string;
+          location_owner?: string | null;
+          is_active?: boolean;
+          inactiveToday?: boolean;
+          inactiveLabel?: string | null;
+        }[];
+      }>('/api/alert/overall/admin-profiles'),
     enabled: q.isFetched,
     staleTime: 5 * 60_000,
     refetchInterval: 60_000,
@@ -555,7 +562,7 @@ export function RedFlagsPage({
   const locationOwnerLookup = useMemo(() => {
     const byId = new Map<string, string>();
     const byName = new Map<string, string>();
-    const inactiveById = new Map<string, boolean>();
+    const inactiveById = new Map<string, { inactive: boolean; label: string }>();
     const rows = profilesQ.data?.rows;
     if (!Array.isArray(rows)) return { byId, byName, inactiveById };
     for (const r of rows) {
@@ -565,8 +572,11 @@ export function RedFlagsPage({
       if (id && owner) byId.set(id, owner);
       if (name && owner) byName.set(name, owner);
       if (id) {
-        const active = (r as { is_active?: boolean }).is_active;
-        inactiveById.set(id, active === false);
+        const inactive = r.inactiveToday === true || r.is_active === false;
+        inactiveById.set(id, {
+          inactive,
+          label: String(r.inactiveLabel || (r.is_active === false ? 'Inactive' : 'Inactive today')).trim() || 'Inactive',
+        });
       }
     }
     return { byId, byName, inactiveById };
@@ -1537,7 +1547,8 @@ export function RedFlagsPage({
                       areaOwnerName: resolveAreaOwnerPerson(machId),
                       locationOwnerFull: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
                       locationTagOwner: resolveLocationTagForRow(machId, String(row.machineName || machId)),
-                      machineInactive: locationOwnerLookup.inactiveById.get(machId) === true,
+                      machineInactive: locationOwnerLookup.inactiveById.get(machId)?.inactive === true,
+                      machineInactiveLabel: locationOwnerLookup.inactiveById.get(machId)?.label || 'Inactive',
                       workflowAttendance: workflowAttendanceQ.data?.byMachineId?.[machId],
                       workflowCleaning: workflowCleaningQ.data?.byMachineId?.[machId],
                       workflowConfigured: workflowAttendanceQ.data?.configured !== false,
@@ -1593,7 +1604,7 @@ export function RedFlagsPage({
                     return (
                       <tr
                         key={machId || `${r}`}
-                        className={`${styles.tr} ${d.isNew ? styles.trNew : ''} ${d.isChanged ? styles.trUpdated : ''} ${hot ? styles.rowHot : ''} ${p2 ? styles.rowP2 : ''} ${cleaningOverdue ? styles.rowCleaningOverdue : ''} ${locationOwnerLookup.inactiveById.get(machId) ? 'opsRowInactive' : ''}`}
+                        className={`${styles.tr} ${d.isNew ? styles.trNew : ''} ${d.isChanged ? styles.trUpdated : ''} ${hot ? styles.rowHot : ''} ${p2 ? styles.rowP2 : ''} ${cleaningOverdue ? styles.rowCleaningOverdue : ''} ${locationOwnerLookup.inactiveById.get(machId)?.inactive ? 'opsRowInactive' : ''}`}
                         style={{ '--ra-rank-strength': rk.toFixed(3) } as CSSProperties}
                         tabIndex={0}
                         onPointerDownCapture={(e) => {

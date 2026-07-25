@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { OperatorContactIcons } from '@/components/OperatorContactIcons';
 import { resolveOperatorContacts } from '@/lib/operatorContacts';
+import { apiGet } from '@/lib/api';
 import { fetchOperatorSchedule, workflowNotConfiguredMessage, type MachineAttendanceSummary } from '@/lib/leetWorkflowApi';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 import { attendanceBadgeForSummary } from '@/lib/operatorAttendanceUi';
@@ -62,6 +63,17 @@ export function OperatorWorkflowModal({
     staleTime: 60_000,
   });
 
+  /** Self-fetch when parent batch missed this machine / cache was cold. */
+  const activityQ = useQuery({
+    queryKey: ['alert-operator-activity-modal', machineId],
+    queryFn: () =>
+      apiGet<{ byMachineId?: Record<string, OperatorActivityTimes> }>(
+        `/api/alert/operator-activity?machines=${encodeURIComponent(machineId)}&days=21`,
+      ),
+    enabled: Boolean(machineId),
+    staleTime: 60_000,
+  });
+
   const schedule = scheduleQ.data;
   const notConfigured = workflowNotConfiguredMessage(schedule);
   const displayName =
@@ -82,8 +94,11 @@ export function OperatorWorkflowModal({
     attendanceSummary?.attendanceStatusLabel ||
     (attendanceSummary?.attendanceStatus === 'not_scheduled' ? 'Missing' : null);
 
-  const physical = operatorActivity?.physicalAttendance;
-  const physicalAt = physical?.at || operatorActivity?.remoteCreditAt || null;
+  const activityMerged = activityQ.data?.byMachineId?.[machineId] || operatorActivity || null;
+  const physical = activityMerged?.physicalAttendance;
+  const physicalAt = physical?.at || activityMerged?.remoteCreditAt || null;
+  const cleaningAt = activityMerged?.cleaningAt || null;
+  const physicalLoading = activityQ.isLoading && !physicalAt && !cleaningAt;
 
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
@@ -175,9 +190,11 @@ export function OperatorWorkflowModal({
           <h3 className="salesHistoryCompareTitle">Monitor · physical location</h3>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
             Proven presence from Attendance &amp; Cleaning (successful remote credit + power interrupts). Separate from
-            Task Manager clock-in above.
+            Task Manager clock-in above. Looks back 21 days in the Attendance cache.
           </p>
-          {physicalAt ? (
+          {physicalLoading ? (
+            <AlertModalAnticipate hint="Physical attendance incoming" lines={3} />
+          ) : physicalAt ? (
             <div className="alertModalContentReveal">
               <p className="salesHistoryNote">
                 Status:{' '}
@@ -194,8 +211,22 @@ export function OperatorWorkflowModal({
               ) : null}
               <p className="salesHistoryNote">Proven at: {formatIsoShort(physicalAt)}</p>
             </div>
+          ) : cleaningAt ? (
+            <div className="alertModalContentReveal">
+              <p className="salesHistoryNote">
+                Status: <span className="pillWarn">Cleaning only</span>
+              </p>
+              <p className="salesHistoryNote">
+                Last cleaning pattern on this machine: {formatIsoShort(cleaningAt)}. No remote-credit + power proof in the
+                last 21 days of Attendance cache.
+              </p>
+            </div>
+          ) : activityQ.isError ? (
+            <p className="stitchOpsAlert">{(activityQ.error as Error)?.message || 'Could not load attendance'}</p>
           ) : (
-            <p className="salesHistoryEmpty">No proven physical attendance in the recent Attendance cache</p>
+            <p className="salesHistoryEmpty">
+              No proven physical attendance or cleaning in the last 21 days of Attendance cache for this machine
+            </p>
           )}
         </section>
       </div>

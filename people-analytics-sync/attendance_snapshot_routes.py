@@ -177,8 +177,17 @@ def _parse_iso_date(date_str: str) -> datetime:
     return datetime.strptime(date_str, "%Y-%m-%d")
 
 
+def _kuwait_today_str() -> str:
+    return datetime.now(ZoneInfo("Asia/Kuwait")).date().isoformat()
+
+
+def _kuwait_yesterday_str() -> str:
+    return (datetime.now(ZoneInfo("Asia/Kuwait")).date() - timedelta(days=1)).isoformat()
+
+
 def _yesterday_utc_str() -> str:
-    return (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    """Deprecated alias — prefer Kuwait calendar day (Monitor Attendance uses Asia/Kuwait)."""
+    return _kuwait_yesterday_str()
 
 
 def _vendon_machine_list(api_base: str, api_key: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
@@ -219,17 +228,30 @@ def _determine_user_type(user: Dict[str, Any]) -> str:
     type_title = str(user.get("type_title") or "")
     tl = type_s.lower()
     ttl = type_title.lower()
+    name = f"{user.get('first_name') or ''} {user.get('last_name') or ''} {user.get('name') or ''}".lower()
+    if "tech" in tl or "tech" in ttl or "service" in tl or "service" in ttl or "maintain" in tl or "maintain" in ttl:
+        return "technician"
+    if "tech" in name and "operator" not in tl and "operator" not in ttl:
+        # Name hint only when Vendon type is not explicitly operator
+        if "technician" in name or name.strip().endswith(" tech") or " tech " in f" {name} ":
+            return "technician"
     if "route" in tl or "route" in ttl or "driver" in tl or "driver" in ttl:
         return "route_driver"
     if "operator" in tl or "operator" in ttl:
         return "operator"
+    if "qa" in tl or "qa" in ttl or "quality" in tl or "quality" in ttl:
+        return "qa_officer"
     return "operator"
 
 
 def _user_type_from_credit_record(user_name: str) -> str:
     un = (user_name or "").lower()
+    if "tech" in un or "service" in un or "maintain" in un:
+        return "technician"
     if "route" in un or "driver" in un:
         return "route_driver"
+    if "qa" in un or "quality" in un:
+        return "qa_officer"
     return "operator"
 
 
@@ -1024,7 +1046,7 @@ def attendance_internal_warm():
     if not _auth_trusted_secret():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
     body = _parse_body()
-    # Default to yesterday single day
+    # Default to Kuwait yesterday (Monitor Attendance calendar), not UTC.
     date_str = str(body.get("date") or "").strip()
     if date_str:
         sd = ed = date_str
@@ -1032,7 +1054,7 @@ def attendance_internal_warm():
     else:
         sd, ed, mid = _norm_dates(body)
         if not sd or not ed:
-            sd = ed = _yesterday_utc_str()
+            sd = ed = _kuwait_yesterday_str()
         mid = mid or ""
 
     payload, err = _compute_attendance_snapshot(sd, ed, mid)

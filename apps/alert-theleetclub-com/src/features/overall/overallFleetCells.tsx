@@ -122,6 +122,7 @@ export type FleetRowBundle = {
   vendonTagOwner: string;
   /** Admin Machines → inactive (still listed, shaded). */
   machineInactive?: boolean;
+  machineInactiveLabel?: string | null;
 };
 
 function formatPct(pct: number): string {
@@ -256,7 +257,7 @@ function renderOverallColumn(
         <>
           {b.machineInactive ? (
             <span className={`${rfStyles.chip} opsInactiveChip`} title="Marked inactive in Alert Admin → Machines">
-              Inactive
+              {b.machineInactiveLabel || 'Inactive'}
             </span>
           ) : null}
           <div className={rfStyles.machineName}>{b.m.name}</div>

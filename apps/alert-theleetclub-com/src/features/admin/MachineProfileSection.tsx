@@ -3,6 +3,11 @@ import { apiGet, apiJson } from '@/lib/api';
 import { Fragment, type Dispatch, type SetStateAction, useCallback, useMemo, useState } from 'react';
 import { HelpTip } from '@/components/HelpTip';
 import { fleetTagSourceDescription } from '@/lib/fleetTagSourceHint';
+import {
+  emptyInactiveSchedule,
+  normalizeInactiveSchedule,
+  type InactiveSchedule,
+} from '@/lib/inactiveSchedule';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -54,6 +59,7 @@ type ProfileRow = {
   qa_schedule: unknown[];
   timezone: string;
   is_active?: boolean;
+  inactive_schedule?: unknown;
   /** From linked Red Alert cleaning schedule row (higher = wins on overlap) */
   priority?: number;
   updated_at?: string | null;
@@ -396,6 +402,7 @@ export function MachineProfileSection() {
   const [locationOwner, setLocationOwner] = useState('');
   const [locationHours, setLocationHours] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [inactiveSchedule, setInactiveSchedule] = useState<InactiveSchedule>(emptyInactiveSchedule());
   const [opPreset, setOpPreset] = useState<'all_week' | 'weekends_off' | 'custom'>('all_week');
   const [customDays, setCustomDays] = useState<number[]>([]);
   const [cleaningWindows, setCleaningWindows] = useState<TimeWindow[]>([{ start: '14:00', end: '15:00' }]);
@@ -433,6 +440,7 @@ export function MachineProfileSection() {
     setLocationOwner(vendonTag || (p.location_owner ?? '').trim());
     setLocationHours(p.location_hours ?? '');
     setIsActive(p.is_active !== false);
+    setInactiveSchedule(normalizeInactiveSchedule(p.inactive_schedule));
     const od = normalizeOperatingDays(p.operating_days);
     setOpPreset(od.preset === 'custom' ? 'custom' : od.preset);
     setCustomDays(od.preset === 'custom' ? od.days : []);
@@ -462,6 +470,7 @@ export function MachineProfileSection() {
     setLocationOwner('');
     setLocationHours('');
     setIsActive(true);
+    setInactiveSchedule(emptyInactiveSchedule());
     setOpPreset('all_week');
     setCustomDays([]);
     setCleaningWindows([{ start: '14:00', end: '15:00' }]);
@@ -481,6 +490,7 @@ export function MachineProfileSection() {
       setLocationOwner((m?.vendon_location_owner ?? '').trim());
       setLocationHours('');
       setIsActive(true);
+      setInactiveSchedule(emptyInactiveSchedule());
       setOpPreset('all_week');
       setCustomDays([]);
       setCleaningWindows([{ start: '14:00', end: '15:00' }]);
@@ -509,6 +519,7 @@ export function MachineProfileSection() {
         location_owner: (vendonLocationTag || locationOwner).trim() || null,
         location_hours: locationHours || null,
         is_active: isActive,
+        inactive_schedule: inactiveSchedule,
         operating_days,
         cleaning_windows: cleaningWindows.filter((w) => w.start && w.end),
         operator_hours: operators
@@ -528,6 +539,7 @@ export function MachineProfileSection() {
     onSuccess: async () => {
       setFormErr(null);
       await qc.invalidateQueries({ queryKey: ['alert-machine-profiles'] });
+      await qc.invalidateQueries({ queryKey: ['alert-overall-admin-profiles'] });
       await qc.invalidateQueries({ queryKey: ['alert-admin-cleaning-schedules'] });
     },
   });
@@ -632,16 +644,111 @@ export function MachineProfileSection() {
             <div className="adminFieldCell">
               <span className="adminFieldCaption">Machine status</span>
               <select
-                title="Active / inactive override for Alert boards"
+                title="Always active, or always inactive on boards"
                 value={isActive ? 'active' : 'inactive'}
                 onChange={(e) => setIsActive(e.target.value === 'active')}
               >
                 <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="inactive">Inactive (always)</option>
               </select>
             </div>
           </div>
 
+          <div className="adminOperatingDaysBlock" style={{ marginTop: 12 }}>
+            <div className="adminOperatingDaysLabelRow">
+              <span className="adminFieldCaption adminOperatingDaysCaption">Also inactive on</span>
+              <HelpTip text="While status is Active, shade the machine on these weekdays, single dates, or date ranges (Kuwait calendar)." />
+            </div>
+            <p className="muted" style={{ fontSize: '0.78rem', margin: '0 0 8px' }}>
+              Optional schedule when the machine is normally active but closed some days / weeks / months.
+            </p>
+            <div className="adminVisitDayStrip">
+              {DAY_LABELS.map((lab, d) => (
+                <label key={lab} className="adminDayCheckbox">
+                  <input
+                    type="checkbox"
+                    checked={inactiveSchedule.weekdays.includes(d)}
+                    onChange={() => {
+                      setInactiveSchedule((prev) => {
+                        const weekdays = prev.weekdays.includes(d)
+                          ? prev.weekdays.filter((x) => x !== d)
+                          : [...prev.weekdays, d].sort((a, b) => a - b);
+                        return { ...prev, weekdays };
+                      });
+                    }}
+                  />{' '}
+                  {lab}
+                </label>
+              ))}
+            </div>
+            <div className="adminTimePairRow" style={{ marginTop: 10 }}>
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">Range from</span>
+                <input
+                  type="date"
+                  value={inactiveSchedule.ranges[0]?.start || ''}
+                  onChange={(e) => {
+                    const start = e.target.value;
+                    setInactiveSchedule((prev) => {
+                      const end = prev.ranges[0]?.end || start;
+                      const ranges = start ? [{ start, end: end >= start ? end : start }] : [];
+                      return { ...prev, ranges };
+                    });
+                  }}
+                />
+              </div>
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">Range to</span>
+                <input
+                  type="date"
+                  value={inactiveSchedule.ranges[0]?.end || ''}
+                  onChange={(e) => {
+                    const end = e.target.value;
+                    setInactiveSchedule((prev) => {
+                      const start = prev.ranges[0]?.start || end;
+                      const ranges = end ? [{ start: start <= end ? start : end, end }] : [];
+                      return { ...prev, ranges };
+                    });
+                  }}
+                />
+              </div>
+              <div className="adminFieldCell">
+                <span className="adminFieldCaption">Extra date</span>
+                <input
+                  type="date"
+                  value=""
+                  title="Add a single inactive calendar day"
+                  onChange={(e) => {
+                    const d = e.target.value;
+                    if (!d) return;
+                    setInactiveSchedule((prev) => ({
+                      ...prev,
+                      dates: prev.dates.includes(d) ? prev.dates : [...prev.dates, d].sort(),
+                    }));
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            </div>
+            {inactiveSchedule.dates.length ? (
+              <p className="muted" style={{ fontSize: '0.78rem', marginTop: 8 }}>
+                Extra dates:{' '}
+                {inactiveSchedule.dates.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className="danger"
+                    style={{ marginRight: 6, marginBottom: 4 }}
+                    onClick={() =>
+                      setInactiveSchedule((prev) => ({ ...prev, dates: prev.dates.filter((x) => x !== d) }))
+                    }
+                  >
+                    {d} ×
+                  </button>
+                ))}
+              </p>
+            ) : null}
+          </div>
           {machineId && vendonLocationTag ? (
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>
               Location Owner from device feed: <strong>{vendonLocationTag}</strong>

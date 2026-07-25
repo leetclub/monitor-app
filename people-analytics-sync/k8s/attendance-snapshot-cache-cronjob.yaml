@@ -1,14 +1,13 @@
-# Warms attendance_snapshot_cache daily (yesterday, UTC).
-# Purpose: allow GAS web app to read attendance via single browser request to people-api,
-# avoiding Apps Script premium UrlFetch quotas.
+# Warms attendance_snapshot_cache for Kuwait yesterday + today.
+# Purpose: Alert Live Op / Tech Visit + GAS Attendance read proven presence.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: attendance-snapshot-cache-warm
   namespace: leet-monitor
 spec:
-  # Shortly after midnight UTC
-  schedule: "20 0 * * *"
+  # 00:20 UTC ≈ 03:20 Kuwait; also mid-day refresh so "today" is not empty all morning
+  schedule: "20 0,9 * * *"
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 2
   concurrencyPolicy: Forbid
@@ -33,13 +32,11 @@ spec:
                 - /bin/sh
                 - -c
                 - >
-                  exec curl -fsS
-                  --connect-timeout 10
-                  --max-time 1200
-                  --retry 2
-                  --retry-delay 10
-                  -X POST "http://people-analytics-api/api/attendance/internal/warm"
-                  -H "Content-Type: application/json"
-                  -H "X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}"
-                  -d "{}"
-
+                  set -e;
+                  AUTH="X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}";
+                  URL="http://people-analytics-api/api/attendance/internal/warm";
+                  curl -fsS --connect-timeout 10 --max-time 1200 --retry 2 --retry-delay 10
+                  -X POST "$URL" -H "Content-Type: application/json" -H "$AUTH" -d "{}";
+                  curl -fsS --connect-timeout 10 --max-time 1200 --retry 2 --retry-delay 10
+                  -X POST "$URL" -H "Content-Type: application/json" -H "$AUTH"
+                  -d "{\"date\":\"$(TZ=Asia/Kuwait date +%F)\"}"

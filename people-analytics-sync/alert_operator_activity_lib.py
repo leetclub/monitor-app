@@ -94,14 +94,114 @@ def _attendance_detail_from_rec(rec: Dict[str, Any], ts_i: int) -> Dict[str, Any
     }
 
 
+def _parse_attendance_ts(raw: Any) -> int:
+    if raw is None:
+        return 0
+    if isinstance(raw, (int, float)):
+        return int(raw) if int(raw) > 0 else 0
+    s = str(raw).strip()
+    if not s:
+        return 0
+    try:
+        return int(float(s)) if float(s) > 0 else 0
+    except (TypeError, ValueError):
+        pass
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    except Exception:
+        return 0
+
+
+def _ingest_attendance_payload(
+    payload: Dict[str, Any],
+    *,
+    cleaning_best: Dict[str, int],
+    credit_best: Dict[str, int],
+    credit_detail: Dict[str, Dict[str, Any]],
+    tech_detail: Dict[str, Dict[str, Any]],
+    tech_name_by_mid: Optional[Dict[str, set]] = None,
+) -> None:
+    cleaning = payload.get("cleaning")
+    cleaning = cleaning if isinstance(cleaning, list) else []
+    for rec in cleaning:
+        if not isinstance(rec, dict):
+            continue
+        mid = str(rec.get("machine_id") or "").strip()
+        if not mid:
+            continue
+        end_i = _parse_attendance_ts(rec.get("cleaning_end"))
+        if end_i > cleaning_best.get(mid, 0):
+            cleaning_best[mid] = end_i
+
+    attendance = payload.get("attendance")
+    attendance = attendance if isinstance(attendance, list) else []
+    for rec in attendance:
+        if not isinstance(rec, dict):
+            continue
+        mid = str(rec.get("machine_id") or "").strip()
+        if not mid:
+            continue
+        ts_i = _parse_attendance_ts(rec.get("work_start") or rec.get("attendance_time"))
+        if ts_i <= 0:
+            continue
+        detail = _attendance_detail_from_rec(rec, ts_i)
+        if ts_i > credit_best.get(mid, 0):
+            credit_best[mid] = ts_i
+            credit_detail[mid] = detail
+        is_tech = _is_technician_type(detail.get("userType"), detail.get("userName"))
+        if not is_tech and tech_name_by_mid:
+            uname = str(detail.get("userName") or "").strip().lower()
+            assigned = tech_name_by_mid.get(mid) or set()
+            if uname and any(uname == a or uname in a or a in uname for a in assigned if a):
+                is_tech = True
+                detail = dict(detail)
+                detail["userType"] = detail.get("userType") or "technician"
+                detail["matchedAssignedTech"] = True
+        if is_tech:
+            prev = tech_detail.get(mid)
+            if not prev or ts_i > int(prev.get("ts") or 0):
+                tech_detail[mid] = detail
+
+
+def _load_assigned_tech_names() -> Dict[str, set]:
+    """machine_id → set of lowercased technician names from Alert Admin profiles."""
+    out: Dict[str, set] = {}
+    try:
+        from dashboard_access_models import AlertMachineProfile, create_dashboard_engine_and_session
+
+        _, SessionLocal = create_dashboard_engine_and_session()
+        db = SessionLocal()
+        try:
+            for row in db.query(AlertMachineProfile).all():
+                mid = str(row.machine_id or "").strip()
+                if not mid:
+                    continue
+                names: set = set()
+                raw = row.technician_schedule
+                if isinstance(raw, list):
+                    for item in raw:
+                        if isinstance(item, dict):
+                            n = str(item.get("name") or "").strip().lower()
+                            if n:
+                                names.add(n)
+                if names:
+                    out[mid] = names
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("operator_activity load assigned tech names failed")
+    return out
+
+
 def _read_attendance_activity(
     days: List[str],
 ) -> Tuple[Dict[str, int], Dict[str, int], Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
     """
     From attendance_snapshot_cache (Monitor Attendance & Cleaning):
-    - cleaning_end → last cleaning unix
-    - attendance work_start / attendance_time → last proven remote credit unix (any user)
-    - technician-only latest proven attendance for Tech Visit
+    - Prefer exact Kuwait day keys
+    - Also merge any recent cache payloads (last 21d) so UTC-key skew / missed warms still surface
+    - Technician presence = user_type technician OR name matches Admin-assigned tech for that machine
     """
     cleaning_best: Dict[str, int] = {}
     credit_best: Dict[str, int] = {}
@@ -112,60 +212,45 @@ def _read_attendance_activity(
     try:
         from db_pool import cache_key as attendance_cache_key, get_conn as attendance_get_conn
 
+        tech_name_by_mid = _load_assigned_tech_names()
         keys = [attendance_cache_key(d, d, "") for d in days if d]
         keys = [k for k in keys if k]
-        if not keys:
-            return cleaning_best, credit_best, credit_detail, tech_detail
         payloads: List[Dict[str, Any]] = []
         with attendance_get_conn() as conn:
             with conn.cursor() as cur:
+                if keys:
+                    cur.execute(
+                        "SELECT payload FROM attendance_snapshot_cache WHERE cache_key = ANY(%s)",
+                        (keys,),
+                    )
+                    for row in cur.fetchall() or []:
+                        if row and isinstance(row[0], dict):
+                            payloads.append(row[0])
+                # Fallback: recent warms even if day-key mapping drifted (UTC vs Kuwait).
                 cur.execute(
-                    "SELECT payload FROM attendance_snapshot_cache WHERE cache_key = ANY(%s)",
-                    (keys,),
+                    """
+                    SELECT payload FROM attendance_snapshot_cache
+                    WHERE generated_at > NOW() - INTERVAL '21 days'
+                    ORDER BY generated_at DESC
+                    LIMIT 40
+                    """
                 )
                 for row in cur.fetchall() or []:
                     if row and isinstance(row[0], dict):
                         payloads.append(row[0])
+        seen_payload = 0
         for payload in payloads:
-            cleaning = payload.get("cleaning")
-            cleaning = cleaning if isinstance(cleaning, list) else []
-            for rec in cleaning:
-                if not isinstance(rec, dict):
-                    continue
-                mid = str(rec.get("machine_id") or "").strip()
-                if not mid:
-                    continue
-                end = rec.get("cleaning_end")
-                try:
-                    end_i = int(end) if end is not None else 0
-                except Exception:
-                    end_i = 0
-                if end_i > cleaning_best.get(mid, 0):
-                    cleaning_best[mid] = end_i
-
-            attendance = payload.get("attendance")
-            attendance = attendance if isinstance(attendance, list) else []
-            for rec in attendance:
-                if not isinstance(rec, dict):
-                    continue
-                mid = str(rec.get("machine_id") or "").strip()
-                if not mid:
-                    continue
-                raw = rec.get("work_start") or rec.get("attendance_time")
-                try:
-                    ts_i = int(raw) if raw is not None else 0
-                except Exception:
-                    ts_i = 0
-                if ts_i <= 0:
-                    continue
-                detail = _attendance_detail_from_rec(rec, ts_i)
-                if ts_i > credit_best.get(mid, 0):
-                    credit_best[mid] = ts_i
-                    credit_detail[mid] = detail
-                if _is_technician_type(detail.get("userType"), detail.get("userName")):
-                    prev = tech_detail.get(mid)
-                    if not prev or ts_i > int(prev.get("ts") or 0):
-                        tech_detail[mid] = detail
+            seen_payload += 1
+            _ingest_attendance_payload(
+                payload,
+                cleaning_best=cleaning_best,
+                credit_best=credit_best,
+                credit_detail=credit_detail,
+                tech_detail=tech_detail,
+                tech_name_by_mid=tech_name_by_mid,
+            )
+        if seen_payload == 0:
+            logger.warning("operator_activity: no attendance_snapshot_cache payloads in lookback")
     except Exception:
         logger.exception("operator_activity attendance cache read failed")
     return cleaning_best, credit_best, credit_detail, tech_detail
@@ -325,7 +410,7 @@ def compute_operator_activity(
         "comparisonNote": (
             "Cleaning + remote credit from Monitor Attendance & Cleaning cache "
             "(power-interrupt cleaning end; proven remote credit). "
-            "technicianPhysicalAttendance is technician user_type only. "
+            "technicianPhysicalAttendance = technician user_type OR name matches Admin-assigned tech. "
             "Door + refill from Vendon /event (Door opened / All Products refilled)."
         ),
         "eventScanError": ev_err,

@@ -86,6 +86,9 @@ type AdminProfileRow = {
   technician_schedule?: unknown;
   qa_schedule?: unknown;
   is_active?: boolean;
+  inactiveToday?: boolean;
+  inactiveLabel?: string | null;
+  inactive_schedule?: unknown;
   priority?: number | null;
   updated_at?: string | null;
 };
@@ -507,14 +510,14 @@ export function OverallPage({
   });
 
   const operatorActivityQ = useQuery({
-    queryKey: ['alert-operator-activity', fleetMachineIdsKey],
+    queryKey: ['alert-operator-activity', fleetMachineIdsKey, 21],
     queryFn: () =>
       apiGet<{
         byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
       }>(
         fleetMachineIdsKey
-          ? `/api/alert/operator-activity?machines=${encodeURIComponent(fleetMachineIdsKey)}`
-          : '/api/alert/operator-activity',
+          ? `/api/alert/operator-activity?machines=${encodeURIComponent(fleetMachineIdsKey)}&days=21`
+          : '/api/alert/operator-activity?days=21',
       ),
     enabled: fleetMachines.length > 0,
     staleTime: 90_000,
@@ -1075,7 +1078,11 @@ export function OverallPage({
                   locHours,
                   adminLocationOwner: areaOwnerPerson || adminLocationOwner,
                   vendonTagOwner: areaOwnerPerson ? adminLocationOwner || vendonTagOwner : vendonTagOwner,
-                  machineInactive: prof?.is_active === false,
+                  machineInactive: prof?.inactiveToday === true || prof?.is_active === false,
+                  machineInactiveLabel:
+                    String(prof?.inactiveLabel || (prof?.is_active === false ? 'Inactive' : 'Inactive today')).trim() ||
+                    'Inactive',
+
                 };
                 return (
                   <OverallFleetRow

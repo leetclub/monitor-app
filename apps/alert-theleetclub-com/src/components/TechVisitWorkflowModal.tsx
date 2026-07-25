@@ -60,10 +60,10 @@ export function TechVisitWorkflowModal({
   });
 
   const activityQ = useQuery({
-    queryKey: ['alert-operator-activity-tech', machineId],
+    queryKey: ['alert-operator-activity-tech', machineId, 21],
     queryFn: () =>
       apiGet<{ byMachineId?: Record<string, OperatorActivityTimes> }>(
-        `/api/alert/operator-activity?machines=${encodeURIComponent(machineId)}&days=7`,
+        `/api/alert/operator-activity?machines=${encodeURIComponent(machineId)}&days=21`,
       ),
     enabled: Boolean(machineId),
     staleTime: 60_000,
@@ -167,14 +167,16 @@ export function TechVisitWorkflowModal({
         <section className="operatorWorkflowSection" style={{ marginTop: 12 }}>
           <h3 className="salesHistoryCompareTitle">On-site proof (technician only)</h3>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
-            Same Monitor Attendance proof as operators (successful remote credit + power interrupts), but only when the
-            Vendon user type is <strong>technician</strong> — operator presence is ignored here. Drink tests today are
+            Monitor Attendance proof (remote credit + power). Counts when Vendon user type is technician, or the person
+            name matches an assigned technician below. Operator-only visits are ignored. Drink tests today are
             machine-level.
           </p>
           <p className="salesHistoryNote">
             Drink tests today: <strong>{drinkTests}</strong>
           </p>
-          {physicalAt ? (
+          {activityQ.isLoading && !physicalAt ? (
+            <AlertModalAnticipate hint="Technician presence incoming" lines={3} />
+          ) : physicalAt ? (
             <div className="alertModalContentReveal">
               <p className="salesHistoryNote">
                 Technician presence:{' '}
@@ -191,8 +193,15 @@ export function TechVisitWorkflowModal({
               ) : null}
               <p className="salesHistoryNote">At: {formatIsoShort(physicalAt)}</p>
             </div>
+          ) : activityQ.isError ? (
+            <p className="stitchOpsAlert">{(activityQ.error as Error)?.message || 'Could not load attendance'}</p>
           ) : (
-            <p className="salesHistoryEmpty">No proven technician on-site presence in recent Attendance cache</p>
+            <p className="salesHistoryEmpty">
+              No proven technician on-site presence in the last 21 days
+              {assignedTechs.length
+                ? ' (no attendance matched technician type or assigned tech name)'
+                : ' — assign a technician in Admin → Machines to also match by name'}
+            </p>
           )}
         </section>
       </div>
