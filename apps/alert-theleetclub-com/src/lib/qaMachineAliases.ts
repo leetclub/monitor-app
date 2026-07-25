@@ -29,7 +29,9 @@ const RAW_GROUPS: string[][] = [
   ['Jahra Women center', 'Jahra Women', 'Jahra Hospital'],
   ['Amiri New', 'Amiri Hospital New', 'Amiri old 2', 'Amiri old', 'Amiri Old'],
   ['Maternity Hospital Main', 'Maternity Hospital', 'Maternity Hospital OPD', 'MOH main', 'Moh Main'],
-  ['Razi Hospital - OPD', 'Razi OPD', 'Razi Hospital', 'Razi Hospital - Old', 'Razi Old', 'Zain hospital'],
+  ['Razi Hospital - OPD', 'Razi OPD', 'Razi Hospital OPD'],
+  ['Razi Hospital - Old', 'Razi Old', 'Razi Hospital Old'],
+  ['Zain Hospital', 'Zain hospital', 'Zain'],
   ['KU Engineering', 'KU Enginnering', 'KU Engineering J', 'KU Enginnering J'],
 ];
 

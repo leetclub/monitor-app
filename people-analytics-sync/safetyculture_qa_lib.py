@@ -1083,6 +1083,10 @@ _GENERIC_SITE_TOKENS = frozenset(
         "floor",
         "floor1",
         "floor2",
+        "fl",
+        "fl1",
+        "fl2",
+        "fl3",
         "ground",
         "building",
         "hospital",
@@ -1091,6 +1095,22 @@ _GENERIC_SITE_TOKENS = frozenset(
         "and",
         "leet",
         "club",
+        # Department / area labels shared across hospitals — never alone as a match.
+        "opd",
+        "casualty",
+        "maternity",
+        "parking",
+        "hallway",
+        "hall",
+        "dental",
+        "clinic",
+        "emergency",
+        "er",
+        "old",
+        "new",
+        "center",
+        "centre",
+        "women",
     }
 )
 
@@ -1243,12 +1263,16 @@ def _audit_match_score(machine_name: str, location: str, location_keys: Optional
             elif n_toks and l_toks:
                 shared = n_toks & l_toks
                 distinctive_shared = {t for t in shared if len(t) >= 3 and t not in _GENERIC_SITE_TOKENS}
-                if distinctive_shared and len(shared) >= 1:
-                    # One strong shared token (cba, jaber, …) plus optional generics.
-                    score = 74 if len(distinctive_shared) >= 1 and len(n_toks - shared) <= 2 else 60
-                elif len(shared) >= 3:
+                # Require a brand/site token from the *machine* (e.g. razi), not only a
+                # shared department word (opd) that would link Razi ↔ Adan.
+                machine_brand = {t for t in n_toks if len(t) >= 3 and t not in _GENERIC_SITE_TOKENS}
+                brand_hit = bool(distinctive_shared & machine_brand) if machine_brand else bool(distinctive_shared)
+                if brand_hit and distinctive_shared:
+                    # One strong shared token (cba, jaber, razi, …) plus optional generics.
+                    score = 74 if len(n_toks - shared) <= 2 else 60
+                elif len(shared) >= 3 and brand_hit:
                     score = 70
-                elif len(shared) >= 2 and len(n_toks) <= 4:
+                elif len(shared) >= 2 and len(n_toks) <= 4 and brand_hit:
                     if not (n_toks - shared) or not (l_toks - shared):
                         score = 58
                     else:
@@ -1512,7 +1536,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v10",
+            "v11",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),

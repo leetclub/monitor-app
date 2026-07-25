@@ -86,6 +86,19 @@ def test_exclusive_machine_name_in_site_still_single_owner():
     assert "KU CBA Right" not in by
 
 
+def test_opd_department_does_not_cross_hospitals():
+    """Shared 'OPD' alone must not link Razi ↔ Adan (wrong PDF / SC: line)."""
+    assert _audit_match_score("Razi Hospital - OPD", "Adan OPD") < _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Razi Hospital - OPD", "Adan Hospital - OPD") < _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Razi Hospital - OPD", "Farwaniya OPD") < _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Razi Hospital - OPD", "Razi OPD") >= _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Razi Hospital - OPD", "Razi Hospital - OPD") >= _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Razi Hospital - OPD", "Razi Hospital") >= _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Farwaniya H - OPD-Fl.1", "Farwaniya OPD") >= _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Farwaniya H - OPD-Fl.1", "Adan OPD") < _MIN_MACHINE_MATCH_SCORE
+    assert _audit_match_score("Adan Hospital - OPD", "Adan OPD") >= _MIN_MACHINE_MATCH_SCORE
+
+
 if __name__ == "__main__":
     test_ku_cba_short_sc_site_matches()
     test_unrelated_sites_still_weak()
@@ -93,4 +106,5 @@ if __name__ == "__main__":
     test_location_only_visit_shared_across_co_located_machines()
     test_title_specific_visit_not_shared_with_sibling()
     test_exclusive_machine_name_in_site_still_single_owner()
+    test_opd_department_does_not_cross_hospitals()
     print("ok")

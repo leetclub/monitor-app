@@ -131,8 +131,8 @@ function visitForMachineName(
   for (const [nk, row] of Object.entries(byLocationKey)) {
     const loc = String(row.location || nk);
     const locKey = normKey(loc);
-    if (aliasKeys.has(nk) || aliasKeys.has(locKey) || qaMachineNamesMatch(machineName, loc) || needle.includes(nk) || nk.includes(needle)) {
-      consider(row, aliasKeys.has(nk) || aliasKeys.has(locKey) || qaMachineNamesMatch(machineName, loc) ? 50 : 40);
+    if (aliasKeys.has(nk) || aliasKeys.has(locKey) || qaMachineNamesMatch(machineName, loc)) {
+      consider(row, 50);
     }
   }
   if (!candidates.length) return null;

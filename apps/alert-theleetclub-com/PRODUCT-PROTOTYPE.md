@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-25 | **QA Visit wrong SC site / PDF:** stop matching hospitals on shared department tokens alone (e.g. OPD linking Razi → Adan). Razi OPD/Old aliases split; PDF follows the correct audit. |
 | 2026-07-22 | **GO CHECK only:** restore shared Call OP/AM `linkGo` sizing; GO CHECK uses dedicated `goCheckBtn` two-line label so it no longer spills into Downtime. |
 | 2026-07-20 | **SX Loc-only + multi-product popup:** Red Flags SX cell shows location KD SX only; popup lists every Admin promoted product. Metric boxes center text. |
 | 2026-07-20 | **SX boxes enlarged:** Loc/Prod SX cells use full sales-box height/width and matching type size (widen boxes; do not shrink text). |
