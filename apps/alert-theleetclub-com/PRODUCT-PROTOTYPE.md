@@ -92,8 +92,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 | **Cleaning 15h alert** | Overdue-not-cleaned notification + red-zone UI | **Shipped** — `cleaningOverdue15h` red row (table, cards, Overall); banner + optional browser notification; **alert icon** on Last clean opens **AI-style operator message preview** (Slack DM, Email, WhatsApp, Workflow Received — preview only) |
 | **Sorting** | Sales today/month; QC latest/oldest | **Shipped** — Data columns sortable (⇅/▼/▲, third click clears); **Live operator** and other action-only columns excluded; **Last / tx** uses Vendon ISO timestamp |
 | **Operator last access** | Last door open / machine access time | **Shipped** — **Operator Activity** column (`operatorLastAccessAt`); Live operator column = **name box + attendance badge only** (contacts in modal icons) |
-| **Tech visit** | Leet Workflow last visit + comment popup | **Partial** — SafetyCulture fallback + Workflow scaffold (`GET /api/alert/workflow/tech-visit`) |
-| **Leet Workflow — Attendance** | Task Manager schedule + punch status on Overall + Red Flags | **Shipped** — active schedule period → operator per machine; badge (Late yellow / Absent red / **Missing** when not scheduled); tap opens MTD modal (`operator-schedule`); fleet map fetched in **batches of 24** machine IDs |
+| **Tech visit** | SafetyCulture last visit + Admin-assigned tech + on-site drink-test/presence proof | **Shipped** — SC fallback + Admin Vendon tech schedule; modal shows drink tests today + Monitor physical presence |
+| **Leet Workflow — Attendance** | Task Manager schedule + punch status on Overall + Red Flags | **Shipped** — active schedule period → operator per machine; badge (Late yellow / Absent red / **Missing** when not scheduled); tap opens MTD modal (`operator-schedule`) **plus Monitor physical location** (Attendance & Cleaning proven credit); fleet map fetched in **batches of 24** machine IDs |
 | **Leet Workflow — other** | Cleaning, GO CHECK, Call OP DM, tech visit | **GO CHECK** sends Slack DM to scheduled operator (TM Received inbox API pending). Cleaning/Call OP still scaffolded. |
 
 ---
@@ -102,6 +102,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-25 | **Inactive shade + tech-only presence:** Inactive machines stay on Red Flags/Overall (shaded + Inactive chip). Tech Visit on-site proof uses Monitor attendance only when user_type is technician. |
+| 2026-07-25 | **Downtime Today/Yest + overlap fix:** Compare baseline is period B (Today \| Yest.), overlapping OFF types merged (no 90h “today”). GO CHECK column isolated so it no longer paints over Downtime. Owner box prefers **Area owners** person, then location tag. Live Op popup keeps workflow attendance and adds **Monitor physical location**. Admin Machines: active/inactive + Vendon dropdowns for operator/tech/QA schedules; Tech visit modal shows assigned tech + drink-test/presence proof. |
 | 2026-07-25 | **QA Visit wrong SC site / PDF:** stop matching hospitals on shared department tokens alone (e.g. OPD linking Razi → Adan). Razi OPD/Old aliases split; PDF follows the correct audit. |
 | 2026-07-22 | **GO CHECK only:** restore shared Call OP/AM `linkGo` sizing; GO CHECK uses dedicated `goCheckBtn` two-line label so it no longer spills into Downtime. |
 | 2026-07-20 | **SX Loc-only + multi-product popup:** Red Flags SX cell shows location KD SX only; popup lists every Admin promoted product. Metric boxes center text. |

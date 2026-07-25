@@ -533,7 +533,7 @@ export function RedFlagsPage({
   const profilesQ = useQuery({
     queryKey: ['alert-overall-admin-profiles'],
     queryFn: () =>
-      apiGet<{ rows?: { machine_id?: string; machine_name?: string; location_owner?: string | null }[] }>(
+      apiGet<{ rows?: { machine_id?: string; machine_name?: string; location_owner?: string | null; is_active?: boolean }[] }>(
         '/api/alert/overall/admin-profiles',
       ),
     enabled: q.isFetched,
@@ -541,22 +541,44 @@ export function RedFlagsPage({
     refetchInterval: 60_000,
   });
 
+  const areaOwnerMapQ = useQuery({
+    queryKey: ['alert-area-owner-map'],
+    queryFn: () =>
+      apiGet<{ byMachineId?: Record<string, { name?: string; vendonUserId?: string }> }>(
+        '/api/alert/area-owner-map',
+      ),
+    enabled: q.isFetched,
+    staleTime: 2 * 60_000,
+    refetchInterval: 60_000,
+  });
+
   const locationOwnerLookup = useMemo(() => {
     const byId = new Map<string, string>();
     const byName = new Map<string, string>();
+    const inactiveById = new Map<string, boolean>();
     const rows = profilesQ.data?.rows;
-    if (!Array.isArray(rows)) return { byId, byName };
+    if (!Array.isArray(rows)) return { byId, byName, inactiveById };
     for (const r of rows) {
       const id = String(r.machine_id ?? '').trim();
       const owner = String(r.location_owner ?? '').trim();
       const name = String(r.machine_name ?? '').trim().toLowerCase();
       if (id && owner) byId.set(id, owner);
       if (name && owner) byName.set(name, owner);
+      if (id) {
+        const active = (r as { is_active?: boolean }).is_active;
+        inactiveById.set(id, active === false);
+      }
     }
-    return { byId, byName };
+    return { byId, byName, inactiveById };
   }, [profilesQ.data?.rows]);
 
-  function resolveLocationOwnerForRow(machId: string, machineName: string): string | null {
+  function resolveAreaOwnerPerson(machId: string): string | null {
+    const entry = areaOwnerMapQ.data?.byMachineId?.[machId];
+    const name = String(entry?.name ?? '').trim();
+    return name || null;
+  }
+
+  function resolveLocationTagForRow(machId: string, machineName: string): string | null {
     const fromId = locationOwnerLookup.byId.get(machId);
     if (fromId) return fromId;
     const key = String(machineName || '').trim().toLowerCase();
@@ -565,6 +587,11 @@ export function RedFlagsPage({
       if (fromName) return fromName;
     }
     return null;
+  }
+
+  /** Owner box: Area owners person first, then location tag (KU/MOH). */
+  function resolveLocationOwnerForRow(machId: string, machineName: string): string | null {
+    return resolveAreaOwnerPerson(machId) || resolveLocationTagForRow(machId, machineName);
   }
 
   const vendonSummaryQ = useQuery({
@@ -1507,8 +1534,10 @@ export function RedFlagsPage({
                       vendonTxIso: vendonTxIsoFromEntry(vendonLastTxQ.data?.byMachineId?.[machId]),
                       clockMs: clock.getTime(),
                       operatorActivity: operatorActivityQ.data?.byMachineId?.[machId] ?? null,
-                      areaOwnerName: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
+                      areaOwnerName: resolveAreaOwnerPerson(machId),
                       locationOwnerFull: resolveLocationOwnerForRow(machId, String(row.machineName || machId)),
+                      locationTagOwner: resolveLocationTagForRow(machId, String(row.machineName || machId)),
+                      machineInactive: locationOwnerLookup.inactiveById.get(machId) === true,
                       workflowAttendance: workflowAttendanceQ.data?.byMachineId?.[machId],
                       workflowCleaning: workflowCleaningQ.data?.byMachineId?.[machId],
                       workflowConfigured: workflowAttendanceQ.data?.configured !== false,
@@ -1564,7 +1593,7 @@ export function RedFlagsPage({
                     return (
                       <tr
                         key={machId || `${r}`}
-                        className={`${styles.tr} ${d.isNew ? styles.trNew : ''} ${d.isChanged ? styles.trUpdated : ''} ${hot ? styles.rowHot : ''} ${p2 ? styles.rowP2 : ''} ${cleaningOverdue ? styles.rowCleaningOverdue : ''}`}
+                        className={`${styles.tr} ${d.isNew ? styles.trNew : ''} ${d.isChanged ? styles.trUpdated : ''} ${hot ? styles.rowHot : ''} ${p2 ? styles.rowP2 : ''} ${cleaningOverdue ? styles.rowCleaningOverdue : ''} ${locationOwnerLookup.inactiveById.get(machId) ? 'opsRowInactive' : ''}`}
                         style={{ '--ra-rank-strength': rk.toFixed(3) } as CSSProperties}
                         tabIndex={0}
                         onPointerDownCapture={(e) => {

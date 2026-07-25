@@ -36,14 +36,15 @@ export function ownerCardFirstName(fullName: string | null | undefined): string 
 }
 
 export function resolveLocationOwnerName(
-  adminOwner: string | null | undefined,
-  vendonTagOwner?: string | null,
+  areaOwnerPerson: string | null | undefined,
+  adminOrVendonOwner?: string | null,
   amFallback?: string | null,
 ): string | null {
-  const admin = String(adminOwner ?? '').trim();
-  if (admin) return admin;
-  const vendon = String(vendonTagOwner ?? '').trim();
-  if (vendon) return vendon;
+  /** Admin → Area owners person assignment wins over location tag (KU/MOH). */
+  const area = String(areaOwnerPerson ?? '').trim();
+  if (area) return area;
+  const tag = String(adminOrVendonOwner ?? '').trim();
+  if (tag) return tag;
   const am = String(amFallback ?? '').trim();
   return am || null;
 }

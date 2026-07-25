@@ -7,6 +7,7 @@ import type { MachineAttendanceSummary } from '@/lib/leetWorkflowApi';
 import { useOperatorContact } from '@/lib/useOperatorContact';
 import { bindStopRowClick } from '@/lib/stopRowClick';
 import { attendanceBadgeForSummary } from '@/lib/operatorAttendanceUi';
+import type { OperatorActivityTimes } from '@/components/OperatorActivityCell';
 
 export function OperatorCell({
   row,
@@ -16,6 +17,7 @@ export function OperatorCell({
   attendanceSummary,
   workflowConfigured,
   workflowLoaded,
+  operatorActivity,
 }: {
   row: RedAlertRow;
   machineLabel: string;
@@ -25,6 +27,7 @@ export function OperatorCell({
   workflowConfigured?: boolean;
   /** True once workflow attendance batch has settled — avoids snapshot name flash. */
   workflowLoaded?: boolean;
+  operatorActivity?: OperatorActivityTimes | null;
 }) {
   const [open, setOpen] = useState(false);
   const machId = getMachineIdRaw(row);
@@ -118,6 +121,7 @@ export function OperatorCell({
           strikeOperatorEmail={strikeEmail}
           attendanceSummary={attendanceSummary}
           workflowConfigured={workflowConfigured}
+          operatorActivity={operatorActivity}
           channels={channels}
           apiMeta={contactQ.data}
           contactLoading={contactQ.isLoading}

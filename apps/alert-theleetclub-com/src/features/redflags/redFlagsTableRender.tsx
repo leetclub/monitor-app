@@ -118,6 +118,9 @@ export type RedFlagsRowBundle = {
   operatorActivity?: import('@/components/OperatorActivityCell').OperatorActivityTimes | null;
   areaOwnerName?: string | null;
   locationOwnerFull?: string | null;
+  locationTagOwner?: string | null;
+  /** Admin Machines → inactive (still listed, shaded). */
+  machineInactive?: boolean;
   workflowAttendance?: import('@/lib/leetWorkflowApi').MachineAttendanceSummary;
   workflowCleaning?: import('@/lib/leetWorkflowApi').CleaningWorkflowPayload | null;
   workflowConfigured?: boolean;
@@ -152,7 +155,7 @@ export function redFlagsHeaderClass(key: RedFlagsColumnKey): string {
     case 'downtime':
       return styles.thSales;
     case 'goCheck':
-      return `${styles.thAction} alertThCenter`;
+      return `${styles.thAction} alertThCenter alertThGoCheck`;
     case 'sendCredit':
     case 'vendsResolved':
     case 'testCredits':
@@ -187,6 +190,8 @@ export function redFlagsBodyCellClass(key: RedFlagsColumnKey): string {
       return `${styles.td} ${styles.tdFreqTriple}`;
     case 'downtime':
       return 'alertSalesCell';
+    case 'goCheck':
+      return `${styles.td} alertTdGoCheck`;
     case 'sendCredit':
     case 'vendsResolved':
     case 'testCredits':
@@ -430,6 +435,11 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
               P2
             </span>
           )}
+          {b.machineInactive ? (
+            <span className={`${styles.chip} opsInactiveChip`} title="Marked inactive in Alert Admin → Machines">
+              Inactive
+            </span>
+          ) : null}
           <div className={styles.machineName}>{row.machineName || machId}</div>
           <div className={styles.machineId}>#{machId}</div>
           <LastTxLines
@@ -456,6 +466,7 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           attendanceSummary={b.workflowAttendance}
           workflowConfigured={b.workflowConfigured}
           workflowLoaded={b.workflowLoaded}
+          operatorActivity={b.operatorActivity}
         />
       );
     case 'operatorActivity':
@@ -501,7 +512,8 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           todayKwd={b.targetKwd.todayKwd}
           dailyTargetKd={row.dailyTarget}
           machineName={String(row.machineName || machId)}
-          areaOwnerName={b.locationOwnerFull ?? b.areaOwnerName}
+          areaOwnerName={b.areaOwnerName}
+          vendonOwnerName={b.locationTagOwner ?? b.locationOwnerFull}
           primaryLabel={presetBoxLabels(b.comparePreset).primary}
           primaryLabelTitle={b.salesPair.primaryLabel}
           title={RED_FLAGS_COLUMNS.dailyTarget.placeholderNote}

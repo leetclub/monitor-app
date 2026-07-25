@@ -397,12 +397,27 @@
   color: #7dd3fc;
 }
 
+/* GO CHECK column — isolate from adjacent Downtime two-box stack */
+.stitchOpsTable tbody td:has(.goCheckBtn),
+.stitchOpsTable tbody td.alertTdGoCheck,
+.stitchOpsTable thead th.alertThGoCheck {
+  min-width: var(--ops-stack-box-w);
+  width: var(--ops-stack-box-w);
+  max-width: calc(var(--ops-stack-box-w) + 0.75rem);
+  overflow: hidden;
+  box-sizing: border-box;
+  vertical-align: middle;
+  text-align: center;
+}
+
 /* GO CHECK only — two-line label so it fits the action box without spilling left */
 .stitchOpsTable .goCheckBtn.linkGo {
   flex-direction: column;
   gap: 1px;
   padding: 5px 4px;
   white-space: normal;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .stitchOpsTable .goCheckBtn .goCheckBtnLine {

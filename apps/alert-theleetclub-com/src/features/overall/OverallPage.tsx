@@ -85,6 +85,7 @@ type AdminProfileRow = {
   operator_hours?: unknown;
   technician_schedule?: unknown;
   qa_schedule?: unknown;
+  is_active?: boolean;
   priority?: number | null;
   updated_at?: string | null;
 };
@@ -326,6 +327,16 @@ export function OverallPage({
     queryKey: ['alert-overall-admin-profiles'],
     queryFn: () => apiGet<AdminProfilesResponse>('/api/alert/overall/admin-profiles'),
     refetchInterval: 60_000,
+  });
+
+  const areaOwnerMapQ = useQuery({
+    queryKey: ['alert-area-owner-map'],
+    queryFn: () =>
+      apiGet<{ byMachineId?: Record<string, { name?: string; vendonUserId?: string }> }>(
+        '/api/alert/area-owner-map',
+      ),
+    refetchInterval: 60_000,
+    staleTime: 2 * 60_000,
   });
 
   const vendonSummaryQ = useQuery({
@@ -917,7 +928,8 @@ export function OverallPage({
                 const locHours = String(prof?.location_hours ?? '').trim();
                 const adminLocationOwner = String(prof?.location_owner ?? '').trim();
                 const vendonTagOwner = String(m.vendon_location_owner ?? '').trim();
-                const locationOwner = adminLocationOwner || vendonTagOwner;
+                const areaOwnerPerson = String(areaOwnerMapQ.data?.byMachineId?.[m.id]?.name ?? '').trim();
+                const locationOwner = areaOwnerPerson || adminLocationOwner || vendonTagOwner;
                 const lastCleanedIso = snap?.lastCleaningAt != null ? String(snap.lastCleaningAt).trim() : '';
                 const vendFailSummary = snapshotVendFailSummary(snap);
                 const mostIssue = snapshotMostIssue(snap);
@@ -1061,8 +1073,9 @@ export function OverallPage({
                   adminMetaHintParts,
                   locationOwner,
                   locHours,
-                  adminLocationOwner,
-                  vendonTagOwner,
+                  adminLocationOwner: areaOwnerPerson || adminLocationOwner,
+                  vendonTagOwner: areaOwnerPerson ? adminLocationOwner || vendonTagOwner : vendonTagOwner,
+                  machineInactive: prof?.is_active === false,
                 };
                 return (
                   <OverallFleetRow

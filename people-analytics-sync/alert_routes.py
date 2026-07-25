@@ -1567,7 +1567,7 @@ def register_alert_routes(app) -> None:
             if len(requested) > 500:
                 requested = requested[:500]
 
-            cache_key = f"op-act:v1:{history_days}:{','.join(sorted(requested)) if requested else 'all'}"
+            cache_key = f"op-act:v3:{history_days}:{','.join(sorted(requested)) if requested else 'all'}"
             cached = _alert_cache_get(cache_key, 90)
             if cached is not None:
                 return jsonify(cached)
@@ -1826,6 +1826,7 @@ def register_alert_routes(app) -> None:
                             "technician_schedule": r.technician_schedule,
                             "qa_schedule": r.qa_schedule,
                             "timezone": r.timezone,
+                            "is_active": bool(getattr(r, "is_active", True)),
                             "priority": priority_out,
                             "daily_sales_target": lmc_fields.get("daily_sales_target"),
                             "sx_product_name": lmc_fields.get("sx_product_name"),
@@ -1865,6 +1866,16 @@ def register_alert_routes(app) -> None:
             if qa is None:
                 qa = []
             tz_s = (body.get("timezone") or "Asia/Kuwait").strip() or "Asia/Kuwait"
+            is_active_raw = body.get("is_active")
+            if is_active_raw is None:
+                is_active_val = True
+            else:
+                is_active_val = bool(is_active_raw) if not isinstance(is_active_raw, str) else str(is_active_raw).strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "active",
+                )
             priority = int(body.get("priority") or 10)
             daily_target_raw = body.get("daily_sales_target")
             sx_product_name_raw = body.get("sx_product_name")
@@ -1883,6 +1894,7 @@ def register_alert_routes(app) -> None:
                 row.technician_schedule = tech
                 row.qa_schedule = qa
                 row.timezone = tz_s
+                row.is_active = is_active_val
                 row.updated_by = email
                 row.updated_at = now
             else:
@@ -1897,6 +1909,7 @@ def register_alert_routes(app) -> None:
                     technician_schedule=tech,
                     qa_schedule=qa,
                     timezone=tz_s,
+                    is_active=is_active_val,
                     updated_by=email,
                     updated_at=now,
                 )
@@ -2370,6 +2383,7 @@ def register_alert_routes(app) -> None:
                         "operator_hours": r.operator_hours,
                         "technician_schedule": r.technician_schedule,
                         "qa_schedule": r.qa_schedule,
+                        "is_active": bool(getattr(r, "is_active", True)),
                         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
                     }
                 )
@@ -2743,10 +2757,11 @@ def register_alert_routes(app) -> None:
     @app.route("/api/alert/overall/downtime-summary", methods=["GET", "OPTIONS"])
     def alert_overall_downtime_summary():
         """
-        Per-machine operational downtime (Today + compare primary period).
+        Per-machine operational downtime (Today + compare baseline period B).
 
-        Sums Vendon Machine OFF / KNet OFF / Vendon OFF episode overlap with each window,
-        subtracting Admin cleaning windows (same operational-time math as Red Alert).
+        Default preset today_vs_yesterday → boxes Today | Yest. (not Today | Today).
+        Sums Vendon Machine OFF / KNet OFF / Vendon OFF overlap; overlapping OFF types
+        are merged. Cleaning windows subtracted (same operational-time math as Red Alert).
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2757,7 +2772,7 @@ def register_alert_routes(app) -> None:
         preset = (request.args.get("preset") or "today_vs_yesterday").strip()
         tz = ZoneInfo("Asia/Kuwait")
         today_kw = datetime.now(tz).date()
-        (a_lo, a_hi), _b, label_a, _label_b = _alert_preset_periods(
+        _a, (b_lo, b_hi), _label_a, label_b = _alert_preset_periods(
             preset,
             today_kw,
             request.args.get("aStart"),
@@ -2767,8 +2782,8 @@ def register_alert_routes(app) -> None:
         )
 
         cache_key = (
-            f"alert-downtime:{preset}:{a_lo.isoformat()}:{a_hi.isoformat()}:"
-            f"{request.args.get('aStart') or ''}:{request.args.get('aEnd') or ''}"
+            f"alert-downtime:v2:{preset}:{b_lo.isoformat()}:{b_hi.isoformat()}:"
+            f"{request.args.get('bStart') or ''}:{request.args.get('bEnd') or ''}"
         )
         cached = _alert_cache_get(cache_key, _ALERT_DOWNTIME_CACHE_SEC)
         if cached is not None:
@@ -2778,9 +2793,9 @@ def register_alert_routes(app) -> None:
             from red_alert_routes import _fetch_events_window
 
             payload = compute_machine_downtime_summary(
-                period_lo=a_lo,
-                period_hi_excl=a_hi,
-                period_label=label_a,
+                period_lo=b_lo,
+                period_hi_excl=b_hi,
+                period_label=label_b,
                 vendon_get=_vendon_get,
                 fetch_events_window=_fetch_events_window,
             )
@@ -4379,6 +4394,61 @@ def register_alert_routes(app) -> None:
                 "Cache-Control": "private, max-age=300",
             },
         )
+
+    @app.route("/api/alert/area-owner-map", methods=["GET", "OPTIONS"])
+    def alert_area_owner_map():
+        """
+        Machine id → Area owner person name (Admin → Area owners assignment).
+        Used by Red Flags / Overall Owner box (highest priority over location tags).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        cache_key = "alert-area-owner-map:v1"
+        cached = _alert_cache_get(cache_key, 120)
+        if cached is not None:
+            return jsonify(cached)
+        db = _pa_session()
+        try:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT vendon_user_id, vendon_user_name, machine_ids, updated_at
+                    FROM target_area_owner
+                    ORDER BY updated_at DESC NULLS LAST
+                    """
+                )
+            ).fetchall()
+            by_machine: Dict[str, Dict[str, str]] = {}
+            for r in rows:
+                name = str(r.vendon_user_name or "").strip()
+                uid = str(r.vendon_user_id or "").strip()
+                if not name:
+                    continue
+                mids_raw = r.machine_ids
+                if isinstance(mids_raw, str):
+                    try:
+                        mids_raw = json.loads(mids_raw)
+                    except Exception:
+                        mids_raw = []
+                for mid in mids_raw or []:
+                    mid_s = str(mid or "").strip()
+                    if not mid_s or mid_s in by_machine:
+                        continue
+                    by_machine[mid_s] = {
+                        "vendonUserId": uid,
+                        "name": name,
+                    }
+            payload = {"ok": True, "byMachineId": by_machine}
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
+        except Exception as ex:
+            logger.exception("alert_area_owner_map")
+            return jsonify({"ok": False, "error": str(ex), "byMachineId": {}}), 500
+        finally:
+            db.close()
 
     @app.route("/api/alert/admin/vendon-users", methods=["GET", "OPTIONS"])
     def alert_admin_vendon_users():

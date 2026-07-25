@@ -122,10 +122,23 @@
   white-space: nowrap;
 }
 
+/* Two-box stacks (Sales / Downtime / …) need full stack width — a short
+   column min-width lets the stack paint over the next cell (e.g. GO CHECK).
+   Exclude Target (3-box) stacks. */
 .stitchOpsTable .opsColSales,
-.stitchOpsTable td:has(.salesStack) {
-  min-width: 6.25rem;
-  width: 6.25rem;
+.stitchOpsTable td:has(.salesStack):not(:has(.salesStackTarget)) {
+  min-width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px) + 0.5rem);
+  width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px) + 0.5rem);
+  max-width: calc(var(--ops-stack-box-w, 4.75rem) * 2 + var(--ops-stack-gap, 4px) + 0.5rem);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.stitchOpsTable td:has(.salesStackTarget) {
+  min-width: calc(var(--ops-stack-box-w, 4.75rem) * 3 + var(--ops-stack-gap, 4px) * 2 + 0.5rem);
+  width: calc(var(--ops-stack-box-w, 4.75rem) * 3 + var(--ops-stack-gap, 4px) * 2 + 0.5rem);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 @media (min-width: 768px) and (max-width: 1366px) {

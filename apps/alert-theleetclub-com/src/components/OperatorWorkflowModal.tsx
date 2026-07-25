@@ -8,6 +8,7 @@ import { fetchOperatorSchedule, workflowNotConfiguredMessage, type MachineAttend
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 import { attendanceBadgeForSummary } from '@/lib/operatorAttendanceUi';
 import type { OperatorContactChannels } from '@/lib/operatorContacts';
+import type { OperatorActivityTimes } from '@/components/OperatorActivityCell';
 
 function pillClass(tone: string | undefined): string {
   if (tone === 'present') return 'pillSuccess';
@@ -18,6 +19,11 @@ function pillClass(tone: string | undefined): string {
   return 'opsCellMuted';
 }
 
+function formatIsoShort(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return String(iso).replace('T', ' ').replace('Z', '').slice(0, 16);
+}
+
 export function OperatorWorkflowModal({
   operatorName,
   machineLabel,
@@ -25,6 +31,7 @@ export function OperatorWorkflowModal({
   strikeOperatorEmail,
   attendanceSummary,
   workflowConfigured,
+  operatorActivity,
   channels,
   contactLoading,
   slackEmailMap,
@@ -37,6 +44,8 @@ export function OperatorWorkflowModal({
   strikeOperatorEmail?: string | null;
   attendanceSummary?: MachineAttendanceSummary;
   workflowConfigured?: boolean;
+  /** Monitor Attendance physical presence (proven remote credit + power). */
+  operatorActivity?: OperatorActivityTimes | null;
   channels: OperatorContactChannels;
   apiMeta?: unknown;
   contactLoading?: boolean;
@@ -72,6 +81,9 @@ export function OperatorWorkflowModal({
     schedule?.attendanceStatusLabel ||
     attendanceSummary?.attendanceStatusLabel ||
     (attendanceSummary?.attendanceStatus === 'not_scheduled' ? 'Missing' : null);
+
+  const physical = operatorActivity?.physicalAttendance;
+  const physicalAt = physical?.at || operatorActivity?.remoteCreditAt || null;
 
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
@@ -156,6 +168,34 @@ export function OperatorWorkflowModal({
             </p>
           ) : (
             <p className="salesHistoryEmpty">No schedule for this machine today</p>
+          )}
+        </section>
+
+        <section className="operatorWorkflowSection">
+          <h3 className="salesHistoryCompareTitle">Monitor · physical location</h3>
+          <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
+            Proven presence from Attendance &amp; Cleaning (successful remote credit + power interrupts). Separate from
+            Task Manager clock-in above.
+          </p>
+          {physicalAt ? (
+            <div className="alertModalContentReveal">
+              <p className="salesHistoryNote">
+                Status:{' '}
+                <span className={physical?.proven !== false ? 'pillSuccess' : 'pillWarn'}>
+                  {physical?.proven !== false ? 'Proven on site' : 'Unconfirmed'}
+                </span>
+                {physical?.isToday ? ' · today' : physical?.date ? ` · ${physical.date}` : ''}
+              </p>
+              {physical?.userName ? (
+                <p className="salesHistoryNote">
+                  Person: {physical.userName}
+                  {physical.userType ? ` (${physical.userType})` : ''}
+                </p>
+              ) : null}
+              <p className="salesHistoryNote">Proven at: {formatIsoShort(physicalAt)}</p>
+            </div>
+          ) : (
+            <p className="salesHistoryEmpty">No proven physical attendance in the recent Attendance cache</p>
           )}
         </section>
       </div>

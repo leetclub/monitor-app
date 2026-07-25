@@ -1,7 +1,7 @@
 import { formatDowntimeSec, type DowntimeMachineRow } from '@/lib/downtimeDisplay';
 
 /**
- * Two-box downtime stack: Today + compare primary period (cumulative).
+ * Two-box downtime stack: Today + compare baseline (e.g. Yesterday).
  * Reuses salesStack layout so cell height matches Sales / Target columns.
  */
 export function DowntimeStack({

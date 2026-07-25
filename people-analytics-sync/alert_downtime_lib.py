@@ -46,6 +46,23 @@ def _kuwait_day_start_ts(d: date) -> int:
     return int(datetime(d.year, d.month, d.day, tzinfo=tz).timestamp())
 
 
+def _merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    """Merge overlapping/adjacent [lo, hi) intervals so concurrent OFF types are not double-counted."""
+    if not intervals:
+        return []
+    ordered = sorted((int(a), int(b)) for a, b in intervals if a < b)
+    if not ordered:
+        return []
+    merged: List[Tuple[int, int]] = [ordered[0]]
+    for lo, hi in ordered[1:]:
+        prev_lo, prev_hi = merged[-1]
+        if lo <= prev_hi:
+            merged[-1] = (prev_lo, max(prev_hi, hi))
+        else:
+            merged.append((lo, hi))
+    return merged
+
+
 def _sum_off_operational_seconds(
     off_events: List[Tuple[int, Optional[int]]],
     win_lo: int,
@@ -53,10 +70,14 @@ def _sum_off_operational_seconds(
     now_ts: int,
     ctx: Any,
 ) -> int:
-    """Sum operational OFF seconds overlapping [win_lo, win_hi_excl)."""
+    """Sum operational OFF seconds overlapping [win_lo, win_hi_excl).
+
+    Overlapping Machine OFF / KNet OFF / Vendon OFF episodes are merged first so
+    totals cannot exceed the window (e.g. ~90h “today” from concurrent types).
+    """
     if not off_events or win_lo >= win_hi_excl:
         return 0
-    total = 0
+    clips: List[Tuple[int, int]] = []
     for rec, res_i in off_events:
         if rec <= 0:
             continue
@@ -65,7 +86,14 @@ def _sum_off_operational_seconds(
         clip_hi = min(int(end_eff), int(win_hi_excl))
         if clip_lo >= clip_hi:
             continue
+        clips.append((clip_lo, clip_hi))
+    total = 0
+    for clip_lo, clip_hi in _merge_intervals(clips):
         total += int(operational_gap_seconds(clip_lo, clip_hi, ctx))
+    # Hard cap: never report more than the wall window (minus cleaning already applied per segment).
+    max_wall = max(0, int(win_hi_excl) - int(win_lo))
+    if total > max_wall:
+        total = max_wall
     return total
 
 
@@ -157,8 +185,8 @@ def compute_machine_downtime_summary(
     Returns payload for GET /api/alert/overall/downtime-summary.
 
     todaySec  — operational OFF seconds for Kuwait today through now
-    periodSec — operational OFF seconds for the compare primary window through now
-                (clipped if the window includes today)
+    periodSec — operational OFF seconds for the compare baseline window (period B)
+                e.g. Yesterday on today_vs_yesterday — clipped at now if open-ended
     """
     tz = ZoneInfo("Asia/Kuwait")
     now = datetime.now(timezone.utc)
@@ -169,6 +197,7 @@ def compute_machine_downtime_summary(
     today_hi_ts = now_ts
 
     period_lo_ts = _kuwait_day_start_ts(period_lo)
+    # Closed calendar days use exclusive end; if baseline includes “now”, clip.
     period_hi_ts = min(_kuwait_day_start_ts(period_hi_excl), now_ts)
     if period_hi_ts < period_lo_ts:
         period_hi_ts = period_lo_ts

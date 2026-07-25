@@ -8,7 +8,17 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 export type TimeWindow = { start: string; end: string };
 
-export type OperatorBlock = { name: string; windows: TimeWindow[] };
+/** One technician or QA officer; multiple rows allowed. Prefer Vendon user pick-list. */
+export type StaffVisitRow = {
+  name: string;
+  /** Vendon user id when picked from Admin roster */
+  vendonUserId?: string;
+  /** Weekday indices 0–6 (Sun–Sat) */
+  days: number[];
+  windows: TimeWindow[];
+};
+
+export type OperatorBlock = { name: string; vendonUserId?: string; windows: TimeWindow[] };
 
 export type OperatingDays =
   | { preset: 'all_week' }
@@ -24,13 +34,7 @@ type MachineRow = {
   vendon_tag_source?: string | null;
 };
 
-/** One technician or QA officer; multiple rows allowed. `name` is one string: name + what they are responsible for. */
-export type StaffVisitRow = {
-  name: string;
-  /** Weekday indices 0–6 (Sun–Sat) */
-  days: number[];
-  windows: TimeWindow[];
-};
+type VendonUser = { id: string; name: string; email?: string | null; type?: string | null };
 
 type MachinesApiResponse = {
   machines: MachineRow[];
@@ -49,6 +53,7 @@ type ProfileRow = {
   technician_schedule: unknown[];
   qa_schedule: unknown[];
   timezone: string;
+  is_active?: boolean;
   /** From linked Red Alert cleaning schedule row (higher = wins on overlap) */
   priority?: number;
   updated_at?: string | null;
@@ -126,7 +131,12 @@ function staffScheduleFromSavedUnknown(raw: unknown): StaffVisitRow[] {
       let windows = parseWindowsFromObject(o);
       if (!windows.length) windows = [{ start: '', end: '' }];
       if (name || days.length || windows.some((w) => w.start && w.end)) {
-        out.push({ name, days, windows });
+        out.push({
+          name,
+          vendonUserId: nonEmptyString(o.vendon_user_id ?? o.vendonUserId ?? '') || undefined,
+          days,
+          windows,
+        });
       }
     }
   }
@@ -134,7 +144,7 @@ function staffScheduleFromSavedUnknown(raw: unknown): StaffVisitRow[] {
 }
 
 function emptyOperator(): OperatorBlock {
-  return { name: '', windows: [{ start: '09:00', end: '17:00' }] };
+  return { name: '', vendonUserId: undefined, windows: [{ start: '09:00', end: '17:00' }] };
 }
 
 function normalizeOperatingDays(raw: unknown): OperatingDays {
@@ -149,7 +159,7 @@ function normalizeOperatingDays(raw: unknown): OperatingDays {
 }
 
 function emptyStaffVisitRow(): StaffVisitRow {
-  return { name: '', days: [], windows: [{ start: '', end: '' }] };
+  return { name: '', vendonUserId: undefined, days: [], windows: [{ start: '', end: '' }] };
 }
 
 /** Load saved schedule array (objects or legacy shapes) into editable rows. */
@@ -165,6 +175,7 @@ function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
       const wins = r.windows.filter((w) => String(w.start ?? '').trim() && String(w.end ?? '').trim());
       return {
         name: r.name.trim(),
+        vendon_user_id: r.vendonUserId?.trim() || null,
         days: [...r.days].sort((a, b) => a - b),
         windows: wins.map((w) => ({
           start: String(w.start ?? '').trim(),
@@ -187,10 +198,16 @@ function StaffVisitScheduleRows(props: {
   variant: 'technician' | 'qa';
   rows: StaffVisitRow[];
   setRows: Dispatch<SetStateAction<StaffVisitRow[]>>;
+  vendonUsers: VendonUser[];
 }) {
-  const { variant, rows, setRows } = props;
-  const nameFieldCaption = variant === 'technician' ? 'Name of Tech Responsible' : 'Name of QA Responsible';
+  const { variant, rows, setRows, vendonUsers } = props;
+  const nameFieldCaption = variant === 'technician' ? 'Technician (Vendon)' : 'QA Officer (Vendon)';
   const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
+  const filteredUsers = useMemo(() => {
+    const q = variant === 'technician' ? /tech|service|maintain/i : /qa|quality|qc|officer/i;
+    const typed = vendonUsers.filter((u) => q.test(String(u.type || '')));
+    return typed.length ? typed : vendonUsers;
+  }, [vendonUsers, variant]);
 
   const toggleDay = (rowIdx: number, d: number) => {
     setRows((prev) => {
@@ -210,17 +227,31 @@ function StaffVisitScheduleRows(props: {
           <div className="adminFieldBlock">
             <span className="adminFieldCaption">{nameFieldCaption}</span>
             <div className="adminStaffInputRow">
-              <input
+              <select
                 className="adminInputFluid"
-                value={row.name}
+                value={row.vendonUserId || ''}
+                title={nameFieldCaption}
                 onChange={(e) => {
+                  const uid = e.target.value;
+                  const user = filteredUsers.find((u) => u.id === uid) || vendonUsers.find((u) => u.id === uid);
                   const next = [...rows];
-                  next[idx] = { ...next[idx], name: e.target.value };
+                  next[idx] = {
+                    ...next[idx],
+                    vendonUserId: uid || undefined,
+                    name: user?.name || (uid ? next[idx].name : ''),
+                  };
                   setRows(next);
                 }}
-                autoComplete="off"
                 aria-label={nameFieldCaption}
-              />
+              >
+                <option value="">Choose from Vendon…</option>
+                {filteredUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                    {u.type ? ` (${u.type})` : ''}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="danger adminStaffRemoveCompact"
@@ -234,10 +265,29 @@ function StaffVisitScheduleRows(props: {
                 Remove
               </button>
             </div>
+            {!row.vendonUserId ? (
+              <input
+                className="adminInputFluid"
+                style={{ marginTop: 6 }}
+                value={row.name}
+                onChange={(e) => {
+                  const next = [...rows];
+                  next[idx] = { ...next[idx], name: e.target.value, vendonUserId: undefined };
+                  setRows(next);
+                }}
+                placeholder="Or type a name"
+                autoComplete="off"
+                aria-label={`${nameFieldCaption} free text`}
+              />
+            ) : (
+              <p className="muted" style={{ fontSize: '0.78rem', margin: '6px 0 0' }}>
+                Assigned: <strong>{row.name || '—'}</strong>
+              </p>
+            )}
           </div>
           <div style={{ marginBottom: 10 }}>
             <div className="muted" style={{ fontSize: '0.78rem', marginBottom: 8 }}>
-              Visit days
+              Visit days / work schedule
             </div>
             <div className="adminVisitDayStrip">
               {DAY_LABELS.map((lab, d) => (
@@ -337,10 +387,15 @@ export function MachineProfileSection() {
     queryKey: ['alert-machine-profiles'],
     queryFn: () => apiGet<{ rows: ProfileRow[] }>('/api/alert/admin/machine-profiles'),
   });
+  const vendonUsersQ = useQuery({
+    queryKey: ['alert-admin-vendon-users'],
+    queryFn: () => apiGet<{ users: VendonUser[] }>('/api/alert/admin/vendon-users'),
+  });
 
   const [machineId, setMachineId] = useState('');
   const [locationOwner, setLocationOwner] = useState('');
   const [locationHours, setLocationHours] = useState('');
+  const [isActive, setIsActive] = useState(true);
   const [opPreset, setOpPreset] = useState<'all_week' | 'weekends_off' | 'custom'>('all_week');
   const [customDays, setCustomDays] = useState<number[]>([]);
   const [cleaningWindows, setCleaningWindows] = useState<TimeWindow[]>([{ start: '14:00', end: '15:00' }]);
@@ -352,6 +407,11 @@ export function MachineProfileSection() {
   const [formErr, setFormErr] = useState<string | null>(null);
 
   const machines = machinesQ.data?.machines ?? [];
+  const vendonUsers = vendonUsersQ.data?.users ?? [];
+  const operatorUsers = useMemo(() => {
+    const typed = vendonUsers.filter((u) => /operat|route|driver|staff/i.test(String(u.type || '')));
+    return typed.length ? typed : vendonUsers;
+  }, [vendonUsers]);
   const ownerOptions = machinesQ.data?.location_owner_options ?? [];
   const ownerOptionsMerged = useMemo(() => {
     const set = new Set<string>([...LOCATION_OWNER_SUGGESTIONS, ...ownerOptions]);
@@ -372,6 +432,7 @@ export function MachineProfileSection() {
     const vendonTag = (m?.vendon_location_owner ?? '').trim();
     setLocationOwner(vendonTag || (p.location_owner ?? '').trim());
     setLocationHours(p.location_hours ?? '');
+    setIsActive(p.is_active !== false);
     const od = normalizeOperatingDays(p.operating_days);
     setOpPreset(od.preset === 'custom' ? 'custom' : od.preset);
     setCustomDays(od.preset === 'custom' ? od.days : []);
@@ -380,8 +441,9 @@ export function MachineProfileSection() {
     const oh = Array.isArray(p.operator_hours) ? p.operator_hours : [];
     setOperators(
       oh.length
-        ? oh.map((x: OperatorBlock) => ({
+        ? oh.map((x: OperatorBlock & { vendon_user_id?: string }) => ({
             name: String(x.name ?? ''),
+            vendonUserId: String(x.vendonUserId ?? x.vendon_user_id ?? '').trim() || undefined,
             windows: Array.isArray(x.windows) && x.windows.length ? x.windows : [{ start: '09:00', end: '17:00' }],
           }))
         : [emptyOperator()],
@@ -399,6 +461,7 @@ export function MachineProfileSection() {
     setMachineId('');
     setLocationOwner('');
     setLocationHours('');
+    setIsActive(true);
     setOpPreset('all_week');
     setCustomDays([]);
     setCleaningWindows([{ start: '14:00', end: '15:00' }]);
@@ -417,6 +480,7 @@ export function MachineProfileSection() {
       setMachineId(id);
       setLocationOwner((m?.vendon_location_owner ?? '').trim());
       setLocationHours('');
+      setIsActive(true);
       setOpPreset('all_week');
       setCustomDays([]);
       setCleaningWindows([{ start: '14:00', end: '15:00' }]);
@@ -444,11 +508,13 @@ export function MachineProfileSection() {
         machine_name: machineName || null,
         location_owner: (vendonLocationTag || locationOwner).trim() || null,
         location_hours: locationHours || null,
+        is_active: isActive,
         operating_days,
         cleaning_windows: cleaningWindows.filter((w) => w.start && w.end),
         operator_hours: operators
           .map((o) => ({
             name: o.name.trim(),
+            vendon_user_id: o.vendonUserId?.trim() || null,
             windows: o.windows.filter((w) => w.start && w.end),
           }))
           .filter((o) => o.name || o.windows.length > 0),
@@ -563,6 +629,17 @@ export function MachineProfileSection() {
                 <option value="24">24 hrs</option>
               </select>
             </div>
+            <div className="adminFieldCell">
+              <span className="adminFieldCaption">Machine status</span>
+              <select
+                title="Active / inactive override for Alert boards"
+                value={isActive ? 'active' : 'inactive'}
+                onChange={(e) => setIsActive(e.target.value === 'active')}
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
           </div>
 
           {machineId && vendonLocationTag ? (
@@ -664,15 +741,42 @@ export function MachineProfileSection() {
           {operators.map((op, oi) => (
             <div key={oi} className="adminOperatorCard">
               <div className="adminFieldCell adminOperatorNameField">
-                <span className="adminFieldCaption">Name</span>
-                <input
-                  value={op.name}
+                <span className="adminFieldCaption">Operator (Vendon)</span>
+                <select
+                  value={op.vendonUserId || ''}
+                  title="Operator from Vendon roster"
                   onChange={(e) => {
+                    const uid = e.target.value;
+                    const user = operatorUsers.find((u) => u.id === uid) || vendonUsers.find((u) => u.id === uid);
                     const next = [...operators];
-                    next[oi] = { ...next[oi], name: e.target.value };
+                    next[oi] = {
+                      ...next[oi],
+                      vendonUserId: uid || undefined,
+                      name: user?.name || (uid ? next[oi].name : ''),
+                    };
                     setOperators(next);
                   }}
-                />
+                >
+                  <option value="">Choose from Vendon…</option>
+                  {operatorUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                      {u.type ? ` (${u.type})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {!op.vendonUserId ? (
+                  <input
+                    style={{ marginTop: 6 }}
+                    value={op.name}
+                    onChange={(e) => {
+                      const next = [...operators];
+                      next[oi] = { ...next[oi], name: e.target.value, vendonUserId: undefined };
+                      setOperators(next);
+                    }}
+                    placeholder="Or type a name"
+                  />
+                ) : null}
               </div>
               {op.windows.map((w, wi) => (
                 <div key={wi} className="adminTimePairRow" style={{ marginTop: 4 }}>
@@ -752,8 +856,13 @@ export function MachineProfileSection() {
           <p className="muted adminTechQaIntro">
             Each block below: one text field for tech or QA (single line), then visit days and hours.
           </p>
-          <StaffVisitScheduleRows variant="technician" rows={technicianRows} setRows={setTechnicianRows} />
-          <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} />
+          <StaffVisitScheduleRows
+            variant="technician"
+            rows={technicianRows}
+            setRows={setTechnicianRows}
+            vendonUsers={vendonUsers}
+          />
+          <StaffVisitScheduleRows variant="qa" rows={qaRows} setRows={setQaRows} vendonUsers={vendonUsers} />
         </details>
 
         <details className="adminDetails">

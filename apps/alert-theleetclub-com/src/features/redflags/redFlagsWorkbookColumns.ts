@@ -126,9 +126,9 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   downtime: {
     title: 'Downtime',
-    sub: 'Today · period',
+    sub: 'Today · compare',
     placeholderNote:
-      'Operational OFF time (Machine OFF / KNet OFF / Vendon OFF) with Admin cleaning windows subtracted. Top = Kuwait today; bottom = selected compare period (primary window).',
+      'Operational OFF time (Machine OFF / KNet OFF / Vendon OFF) with Admin cleaning windows subtracted. Overlapping OFF types are merged. Top = Kuwait today; bottom = compare baseline (e.g. Yesterday on Today vs Yesterday).',
   },
   goCheck: {
     title: 'GO CHECK',

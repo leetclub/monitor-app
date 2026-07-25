@@ -120,6 +120,8 @@ export type FleetRowBundle = {
   locHours: string;
   adminLocationOwner: string;
   vendonTagOwner: string;
+  /** Admin Machines → inactive (still listed, shaded). */
+  machineInactive?: boolean;
 };
 
 function formatPct(pct: number): string {
@@ -217,7 +219,12 @@ export function OverallFleetRow({
   onSalesDetail?: (b: FleetRowBundle) => void;
 }) {
   const b = bundle;
-  const rowClass = b.cleaningOverdue15h ? rfStyles.rowCleaningOverdue : undefined;
+  const rowClass = [
+    b.cleaningOverdue15h ? rfStyles.rowCleaningOverdue : '',
+    b.machineInactive ? 'opsRowInactive' : '',
+  ]
+    .filter(Boolean)
+    .join(' ') || undefined;
   return (
     <tr className={rowClass}>
       {columns.map((key) => (
@@ -247,6 +254,11 @@ function renderOverallColumn(
     case 'vendingMachine':
       return (
         <>
+          {b.machineInactive ? (
+            <span className={`${rfStyles.chip} opsInactiveChip`} title="Marked inactive in Alert Admin → Machines">
+              Inactive
+            </span>
+          ) : null}
           <div className={rfStyles.machineName}>{b.m.name}</div>
           <div className={rfStyles.machineId}>#{b.m.id}</div>
         </>
@@ -260,6 +272,7 @@ function renderOverallColumn(
           attendanceSummary={b.workflowAttendance}
           workflowConfigured={b.workflowConfigured}
           workflowLoaded={b.workflowLoaded}
+          operatorActivity={b.operatorActivity}
         />
       );
     }

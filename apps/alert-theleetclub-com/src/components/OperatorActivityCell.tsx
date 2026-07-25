@@ -6,9 +6,30 @@ export type OperatorActivityTimes = {
   remoteCreditAt?: string | null;
   doorOpenAt?: string | null;
   latestAt?: string | null;
+  physicalAttendance?: {
+    at?: string | null;
+    userName?: string | null;
+    userType?: string | null;
+    date?: string | null;
+    proven?: boolean;
+    status?: string | null;
+    isToday?: boolean;
+  } | null;
+  /** Monitor proven presence for technician user_type only (Tech Visit). */
+  technicianPhysicalAttendance?: {
+    at?: string | null;
+    userName?: string | null;
+    userType?: string | null;
+    date?: string | null;
+    proven?: boolean;
+    status?: string | null;
+    isToday?: boolean;
+  } | null;
 };
 
-const SOURCES: Array<{ key: keyof OperatorActivityTimes; label: string; short: string }> = [
+type ActivityStampKey = 'cleaningAt' | 'refillAt' | 'remoteCreditAt' | 'doorOpenAt';
+
+const SOURCES: Array<{ key: ActivityStampKey; label: string; short: string }> = [
   { key: 'cleaningAt', label: 'Cleaning', short: 'Clean' },
   { key: 'refillAt', label: 'Refill', short: 'Refill' },
   { key: 'remoteCreditAt', label: 'Remote credit', short: 'Credit' },

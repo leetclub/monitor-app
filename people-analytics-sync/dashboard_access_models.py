@@ -85,6 +85,7 @@ class AlertMachineProfile(Base):
     technician_schedule = Column(JSONB, nullable=False)
     qa_schedule = Column(JSONB, nullable=False)
     timezone = Column(Text, nullable=False, default="Asia/Kuwait")
+    is_active = Column(Boolean, nullable=False, default=True)
     updated_by = Column(Text, nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
