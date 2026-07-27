@@ -510,14 +510,14 @@ export function OverallPage({
   });
 
   const operatorActivityQ = useQuery({
-    queryKey: ['alert-operator-activity', fleetMachineIdsKey, 21],
+    queryKey: ['alert-operator-activity', fleetMachineIdsKey, 14],
     queryFn: () =>
       apiGet<{
         byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
       }>(
         fleetMachineIdsKey
-          ? `/api/alert/operator-activity?machines=${encodeURIComponent(fleetMachineIdsKey)}&days=21`
-          : '/api/alert/operator-activity?days=21',
+          ? `/api/alert/operator-activity?machines=${encodeURIComponent(fleetMachineIdsKey)}&days=14`
+          : '/api/alert/operator-activity?days=14',
       ),
     enabled: fleetMachines.length > 0,
     staleTime: 90_000,
@@ -1066,7 +1066,8 @@ export function OverallPage({
                   techVisit,
                   qaFindings,
                   qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
-                  qaError: qaSummaryQ.data?.error || qaFindingsQ.data?.error || null,
+                  // Findings Slack errors must not blank QA/Tech visit cells.
+                  qaError: qaSummaryQ.data?.error || null,
                   operatorActivity: operatorActivityQ.data?.byMachineId?.[m.id] ?? null,
                   comparePreset: compare.preset,
                   snapTime: snapQ.data?.generatedAt ?? snapQ.data?.cacheGeneratedAt ?? null,

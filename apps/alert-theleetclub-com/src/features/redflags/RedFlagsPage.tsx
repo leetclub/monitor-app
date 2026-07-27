@@ -495,18 +495,18 @@ export function RedFlagsPage({
   });
 
   const operatorActivityQ = useQuery({
-    queryKey: ['alert-operator-activity', creditsMachineIdsKey, 21],
+    queryKey: ['alert-operator-activity', creditsMachineIdsKey, 14],
     queryFn: async () => {
       const base = '/api/alert/operator-activity';
       const ids = creditsMachineIdsKey.split(',').map((s) => s.trim()).filter(Boolean);
       if (!ids.length) {
         return apiGet<{
           byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
-        }>(`${base}?days=21`);
+        }>(`${base}?days=14`);
       }
       return apiGet<{
         byMachineId?: Record<string, import('@/components/OperatorActivityCell').OperatorActivityTimes>;
-      }>(`${base}?machines=${encodeURIComponent(ids.join(','))}&days=21`);
+      }>(`${base}?machines=${encodeURIComponent(ids.join(','))}&days=14`);
     },
     enabled: q.isFetched && Boolean(creditsMachineIdsKey),
     refetchInterval: 3 * 60_000,
@@ -1536,7 +1536,8 @@ export function RedFlagsPage({
                       techVisit,
                       qaFindings,
                       qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
-                      qaError: qaSummaryQ.data?.error || qaFindingsQ.data?.error || null,
+                      // Findings Slack errors must not blank QA/Tech visit cells.
+                      qaError: qaSummaryQ.data?.error || null,
                       goUrl,
                       slackEmailMap: slackContact.map,
                       slackTeamId: slackContact.team,

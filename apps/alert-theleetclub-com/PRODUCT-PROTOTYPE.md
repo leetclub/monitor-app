@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-27 | **QA/Tech columns blanked by Slack findings error:** Visit cells no longer show `!` when Slack issues-list fails but SafetyCulture data exists. Softened name matching; fleet operator-activity back to 14d (modals still 21d). |
 | 2026-07-27 | **Admin Machines tech/QA save:** Vendon dropdowns always include full roster (suggested types + All users); keep assigned id on save even without days/hours; SQLAlchemy JSONB flag_modified so technician/QA/operator schedules persist. Tech Visit drink tests remain machine-level; on-site proof matches technician type or Admin-assigned name. |
 | 2026-07-26 | **Downtime Yest. visible + inactive schedule + attendance:** Fixed stack/GO CHECK CSS clipping the Downtime Yest. box. Inactive rows use stronger amber hatch; Admin Machines: always inactive **or** weekdays/range/extra dates (Kuwait). Live Op / Tech Visit read 21d Attendance cache with modal self-fetch; tech proof matches technician type **or** Admin-assigned tech name. |
 | 2026-07-25 | **Inactive shade + tech-only presence:** Inactive machines stay on Red Flags/Overall (shaded + Inactive chip). Tech Visit on-site proof uses Monitor attendance only when user_type is technician. |

@@ -98,12 +98,12 @@ def qa_findings_payload() -> Dict[str, Any]:
         payload = {
             "findings": [],
             "total": 0,
-            "error": "list_id_not_configured",
+            "warning": "list_id_not_configured",
             "source": "slack",
         }
         return payload
     if not _TOKEN:
-        payload = {"findings": [], "total": 0, "error": "slack_token_missing", "source": "slack"}
+        payload = {"findings": [], "total": 0, "warning": "slack_token_missing", "source": "slack"}
         return payload
     raw_items = _fetch_list_items()
     findings: List[Dict[str, str]] = []
@@ -115,6 +115,9 @@ def qa_findings_payload() -> Dict[str, Any]:
         norm = _normalize_finding(row)
         if norm:
             findings.append(norm)
-    payload = {"findings": findings, "total": len(findings), "source": "slack"}
+    payload: Dict[str, Any] = {"findings": findings, "total": len(findings), "source": "slack"}
+    if not findings and _LIST_ID:
+        # Slack list missing/empty must not look like a hard API failure on Alert boards.
+        payload["warning"] = "slack_list_empty_or_unavailable"
     _CACHE[cache_key] = (time.time(), payload)
     return payload

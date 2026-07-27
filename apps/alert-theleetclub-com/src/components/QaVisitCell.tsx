@@ -39,7 +39,6 @@ export function QaVisitCell({
   const [open, setOpen] = useState(false);
 
   if (loading) return <span className="qaVisitCellMuted">…</span>;
-  if (error) return <span className="qaVisitCellMuted" title={error}>!</span>;
 
   const hasVisit =
     visit &&
@@ -47,6 +46,12 @@ export function QaVisitCell({
       visit.lastVisitDate ||
       visit.daysSinceVisit != null ||
       (visit.adminSummaryMtd ?? 0) > 0);
+
+  // Never blank the whole column for a secondary error (e.g. Slack findings list down)
+  // when SafetyCulture visit data is present.
+  if (error && !hasVisit) {
+    return <span className="qaVisitCellMuted" title={error}>!</span>;
+  }
 
   if (!hasVisit && mode === 'tech' && machineId) {
     return (

@@ -522,6 +522,15 @@
 }
 
 /* QA / Tech visit button */
+.stitchOpsTable tbody td:has(.qaVisitCellBtn),
+.stitchOpsTable tbody td:has(.qaVisitCellMuted) {
+  min-width: calc(var(--ops-stack-box-w) + 0.35rem);
+  width: calc(var(--ops-stack-box-w) + 0.35rem);
+  box-sizing: border-box;
+  vertical-align: middle;
+  text-align: center;
+}
+
 .stitchOpsTable .qaVisitCellBtn {
   display: inline-flex;
   flex-direction: column;

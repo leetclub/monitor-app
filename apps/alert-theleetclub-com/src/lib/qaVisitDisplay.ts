@@ -118,10 +118,14 @@ function visitForMachineName(
 
   const consider = (row: QaVisitRow | undefined, priority: number) => {
     if (!row) return;
-    if (!row.auditId) return;
     const lat = String(row.lastVisitAt || row.lastVisitDate || '');
-    if (!lat) return;
-    candidates.push({ priority, at: lat, row });
+    if (!lat && row.auditId == null && (row.daysSinceVisit == null || !Number.isFinite(row.daysSinceVisit))) {
+      return;
+    }
+    // Prefer rows with a timestamp; auditId alone is enough for ranking key.
+    const at = lat || String(row.auditId || '');
+    if (!at && row.daysSinceVisit == null) return;
+    candidates.push({ priority, at: at || `d${row.daysSinceVisit}`, row });
   };
 
   consider(byLocationKey[needle], 100);
@@ -133,6 +137,12 @@ function visitForMachineName(
     const locKey = normKey(loc);
     if (aliasKeys.has(nk) || aliasKeys.has(locKey) || qaMachineNamesMatch(machineName, loc)) {
       consider(row, 50);
+      continue;
+    }
+    // Soft fallback (backend parity): distinctive substring overlap when names share a site token.
+    if (needle.length >= 4 && (needle.includes(nk) || nk.includes(needle) || locKey.includes(needle) || needle.includes(locKey))) {
+      const shorter = Math.min(needle.length, Math.max(nk.length, locKey.length));
+      if (shorter >= 4) consider(row, 35);
     }
   }
   if (!candidates.length) return null;
