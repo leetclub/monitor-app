@@ -179,9 +179,10 @@ function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
   return rows
     .map((r) => {
       const wins = r.windows.filter((w) => String(w.start ?? '').trim() && String(w.end ?? '').trim());
+      const vendon_user_id = r.vendonUserId?.trim() || null;
       return {
         name: r.name.trim(),
-        vendon_user_id: r.vendonUserId?.trim() || null,
+        vendon_user_id,
         days: [...r.days].sort((a, b) => a - b),
         windows: wins.map((w) => ({
           start: String(w.start ?? '').trim(),
@@ -189,7 +190,34 @@ function unknownArrayFromStaffRows(rows: StaffVisitRow[]): unknown[] {
         })),
       };
     })
-    .filter((r) => r.name || r.days.length > 0 || r.windows.length > 0);
+    // Keep Vendon picks even when days/hours were left blank (name may still be empty briefly).
+    .filter((r) => r.name || r.vendon_user_id || r.days.length > 0 || r.windows.length > 0);
+}
+
+function splitVendonUsersForStaff(
+  all: VendonUser[],
+  preferredRe: RegExp,
+  keepIds: string[],
+): { preferred: VendonUser[]; others: VendonUser[] } {
+  const preferred: VendonUser[] = [];
+  const others: VendonUser[] = [];
+  const seen = new Set<string>();
+  for (const u of all) {
+    const id = String(u.id || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    if (preferredRe.test(String(u.type || '')) || keepIds.includes(id)) preferred.push(u);
+    else others.push(u);
+  }
+  // Any keepIds not in catalog (stale) stay as preferred stubs so <select> can show the saved id.
+  for (const id of keepIds) {
+    if (seen.has(id)) continue;
+    preferred.push({ id, name: `Saved #${id}`, type: null });
+    seen.add(id);
+  }
+  preferred.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  others.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return { preferred, others };
 }
 
 function visitDaysLabel(days: number[]): string {
@@ -209,11 +237,19 @@ function StaffVisitScheduleRows(props: {
   const { variant, rows, setRows, vendonUsers } = props;
   const nameFieldCaption = variant === 'technician' ? 'Technician (Vendon)' : 'QA Officer (Vendon)';
   const sectionTitle = variant === 'technician' ? 'Technician' : 'QA Officer';
-  const filteredUsers = useMemo(() => {
-    const q = variant === 'technician' ? /tech|service|maintain/i : /qa|quality|qc|officer/i;
-    const typed = vendonUsers.filter((u) => q.test(String(u.type || '')));
-    return typed.length ? typed : vendonUsers;
-  }, [vendonUsers, variant]);
+  const keepIds = useMemo(
+    () => rows.map((r) => String(r.vendonUserId || '').trim()).filter(Boolean),
+    [rows],
+  );
+  const { preferred, others } = useMemo(
+    () =>
+      splitVendonUsersForStaff(
+        vendonUsers,
+        variant === 'technician' ? /tech|service|maintain/i : /qa|quality|qc|officer/i,
+        keepIds,
+      ),
+    [vendonUsers, variant, keepIds],
+  );
 
   const toggleDay = (rowIdx: number, d: number) => {
     setRows((prev) => {
@@ -239,24 +275,41 @@ function StaffVisitScheduleRows(props: {
                 title={nameFieldCaption}
                 onChange={(e) => {
                   const uid = e.target.value;
-                  const user = filteredUsers.find((u) => u.id === uid) || vendonUsers.find((u) => u.id === uid);
+                  const user =
+                    preferred.find((u) => u.id === uid) ||
+                    others.find((u) => u.id === uid) ||
+                    vendonUsers.find((u) => u.id === uid);
                   const next = [...rows];
                   next[idx] = {
                     ...next[idx],
                     vendonUserId: uid || undefined,
-                    name: user?.name || (uid ? next[idx].name : ''),
+                    name: (user?.name || '').trim() || (uid ? next[idx].name : ''),
                   };
                   setRows(next);
                 }}
                 aria-label={nameFieldCaption}
               >
                 <option value="">Choose from Vendon…</option>
-                {filteredUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                    {u.type ? ` (${u.type})` : ''}
-                  </option>
-                ))}
+                {preferred.length ? (
+                  <optgroup label={variant === 'technician' ? 'Technicians (suggested)' : 'QA (suggested)'}>
+                    {preferred.map((u) => (
+                      <option key={`p-${u.id}`} value={u.id}>
+                        {u.name}
+                        {u.type ? ` (${u.type})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {others.length ? (
+                  <optgroup label="All Vendon users">
+                    {others.map((u) => (
+                      <option key={`o-${u.id}`} value={u.id}>
+                        {u.name}
+                        {u.type ? ` (${u.type})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </select>
               <button
                 type="button"
@@ -288,6 +341,7 @@ function StaffVisitScheduleRows(props: {
             ) : (
               <p className="muted" style={{ fontSize: '0.78rem', margin: '6px 0 0' }}>
                 Assigned: <strong>{row.name || '—'}</strong>
+                {row.vendonUserId ? ` · #${row.vendonUserId}` : ''}
               </p>
             )}
           </div>
@@ -412,13 +466,17 @@ export function MachineProfileSection() {
   const [timezone, setTimezone] = useState('Asia/Kuwait');
   const [priority, setPriority] = useState(10);
   const [formErr, setFormErr] = useState<string | null>(null);
+  const [saveOk, setSaveOk] = useState<string | null>(null);
 
   const machines = machinesQ.data?.machines ?? [];
   const vendonUsers = vendonUsersQ.data?.users ?? [];
-  const operatorUsers = useMemo(() => {
-    const typed = vendonUsers.filter((u) => /operat|route|driver|staff/i.test(String(u.type || '')));
-    return typed.length ? typed : vendonUsers;
-  }, [vendonUsers]);
+  const operatorUsersPreferred = useMemo(() => {
+    return splitVendonUsersForStaff(
+      vendonUsers,
+      /operat|route|driver|staff/i,
+      operators.map((o) => String(o.vendonUserId || '').trim()).filter(Boolean),
+    );
+  }, [vendonUsers, operators]);
   const ownerOptions = machinesQ.data?.location_owner_options ?? [];
   const ownerOptionsMerged = useMemo(() => {
     const set = new Set<string>([...LOCATION_OWNER_SUGGESTIONS, ...ownerOptions]);
@@ -461,6 +519,7 @@ export function MachineProfileSection() {
     setTimezone(p.timezone || 'Asia/Kuwait');
     setPriority(typeof p.priority === 'number' && !Number.isNaN(p.priority) ? p.priority : 10);
     setFormErr(null);
+    setSaveOk(null);
   },
   [machines],
 );
@@ -480,6 +539,7 @@ export function MachineProfileSection() {
     setTimezone('Asia/Kuwait');
     setPriority(10);
     setFormErr(null);
+    setSaveOk(null);
   }, []);
 
   /** New machine with no saved profile — seed machine tag from live machine list. */
@@ -500,6 +560,7 @@ export function MachineProfileSection() {
       setTimezone('Asia/Kuwait');
       setPriority(10);
       setFormErr(null);
+      setSaveOk(null);
     },
     [],
   );
@@ -538,6 +599,7 @@ export function MachineProfileSection() {
     },
     onSuccess: async () => {
       setFormErr(null);
+      setSaveOk('Saved — technician, QA, operators, and status are on this profile.');
       await qc.invalidateQueries({ queryKey: ['alert-machine-profiles'] });
       await qc.invalidateQueries({ queryKey: ['alert-overall-admin-profiles'] });
       await qc.invalidateQueries({ queryKey: ['alert-admin-cleaning-schedules'] });
@@ -576,6 +638,11 @@ export function MachineProfileSection() {
         {formErr || saveMut.isError ? (
           <div className="pillDanger" style={{ marginBottom: 12 }}>
             {formErr || (saveMut.error as Error)?.message}
+          </div>
+        ) : null}
+        {saveOk && !formErr && !saveMut.isError ? (
+          <div className="pillSuccess" style={{ marginBottom: 12 }}>
+            {saveOk}
           </div>
         ) : null}
 
@@ -854,23 +921,40 @@ export function MachineProfileSection() {
                   title="Operator from Vendon roster"
                   onChange={(e) => {
                     const uid = e.target.value;
-                    const user = operatorUsers.find((u) => u.id === uid) || vendonUsers.find((u) => u.id === uid);
+                    const user =
+                      operatorUsersPreferred.preferred.find((u) => u.id === uid) ||
+                      operatorUsersPreferred.others.find((u) => u.id === uid) ||
+                      vendonUsers.find((u) => u.id === uid);
                     const next = [...operators];
                     next[oi] = {
                       ...next[oi],
                       vendonUserId: uid || undefined,
-                      name: user?.name || (uid ? next[oi].name : ''),
+                      name: (user?.name || '').trim() || (uid ? next[oi].name : ''),
                     };
                     setOperators(next);
                   }}
                 >
                   <option value="">Choose from Vendon…</option>
-                  {operatorUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                      {u.type ? ` (${u.type})` : ''}
-                    </option>
-                  ))}
+                  {operatorUsersPreferred.preferred.length ? (
+                    <optgroup label="Operators (suggested)">
+                      {operatorUsersPreferred.preferred.map((u) => (
+                        <option key={`op-p-${u.id}`} value={u.id}>
+                          {u.name}
+                          {u.type ? ` (${u.type})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {operatorUsersPreferred.others.length ? (
+                    <optgroup label="All Vendon users">
+                      {operatorUsersPreferred.others.map((u) => (
+                        <option key={`op-o-${u.id}`} value={u.id}>
+                          {u.name}
+                          {u.type ? ` (${u.type})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
                 </select>
                 {!op.vendonUserId ? (
                   <input
@@ -956,12 +1040,15 @@ export function MachineProfileSection() {
           </button>
         </details>
 
-        <details className="adminDetails">
-          <summary title="Technician and QA: one text field per person, visit days, hours.">
+        <details className="adminDetails" open>
+          <summary title="Assign technicians and QA from Vendon roster, plus visit days and hours.">
             Technician &amp; QA Officer
           </summary>
           <p className="muted adminTechQaIntro">
-            Each block below: one text field for tech or QA (single line), then visit days and hours.
+            Pick from the Vendon roster (suggested types first; full list under All Vendon users), then set visit days and
+            hours — same pattern as operators. Saved on <strong>Save machine</strong> below. Assigned technicians feed
+            Tech Visit on-site proof (drink tests are machine-level; physical presence matches technician or assigned
+            name).
           </p>
           <StaffVisitScheduleRows
             variant="technician"
@@ -1008,6 +1095,7 @@ export function MachineProfileSection() {
             disabled={!machineId || saveMut.isPending}
             onClick={() => {
               setFormErr(null);
+              setSaveOk(null);
               saveMut.mutate(undefined, {
                 onError: (e) => setFormErr((e as Error).message),
               });

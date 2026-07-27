@@ -185,6 +185,10 @@ def _load_assigned_tech_names() -> Dict[str, set]:
                             n = str(item.get("name") or "").strip().lower()
                             if n:
                                 names.add(n)
+                            # Also keep short tokens so "Ahmed Tech" matches attendance "Ahmed"
+                            for part in n.replace("-", " ").split():
+                                if len(part) >= 4:
+                                    names.add(part)
                 if names:
                     out[mid] = names
         finally:

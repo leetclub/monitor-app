@@ -55,6 +55,79 @@ def _decimal_or_none(v: Any) -> Optional[float]:
     except (TypeError, ValueError):
         return None
 
+
+def _normalize_staff_visit_schedule(raw: Any) -> List[Dict[str, Any]]:
+    """Technician / QA schedule rows from Admin Machines (name + optional Vendon id + days + windows)."""
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = str(
+            item.get("name")
+            or item.get("person")
+            or item.get("technician")
+            or item.get("officer")
+            or ""
+        ).strip()
+        uid = str(item.get("vendon_user_id") or item.get("vendonUserId") or "").strip() or None
+        days: List[int] = []
+        for d in item.get("days") or item.get("visit_days") or item.get("weekdays") or []:
+            try:
+                n = int(d)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= n <= 6 and n not in days:
+                days.append(n)
+        days.sort()
+        windows: List[Dict[str, str]] = []
+        raw_wins = item.get("windows")
+        if isinstance(raw_wins, list):
+            for w in raw_wins:
+                if not isinstance(w, dict):
+                    continue
+                start = str(w.get("start") or "").strip()
+                end = str(w.get("end") or "").strip()
+                if start and end:
+                    windows.append({"start": start, "end": end})
+        if not name and not uid and not days and not windows:
+            continue
+        out.append(
+            {
+                "name": name,
+                "vendon_user_id": uid,
+                "days": days,
+                "windows": windows,
+            }
+        )
+    return out
+
+
+def _normalize_operator_hours(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        uid = str(item.get("vendon_user_id") or item.get("vendonUserId") or "").strip() or None
+        windows: List[Dict[str, str]] = []
+        raw_wins = item.get("windows")
+        if isinstance(raw_wins, list):
+            for w in raw_wins:
+                if not isinstance(w, dict):
+                    continue
+                start = str(w.get("start") or "").strip()
+                end = str(w.get("end") or "").strip()
+                if start and end:
+                    windows.append({"start": start, "end": end})
+        if not name and not uid and not windows:
+            continue
+        out.append({"name": name, "vendon_user_id": uid, "windows": windows})
+    return out
+
 VENDON_API_BASE = (os.environ.get("VENDON_API_BASE") or "").strip().rstrip("/")
 VENDON_API_KEY = (os.environ.get("VENDON_API_KEY") or "").strip()
 
@@ -1857,15 +1930,9 @@ def register_alert_routes(app) -> None:
             cw = body.get("cleaning_windows")
             if cw is None:
                 cw = []
-            oh = body.get("operator_hours")
-            if oh is None:
-                oh = []
-            tech = body.get("technician_schedule")
-            if tech is None:
-                tech = []
-            qa = body.get("qa_schedule")
-            if qa is None:
-                qa = []
+            oh = _normalize_operator_hours(body.get("operator_hours"))
+            tech = _normalize_staff_visit_schedule(body.get("technician_schedule"))
+            qa = _normalize_staff_visit_schedule(body.get("qa_schedule"))
             tz_s = (body.get("timezone") or "Asia/Kuwait").strip() or "Asia/Kuwait"
             is_active_raw = body.get("is_active")
             if is_active_raw is None:
@@ -1878,6 +1945,7 @@ def register_alert_routes(app) -> None:
                     "active",
                 )
             from alert_inactive_lib import normalize_inactive_schedule
+            from sqlalchemy.orm.attributes import flag_modified
 
             inactive_sched = normalize_inactive_schedule(body.get("inactive_schedule"))
             priority = int(body.get("priority") or 10)
@@ -1902,6 +1970,13 @@ def register_alert_routes(app) -> None:
                 row.inactive_schedule = inactive_sched
                 row.updated_by = email
                 row.updated_at = now
+                # JSONB: force dirty so technician/QA/operator arrays always persist
+                flag_modified(row, "operating_days")
+                flag_modified(row, "cleaning_windows")
+                flag_modified(row, "operator_hours")
+                flag_modified(row, "technician_schedule")
+                flag_modified(row, "qa_schedule")
+                flag_modified(row, "inactive_schedule")
             else:
                 row = AlertMachineProfile(
                     machine_id=mid,
