@@ -4447,6 +4447,27 @@ def register_alert_routes(app) -> None:
                 {
                     "machineId": body.get("machineId") or body.get("machine_id"),
                     "operatorEmail": body.get("operatorEmail") or body.get("operator_email"),
+                    "message": body.get("message"),
+                }
+            )
+        )
+
+    @app.route("/api/alert/workflow/cleaning-overdue", methods=["POST", "OPTIONS"])
+    def alert_workflow_cleaning_overdue():
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import post_cleaning_overdue
+
+        body = request.get_json(silent=True) or {}
+        return jsonify(
+            post_cleaning_overdue(
+                {
+                    "machineId": body.get("machineId") or body.get("machine_id"),
+                    "message": body.get("message"),
+                    "overdueDate": body.get("overdueDate") or body.get("overdue_date"),
                 }
             )
         )

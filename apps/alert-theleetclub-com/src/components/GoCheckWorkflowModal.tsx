@@ -40,15 +40,21 @@ export function GoCheckWorkflowModal({
       if (workflowNotConfiguredMessage(res)) {
         setResult('Workflow not configured');
       } else if (res.ok) {
-        setResult(
-          res.delivery === 'slack_dm'
-            ? `GO CHECK sent to ${res.operatorName || 'operator'} via Slack DM (24h due).`
-            : 'GO CHECK sent.',
-        );
+        if (res.delivery === 'task_manager_received') {
+          setResult(
+            `GO CHECK created in Workflow Received for ${res.operatorName || 'operator'} (24h due).`,
+          );
+        } else if (res.delivery === 'slack_dm') {
+          setResult(
+            `GO CHECK sent to ${res.operatorName || 'operator'} via Slack DM (Workflow Received unavailable).`,
+          );
+        } else {
+          setResult('GO CHECK sent.');
+        }
       } else if (res.mailtoUrl) {
         window.location.href = res.mailtoUrl;
         setResult(
-          `${res.error || 'Slack DM unavailable'}. Opened email to ${res.operatorEmail || 'operator'}.`,
+          `${res.error || 'Delivery unavailable'}. Opened email to ${res.operatorEmail || 'operator'}.`,
         );
       } else {
         setResult(
@@ -80,8 +86,9 @@ export function GoCheckWorkflowModal({
         ) : (
           <form onSubmit={onSubmit}>
             <p className="salesHistoryNote">
-              Sends <strong>URGENT ACTION REQUIRED</strong> to the scheduled operator via Slack DM (error type +
-              message, 24h due). Task Manager Received inbox is not available yet — Slack is used instead.
+              Creates an <strong>urgent task</strong> in the scheduled operator&apos;s Workflow{' '}
+              <strong>Received</strong> inbox (error type + message, 24h due). Falls back to Slack DM / email if
+              Workflow write fails.
             </p>
             <label className="workflowField">
               Error type

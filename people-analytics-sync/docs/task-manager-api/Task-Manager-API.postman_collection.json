@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
 		"name": "Task Manager API",
-		"description": "Read-only JSON API for Task Manager (Laravel).\n\n## Purpose\nThis collection is for external developers who need to read schedule periods, employee schedule entries, attendance users, daily punch details, lateness deductions, and attendance status history.\n\nAll endpoints are `GET` requests under `/api/v1/*`.\n\n## Authentication\nEvery request requires the shared `API_KEY` from the Laravel `.env` file.\n\nYou can authenticate with either header:\n\n```http\nX-Api-Key: {{api_key}}\n```\n\nor:\n\n```http\nAuthorization: Bearer {{api_key}}\n```\n\nIf the key is missing or wrong, the API returns `401 Unauthorized`.\n\n## Collection Variables\n| Variable | Description |\n|----------|-------------|\n| `base_url` | App URL without trailing slash, for example `http://localhost`, `https://task.almaghrerb.com:8890`, or production URL. |\n| `api_key` | Shared API key. Must match `API_KEY` in `.env`. |\n| `schedule_period_id` | Schedule period ID copied from the schedule period list response. |\n| `user_id` | User ID copied from the attendance users list or schedule period employee schedules. |\n\n## Common Response Shapes\nPaginated endpoints return:\n\n```json\n{\n  \"data\": [],\n  \"pagination\": {\n    \"page\": 1,\n    \"per_page\": 25,\n    \"total\": 60,\n    \"total_pages\": 3,\n    \"has_next_page\": true,\n    \"has_prev_page\": false\n  }\n}\n```\n\nEndpoints with `all=true` return all matching rows without pagination:\n\n```json\n{\n  \"data\": [],\n  \"total\": 12\n}\n```\n\nValidation errors return standard Laravel JSON validation responses with HTTP `422`.\n\n## Attendance Status Values\nAttendance day endpoints include:\n\n| Value | Label | Meaning |\n|-------|-------|---------|\n| `present` | `Present` | The user has one or more punches on that date. |\n| `absent` | `Absent` | The date is today or in the past, the user was scheduled to work, and there are no punches. |\n| `pending` | `Pending` | The date is in the future, the user is scheduled to work, and attendance is not known yet. |\n| `not_scheduled` | `Not scheduled` | The user has no published schedule for that date or that weekday is marked off. |\n\n## Attendance Runtime State Values\nAttendance day endpoints also include `state`, which is the current punch replay state for that date:\n\n| Value | Meaning |\n|-------|---------|\n| `idle` | No open work session, or user has clocked out. |\n| `working` | User clocked in and has not clocked out or started a break. |\n| `break` | User started a break and has not ended it. |\n| `corrupt` | Punch sequence is invalid, such as duplicate clock-ins without a clock-out. |\n\n## Endpoint Groups\n### Schedule Periods\nUse these endpoints to list published/draft/active schedule periods and inspect the employees, positions, weekly schedules, and assigned machines in a period.\n\n### Attendance by User\nUse these endpoints to list users who have attendance activity, fetch one user's attendance for one date, or fetch all attendance dates for one user including present, absent, pending, and not scheduled days.",
+		"description": "JSON API for Task Manager (Laravel).\n\n## Purpose\nExternal integrations can read schedule periods, attendance, daily checks, quality control visits, and write urgent tasks, direct messages, and cleaning-overdue notifications.\n\n## Authentication\nEvery request requires the shared `API_KEY` from the Laravel `.env` file.\n\n```http\nX-Api-Key: {{api_key}}\n```\n\nor:\n\n```http\nAuthorization: Bearer {{api_key}}\n```\n\nMissing or invalid key \u2192 `401 Unauthorized`. Rate limit: **60 requests/minute**.\n\n## Collection Variables\n| Variable | Description |\n|----------|-------------|\n| `base_url` | App URL without trailing slash |\n| `api_key` | Shared API key (`API_KEY` in `.env`) |\n| `schedule_period_id` | From schedule period list |\n| `user_id` | Operator / user ID |\n| `daily_check_id` | From daily check list |\n| `vendon_id` | Vendon cloud machine ID |\n| `quality_control_visit_id` | From quality control list |\n\n## Write APIs\nPOST endpoints require `TASKS_SYSTEM_ISSUER_ADMIN_ID` in `.env` for system sender / task issuer admin.\n\n## Endpoint Groups\n- **Schedule Periods** \u2014 published schedules and employee assignments\n- **Attendance by User** \u2014 punches, lateness, calendar status\n- **Daily checks** \u2014 VM daily check submissions\n- **Quality Control** \u2014 QC visit incidents per machine\n- **Urgent operator tasks** \u2014 create urgent Received tasks\n- **Direct messages** \u2014 system DM to operator inbox\n- **Notifications** \u2014 cleaning-overdue DM delivery",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -575,6 +575,395 @@
 				}
 			],
 			"description": "Vending machine daily check submissions (VM Check / channel daily checks).\n\nList: `GET /api/v1/daily-checks` \u2014 use `all=true` + `date`, optionally `vendon_id` (machine.vendon_id) or `user_id`.\nDetail: `GET /api/v1/daily-checks/{id}` \u2014 set `daily_check_id` from a list response."
+		},
+		{
+			"name": "Quality Control",
+			"item": [
+				{
+					"name": "List QC visits by machine (vendon_id)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/quality-control?vendon_id={{vendon_id}}&all=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"quality-control"
+							],
+							"query": [
+								{
+									"key": "vendon_id",
+									"value": "{{vendon_id}}",
+									"description": "Vendon cloud machine ID"
+								},
+								{
+									"key": "all",
+									"value": "true"
+								},
+								{
+									"key": "date",
+									"value": "2026-07-20",
+									"description": "Optional exact visit date",
+									"disabled": true
+								},
+								{
+									"key": "from",
+									"value": "2026-07-01",
+									"description": "Optional range start (with until)",
+									"disabled": true
+								},
+								{
+									"key": "until",
+									"value": "2026-07-31",
+									"description": "Optional range end (with from)",
+									"disabled": true
+								},
+								{
+									"key": "result",
+									"value": "not_pass",
+									"description": "pass | not_pass",
+									"disabled": true
+								},
+								{
+									"key": "issue_status",
+									"value": "unresolved",
+									"description": "resolved | unresolved",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List quality control visits for one machine.\n\n```\nGET /api/v1/quality-control?vendon_id=325250&all=true\n```\n\nEach visit includes **date**, **visitor** (QC inspector name), **machine**, **operator**, **incident_type**, **issue_detected**, **result**, **issue_status**, **recommendations**, **attachment**, **recorded_at**.\n\nCopy `data[].id` into collection variable `quality_control_visit_id` for the detail request."
+					},
+					"response": []
+				},
+				{
+					"name": "Get QC visit details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/quality-control/{{quality_control_visit_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"quality-control",
+								"{{quality_control_visit_id}}"
+							]
+						},
+						"description": "Returns full detail for one QC visit by ID.\n\n```\nGET /api/v1/quality-control/1\n```"
+					},
+					"response": []
+				}
+			],
+			"description": "Quality control visit incidents per machine.\n\nFilter list by `vendon_id`, date, operator, incident type, result, and issue status."
+		},
+		{
+			"name": "Urgent operator tasks",
+			"item": [
+				{
+					"name": "Create urgent operator task (JSON)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Restock urgently\",\n  \"user_id\": {{user_id}},\n  \"vendon_id\": {{vendon_id}},\n  \"message\": \"Refill cups and verify coin mech.\",\n  \"due_time\": \"18:30\",\n  \"start_date\": \"2026-07-28\",\n  \"end_date\": \"2026-07-28\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/tasks/urgent-operator",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tasks",
+								"urgent-operator"
+							]
+						},
+						"description": "Creates an **urgent** task in the operator's **Received tasks** list.\n\n**Required:** `title`, `user_id`, `message`, `start_date`, `end_date`, and one of `machine_id` or `vendon_id`.\n\n**Optional:** `due_time` (`H:i`), `attachment` (use multipart form instead of JSON when attaching a file).\n\n**Auto-filled:** `department_id`, `position_id` from the operator's linked positions.\n\n**Issuer:** admin from `TASKS_SYSTEM_ISSUER_ADMIN_ID` in `.env`.\n\nReturns `201 Created` with task JSON including assignee, department, position, and `issued_by`."
+					},
+					"response": []
+				},
+				{
+					"name": "Create urgent operator task (multipart + attachment)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "title",
+									"value": "Restock urgently",
+									"type": "text"
+								},
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"type": "text"
+								},
+								{
+									"key": "vendon_id",
+									"value": "{{vendon_id}}",
+									"type": "text"
+								},
+								{
+									"key": "message",
+									"value": "See attached photo.",
+									"type": "text"
+								},
+								{
+									"key": "start_date",
+									"value": "2026-07-28",
+									"type": "text"
+								},
+								{
+									"key": "end_date",
+									"value": "2026-07-28",
+									"type": "text"
+								},
+								{
+									"key": "attachment",
+									"type": "file",
+									"src": [],
+									"description": "Optional image, video, PDF, office doc, or zip"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/tasks/urgent-operator",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tasks",
+								"urgent-operator"
+							]
+						},
+						"description": "Same as JSON create, but with `multipart/form-data` when sending an attachment."
+					},
+					"response": []
+				}
+			],
+			"description": "POST urgent operator tasks to the company Received tasks list."
+		},
+		{
+			"name": "Direct messages",
+			"item": [
+				{
+					"name": "Send DM to user (JSON)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": {{user_id}},\n  \"message\": \"Please confirm machine {{vendon_id}} is restocked.\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/direct-messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"direct-messages"
+							]
+						},
+						"description": "Sends a global direct message to a company user's DM inbox.\n\n**Sender:** admin from `TASKS_SYSTEM_ISSUER_ADMIN_ID`.\n\n**Required:** `user_id` and at least one of `message` or `attachment`.\n\nReturns `201 Created` with sender, recipient, and optional attachment."
+					},
+					"response": []
+				},
+				{
+					"name": "Send DM with attachment (multipart)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"type": "text"
+								},
+								{
+									"key": "message",
+									"value": "See attached notice.",
+									"type": "text"
+								},
+								{
+									"key": "attachment",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/direct-messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"direct-messages"
+							]
+						},
+						"description": "Send a DM with an optional text message and file attachment using multipart form data."
+					},
+					"response": []
+				}
+			],
+			"description": "System direct messages to operator DM inbox."
+		},
+		{
+			"name": "Notifications",
+			"item": [
+				{
+					"name": "Deliver cleaning-overdue DM",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Api-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": {{user_id}},\n  \"vendon_id\": {{vendon_id}},\n  \"overdue_date\": \"2026-07-28\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/cleaning-overdue",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"notifications",
+								"cleaning-overdue"
+							]
+						},
+						"description": "Delivers a **cleaning overdue** notification to the operator's DM inbox.\n\n**Required:** `user_id` and one of `machine_id` or `vendon_id`.\n\n**Optional:** `overdue_date` (`YYYY-MM-DD`, defaults to today), `message` (custom body; default template used if omitted).\n\n**Default message** includes machine name, Vendon ID, overdue date, and instructions to submit the cleaning video.\n\nReturns `201 Created` with `notification_type`, `overdue_date`, `machine`, and `direct_message`."
+					},
+					"response": []
+				}
+			],
+			"description": "Automated notification delivery to operator DM inbox."
 		}
 	],
 	"event": [
@@ -605,7 +994,7 @@
 		},
 		{
 			"key": "api_key",
-			"value": "CHANGE_ME",
+			"value": "",
 			"type": "string"
 		},
 		{
@@ -620,6 +1009,16 @@
 		},
 		{
 			"key": "daily_check_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "vendon_id",
+			"value": "325250",
+			"type": "string"
+		},
+		{
+			"key": "quality_control_visit_id",
 			"value": "1",
 			"type": "string"
 		}

@@ -50,13 +50,54 @@ def _get(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[Optional[A
         if res.status_code >= 400:
             if res.status_code == 404:
                 return None, None
-            return None, f"Task Manager GET {path} failed ({res.status_code})"
+            detail = _response_error_detail(res)
+            return None, f"Task Manager GET {path} failed ({res.status_code}){detail}"
         if not res.content:
             return {}, None
         return res.json(), None
     except Exception as ex:
         logger.exception("task_manager GET %s", path)
         return None, str(ex)
+
+
+def _response_error_detail(res: requests.Response) -> str:
+    try:
+        payload = res.json()
+    except Exception:
+        text = (res.text or "").strip()
+        return f": {text[:240]}" if text else ""
+    if isinstance(payload, dict):
+        for key in ("message", "error", "detail"):
+            val = payload.get(key)
+            if isinstance(val, str) and val.strip():
+                return f": {val.strip()[:240]}"
+        errs = payload.get("errors")
+        if isinstance(errs, dict) and errs:
+            return f": {str(errs)[:240]}"
+    return ""
+
+
+def _post_json(path: str, body: Dict[str, Any]) -> Tuple[Optional[Any], Optional[str], int]:
+    """POST JSON; returns (json_or_none, error, http_status)."""
+    if not task_manager_configured():
+        return None, "LEET_WORKFLOW_API_BASE or LEET_WORKFLOW_API_KEY not configured", 0
+    url = f"{_BASE}{path}"
+    headers = {**_headers(), "Content-Type": "application/json"}
+    try:
+        res = requests.post(url, headers=headers, json=body, timeout=_TIMEOUT)
+        status = int(res.status_code)
+        if status >= 400:
+            detail = _response_error_detail(res)
+            return None, f"Task Manager POST {path} failed ({status}){detail}", status
+        if not res.content:
+            return {}, None, status
+        try:
+            return res.json(), None, status
+        except Exception:
+            return {"raw": (res.text or "")[:500]}, None, status
+    except Exception as ex:
+        logger.exception("task_manager POST %s", path)
+        return None, str(ex), 0
 
 
 def _cached(key: str, ttl: float, loader):
@@ -539,4 +580,156 @@ def get_machine_cleaning_records_batch(
             continue
         out[mid] = (_parse_cleaning_record(_resolve_daily_check_row(row)), None)
     return out
+
+
+def _unwrap_data(payload: Any) -> Any:
+    if isinstance(payload, dict) and "data" in payload:
+        return payload.get("data")
+    return payload
+
+
+def post_urgent_operator_task(
+    *,
+    title: str,
+    user_id: int,
+    message: str,
+    vendon_id: str,
+    start_date: str,
+    end_date: str,
+    due_time: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    body: Dict[str, Any] = {
+        "title": title,
+        "user_id": int(user_id),
+        "message": message,
+        "vendon_id": int(vendon_id) if str(vendon_id).isdigit() else vendon_id,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    if due_time:
+        body["due_time"] = due_time
+    data, err, _status = _post_json("/api/v1/tasks/urgent-operator", body)
+    if err:
+        return None, err
+    row = _unwrap_data(data)
+    return row if isinstance(row, dict) else (data if isinstance(data, dict) else {}), None
+
+
+def post_direct_message(*, user_id: int, message: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    body = {"user_id": int(user_id), "message": message}
+    data, err, _status = _post_json("/api/v1/direct-messages", body)
+    if err:
+        return None, err
+    row = _unwrap_data(data)
+    return row if isinstance(row, dict) else (data if isinstance(data, dict) else {}), None
+
+
+def post_cleaning_overdue_notification(
+    *,
+    user_id: int,
+    vendon_id: str,
+    overdue_date: Optional[str] = None,
+    message: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    body: Dict[str, Any] = {
+        "user_id": int(user_id),
+        "vendon_id": int(vendon_id) if str(vendon_id).isdigit() else vendon_id,
+    }
+    if overdue_date:
+        body["overdue_date"] = overdue_date
+    if message:
+        body["message"] = message
+    data, err, _status = _post_json("/api/v1/notifications/cleaning-overdue", body)
+    if err:
+        return None, err
+    row = _unwrap_data(data)
+    return row if isinstance(row, dict) else (data if isinstance(data, dict) else {}), None
+
+
+def _qc_visit_sort_key(row: Dict[str, Any]) -> str:
+    for key in ("recorded_at", "updated_at", "date", "visit_date", "created_at"):
+        val = row.get(key)
+        if val:
+            return str(val)
+    return ""
+
+
+def _parse_quality_control_visit(row: Dict[str, Any]) -> Dict[str, Any]:
+    visitor = row.get("visitor") if isinstance(row.get("visitor"), dict) else {}
+    visitor_name = (
+        str(visitor.get("name") or "").strip()
+        or str(row.get("visitor_name") or row.get("inspector_name") or "").strip()
+        or None
+    )
+    date_raw = (
+        row.get("recorded_at")
+        or row.get("date")
+        or row.get("visit_date")
+        or row.get("updated_at")
+        or row.get("created_at")
+    )
+    last_visit_at = str(date_raw).strip() if date_raw else None
+    if last_visit_at and "T" not in last_visit_at and len(last_visit_at) >= 10:
+        last_visit_at = f"{last_visit_at[:10]}T00:00:00+00:00"
+
+    comment_parts: List[str] = []
+    for key in ("issue_detected", "recommendations", "comment", "notes", "summary"):
+        val = row.get(key)
+        if isinstance(val, str) and val.strip():
+            comment_parts.append(val.strip())
+    incident = str(row.get("incident_type") or "").strip()
+    result = str(row.get("result") or "").strip()
+    status = str(row.get("issue_status") or "").strip()
+    meta = " · ".join(p for p in (incident, result, status) if p)
+    if meta:
+        comment_parts.insert(0, meta)
+    comment = " — ".join(comment_parts) if comment_parts else None
+
+    return {
+        "lastVisitAt": last_visit_at,
+        "visitorName": visitor_name,
+        "comment": comment,
+        "source": "task_manager_quality_control",
+        "qualityControlId": row.get("id"),
+        "incidentType": incident or None,
+        "result": result or None,
+        "issueStatus": status or None,
+    }
+
+
+def get_latest_quality_control_visit(
+    vendon_id: str,
+    *,
+    days_back: int = 90,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Latest QC visit for a machine (`GET /api/v1/quality-control`). Used as tech-visit source."""
+    mid = str(vendon_id or "").strip()
+    if not mid:
+        return None, "vendon_id required"
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+
+    today = kuwait_today()
+    params: Dict[str, Any] = {
+        "vendon_id": mid,
+        "all": "true",
+        "from": (today - timedelta(days=max(1, days_back))).isoformat(),
+        "until": today.isoformat(),
+    }
+    data, err = _get("/api/v1/quality-control", params)
+    if err:
+        # Fallback without range if server rejects from/until
+        data, err = _get("/api/v1/quality-control", {"vendon_id": mid, "all": "true"})
+        if err:
+            return None, err
+
+    rows = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or not rows:
+        return None, None
+
+    dict_rows = [r for r in rows if isinstance(r, dict)]
+    if not dict_rows:
+        return None, None
+    dict_rows.sort(key=_qc_visit_sort_key, reverse=True)
+    return _parse_quality_control_visit(dict_rows[0]), None
 

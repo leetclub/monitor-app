@@ -16,6 +16,9 @@ export function LeetWorkflowDmModal({
 }) {
   const machineId = String(row.machineId ?? row.machine_id ?? '').trim();
   const email = getStrikeOperatorEmail(row) || '';
+  const [message, setMessage] = useState(
+    `Please check machine ${machineLabel || machineId} and confirm status.`,
+  );
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   useAlertModal(onClose);
@@ -23,20 +26,28 @@ export function LeetWorkflowDmModal({
   const panel = modalPanelHandlers();
 
   async function onSend() {
-    if (!email || !machineId) {
-      setResult('Operator email not available');
+    if (!machineId) {
+      setResult('Machine id not available');
+      return;
+    }
+    if (!message.trim()) {
+      setResult('Message required');
       return;
     }
     setBusy(true);
     setResult(null);
     try {
-      const res = await submitDmOperator({ machineId, operatorEmail: email });
+      const res = await submitDmOperator({
+        machineId,
+        operatorEmail: email || undefined,
+        message: message.trim(),
+      });
       if (workflowNotConfiguredMessage(res)) {
         setResult('Workflow not configured');
       } else if (res.ok) {
-        setResult('DM popup opened via Leet Workflow.');
+        setResult(`DM sent to ${res.operatorName || 'operator'} via Workflow inbox.`);
       } else {
-        setResult(res.error || 'Could not open DM');
+        setResult(res.error || res.note || 'Could not send DM');
       }
     } catch (err) {
       setResult((err as Error).message);
@@ -59,10 +70,21 @@ export function LeetWorkflowDmModal({
           </button>
         </div>
         <p className="salesHistoryNote">
-          Opens Leet Workflow DM popup (not Slack) for <strong>{email || '—'}</strong>.
+          Sends a message to the <strong>scheduled operator</strong> Workflow DM inbox
+          {email ? (
+            <>
+              {' '}
+              ({email})
+            </>
+          ) : null}
+          .
         </p>
-        <button type="button" className="btnPrimary" disabled={busy || !email} onClick={onSend}>
-          {busy ? 'Opening…' : 'Open workflow DM'}
+        <label className="workflowField">
+          Message
+          <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} required />
+        </label>
+        <button type="button" className="btnPrimary" disabled={busy || !machineId} onClick={onSend}>
+          {busy ? 'Sending…' : 'Send workflow DM'}
         </button>
         {result ? <p className="salesHistoryNote">{result}</p> : null}
       </div>

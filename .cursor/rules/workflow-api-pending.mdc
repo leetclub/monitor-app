@@ -1,0 +1,31 @@
+---
+description: Pending Leet Workflow / Task Manager API gaps for Alert integration
+globs: people-analytics-sync/docs/task-manager-api/**
+alwaysApply: false
+---
+
+# Workflow API — pending Alert needs
+
+Canonical tracker: `people-analytics-sync/docs/task-manager-api/PENDING-ALERT-INTEGRATION.md`  
+Package: Postman + `Task-Manager-API-New-Endpoints.pdf` under `docs/task-manager-api/`.
+
+Also apply mentally when editing `leet_workflow_lib.py`, `task_manager_client.py`, or Alert `leetWorkflowApi.ts` / GO CHECK / DM flows.
+
+## Wired in Alert (2026-07-29)
+
+| Ask | Endpoint | Alert path |
+|-----|----------|------------|
+| #1 Urgent Received task | `POST /api/v1/tasks/urgent-operator` | GO CHECK → `/api/alert/workflow/go-check` |
+| #2 DM scheduled operator | `POST /api/v1/direct-messages` | Call OP → `/api/alert/workflow/dm-operator` |
+| #3 Tech / QC visit | `GET /api/v1/quality-control` | Tech visit modal → `/api/alert/workflow/tech-visit` (SC fallback) |
+| #4 Cleaning overdue inbox | `POST /api/v1/notifications/cleaning-overdue` | Cleaning alert → `/api/alert/workflow/cleaning-overdue` |
+
+## Still open with Workflow team
+
+- **#5 Daily checks CC review:** need approved/rejected sample JSON (`review_status` + `vm_review`).
+- **#6 Daily-checks date range:** need `from`/`until` (and ideally `updated_since` / webhook).
+- **#3 naming:** confirm QC list is the intended **tech visit** source.
+
+## Do not regress
+
+Existing read proxies (operator schedule, attendance map, cleaning map) must keep working while using write paths.

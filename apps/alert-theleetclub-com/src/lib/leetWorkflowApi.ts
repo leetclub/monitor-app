@@ -79,6 +79,7 @@ export type TechVisitWorkflowPayload = WorkflowConfigured & {
   visitorName?: string | null;
   comment?: string | null;
   source?: string | null;
+  note?: string | null;
 };
 
 export type QaBulletsPayload = WorkflowConfigured & {
@@ -363,7 +364,7 @@ export function submitGoCheck(body: {
 }): Promise<
   WorkflowConfigured & {
     ok?: boolean;
-    taskId?: string | null;
+    taskId?: string | number | null;
     delivery?: string;
     operatorEmail?: string | null;
     operatorName?: string | null;
@@ -376,9 +377,34 @@ export function submitGoCheck(body: {
 
 export function submitDmOperator(body: {
   machineId: string;
-  operatorEmail: string;
-}): Promise<WorkflowConfigured & { ok?: boolean }> {
+  operatorEmail?: string;
+  message: string;
+}): Promise<
+  WorkflowConfigured & {
+    ok?: boolean;
+    delivery?: string;
+    operatorName?: string | null;
+    directMessageId?: string | number | null;
+    note?: string | null;
+  }
+> {
   return apiJson('/api/alert/workflow/dm-operator', body);
+}
+
+export function submitCleaningOverdue(body: {
+  machineId: string;
+  message?: string;
+  overdueDate?: string;
+}): Promise<
+  WorkflowConfigured & {
+    ok?: boolean;
+    delivery?: string;
+    operatorName?: string | null;
+    overdueDate?: string | null;
+    note?: string | null;
+  }
+> {
+  return apiJson('/api/alert/workflow/cleaning-overdue', body);
 }
 
 export function workflowNotConfiguredMessage(payload: WorkflowConfigured | undefined): string | null {

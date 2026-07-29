@@ -89,12 +89,12 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 |------|---------|--------|
 | **QA column** | Last visit + **score chip**; **QA Visit tab** for full fleet/history/filters/trend/PDF; cell popup = full modal (unchanged) | **Shipped** — `/qa-visit` + `GET /api/alert/qa/machine-audits` |
 | **Target column** | Beside sales: today % + remaining; popup WTD vs prior week | **Shipped** — snapshot `dailyTarget` + area-owner box + `GET /api/alert/targets/machine-detail` |
-| **Cleaning 15h alert** | Overdue-not-cleaned notification + red-zone UI | **Shipped** — `cleaningOverdue15h` red row (table, cards, Overall); banner + optional browser notification; **alert icon** on Last clean opens **AI-style operator message preview** (Slack DM, Email, WhatsApp, Workflow Received — preview only) |
+| **Cleaning 15h alert** | Overdue-not-cleaned notification + red-zone UI | **Shipped** — `cleaningOverdue15h` red row; banner + optional browser notification; alert icon opens message modal — **Workflow channel can POST cleaning-overdue** to operator inbox; Slack/Email/WhatsApp remain copy |
 | **Sorting** | Sales today/month; QC latest/oldest | **Shipped** — Data columns sortable (⇅/▼/▲, third click clears); **Live operator** and other action-only columns excluded; **Last / tx** uses Vendon ISO timestamp |
 | **Operator last access** | Last door open / machine access time | **Shipped** — **Operator Activity** column (`operatorLastAccessAt`); Live operator column = **name box + attendance badge only** (contacts in modal icons) |
-| **Tech visit** | SafetyCulture last visit + Admin-assigned tech + on-site drink-test/presence proof | **Shipped** — SC fallback + Admin Vendon tech schedule; modal shows drink tests today + Monitor presence (technician type or assigned-name match, 21d cache) |
+| **Tech visit** | Workflow QC last visit (fallback SafetyCulture) + Admin-assigned tech + on-site proof | **Shipped** — `GET quality-control` via people-api; SC fallback; Admin Vendon tech schedule; drink tests + Monitor presence |
 | **Leet Workflow — Attendance** | Task Manager schedule + punch status on Overall + Red Flags | **Shipped** — active schedule period → operator per machine; badge (Late yellow / Absent red / **Missing** when not scheduled); tap opens MTD modal (`operator-schedule`) **plus Monitor physical location** (Attendance & Cleaning proven credit, 21d + modal self-fetch); fleet map fetched in **batches of 24** machine IDs |
-| **Leet Workflow — other** | Cleaning, GO CHECK, Call OP DM, tech visit | **GO CHECK** sends Slack DM to scheduled operator (TM Received inbox API pending). Cleaning/Call OP still scaffolded. |
+| **Leet Workflow — other** | Cleaning, GO CHECK, Call OP DM, tech visit | **Shipped writes** — GO CHECK → `POST /tasks/urgent-operator` (Slack fallback); Call OP → `POST /direct-messages`; cleaning overdue → `POST /notifications/cleaning-overdue`; tech visit modal → QC list |
 
 ---
 
@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-07-29 | **Workflow write APIs wired:** GO CHECK creates urgent Received task; Call OP sends TM DM; cleaning alert can deliver cleaning-overdue to operator inbox; tech visit prefers Task Manager quality-control (SafetyCulture fallback). Daily-checks CC approve/reject samples + date-range still pending upstream. |
 | 2026-07-27 | **QA/Tech columns blanked by Slack findings error:** Visit cells no longer show `!` when Slack issues-list fails but SafetyCulture data exists. Softened name matching; fleet operator-activity back to 14d (modals still 21d). |
 | 2026-07-27 | **Admin Machines tech/QA save:** Vendon dropdowns always include full roster (suggested types + All users); keep assigned id on save even without days/hours; SQLAlchemy JSONB flag_modified so technician/QA/operator schedules persist. Tech Visit drink tests remain machine-level; on-site proof matches technician type or Admin-assigned name. |
 | 2026-07-26 | **Downtime Yest. visible + inactive schedule + attendance:** Fixed stack/GO CHECK CSS clipping the Downtime Yest. box. Inactive rows use stronger amber hatch; Admin Machines: always inactive **or** weekdays/range/extra dates (Kuwait). Live Op / Tech Visit read 21d Attendance cache with modal self-fetch; tech proof matches technician type **or** Admin-assigned tech name. |

@@ -505,6 +505,17 @@ def get_tech_visit(machine_id: str, machine_name: Optional[str] = None) -> Dict[
     if not workflow_configured():
         return _not_configured()
 
+    tm_err: Optional[str] = None
+    try:
+        from task_manager_client import get_latest_quality_control_visit
+
+        visit, tm_err = get_latest_quality_control_visit(mid)
+        if visit and visit.get("lastVisitAt"):
+            return _with_configured(visit)
+    except Exception:
+        logger.exception("tech visit Task Manager QC for %s", mid)
+        tm_err = "Task Manager quality-control lookup failed"
+
     name = (machine_name or "").strip() or _resolve_machine_name(mid) or ""
     if name:
         try:
@@ -512,19 +523,33 @@ def get_tech_visit(machine_id: str, machine_name: Optional[str] = None) -> Dict[
 
             visit = tech_visit_for_machine_name(name)
             if visit and (visit.get("lastVisitAt") or visit.get("lastVisitDate")):
-                return _with_configured(
-                    {
-                        "lastVisitAt": visit.get("lastVisitAt") or visit.get("lastVisitDate"),
-                        "visitorName": visit.get("officerName"),
-                        "comment": visit.get("summary"),
-                        "source": "safetyculture",
-                        "error": "Task Manager tech visit API not available in v1",
-                    }
-                )
+                out: Dict[str, Any] = {
+                    "lastVisitAt": visit.get("lastVisitAt") or visit.get("lastVisitDate"),
+                    "visitorName": visit.get("officerName"),
+                    "comment": visit.get("summary"),
+                    "source": "safetyculture",
+                }
+                if tm_err:
+                    out["note"] = tm_err
+                return _with_configured(out)
         except Exception:
             logger.exception("tech visit SafetyCulture fallback for %s", name)
 
-    return _with_configured({"error": "tech visit API not available in Task Manager v1"})
+    return _with_configured(
+        {
+            "error": tm_err or "No tech / QC visit found for this machine",
+        }
+    )
+
+
+def _scheduled_operator_user_id(machine_id: str) -> Tuple[Optional[int], Dict[str, Any]]:
+    schedule = get_operator_schedule(machine_id)
+    raw = schedule.get("taskManagerUserId")
+    try:
+        uid = int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        uid = None
+    return uid, schedule
 
 
 def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
@@ -543,9 +568,63 @@ def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
     if not message:
         return _with_configured({"ok": False, "error": "message required"})
 
-    schedule = get_operator_schedule(machine_id)
+    user_id, schedule = _scheduled_operator_user_id(machine_id)
     operator_name = str(schedule.get("operatorName") or "Operator").strip() or "Operator"
     operator_email = str(schedule.get("operatorEmail") or "").strip().lower()
+
+    task_message = "\n".join(
+        [
+            "URGENT ACTION REQUIRED",
+            "",
+            f"Machine: {machine_name} (#{machine_id})",
+            f"Operator: {operator_name}",
+            f"Error type: {error_type}",
+            "",
+            message,
+            "",
+            "Due: 24 hours · Sent from Leet Alert GO CHECK",
+        ]
+    )
+
+    if user_id is not None:
+        try:
+            from zoneinfo import ZoneInfo
+
+            from task_manager_client import post_urgent_operator_task
+
+            kwt = ZoneInfo("Asia/Kuwait")
+            now = datetime.now(kwt)
+            due = now + timedelta(hours=24)
+            task, terr = post_urgent_operator_task(
+                title=f"GO CHECK: {error_type}"[:120],
+                user_id=user_id,
+                message=task_message,
+                vendon_id=machine_id,
+                start_date=now.date().isoformat(),
+                end_date=due.date().isoformat(),
+                due_time=due.strftime("%H:%M"),
+            )
+            if terr is None:
+                task_id = None
+                if isinstance(task, dict):
+                    task_id = task.get("id") or (task.get("task") or {}).get("id")
+                return _with_configured(
+                    {
+                        "ok": True,
+                        "delivery": "task_manager_received",
+                        "taskId": task_id,
+                        "operatorName": operator_name,
+                        "operatorEmail": operator_email or None,
+                        "taskManagerUserId": user_id,
+                        "note": "Urgent task created in Workflow Received.",
+                    }
+                )
+            tm_err = terr
+        except Exception as ex:
+            logger.exception("GO CHECK urgent-operator for %s", machine_id)
+            tm_err = str(ex)
+    else:
+        tm_err = str(schedule.get("error") or "No scheduled operator user_id for this machine")
 
     slack_text = "\n".join(
         [
@@ -581,7 +660,7 @@ def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
                     "operatorEmail": operator_email,
                     "operatorName": operator_name,
                     "slackUserId": sent.get("slackUserId"),
-                    "note": "Task Manager Received inbox API is not available yet; message sent via Slack DM.",
+                    "note": f"Task Manager Received failed ({tm_err}); sent via Slack DM.",
                 }
             )
         err = str(sent.get("error") or "Slack DM failed")
@@ -589,7 +668,7 @@ def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
             return _with_configured(
                 {
                     "ok": False,
-                    "error": err,
+                    "error": f"{tm_err}; Slack: {err}",
                     "delivery": "none",
                     "operatorEmail": operator_email,
                     "operatorName": operator_name,
@@ -600,7 +679,7 @@ def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
         return _with_configured(
             {
                 "ok": False,
-                "error": err,
+                "error": f"{tm_err}; Slack: {err}",
                 "operatorEmail": operator_email or None,
                 "operatorName": operator_name,
             }
@@ -610,21 +689,21 @@ def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
         return _with_configured(
             {
                 "ok": False,
-                "error": "Slack DM not configured; use email fallback",
+                "error": tm_err,
                 "delivery": "mailto",
                 "operatorEmail": operator_email,
                 "operatorName": operator_name,
                 "mailtoUrl": mailto_url,
-                "note": "Slack DM is not configured on people-api; use the email fallback.",
+                "note": "Task Manager write failed; use the email fallback.",
             }
         )
 
     return _with_configured(
         {
             "ok": False,
-            "error": "No operator email on schedule and Slack DM not configured",
+            "error": tm_err,
             "operatorName": operator_name,
-            "note": "Add operator email on schedule or configure Slack DM on people-api.",
+            "note": "Could not create Workflow Received task or fall back to Slack/email.",
         }
     )
 
@@ -632,7 +711,117 @@ def post_go_check(body: Dict[str, Any]) -> Dict[str, Any]:
 def post_dm_operator(body: Dict[str, Any]) -> Dict[str, Any]:
     if not workflow_configured():
         return _not_configured()
-    return _with_configured({"error": "dm-operator API not available in Task Manager v1", "ok": False})
+
+    machine_id = str(body.get("machineId") or body.get("machine_id") or "").strip()
+    message = str(body.get("message") or "").strip()
+    if not machine_id:
+        return _with_configured({"ok": False, "error": "machineId required"})
+    if not message:
+        return _with_configured({"ok": False, "error": "message required"})
+
+    user_id, schedule = _scheduled_operator_user_id(machine_id)
+    operator_name = str(schedule.get("operatorName") or "Operator").strip() or "Operator"
+    if user_id is None:
+        return _with_configured(
+            {
+                "ok": False,
+                "error": str(schedule.get("error") or "No scheduled operator user_id for this machine"),
+                "operatorName": operator_name,
+            }
+        )
+
+    try:
+        from task_manager_client import post_direct_message
+
+        row, err = post_direct_message(user_id=user_id, message=message)
+        if err:
+            return _with_configured(
+                {
+                    "ok": False,
+                    "error": err,
+                    "operatorName": operator_name,
+                    "taskManagerUserId": user_id,
+                }
+            )
+        dm_id = None
+        if isinstance(row, dict):
+            dm_id = row.get("id") or (row.get("direct_message") or {}).get("id")
+        return _with_configured(
+            {
+                "ok": True,
+                "delivery": "task_manager_dm",
+                "directMessageId": dm_id,
+                "operatorName": operator_name,
+                "taskManagerUserId": user_id,
+                "note": "Message delivered to operator Workflow inbox.",
+            }
+        )
+    except Exception as ex:
+        logger.exception("DM operator for %s", machine_id)
+        return _with_configured({"ok": False, "error": str(ex), "operatorName": operator_name})
+
+
+def post_cleaning_overdue(body: Dict[str, Any]) -> Dict[str, Any]:
+    if not workflow_configured():
+        return _not_configured()
+
+    machine_id = str(body.get("machineId") or body.get("machine_id") or "").strip()
+    message = str(body.get("message") or "").strip() or None
+    overdue_date = str(body.get("overdueDate") or body.get("overdue_date") or "").strip() or None
+    if not machine_id:
+        return _with_configured({"ok": False, "error": "machineId required"})
+
+    user_id, schedule = _scheduled_operator_user_id(machine_id)
+    operator_name = str(schedule.get("operatorName") or "Operator").strip() or "Operator"
+    if user_id is None:
+        return _with_configured(
+            {
+                "ok": False,
+                "error": str(schedule.get("error") or "No scheduled operator user_id for this machine"),
+                "operatorName": operator_name,
+            }
+        )
+
+    if not overdue_date:
+        try:
+            from task_manager_client import kuwait_today
+
+            overdue_date = kuwait_today().isoformat()
+        except Exception:
+            overdue_date = date.today().isoformat()
+
+    try:
+        from task_manager_client import post_cleaning_overdue_notification
+
+        row, err = post_cleaning_overdue_notification(
+            user_id=user_id,
+            vendon_id=machine_id,
+            overdue_date=overdue_date,
+            message=message,
+        )
+        if err:
+            return _with_configured(
+                {
+                    "ok": False,
+                    "error": err,
+                    "operatorName": operator_name,
+                    "taskManagerUserId": user_id,
+                }
+            )
+        return _with_configured(
+            {
+                "ok": True,
+                "delivery": "task_manager_cleaning_overdue",
+                "operatorName": operator_name,
+                "taskManagerUserId": user_id,
+                "overdueDate": overdue_date,
+                "payload": row if isinstance(row, dict) else None,
+                "note": "Cleaning-overdue notification delivered to operator inbox.",
+            }
+        )
+    except Exception as ex:
+        logger.exception("cleaning-overdue for %s", machine_id)
+        return _with_configured({"ok": False, "error": str(ex), "operatorName": operator_name})
 
 
 def _heuristic_bullets_from_text(text: str, limit: int = 5) -> List[str]:

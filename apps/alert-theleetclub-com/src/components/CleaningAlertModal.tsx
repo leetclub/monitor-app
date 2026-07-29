@@ -10,6 +10,7 @@ import {
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { operatorChannelsFromApi, resolveOperatorContacts } from '@/lib/operatorContacts';
 import type { MachineAttendanceSummary } from '@/lib/leetWorkflowApi';
+import { submitCleaningOverdue, workflowNotConfiguredMessage } from '@/lib/leetWorkflowApi';
 import { useOperatorContact } from '@/lib/useOperatorContact';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 
@@ -39,8 +40,10 @@ export function CleaningAlertModal({
   onClose: () => void;
 }) {
   useAlertModal(onClose);
-  const [activeChannel, setActiveChannel] = useState<CleaningAlertChannel>('slack');
+  const [activeChannel, setActiveChannel] = useState<CleaningAlertChannel>('workflow');
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
 
   const displayName =
     String(operatorName || attendanceSummary?.operatorName || 'Operator').trim() || 'Operator';
@@ -119,12 +122,35 @@ export function CleaningAlertModal({
     }
   }
 
+  async function onSendWorkflow() {
+    if (!machineId) return;
+    setBusy(true);
+    setSendResult(null);
+    try {
+      const res = await submitCleaningOverdue({
+        machineId,
+        message: previewText,
+      });
+      if (workflowNotConfiguredMessage(res)) {
+        setSendResult('Workflow not configured');
+      } else if (res.ok) {
+        setSendResult(`Cleaning-overdue sent to ${res.operatorName || 'operator'} Workflow inbox.`);
+      } else {
+        setSendResult([res.error, res.note].filter(Boolean).join(' — ') || 'Could not send');
+      }
+    } catch (err) {
+      setSendResult((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return createPortal(
     <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
       <div className="salesHistoryModal cleaningAlertModal" {...panel}>
         <div className="salesHistoryHead">
           <div>
-            <p className="salesHistoryEyebrow">Cleaning alert notification · preview</p>
+            <p className="salesHistoryEyebrow">Cleaning alert notification</p>
             <h2 className="salesHistoryTitle">{machineName}</h2>
             <p className="salesHistorySub">#{machineId}</p>
           </div>
@@ -150,8 +176,8 @@ export function CleaningAlertModal({
         </p>
 
         <p className="salesHistoryNote">
-          Operator: <strong>{displayName}</strong> — message would be sent to Slack DM, Email, WhatsApp, and
-          Workflow <strong>Received</strong> (preview only; not sent from Alert).
+          Operator: <strong>{displayName}</strong> — deliver via Workflow inbox, or copy for Slack / Email /
+          WhatsApp.
         </p>
 
         <OperatorContactIcons
@@ -187,6 +213,15 @@ export function CleaningAlertModal({
           </div>
           <pre className="cleaningAlertPreviewBody">{previewText}</pre>
         </section>
+
+        {activeChannel === 'workflow' ? (
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="btnPrimary" disabled={busy || !machineId} onClick={onSendWorkflow}>
+              {busy ? 'Sending…' : 'Send to operator Workflow inbox'}
+            </button>
+            {sendResult ? <p className="salesHistoryNote">{sendResult}</p> : null}
+          </div>
+        ) : null}
       </div>
     </div>,
     getAlertModalPortal(),

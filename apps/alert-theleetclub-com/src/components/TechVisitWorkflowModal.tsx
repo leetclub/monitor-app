@@ -124,7 +124,13 @@ export function TechVisitWorkflowModal({
           <div className="alertModalContentReveal">
             <p className="salesHistoryNote">
               Last visit: <strong>{formatKuwaitDateTime(lastVisitIso)}</strong>
-              {source === 'safetyculture' ? ' · SafetyCulture' : null}
+              {source === 'safetyculture'
+                ? ' · SafetyCulture'
+                : source === 'task_manager_quality_control'
+                  ? ' · Workflow QC'
+                  : source
+                    ? ` · ${source}`
+                    : null}
             </p>
             {visitorName ? (
               <p className="salesHistoryNote">
@@ -134,6 +140,8 @@ export function TechVisitWorkflowModal({
             {comment ? <p className="historyModalRowExplain">{comment}</p> : null}
             {payload?.error && source === 'safetyculture' ? (
               <p className="salesHistoryEmpty salesHistoryFootnote">{payload.error}</p>
+            ) : payload?.note && source === 'safetyculture' ? (
+              <p className="salesHistoryEmpty salesHistoryFootnote">{payload.note}</p>
             ) : null}
           </div>
         ) : !q.isLoading ? (
