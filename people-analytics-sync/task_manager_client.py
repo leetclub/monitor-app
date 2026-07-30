@@ -88,7 +88,13 @@ def _post_json(path: str, body: Dict[str, Any]) -> Tuple[Optional[Any], Optional
         status = int(res.status_code)
         if status >= 400:
             detail = _response_error_detail(res)
-            return None, f"Task Manager POST {path} failed ({status}){detail}", status
+            hint = ""
+            if status >= 500:
+                hint = (
+                    " — Live Task Manager crashed after validation; ask Workflow to check "
+                    "Laravel logs and TASKS_SYSTEM_ISSUER_ADMIN_ID on production"
+                )
+            return None, f"Task Manager POST {path} failed ({status}){detail}{hint}", status
         if not res.content:
             return {}, None, status
         try:
