@@ -45,8 +45,11 @@ export function GoCheckWorkflowModal({
             `GO CHECK created in Workflow Received for ${res.operatorName || 'operator'} (24h due).`,
           );
         } else if (res.delivery === 'slack_dm') {
+          const why = String(res.note || '').trim();
           setResult(
-            `GO CHECK sent to ${res.operatorName || 'operator'} via Slack DM (Workflow Received unavailable).`,
+            why
+              ? `GO CHECK sent to ${res.operatorName || 'operator'} via Slack DM. ${why}`
+              : `GO CHECK sent to ${res.operatorName || 'operator'} via Slack DM (Workflow Received unavailable).`,
           );
         } else {
           setResult('GO CHECK sent.');

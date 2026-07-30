@@ -1311,8 +1311,8 @@ export function RedFlagsPage({
         {cleaningOverdueCount > 0 ? (
           <div className="stitchOpsAlert stitchOpsAlertWarn opsAlertInline" role="status">
             <strong>Cleaning overdue ({cleaningOverdueCount})</strong> — rows highlighted in red. Tap the{' '}
-            <strong>alert icon</strong> on Last clean for the operator message preview (Slack, Email, WhatsApp,
-            Workflow Received).
+            <strong>alert icon</strong> on <strong>Last clean</strong> → choose <strong>Workflow</strong> →{' '}
+            <strong>Send to operator Workflow inbox</strong> (Slack/Email/WhatsApp remain copy-only).
             {notifyPerm !== 'granted' && notifyPerm !== 'unsupported' ? (
               <>
                 {' '}
