@@ -23,6 +23,101 @@ logger = logging.getLogger(__name__)
 
 OFF_DISPLAY_NAMES = frozenset({"Machine OFF", "KNet OFF", "Vendon OFF"})
 
+# Kuwait time-of-day peak multipliers for projected loss (hospital / workplace vending).
+# Weighted by seconds spent in each hour band during the downtime interval.
+_PEAK_BANDS: Tuple[Tuple[int, int, float, str], ...] = (
+    (0, 6, 0.35, "off_peak"),  # overnight
+    (6, 9, 0.85, "morning"),
+    (9, 14, 1.9, "peak"),  # mid-morning + lunch rush
+    (14, 17, 1.15, "afternoon"),
+    (17, 23, 0.65, "evening"),
+    (23, 24, 0.35, "off_peak"),
+)
+
+_DEFAULT_AVG_VEND_KWD = 0.30  # fallback ticket size for volume impact
+
+
+def _peak_multiplier_for_hour(hour: int) -> Tuple[float, str]:
+    h = int(hour) % 24
+    for lo, hi, mult, label in _PEAK_BANDS:
+        if lo <= h < hi:
+            return mult, label
+    return 1.0, "standard"
+
+
+def weighted_peak_multiplier(clip_lo: int, clip_hi: int) -> Dict[str, Any]:
+    """Seconds-weighted peak multiplier for [clip_lo, clip_hi) in Kuwait local time."""
+    if clip_hi <= clip_lo:
+        return {"peakMultiplier": 1.0, "peakBand": "standard", "byBand": {}}
+    tz = ZoneInfo("Asia/Kuwait")
+    total = 0
+    band_sec: Dict[str, int] = {}
+    weighted = 0.0
+    t = int(clip_lo)
+    end = int(clip_hi)
+    while t < end:
+        local = datetime.fromtimestamp(t, tz=tz)
+        hour = local.hour
+        # next hour boundary
+        next_hour = local.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        next_ts = int(next_hour.timestamp())
+        chunk_hi = min(end, next_ts)
+        sec = max(0, chunk_hi - t)
+        if sec <= 0:
+            break
+        mult, label = _peak_multiplier_for_hour(hour)
+        weighted += mult * sec
+        total += sec
+        band_sec[label] = band_sec.get(label, 0) + sec
+        t = chunk_hi
+    if total <= 0:
+        return {"peakMultiplier": 1.0, "peakBand": "standard", "byBand": {}}
+    avg = weighted / total
+    # Dominant band by seconds
+    peak_band = max(band_sec.items(), key=lambda kv: kv[1])[0] if band_sec else "standard"
+    return {
+        "peakMultiplier": round(avg, 3),
+        "peakBand": peak_band,
+        "byBand": {k: int(v) for k, v in band_sec.items()},
+    }
+
+
+def project_downtime_loss(
+    *,
+    baseline_hourly_kwd: Optional[float],
+    operational_sec: int,
+    clip_lo: int,
+    clip_hi: int,
+    spoilage_kwd: float = 0.0,
+    avg_vend_kwd: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Projected Loss = Baseline Hourly Revenue × Downtime Hours × Peak Multiplier
+    (+ spoilage). Volume = opportunity / avg ticket.
+    """
+    peak = weighted_peak_multiplier(clip_lo, clip_hi)
+    hours = max(0.0, float(operational_sec) / 3600.0)
+    base = float(baseline_hourly_kwd) if baseline_hourly_kwd is not None else None
+    mult = float(peak["peakMultiplier"])
+    opportunity = round(base * hours * mult, 3) if base is not None and hours > 0 else None
+    spoil = max(0.0, float(spoilage_kwd or 0.0))
+    final = round(opportunity + spoil, 3) if opportunity is not None else None
+    ticket = float(avg_vend_kwd) if avg_vend_kwd and avg_vend_kwd > 0 else _DEFAULT_AVG_VEND_KWD
+    volume = int(round(opportunity / ticket)) if opportunity is not None and ticket > 0 else None
+    return {
+        "baselineHourlyKwd": round(base, 4) if base is not None else None,
+        "downtimeHours": round(hours, 4),
+        "peakMultiplier": mult,
+        "peakBand": peak.get("peakBand"),
+        "peakBandsSeconds": peak.get("byBand"),
+        "opportunityCostKwd": opportunity,
+        "spoilageKwd": round(spoil, 3),
+        "finalEconomicImpactKwd": final,
+        "avgVendKwd": round(ticket, 4),
+        "volumeImpact": volume,
+        "formula": "baseline_hourly × downtime_hours × peak_multiplier (+ spoilage)",
+    }
+
 # Look back this many days before the period start so unresolved / long OFF episodes clip correctly.
 _LOOKBACK_DAYS = 2
 
@@ -307,6 +402,31 @@ def _collect_off_by_mid(
     return _dedupe_off_events(cached + live_parsed), live_err, now_ts
 
 
+def _derive_baseline_hourly_kwd(baselines_out: List[Dict[str, Any]]) -> Optional[float]:
+    """KD/hour from same-elapsed day rates (prefer primary; else weighted average)."""
+    primary_rate = None
+    sum_kwd = 0.0
+    sum_hours = 0.0
+    for b in baselines_out:
+        kwd_f = b.get("kwd")
+        el_f = b.get("elapsedSec")
+        if kwd_f is None or el_f is None or float(el_f) <= 0:
+            continue
+        hours = float(el_f) / 3600.0
+        if hours <= 0:
+            continue
+        hourly = float(kwd_f) / hours
+        if b.get("primary") and primary_rate is None:
+            primary_rate = hourly
+        sum_kwd += float(kwd_f)
+        sum_hours += hours
+    if primary_rate is not None:
+        return round(primary_rate, 4)
+    if sum_hours > 0:
+        return round(sum_kwd / sum_hours, 4)
+    return None
+
+
 def compute_machine_downtime_detail(
     machine_id: str,
     machine_name: Optional[str],
@@ -315,15 +435,18 @@ def compute_machine_downtime_detail(
     fetch_events_window,
     sales_baselines: Optional[List[Dict[str, Any]]] = None,
     fetch_window_sales: Optional[Callable[[str, int, int], float]] = None,
+    baseline_hourly_kwd: Optional[float] = None,
+    avg_vend_kwd: Optional[float] = None,
+    spoilage_kwd: float = 0.0,
 ) -> Dict[str, Any]:
     """
-    Per-machine OFF events for Kuwait today + estimated KD loss.
+    Per-machine OFF events for Kuwait today + projected revenue loss.
 
-    Loss method (preferred): actual Vendon sales on the baseline day during the
-    **same clock hours** as the downtime (e.g. today 10:15–11:40 → yesterday 10:15–11:40).
-    Primary baseline = yesterday; also day-before and same weekday last week.
+    Primary: Projected Loss = Baseline Hourly Revenue × Downtime Hours × Peak Multiplier
+    (+ optional spoilage). Peak multiplier is seconds-weighted across Kuwait hour bands.
 
-    Fallback if window sales unavailable: day same-elapsed rate × operational seconds.
+    Secondary (observed): actual Vendon sales on comparison days during the same clock hours
+    (yesterday / day before / same weekday last week) for sanity-check.
     """
     mid = str(machine_id or "").strip()
     if not mid:
@@ -357,7 +480,7 @@ def compute_machine_downtime_detail(
         dash.close()
     ctx = resolve_cleaning_context(name, cleaning_rules)
 
-    # Keep clip timestamps for window-aligned loss.
+    # Keep clip timestamps for projection + observed window sales.
     event_clips: List[Tuple[Dict[str, Any], int, int]] = []
     for disp, rt, res_i in typed:
         end_eff = res_i if res_i is not None else now_ts
@@ -421,6 +544,12 @@ def compute_machine_downtime_detail(
             }
         )
 
+    hourly = (
+        float(baseline_hourly_kwd)
+        if baseline_hourly_kwd is not None
+        else _derive_baseline_hourly_kwd(baselines_out)
+    )
+
     def _shift_window(clip_lo: int, clip_hi: int, baseline_day: date) -> Tuple[int, int]:
         """Map today's [clip_lo, clip_hi) onto the same clock on baseline_day (Kuwait)."""
         off_lo = int(clip_lo) - int(today_lo_ts)
@@ -446,16 +575,6 @@ def compute_machine_downtime_detail(
         window_cache[key] = val
         return val
 
-    # Prefetch unique baseline windows (events + merged) in parallel.
-    prefetch: List[Tuple[int, int]] = []
-    for _ev, clip_lo, clip_hi in event_clips:
-        for b in baselines_out:
-            bd = b.get("baselineDay")
-            if not isinstance(bd, date):
-                continue
-            b_lo, b_hi = _shift_window(clip_lo, clip_hi, bd)
-            if b_hi > b_lo:
-                prefetch.append((b_lo, b_hi))
     # Merged intervals for today total (no double-count across OFF types)
     merge_clips: List[Tuple[int, int]] = []
     for _disp, rt, res_i in typed:
@@ -465,6 +584,17 @@ def compute_machine_downtime_detail(
         if clip_lo < clip_hi:
             merge_clips.append((clip_lo, clip_hi))
     merged = _merge_intervals(merge_clips)
+
+    # Prefetch observed same-clock sales (secondary)
+    prefetch: List[Tuple[int, int]] = []
+    for _ev, clip_lo, clip_hi in event_clips:
+        for b in baselines_out:
+            bd = b.get("baselineDay")
+            if not isinstance(bd, date):
+                continue
+            b_lo, b_hi = _shift_window(clip_lo, clip_hi, bd)
+            if b_hi > b_lo:
+                prefetch.append((b_lo, b_hi))
     for clip_lo, clip_hi in merged:
         for b in baselines_out:
             bd = b.get("baselineDay")
@@ -485,8 +615,21 @@ def compute_machine_downtime_detail(
     used_window_sales = False
     for ev, clip_lo, clip_hi in event_clips:
         op = int(ev.get("operationalSec") or 0)
+        proj = project_downtime_loss(
+            baseline_hourly_kwd=hourly,
+            operational_sec=op,
+            clip_lo=clip_lo,
+            clip_hi=clip_hi,
+            spoilage_kwd=spoilage_kwd,
+            avg_vend_kwd=avg_vend_kwd,
+        )
+        ev["projection"] = proj
+        ev["estimatedLossPrimaryKwd"] = proj.get("opportunityCostKwd")
+        ev["peakMultiplier"] = proj.get("peakMultiplier")
+        ev["peakBand"] = proj.get("peakBand")
+
+        # Secondary: observed same-clock sales on comparison days
         loss_by: Dict[str, Optional[float]] = {}
-        primary_loss: Optional[float] = None
         for b in baselines_out:
             bid = str(b.get("id") or b.get("label"))
             bd = b.get("baselineDay")
@@ -502,18 +645,55 @@ def compute_machine_downtime_detail(
                 if rate is not None and op > 0:
                     loss = round(float(rate) * op, 3)
             loss_by[bid] = loss
-            if b.get("primary") and loss is not None and primary_loss is None:
-                primary_loss = loss
-        if primary_loss is None:
-            for b in baselines_out:
-                bid = str(b.get("id") or b.get("label"))
-                if loss_by.get(bid) is not None:
-                    primary_loss = loss_by[bid]
-                    break
-        ev["estimatedLossKwd"] = loss_by
-        ev["estimatedLossPrimaryKwd"] = primary_loss
+        ev["observedSalesKwd"] = loss_by
+        ev["estimatedLossKwd"] = loss_by  # alias for older UI
 
-    # Today total: sum window sales over merged OFF intervals (primary baseline)
+    # Today total: formula on merged OFF intervals (no double-count)
+    today_opp = 0.0
+    today_opp_ok = hourly is not None and today_merged_sec > 0
+    today_volume = 0
+    peak_acc_weighted = 0.0
+    peak_acc_sec = 0
+    for clip_lo, clip_hi in merged:
+        op = int(operational_gap_seconds(clip_lo, clip_hi, ctx))
+        if op <= 0:
+            continue
+        piece = project_downtime_loss(
+            baseline_hourly_kwd=hourly,
+            operational_sec=op,
+            clip_lo=clip_lo,
+            clip_hi=clip_hi,
+            spoilage_kwd=0.0,
+            avg_vend_kwd=avg_vend_kwd,
+        )
+        if piece.get("opportunityCostKwd") is not None:
+            today_opp += float(piece["opportunityCostKwd"])
+            today_volume += int(piece.get("volumeImpact") or 0)
+            peak_acc_weighted += float(piece.get("peakMultiplier") or 1.0) * op
+            peak_acc_sec += op
+        else:
+            today_opp_ok = False
+
+    spoil = max(0.0, float(spoilage_kwd or 0.0))
+    today_final = round(today_opp + spoil, 3) if today_opp_ok else None
+    today_opp_r = round(today_opp, 3) if today_opp_ok else None
+    today_peak = round(peak_acc_weighted / peak_acc_sec, 3) if peak_acc_sec > 0 else None
+
+    today_projection = {
+        "baselineHourlyKwd": round(hourly, 4) if hourly is not None else None,
+        "downtimeHours": round(float(today_merged_sec) / 3600.0, 4) if today_merged_sec else 0.0,
+        "peakMultiplier": today_peak,
+        "opportunityCostKwd": today_opp_r,
+        "spoilageKwd": round(spoil, 3),
+        "finalEconomicImpactKwd": today_final,
+        "avgVendKwd": round(float(avg_vend_kwd), 4)
+        if avg_vend_kwd and float(avg_vend_kwd) > 0
+        else _DEFAULT_AVG_VEND_KWD,
+        "volumeImpact": today_volume if today_opp_ok else None,
+        "formula": "baseline_hourly × downtime_hours × peak_multiplier (+ spoilage)",
+    }
+
+    # Observed totals by comparison day (secondary)
     total_by: Dict[str, Optional[float]] = {str(b.get("id") or b.get("label")): 0.0 for b in baselines_out}
     total_ok: Dict[str, bool] = {k: True for k in total_by}
     for clip_lo, clip_hi in merged:
@@ -542,30 +722,18 @@ def compute_machine_downtime_detail(
         elif total_by.get(bid) is not None:
             total_by[bid] = round(float(total_by[bid]), 3)
 
-    primary_id = None
-    for b in baselines_out:
-        if b.get("primary"):
-            primary_id = str(b.get("id") or b.get("label"))
-            break
-    if primary_id is None and baselines_out:
-        primary_id = str(baselines_out[0].get("id") or baselines_out[0].get("label"))
-    total_primary = total_by.get(primary_id) if primary_id else None
-
     # Strip non-JSON baselineDay
     for b in baselines_out:
         b.pop("baselineDay", None)
 
     method = (
-        "estimated_kd = actual Vendon sales on the baseline day during the same Kuwait clock hours "
-        "as the downtime (e.g. today 10:15–11:40 vs yesterday 10:15–11:40). "
-        "Primary = yesterday; also day before and same weekday last week. "
-        "Concurrent OFF types are listed separately; today total merges overlaps."
+        "Projected Loss = Baseline Hourly Revenue × Downtime Hours × Peak Multiplier (+ spoilage). "
+        "Baseline hourly = machine same-elapsed KD ÷ elapsed hours (primary: yesterday). "
+        "Peak multiplier is seconds-weighted across Kuwait bands "
+        "(off-peak ~0.35, morning 0.85, peak 1.9, afternoon 1.15, evening 0.65). "
+        "Volume = opportunity ÷ avg vend. Concurrent OFF types listed separately; today total merges overlaps. "
+        "Observed same-clock sales on comparison days are shown for reference."
     )
-    if not used_window_sales:
-        method = (
-            "Fallback: baseline same-elapsed KD / elapsed seconds × downtime operational seconds "
-            "(window-aligned sales unavailable). Primary = yesterday."
-        )
 
     return {
         "ok": True,
@@ -574,12 +742,18 @@ def compute_machine_downtime_detail(
         "dateToday": today.isoformat(),
         "generatedAt": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "todayMergedOperationalSec": today_merged_sec,
-        "estimatedLossTodayPrimaryKwd": total_primary,
+        "projection": today_projection,
+        "estimatedLossTodayPrimaryKwd": today_opp_r,
         "estimatedLossTodayKwd": total_by,
+        "observedSalesTodayKwd": total_by,
         "lossMethod": method,
         "lossAlignedToClock": used_window_sales,
         "baselines": baselines_out,
         "events": events,
         "liveEventsError": live_err,
         "offTypes": sorted(OFF_DISPLAY_NAMES),
+        "peakBands": [
+            {"fromHour": lo, "toHour": hi, "multiplier": mult, "label": label}
+            for lo, hi, mult, label in _PEAK_BANDS
+        ],
     }

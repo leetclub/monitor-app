@@ -2901,12 +2901,11 @@ def register_alert_routes(app) -> None:
     @app.route("/api/alert/overall/downtime-detail", methods=["GET", "OPTIONS"])
     def alert_overall_downtime_detail():
         """
-        Per-machine OFF events for Kuwait today + estimated KD loss vs sales baselines.
+        Per-machine OFF events for Kuwait today + projected revenue loss.
 
-        Query: machine_id (required), machine_name (optional).
-        For each OFF interval, loss = actual sales on the baseline day during the **same clock hours**.
-        Baselines: yesterday (primary), day before, same weekday last week.
-        Fallback: same-elapsed day rate × operational seconds if window sales fail.
+        Query: machine_id (required), machine_name (optional), spoilage_kwd (optional).
+        Primary: baseline hourly KD × downtime hours × peak multiplier (+ spoilage).
+        Secondary: observed same-clock sales on yesterday / day before / same weekday last week.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2919,6 +2918,12 @@ def register_alert_routes(app) -> None:
         if not mid:
             return jsonify({"ok": False, "error": "machine_id required", "events": []}), 400
 
+        try:
+            spoilage_kwd = float(request.args.get("spoilage_kwd") or request.args.get("spoilageKwd") or 0)
+        except (TypeError, ValueError):
+            spoilage_kwd = 0.0
+        spoilage_kwd = max(0.0, spoilage_kwd)
+
         tz = ZoneInfo("Asia/Kuwait")
         now_local = datetime.now(tz)
         today = now_local.date()
@@ -2929,6 +2934,7 @@ def register_alert_routes(app) -> None:
             return max(0, we - ws)
 
         sales_baselines: List[Dict[str, Any]] = []
+        baseline_hourly: Optional[float] = None
         try:
             elapsed_payload = _load_daily_sales_elapsed_db_cache() or {}
             row = (elapsed_payload.get("byMachineId") or {}).get(mid) or {}
@@ -2970,6 +2976,24 @@ def register_alert_routes(app) -> None:
                         "primary": primary,
                     }
                 )
+
+            # Baseline hourly: prefer yesterday; else weighted avg of last 7 completed days.
+            y_kwd = _day_kwd(1)
+            y_el = _elapsed_sec_for_day(today - timedelta(days=1))
+            if y_kwd is not None and y_el > 0:
+                baseline_hourly = float(y_kwd) / (float(y_el) / 3600.0)
+            else:
+                sum_kwd = 0.0
+                sum_hours = 0.0
+                for i in range(1, 8):
+                    k = _day_kwd(i)
+                    el = _elapsed_sec_for_day(today - timedelta(days=i))
+                    if k is None or el <= 0:
+                        continue
+                    sum_kwd += float(k)
+                    sum_hours += float(el) / 3600.0
+                if sum_hours > 0:
+                    baseline_hourly = sum_kwd / sum_hours
         except Exception:
             logger.exception("downtime-detail sales baselines for %s", mid)
 
@@ -2988,6 +3012,8 @@ def register_alert_routes(app) -> None:
                 fetch_events_window=_fetch_events_window,
                 sales_baselines=sales_baselines,
                 fetch_window_sales=_window_sales,
+                baseline_hourly_kwd=baseline_hourly,
+                spoilage_kwd=spoilage_kwd,
             )
             return jsonify(payload)
         except Exception as ex:

@@ -32,6 +32,19 @@ export type DowntimeLossBaseline = {
   primary?: boolean;
 };
 
+export type DowntimeProjection = {
+  baselineHourlyKwd?: number | null;
+  downtimeHours?: number | null;
+  peakMultiplier?: number | null;
+  peakBand?: string | null;
+  opportunityCostKwd?: number | null;
+  spoilageKwd?: number | null;
+  finalEconomicImpactKwd?: number | null;
+  avgVendKwd?: number | null;
+  volumeImpact?: number | null;
+  formula?: string | null;
+};
+
 export type DowntimeEventRow = {
   eventType?: string;
   startAt?: string | null;
@@ -42,6 +55,10 @@ export type DowntimeEventRow = {
   operationalSec?: number | null;
   estimatedLossPrimaryKwd?: number | null;
   estimatedLossKwd?: Record<string, number | null | undefined>;
+  observedSalesKwd?: Record<string, number | null | undefined>;
+  peakMultiplier?: number | null;
+  peakBand?: string | null;
+  projection?: DowntimeProjection | null;
 };
 
 export type DowntimeDetailResponse = {
@@ -51,13 +68,16 @@ export type DowntimeDetailResponse = {
   machineName?: string;
   dateToday?: string;
   todayMergedOperationalSec?: number | null;
+  projection?: DowntimeProjection | null;
   estimatedLossTodayPrimaryKwd?: number | null;
   estimatedLossTodayKwd?: Record<string, number | null | undefined>;
+  observedSalesTodayKwd?: Record<string, number | null | undefined>;
   lossMethod?: string | null;
   lossAlignedToClock?: boolean;
   baselines?: DowntimeLossBaseline[];
   events?: DowntimeEventRow[];
   liveEventsError?: string | null;
+  peakBands?: Array<{ fromHour?: number; toHour?: number; multiplier?: number; label?: string }>;
 };
 
 export function formatDowntimeClock(iso: string | null | undefined): string {
@@ -74,4 +94,14 @@ export function formatLossKwd(kwd: number | null | undefined): string {
   const n = Number(kwd);
   if (Math.abs(n) < 0.005) return '0.00 KD';
   return `${n.toFixed(2)} KD`;
+}
+
+export function formatHourlyKwd(kwd: number | null | undefined): string {
+  if (kwd == null || !Number.isFinite(kwd)) return '—';
+  return `${Number(kwd).toFixed(2)} KD/h`;
+}
+
+export function formatPeakMult(m: number | null | undefined): string {
+  if (m == null || !Number.isFinite(m)) return '—';
+  return `×${Number(m).toFixed(2)}`;
 }
