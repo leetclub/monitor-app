@@ -97,7 +97,8 @@ def _sum_off_operational_seconds(
     return total
 
 
-def _parse_off_pair(e: Dict[str, Any]) -> Optional[Tuple[str, int, Optional[int]]]:
+def _parse_off_pair(e: Dict[str, Any]) -> Optional[Tuple[str, str, int, Optional[int]]]:
+    """Return (machine_id, display_name, received_at, resolved_at)."""
     name = e.get("name") or e.get("original_name") or ""
     base = e.get("base_code") or e.get("original_base_code") or ""
     if name in EXCLUDED_EVENT_NAMES or base in EXCLUDED_EVENT_NAMES:
@@ -120,14 +121,14 @@ def _parse_off_pair(e: Dict[str, Any]) -> Optional[Tuple[str, int, Optional[int]
         res_i = int(res) if res is not None and int(res) > 0 else None
     except (TypeError, ValueError):
         res_i = None
-    return mid, rt, res_i
+    return mid, disp, rt, res_i
 
 
 def _load_off_events_from_cache(
     day_lo: date,
     day_hi_excl: date,
-) -> List[Tuple[str, int, Optional[int]]]:
-    out: List[Tuple[str, int, Optional[int]]] = []
+) -> List[Tuple[str, str, int, Optional[int]]]:
+    out: List[Tuple[str, str, int, Optional[int]]] = []
     _, factory = create_engine_and_session()
     db = factory()
     try:
@@ -160,17 +161,24 @@ def _load_off_events_from_cache(
 
 
 def _dedupe_off_events(
-    rows: List[Tuple[str, int, Optional[int]]],
-) -> Dict[str, List[Tuple[int, Optional[int]]]]:
-    seen: Set[Tuple[str, int, Optional[int]]] = set()
-    by_mid: Dict[str, List[Tuple[int, Optional[int]]]] = {}
-    for mid, rt, res_i in rows:
-        key = (mid, rt, res_i)
+    rows: List[Tuple[str, str, int, Optional[int]]],
+) -> Dict[str, List[Tuple[str, int, Optional[int]]]]:
+    """machine_id → list of (display_name, received_at, resolved_at)."""
+    seen: Set[Tuple[str, str, int, Optional[int]]] = set()
+    by_mid: Dict[str, List[Tuple[str, int, Optional[int]]]] = {}
+    for mid, disp, rt, res_i in rows:
+        key = (mid, disp, rt, res_i)
         if key in seen:
             continue
         seen.add(key)
-        by_mid.setdefault(mid, []).append((rt, res_i))
+        by_mid.setdefault(mid, []).append((disp, rt, res_i))
     return by_mid
+
+
+def _off_pairs_only(
+    typed: List[Tuple[str, int, Optional[int]]],
+) -> List[Tuple[int, Optional[int]]]:
+    return [(rt, res_i) for _disp, rt, res_i in typed]
 
 
 def compute_machine_downtime_summary(
@@ -212,7 +220,7 @@ def compute_machine_downtime_summary(
     live_events, live_err = fetch_events_window(live_from, now_ts, max_rows=45000)
     if live_err:
         logger.warning("alert downtime live events: %s", live_err)
-    live_parsed: List[Tuple[str, int, Optional[int]]] = []
+    live_parsed: List[Tuple[str, str, int, Optional[int]]] = []
     for e in live_events or []:
         if not isinstance(e, dict):
             continue
@@ -249,7 +257,7 @@ def compute_machine_downtime_summary(
     mids = set(cleaning_by_mid.keys()) | set(off_by_mid.keys())
     for mid in mids:
         ctx = cleaning_by_mid.get(mid)
-        off_list = off_by_mid.get(mid, [])
+        off_list = _off_pairs_only(off_by_mid.get(mid, []))
         today_sec = _sum_off_operational_seconds(off_list, today_lo_ts, today_hi_ts, now_ts, ctx)
         period_sec = _sum_off_operational_seconds(off_list, period_lo_ts, period_hi_ts, now_ts, ctx)
         if today_sec <= 0 and period_sec <= 0:
@@ -268,4 +276,183 @@ def compute_machine_downtime_summary(
         "offTypes": sorted(OFF_DISPLAY_NAMES),
         "byMachineId": by_machine,
         "liveEventsError": live_err,
+    }
+
+
+def _iso_kwt(ts: int) -> str:
+    tz = ZoneInfo("Asia/Kuwait")
+    return datetime.fromtimestamp(int(ts), tz=tz).replace(microsecond=0).isoformat()
+
+
+def _collect_off_by_mid(
+    *,
+    today: date,
+    fetch_events_window,
+) -> Tuple[Dict[str, List[Tuple[str, int, Optional[int]]]], Optional[str], int]:
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    today_lo_ts = _kuwait_day_start_ts(today)
+    cache_day_lo = today - timedelta(days=_LOOKBACK_DAYS)
+    cache_day_hi = today + timedelta(days=1)
+    cached = _load_off_events_from_cache(cache_day_lo, cache_day_hi)
+    live_from = max(0, today_lo_ts - _LOOKBACK_DAYS * 86400)
+    live_events, live_err = fetch_events_window(live_from, now_ts, max_rows=45000)
+    live_parsed: List[Tuple[str, str, int, Optional[int]]] = []
+    for e in live_events or []:
+        if not isinstance(e, dict):
+            continue
+        parsed = _parse_off_pair(e)
+        if parsed:
+            live_parsed.append(parsed)
+    return _dedupe_off_events(cached + live_parsed), live_err, now_ts
+
+
+def compute_machine_downtime_detail(
+    machine_id: str,
+    machine_name: Optional[str],
+    *,
+    vendon_get,
+    fetch_events_window,
+    sales_baselines: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Per-machine OFF events for Kuwait today + estimated KD loss rates.
+
+    Loss method: baseline_day_kwd / baseline_elapsed_seconds × event operational seconds.
+    Primary baseline = yesterday; also day-before and same weekday last week when provided.
+    """
+    mid = str(machine_id or "").strip()
+    if not mid:
+        return {"ok": False, "error": "machine_id required", "events": []}
+
+    tz = ZoneInfo("Asia/Kuwait")
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(tz).date()
+    today_lo_ts = _kuwait_day_start_ts(today)
+    now_ts = int(now.timestamp())
+
+    off_by_mid, live_err, now_ts = _collect_off_by_mid(
+        today=today,
+        fetch_events_window=fetch_events_window,
+    )
+    typed = off_by_mid.get(mid, [])
+
+    name = (machine_name or "").strip() or mid
+    if not (machine_name or "").strip():
+        fleet_rows, _ferr = vendon_fetch_machine_list(vendon_get)
+        for m in fleet_rows or []:
+            if str(m.get("id") or "").strip() == mid:
+                name = str(m.get("name") or mid)
+                break
+
+    _, dash_factory = create_dashboard_engine_and_session()
+    dash = dash_factory()
+    try:
+        cleaning_rules: List[MachineCleaningSchedule] = dash.query(MachineCleaningSchedule).all()
+    finally:
+        dash.close()
+    ctx = resolve_cleaning_context(name, cleaning_rules)
+
+    events: List[Dict[str, Any]] = []
+    for disp, rt, res_i in typed:
+        end_eff = res_i if res_i is not None else now_ts
+        clip_lo = max(int(rt), int(today_lo_ts))
+        clip_hi = min(int(end_eff), int(now_ts))
+        if clip_lo >= clip_hi:
+            continue
+        wall_sec = clip_hi - clip_lo
+        op_sec = int(operational_gap_seconds(clip_lo, clip_hi, ctx))
+        max_wall = max(0, now_ts - today_lo_ts)
+        if op_sec > max_wall:
+            op_sec = max_wall
+        events.append(
+            {
+                "eventType": disp,
+                "startAt": _iso_kwt(clip_lo),
+                "endAt": _iso_kwt(clip_hi) if res_i is not None and res_i <= now_ts else None,
+                "endAtEffective": _iso_kwt(clip_hi),
+                "open": res_i is None or int(res_i) > now_ts,
+                "wallSec": wall_sec,
+                "operationalSec": op_sec,
+            }
+        )
+    events.sort(key=lambda e: str(e.get("startAt") or ""), reverse=True)
+
+    today_merged_sec = _sum_off_operational_seconds(
+        _off_pairs_only(typed), today_lo_ts, now_ts, now_ts, ctx
+    )
+
+    baselines_out: List[Dict[str, Any]] = []
+    for b in sales_baselines or []:
+        if not isinstance(b, dict):
+            continue
+        label = str(b.get("label") or "").strip() or "Baseline"
+        kwd = b.get("kwd")
+        elapsed_sec = b.get("elapsedSec")
+        try:
+            kwd_f = float(kwd) if kwd is not None else None
+            el_f = float(elapsed_sec) if elapsed_sec is not None else None
+        except (TypeError, ValueError):
+            kwd_f, el_f = None, None
+        rate = None
+        if kwd_f is not None and el_f is not None and el_f > 0:
+            rate = kwd_f / el_f
+        baselines_out.append(
+            {
+                "id": str(b.get("id") or label).strip(),
+                "label": label,
+                "date": b.get("date"),
+                "kwd": round(kwd_f, 4) if kwd_f is not None else None,
+                "elapsedSec": int(el_f) if el_f is not None else None,
+                "kwdPerSec": round(rate, 8) if rate is not None else None,
+                "primary": bool(b.get("primary")),
+            }
+        )
+
+    primary_rate = None
+    for b in baselines_out:
+        if b.get("primary") and b.get("kwdPerSec") is not None:
+            primary_rate = float(b["kwdPerSec"])
+            break
+    if primary_rate is None:
+        for b in baselines_out:
+            if b.get("kwdPerSec") is not None:
+                primary_rate = float(b["kwdPerSec"])
+                break
+
+    for ev in events:
+        op = int(ev.get("operationalSec") or 0)
+        loss_by: Dict[str, Optional[float]] = {}
+        for b in baselines_out:
+            rate = b.get("kwdPerSec")
+            bid = str(b.get("id") or b.get("label"))
+            if rate is None:
+                loss_by[bid] = None
+            else:
+                loss_by[bid] = round(float(rate) * op, 3)
+        ev["estimatedLossKwd"] = loss_by
+        ev["estimatedLossPrimaryKwd"] = (
+            round(primary_rate * op, 3) if primary_rate is not None and op > 0 else None
+        )
+
+    total_primary = None
+    if primary_rate is not None and today_merged_sec > 0:
+        total_primary = round(primary_rate * today_merged_sec, 3)
+
+    return {
+        "ok": True,
+        "machineId": mid,
+        "machineName": name,
+        "dateToday": today.isoformat(),
+        "generatedAt": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "todayMergedOperationalSec": today_merged_sec,
+        "estimatedLossTodayPrimaryKwd": total_primary,
+        "lossMethod": (
+            "estimated_kd = baseline_same_elapsed_kwd / baseline_elapsed_seconds × downtime_operational_seconds. "
+            "Primary baseline = yesterday. Concurrent OFF types are listed separately; "
+            "today total uses merged intervals (no double-count)."
+        ),
+        "baselines": baselines_out,
+        "events": events,
+        "liveEventsError": live_err,
+        "offTypes": sorted(OFF_DISPLAY_NAMES),
     }

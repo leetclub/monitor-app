@@ -33,6 +33,7 @@ import {
   type RankedRedAlertRow,
 } from './redFlagsModel';
 import { GoCheckWorkflowModal } from '@/components/GoCheckWorkflowModal';
+import { DowntimeDetailModal } from '@/components/DowntimeDetailModal';
 import { freshnessNotice } from '@/lib/dataFreshness';
 import {
   aggregateFleetSalesForPreset,
@@ -386,6 +387,12 @@ export function RedFlagsPage({
     operatorName: string;
     strikeOperatorEmail?: string | null;
     attendanceSummary?: MachineAttendanceSummary;
+  } | null>(null);
+  const [downtimeDetail, setDowntimeDetail] = useState<{
+    machineName: string;
+    machineId: string;
+    todaySec?: number | null;
+    periodSec?: number | null;
   } | null>(null);
   const [targetDetail, setTargetDetail] = useState<{
     machineName: string;
@@ -1240,6 +1247,17 @@ export function RedFlagsPage({
             onClose={() => setSalesDetail(null)}
           />
         ) : null}
+        {downtimeDetail ? (
+          <DowntimeDetailModal
+            machineName={downtimeDetail.machineName}
+            machineId={downtimeDetail.machineId}
+            todayLabel={downtimeQ.data?.labelToday?.trim() || 'Today'}
+            periodLabel={downtimeQ.data?.labelPeriod?.trim() || 'Period'}
+            todaySec={downtimeDetail.todaySec}
+            periodSec={downtimeDetail.periodSec}
+            onClose={() => setDowntimeDetail(null)}
+          />
+        ) : null}
         {targetDetail ? (
           <TargetDetailModal
             machineName={targetDetail.machineName}
@@ -1532,6 +1550,17 @@ export function RedFlagsPage({
                       downtimeRow: downtimeQ.data?.byMachineId?.[machId] ?? null,
                       downtimeTodayLabel: downtimeQ.data?.labelToday?.trim() || 'Today',
                       downtimePeriodLabel: downtimeQ.data?.labelPeriod?.trim() || 'Period',
+                      onOpenDowntime: machId
+                        ? () => {
+                            const dt = downtimeQ.data?.byMachineId?.[machId];
+                            setDowntimeDetail({
+                              machineId: machId,
+                              machineName: String(row.machineName || machId),
+                              todaySec: dt?.todaySec,
+                              periodSec: dt?.periodSec,
+                            });
+                          }
+                        : undefined,
                       qaVisit,
                       techVisit,
                       qaFindings,
@@ -1695,6 +1724,17 @@ export function RedFlagsPage({
           strikeOperatorEmail={salesDetail.strikeOperatorEmail}
           attendanceSummary={salesDetail.attendanceSummary}
           onClose={() => setSalesDetail(null)}
+        />
+      ) : null}
+      {downtimeDetail ? (
+        <DowntimeDetailModal
+          machineName={downtimeDetail.machineName}
+          machineId={downtimeDetail.machineId}
+          todayLabel={downtimeQ.data?.labelToday?.trim() || 'Today'}
+          periodLabel={downtimeQ.data?.labelPeriod?.trim() || 'Period'}
+          todaySec={downtimeDetail.todaySec}
+          periodSec={downtimeDetail.periodSec}
+          onClose={() => setDowntimeDetail(null)}
         />
       ) : null}
       {targetDetail ? (

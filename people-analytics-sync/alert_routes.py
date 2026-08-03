@@ -2898,6 +2898,96 @@ def register_alert_routes(app) -> None:
             logger.exception("alert overall downtime summary")
             return jsonify({"ok": False, "error": "failed", "message": str(ex), "byMachineId": {}}), 500
 
+    @app.route("/api/alert/overall/downtime-detail", methods=["GET", "OPTIONS"])
+    def alert_overall_downtime_detail():
+        """
+        Per-machine OFF events for Kuwait today + estimated KD loss vs sales baselines.
+
+        Query: machine_id (required), machine_name (optional).
+        Baselines from daily-sales-elapsed cache: yesterday (primary), day before, same weekday last week.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        mid = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        mname = (request.args.get("machine_name") or request.args.get("machineName") or "").strip()
+        if not mid:
+            return jsonify({"ok": False, "error": "machine_id required", "events": []}), 400
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+
+        def _elapsed_sec_for_day(d: date) -> int:
+            ws = int(datetime.combine(d, dt_time.min, tzinfo=tz).timestamp())
+            we = int(_kuwait_elapsed_window_end(d, now_local).timestamp())
+            return max(0, we - ws)
+
+        sales_baselines: List[Dict[str, Any]] = []
+        try:
+            elapsed_payload = _load_daily_sales_elapsed_db_cache() or {}
+            row = (elapsed_payload.get("byMachineId") or {}).get(mid) or {}
+            daily = row.get("dailyElapsed") if isinstance(row.get("dailyElapsed"), list) else []
+
+            def _day_kwd(i: int) -> Optional[float]:
+                if i == 1 and row.get("yesterdaySameElapsedKwd") is not None:
+                    try:
+                        return float(row.get("yesterdaySameElapsedKwd"))
+                    except (TypeError, ValueError):
+                        pass
+                if i < len(daily) and isinstance(daily[i], dict):
+                    try:
+                        return float(daily[i].get("kwd"))
+                    except (TypeError, ValueError):
+                        return None
+                return None
+
+            # index 1 = yesterday, 2 = day before, 7 = same weekday last week (if history ≥ 8)
+            candidates = [
+                (1, "yesterday", "Yesterday", True),
+                (2, "day_before", "Day before", False),
+                (7, "same_weekday_last_week", "Same weekday last week", False),
+            ]
+            for idx, bid, label, primary in candidates:
+                d = today - timedelta(days=idx)
+                kwd = _day_kwd(idx)
+                if kwd is None and idx < len(daily) and isinstance(daily[idx], dict):
+                    try:
+                        kwd = float(daily[idx].get("kwd"))
+                    except (TypeError, ValueError):
+                        kwd = None
+                sales_baselines.append(
+                    {
+                        "id": bid,
+                        "label": label,
+                        "date": d.isoformat(),
+                        "kwd": kwd,
+                        "elapsedSec": _elapsed_sec_for_day(d),
+                        "primary": primary,
+                    }
+                )
+        except Exception:
+            logger.exception("downtime-detail sales baselines for %s", mid)
+
+        try:
+            from alert_downtime_lib import compute_machine_downtime_detail
+            from red_alert_routes import _fetch_events_window
+
+            payload = compute_machine_downtime_detail(
+                mid,
+                mname or None,
+                vendon_get=_vendon_get,
+                fetch_events_window=_fetch_events_window,
+                sales_baselines=sales_baselines,
+            )
+            return jsonify(payload)
+        except Exception as ex:
+            logger.exception("alert overall downtime detail")
+            return jsonify({"ok": False, "error": "failed", "message": str(ex), "events": []}), 500
+
     @app.route("/api/alert/overall/sales-acceleration", methods=["GET", "OPTIONS"])
     def alert_overall_sales_acceleration():
         """

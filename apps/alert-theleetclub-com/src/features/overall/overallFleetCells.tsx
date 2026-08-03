@@ -92,6 +92,7 @@ export type FleetRowBundle = {
   downtimeRow?: import('@/lib/downtimeDisplay').DowntimeMachineRow | null;
   downtimeTodayLabel?: string;
   downtimePeriodLabel?: string;
+  onOpenDowntime?: () => void;
   operator: string;
   txRaw: unknown;
   minsOk: boolean;
@@ -337,6 +338,8 @@ function renderOverallColumn(
           todayLabel={b.downtimeTodayLabel || 'Today'}
           periodLabel={b.downtimePeriodLabel || 'Period'}
           title={headerTooltip('downtime')}
+          interactive={Boolean(b.onOpenDowntime)}
+          onOpenDetail={b.onOpenDowntime}
         />
       );
     case 'lastTransaction':

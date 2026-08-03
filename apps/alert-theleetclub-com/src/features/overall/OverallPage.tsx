@@ -19,6 +19,7 @@ import {
 } from './overallWorkbookColumns';
 import { OverallFleetRow, overallHeaderClass, type FleetRowBundle } from './overallFleetCells';
 import { SalesHistoryModal } from '@/components/SalesHistoryModal';
+import { DowntimeDetailModal } from '@/components/DowntimeDetailModal';
 import { AlertTableHeader } from '@/components/AlertTableHeader';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import type { StitchKpi } from '@/components/StitchKpiStrip';
@@ -305,6 +306,7 @@ export function OverallPage({
     [columnStored],
   );
   const [salesDetail, setSalesDetail] = useState<FleetRowBundle | null>(null);
+  const [downtimeDetail, setDowntimeDetail] = useState<FleetRowBundle | null>(null);
   const [columnSort, setColumnSort] = useState<ColumnSortState<OverallColumnKey>>({
     column: null,
     dir: null,
@@ -1088,7 +1090,10 @@ export function OverallPage({
                 return (
                   <OverallFleetRow
                     key={m.id}
-                    bundle={bundle}
+                    bundle={{
+                      ...bundle,
+                      onOpenDowntime: () => setDowntimeDetail(bundle),
+                    }}
                     columns={visibleColumns}
                     onSalesDetail={setSalesDetail}
                   />
@@ -1130,16 +1135,30 @@ export function OverallPage({
       />
     ) : null;
 
-  const modals =
-    salesDetail && salesDetail.salesElapsed ? (
-      <SalesHistoryModal
-        machineName={salesDetail.m.name}
-        machineId={salesDetail.m.id}
-        row={salesDetail.salesElapsed}
-        meta={dailySalesQ.data}
-        onClose={() => setSalesDetail(null)}
-      />
-    ) : null;
+  const modals = (
+    <>
+      {salesDetail && salesDetail.salesElapsed ? (
+        <SalesHistoryModal
+          machineName={salesDetail.m.name}
+          machineId={salesDetail.m.id}
+          row={salesDetail.salesElapsed}
+          meta={dailySalesQ.data}
+          onClose={() => setSalesDetail(null)}
+        />
+      ) : null}
+      {downtimeDetail ? (
+        <DowntimeDetailModal
+          machineName={downtimeDetail.m.name}
+          machineId={downtimeDetail.m.id}
+          todayLabel={downtimeDetail.downtimeTodayLabel || 'Today'}
+          periodLabel={downtimeDetail.downtimePeriodLabel || 'Period'}
+          todaySec={downtimeDetail.downtimeRow?.todaySec}
+          periodSec={downtimeDetail.downtimeRow?.periodSec}
+          onClose={() => setDowntimeDetail(null)}
+        />
+      ) : null}
+    </>
+  );
 
   if (manus) {
     return (

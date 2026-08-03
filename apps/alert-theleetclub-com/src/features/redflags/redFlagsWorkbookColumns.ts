@@ -128,7 +128,7 @@ export const RED_FLAGS_COLUMNS: Record<
     title: 'Downtime',
     sub: 'Today · compare',
     placeholderNote:
-      'Operational OFF time (Machine OFF / KNet OFF / Vendon OFF) with Admin cleaning windows subtracted. Overlapping OFF types are merged. Top = Kuwait today; bottom = compare baseline (e.g. Yesterday on Today vs Yesterday).',
+      'Operational OFF (Machine/KNet/Vendon) with cleaning subtracted; overlaps merged in totals. Top = today; bottom = compare baseline. Tap for each event (from→to, type) and estimated KD loss vs yesterday (primary), day before, same weekday last week.',
   },
   goCheck: {
     title: 'GO CHECK',

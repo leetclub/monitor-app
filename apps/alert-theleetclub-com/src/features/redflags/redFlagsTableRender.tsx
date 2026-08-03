@@ -104,6 +104,7 @@ export type RedFlagsRowBundle = {
   downtimeRow?: DowntimeMachineRow | null;
   downtimeTodayLabel?: string;
   downtimePeriodLabel?: string;
+  onOpenDowntime?: () => void;
   qaVisit?: QaVisitRow | null;
   techVisit?: QaVisitRow | null;
   qaFindings?: QaFindingRow[];
@@ -627,6 +628,8 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           todayLabel={b.downtimeTodayLabel || 'Today'}
           periodLabel={b.downtimePeriodLabel || 'Period'}
           title={RED_FLAGS_COLUMNS.downtime.placeholderNote}
+          interactive={Boolean(b.onOpenDowntime)}
+          onOpenDetail={b.onOpenDowntime}
         />
       );
     case 'goCheck':

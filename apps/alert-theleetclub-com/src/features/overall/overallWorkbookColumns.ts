@@ -103,7 +103,7 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   downtime: {
     title: 'Downtime',
     note:
-      'Operational OFF time (Machine OFF / KNet OFF / Vendon OFF) with cleaning windows subtracted; overlapping OFF types merged. Today (Kuwait) vs compare baseline (e.g. Yesterday).',
+      'Operational OFF (Machine/KNet/Vendon) with cleaning subtracted. Today vs compare baseline. Tap cell for each event (from→to, type) and estimated KD loss vs yesterday (primary), day before, same weekday last week.',
   },
   lastTransaction: { title: 'Last Transaction' },
   salesTrend: {
