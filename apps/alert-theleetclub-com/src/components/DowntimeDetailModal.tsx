@@ -75,15 +75,17 @@ export function DowntimeDetailModal({
             ) : null}
           </p>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
-            Loss uses each machine&apos;s same-elapsed sales rate × operational downtime (cleaning windows
-            subtracted). <strong>Primary = yesterday</strong>; also shows day before and same weekday last week.
-            Concurrent OFF types are listed separately; the today total merges overlaps.
+            Est. loss = what this machine sold on the baseline day during the <strong>same clock hours</strong> as
+            the downtime (e.g. today 10:15–11:40 vs yesterday 10:15–11:40).{' '}
+            <strong>Primary = yesterday</strong>; also day before and same weekday last week. Concurrent OFF types
+            are listed separately; the today total merges overlaps.
+            {data?.lossAlignedToClock === false ? ' (Fallback day-rate used — window sales unavailable.)' : ''}
           </p>
         </section>
 
         {baselines.length ? (
           <section className="operatorWorkflowSection" style={{ marginTop: 10 }}>
-            <h3 className="salesHistoryCompareTitle">Sales rate baselines</h3>
+            <h3 className="salesHistoryCompareTitle">Comparison days</h3>
             <ul className="salesHistoryList">
               {baselines.map((b) => (
                 <li key={b.id || b.label} className="salesHistoryRow">
@@ -94,7 +96,7 @@ export function DowntimeDetailModal({
                   </span>
                   <span className="salesHistoryGridVal">
                     {b.kwd != null && Number.isFinite(b.kwd)
-                      ? `${Number(b.kwd).toFixed(2)} KD / ${formatDowntimeSec(b.elapsedSec)}`
+                      ? `same-elapsed day ${Number(b.kwd).toFixed(2)} KD`
                       : '—'}
                   </span>
                 </li>

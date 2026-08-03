@@ -52,7 +52,9 @@ export type DowntimeDetailResponse = {
   dateToday?: string;
   todayMergedOperationalSec?: number | null;
   estimatedLossTodayPrimaryKwd?: number | null;
+  estimatedLossTodayKwd?: Record<string, number | null | undefined>;
   lossMethod?: string | null;
+  lossAlignedToClock?: boolean;
   baselines?: DowntimeLossBaseline[];
   events?: DowntimeEventRow[];
   liveEventsError?: string | null;

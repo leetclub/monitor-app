@@ -102,7 +102,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-08-03 | **Downtime popup:** Tap Downtime cell → events for Kuwait today (from→to, OFF type) plus estimated KD loss. Primary = yesterday same-elapsed sales rate; also day before and same weekday last week. Concurrent OFF types listed separately; today total merges overlaps. |
+| 2026-08-03 | **Downtime loss = same clock hours:** Est. KD loss = actual sales on yesterday / day before / same weekday last week during the same Kuwait clock window as each OFF event (fallback: day rate). |
+| 2026-08-03 | **Downtime popup:** Tap Downtime cell → events for Kuwait today (from→to, OFF type) plus estimated KD loss vs comparison days. Concurrent OFF types listed separately; today total merges overlaps. |
 | 2026-07-29 | **Workflow write APIs wired:** GO CHECK creates urgent Received task; Call OP sends TM DM; cleaning alert can deliver cleaning-overdue to operator inbox; tech visit prefers Task Manager quality-control (SafetyCulture fallback). Daily-checks CC approve/reject samples + date-range still pending upstream. |
 | 2026-07-27 | **QA/Tech columns blanked by Slack findings error:** Visit cells no longer show `!` when Slack issues-list fails but SafetyCulture data exists. Softened name matching; fleet operator-activity back to 14d (modals still 21d). |
 | 2026-07-27 | **Admin Machines tech/QA save:** Vendon dropdowns always include full roster (suggested types + All users); keep assigned id on save even without days/hours; SQLAlchemy JSONB flag_modified so technician/QA/operator schedules persist. Tech Visit drink tests remain machine-level; on-site proof matches technician type or Admin-assigned name. |

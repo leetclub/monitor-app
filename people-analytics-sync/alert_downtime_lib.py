@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from zoneinfo import ZoneInfo
 
 from cleaning_schedule import operational_gap_seconds, resolve_cleaning_context
@@ -313,12 +314,16 @@ def compute_machine_downtime_detail(
     vendon_get,
     fetch_events_window,
     sales_baselines: Optional[List[Dict[str, Any]]] = None,
+    fetch_window_sales: Optional[Callable[[str, int, int], float]] = None,
 ) -> Dict[str, Any]:
     """
-    Per-machine OFF events for Kuwait today + estimated KD loss rates.
+    Per-machine OFF events for Kuwait today + estimated KD loss.
 
-    Loss method: baseline_day_kwd / baseline_elapsed_seconds × event operational seconds.
-    Primary baseline = yesterday; also day-before and same weekday last week when provided.
+    Loss method (preferred): actual Vendon sales on the baseline day during the
+    **same clock hours** as the downtime (e.g. today 10:15–11:40 → yesterday 10:15–11:40).
+    Primary baseline = yesterday; also day-before and same weekday last week.
+
+    Fallback if window sales unavailable: day same-elapsed rate × operational seconds.
     """
     mid = str(machine_id or "").strip()
     if not mid:
@@ -352,7 +357,8 @@ def compute_machine_downtime_detail(
         dash.close()
     ctx = resolve_cleaning_context(name, cleaning_rules)
 
-    events: List[Dict[str, Any]] = []
+    # Keep clip timestamps for window-aligned loss.
+    event_clips: List[Tuple[Dict[str, Any], int, int]] = []
     for disp, rt, res_i in typed:
         end_eff = res_i if res_i is not None else now_ts
         clip_lo = max(int(rt), int(today_lo_ts))
@@ -364,18 +370,19 @@ def compute_machine_downtime_detail(
         max_wall = max(0, now_ts - today_lo_ts)
         if op_sec > max_wall:
             op_sec = max_wall
-        events.append(
-            {
-                "eventType": disp,
-                "startAt": _iso_kwt(clip_lo),
-                "endAt": _iso_kwt(clip_hi) if res_i is not None and res_i <= now_ts else None,
-                "endAtEffective": _iso_kwt(clip_hi),
-                "open": res_i is None or int(res_i) > now_ts,
-                "wallSec": wall_sec,
-                "operationalSec": op_sec,
-            }
-        )
-    events.sort(key=lambda e: str(e.get("startAt") or ""), reverse=True)
+        ev = {
+            "eventType": disp,
+            "startAt": _iso_kwt(clip_lo),
+            "endAt": _iso_kwt(clip_hi) if res_i is not None and res_i <= now_ts else None,
+            "endAtEffective": _iso_kwt(clip_hi),
+            "open": res_i is None or int(res_i) > now_ts,
+            "wallSec": wall_sec,
+            "operationalSec": op_sec,
+        }
+        event_clips.append((ev, clip_lo, clip_hi))
+
+    event_clips.sort(key=lambda t: str(t[0].get("startAt") or ""), reverse=True)
+    events = [t[0] for t in event_clips]
 
     today_merged_sec = _sum_off_operational_seconds(
         _off_pairs_only(typed), today_lo_ts, now_ts, now_ts, ctx
@@ -386,6 +393,11 @@ def compute_machine_downtime_detail(
         if not isinstance(b, dict):
             continue
         label = str(b.get("label") or "").strip() or "Baseline"
+        day_iso = str(b.get("date") or "").strip()
+        try:
+            baseline_day = date.fromisoformat(day_iso) if day_iso else None
+        except ValueError:
+            baseline_day = None
         kwd = b.get("kwd")
         elapsed_sec = b.get("elapsedSec")
         try:
@@ -400,7 +412,8 @@ def compute_machine_downtime_detail(
             {
                 "id": str(b.get("id") or label).strip(),
                 "label": label,
-                "date": b.get("date"),
+                "date": day_iso or None,
+                "baselineDay": baseline_day,
                 "kwd": round(kwd_f, 4) if kwd_f is not None else None,
                 "elapsedSec": int(el_f) if el_f is not None else None,
                 "kwdPerSec": round(rate, 8) if rate is not None else None,
@@ -408,35 +421,151 @@ def compute_machine_downtime_detail(
             }
         )
 
-    primary_rate = None
-    for b in baselines_out:
-        if b.get("primary") and b.get("kwdPerSec") is not None:
-            primary_rate = float(b["kwdPerSec"])
-            break
-    if primary_rate is None:
-        for b in baselines_out:
-            if b.get("kwdPerSec") is not None:
-                primary_rate = float(b["kwdPerSec"])
-                break
+    def _shift_window(clip_lo: int, clip_hi: int, baseline_day: date) -> Tuple[int, int]:
+        """Map today's [clip_lo, clip_hi) onto the same clock on baseline_day (Kuwait)."""
+        off_lo = int(clip_lo) - int(today_lo_ts)
+        off_hi = int(clip_hi) - int(today_lo_ts)
+        b_start = _kuwait_day_start_ts(baseline_day)
+        return b_start + max(0, off_lo), b_start + max(0, off_hi)
 
-    for ev in events:
+    window_cache: Dict[Tuple[int, int], Optional[float]] = {}
+
+    def _sales_for_window(ws: int, we: int) -> Optional[float]:
+        if we <= ws:
+            return 0.0
+        key = (int(ws), int(we))
+        if key in window_cache:
+            return window_cache[key]
+        val: Optional[float] = None
+        if fetch_window_sales is not None:
+            try:
+                val = float(fetch_window_sales(mid, key[0], key[1]))
+            except Exception:
+                logger.exception("downtime window sales %s %s-%s", mid, ws, we)
+                val = None
+        window_cache[key] = val
+        return val
+
+    # Prefetch unique baseline windows (events + merged) in parallel.
+    prefetch: List[Tuple[int, int]] = []
+    for _ev, clip_lo, clip_hi in event_clips:
+        for b in baselines_out:
+            bd = b.get("baselineDay")
+            if not isinstance(bd, date):
+                continue
+            b_lo, b_hi = _shift_window(clip_lo, clip_hi, bd)
+            if b_hi > b_lo:
+                prefetch.append((b_lo, b_hi))
+    # Merged intervals for today total (no double-count across OFF types)
+    merge_clips: List[Tuple[int, int]] = []
+    for _disp, rt, res_i in typed:
+        end_eff = res_i if res_i is not None else now_ts
+        clip_lo = max(int(rt), int(today_lo_ts))
+        clip_hi = min(int(end_eff), int(now_ts))
+        if clip_lo < clip_hi:
+            merge_clips.append((clip_lo, clip_hi))
+    merged = _merge_intervals(merge_clips)
+    for clip_lo, clip_hi in merged:
+        for b in baselines_out:
+            bd = b.get("baselineDay")
+            if not isinstance(bd, date):
+                continue
+            b_lo, b_hi = _shift_window(clip_lo, clip_hi, bd)
+            if b_hi > b_lo:
+                prefetch.append((b_lo, b_hi))
+
+    uniq_prefetch = sorted(set(prefetch))
+    if fetch_window_sales is not None and uniq_prefetch:
+        def _job(pair: Tuple[int, int]) -> None:
+            _sales_for_window(pair[0], pair[1])
+
+        with ThreadPoolExecutor(max_workers=min(6, max(1, len(uniq_prefetch)))) as pool:
+            list(pool.map(_job, uniq_prefetch))
+
+    used_window_sales = False
+    for ev, clip_lo, clip_hi in event_clips:
         op = int(ev.get("operationalSec") or 0)
         loss_by: Dict[str, Optional[float]] = {}
+        primary_loss: Optional[float] = None
         for b in baselines_out:
-            rate = b.get("kwdPerSec")
             bid = str(b.get("id") or b.get("label"))
-            if rate is None:
-                loss_by[bid] = None
-            else:
-                loss_by[bid] = round(float(rate) * op, 3)
+            bd = b.get("baselineDay")
+            loss: Optional[float] = None
+            if isinstance(bd, date):
+                b_lo, b_hi = _shift_window(clip_lo, clip_hi, bd)
+                sales = _sales_for_window(b_lo, b_hi)
+                if sales is not None:
+                    loss = round(float(sales), 3)
+                    used_window_sales = True
+            if loss is None:
+                rate = b.get("kwdPerSec")
+                if rate is not None and op > 0:
+                    loss = round(float(rate) * op, 3)
+            loss_by[bid] = loss
+            if b.get("primary") and loss is not None and primary_loss is None:
+                primary_loss = loss
+        if primary_loss is None:
+            for b in baselines_out:
+                bid = str(b.get("id") or b.get("label"))
+                if loss_by.get(bid) is not None:
+                    primary_loss = loss_by[bid]
+                    break
         ev["estimatedLossKwd"] = loss_by
-        ev["estimatedLossPrimaryKwd"] = (
-            round(primary_rate * op, 3) if primary_rate is not None and op > 0 else None
-        )
+        ev["estimatedLossPrimaryKwd"] = primary_loss
 
-    total_primary = None
-    if primary_rate is not None and today_merged_sec > 0:
-        total_primary = round(primary_rate * today_merged_sec, 3)
+    # Today total: sum window sales over merged OFF intervals (primary baseline)
+    total_by: Dict[str, Optional[float]] = {str(b.get("id") or b.get("label")): 0.0 for b in baselines_out}
+    total_ok: Dict[str, bool] = {k: True for k in total_by}
+    for clip_lo, clip_hi in merged:
+        for b in baselines_out:
+            bid = str(b.get("id") or b.get("label"))
+            bd = b.get("baselineDay")
+            piece: Optional[float] = None
+            if isinstance(bd, date):
+                b_lo, b_hi = _shift_window(clip_lo, clip_hi, bd)
+                sales = _sales_for_window(b_lo, b_hi)
+                if sales is not None:
+                    piece = float(sales)
+                    used_window_sales = True
+            if piece is None:
+                rate = b.get("kwdPerSec")
+                op = int(operational_gap_seconds(clip_lo, clip_hi, ctx))
+                if rate is not None and op > 0:
+                    piece = float(rate) * op
+            if piece is None:
+                total_ok[bid] = False
+            else:
+                total_by[bid] = float(total_by.get(bid) or 0) + piece
+    for bid, ok in total_ok.items():
+        if not ok:
+            total_by[bid] = None
+        elif total_by.get(bid) is not None:
+            total_by[bid] = round(float(total_by[bid]), 3)
+
+    primary_id = None
+    for b in baselines_out:
+        if b.get("primary"):
+            primary_id = str(b.get("id") or b.get("label"))
+            break
+    if primary_id is None and baselines_out:
+        primary_id = str(baselines_out[0].get("id") or baselines_out[0].get("label"))
+    total_primary = total_by.get(primary_id) if primary_id else None
+
+    # Strip non-JSON baselineDay
+    for b in baselines_out:
+        b.pop("baselineDay", None)
+
+    method = (
+        "estimated_kd = actual Vendon sales on the baseline day during the same Kuwait clock hours "
+        "as the downtime (e.g. today 10:15–11:40 vs yesterday 10:15–11:40). "
+        "Primary = yesterday; also day before and same weekday last week. "
+        "Concurrent OFF types are listed separately; today total merges overlaps."
+    )
+    if not used_window_sales:
+        method = (
+            "Fallback: baseline same-elapsed KD / elapsed seconds × downtime operational seconds "
+            "(window-aligned sales unavailable). Primary = yesterday."
+        )
 
     return {
         "ok": True,
@@ -446,11 +575,9 @@ def compute_machine_downtime_detail(
         "generatedAt": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "todayMergedOperationalSec": today_merged_sec,
         "estimatedLossTodayPrimaryKwd": total_primary,
-        "lossMethod": (
-            "estimated_kd = baseline_same_elapsed_kwd / baseline_elapsed_seconds × downtime_operational_seconds. "
-            "Primary baseline = yesterday. Concurrent OFF types are listed separately; "
-            "today total uses merged intervals (no double-count)."
-        ),
+        "estimatedLossTodayKwd": total_by,
+        "lossMethod": method,
+        "lossAlignedToClock": used_window_sales,
         "baselines": baselines_out,
         "events": events,
         "liveEventsError": live_err,

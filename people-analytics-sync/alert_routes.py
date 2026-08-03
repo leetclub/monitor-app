@@ -2904,7 +2904,9 @@ def register_alert_routes(app) -> None:
         Per-machine OFF events for Kuwait today + estimated KD loss vs sales baselines.
 
         Query: machine_id (required), machine_name (optional).
-        Baselines from daily-sales-elapsed cache: yesterday (primary), day before, same weekday last week.
+        For each OFF interval, loss = actual sales on the baseline day during the **same clock hours**.
+        Baselines: yesterday (primary), day before, same weekday last week.
+        Fallback: same-elapsed day rate × operational seconds if window sales fail.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2945,7 +2947,6 @@ def register_alert_routes(app) -> None:
                         return None
                 return None
 
-            # index 1 = yesterday, 2 = day before, 7 = same weekday last week (if history ≥ 8)
             candidates = [
                 (1, "yesterday", "Yesterday", True),
                 (2, "day_before", "Day before", False),
@@ -2972,6 +2973,10 @@ def register_alert_routes(app) -> None:
         except Exception:
             logger.exception("downtime-detail sales baselines for %s", mid)
 
+        def _window_sales(machine_id: str, ws: int, we: int) -> float:
+            kwd, _trunc = _machine_window_sales_kwd(machine_id, ws, we)
+            return float(kwd)
+
         try:
             from alert_downtime_lib import compute_machine_downtime_detail
             from red_alert_routes import _fetch_events_window
@@ -2982,6 +2987,7 @@ def register_alert_routes(app) -> None:
                 vendon_get=_vendon_get,
                 fetch_events_window=_fetch_events_window,
                 sales_baselines=sales_baselines,
+                fetch_window_sales=_window_sales,
             )
             return jsonify(payload)
         except Exception as ex:
