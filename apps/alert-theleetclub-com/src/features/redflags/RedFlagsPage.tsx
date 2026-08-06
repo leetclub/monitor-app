@@ -393,6 +393,7 @@ export function RedFlagsPage({
     machineId: string;
     todaySec?: number | null;
     periodSec?: number | null;
+    trendPct?: number | null;
   } | null>(null);
   const [targetDetail, setTargetDetail] = useState<{
     machineName: string;
@@ -1255,6 +1256,7 @@ export function RedFlagsPage({
             periodLabel={downtimeQ.data?.labelPeriod?.trim() || 'Period'}
             todaySec={downtimeDetail.todaySec}
             periodSec={downtimeDetail.periodSec}
+            trendPct={downtimeDetail.trendPct}
             onClose={() => setDowntimeDetail(null)}
           />
         ) : null}
@@ -1558,6 +1560,7 @@ export function RedFlagsPage({
                               machineName: String(row.machineName || machId),
                               todaySec: dt?.todaySec,
                               periodSec: dt?.periodSec,
+                              trendPct: dt?.trendPct,
                             });
                           }
                         : undefined,
@@ -1734,6 +1737,7 @@ export function RedFlagsPage({
           periodLabel={downtimeQ.data?.labelPeriod?.trim() || 'Period'}
           todaySec={downtimeDetail.todaySec}
           periodSec={downtimeDetail.periodSec}
+          trendPct={downtimeDetail.trendPct}
           onClose={() => setDowntimeDetail(null)}
         />
       ) : null}

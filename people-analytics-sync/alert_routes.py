@@ -2874,7 +2874,7 @@ def register_alert_routes(app) -> None:
         )
 
         cache_key = (
-            f"alert-downtime:v2:{preset}:{b_lo.isoformat()}:{b_hi.isoformat()}:"
+            f"alert-downtime:v3:{preset}:{b_lo.isoformat()}:{b_hi.isoformat()}:"
             f"{request.args.get('bStart') or ''}:{request.args.get('bEnd') or ''}"
         )
         cached = _alert_cache_get(cache_key, _ALERT_DOWNTIME_CACHE_SEC)
@@ -2977,10 +2977,11 @@ def register_alert_routes(app) -> None:
                     }
                 )
 
-            # Baseline hourly: prefer yesterday; else weighted avg of last 7 completed days.
+            # Prefer yesterday only when it has real sales; a 0 KD day must not
+            # become 0 KD/h (that zeroes the whole projected-loss calculator).
             y_kwd = _day_kwd(1)
             y_el = _elapsed_sec_for_day(today - timedelta(days=1))
-            if y_kwd is not None and y_el > 0:
+            if y_kwd is not None and float(y_kwd) > 0.005 and y_el > 0:
                 baseline_hourly = float(y_kwd) / (float(y_el) / 3600.0)
             else:
                 sum_kwd = 0.0
@@ -2988,12 +2989,35 @@ def register_alert_routes(app) -> None:
                 for i in range(1, 8):
                     k = _day_kwd(i)
                     el = _elapsed_sec_for_day(today - timedelta(days=i))
-                    if k is None or el <= 0:
+                    if k is None or float(k) <= 0.005 or el <= 0:
                         continue
                     sum_kwd += float(k)
                     sum_hours += float(el) / 3600.0
-                if sum_hours > 0:
+                if sum_hours > 0 and sum_kwd > 0:
                     baseline_hourly = sum_kwd / sum_hours
+
+            # Last resort: live same-elapsed window sales for yesterday / day before.
+            if baseline_hourly is None or baseline_hourly <= 0.005:
+                for days_back in (1, 2, 7):
+                    d = today - timedelta(days=days_back)
+                    ws = int(datetime.combine(d, dt_time.min, tzinfo=tz).timestamp())
+                    we = int(_kuwait_elapsed_window_end(d, now_local).timestamp())
+                    if we <= ws:
+                        continue
+                    try:
+                        kwd, _trunc = _machine_window_sales_kwd(mid, ws, we)
+                    except Exception:
+                        logger.exception("downtime-detail live baseline sales %s day-%s", mid, days_back)
+                        continue
+                    hours = (we - ws) / 3600.0
+                    if kwd is not None and float(kwd) > 0.005 and hours > 0:
+                        baseline_hourly = float(kwd) / hours
+                        # Keep baselines list consistent when cache had null/0.
+                        for b in sales_baselines:
+                            if b.get("id") == ("yesterday" if days_back == 1 else "day_before" if days_back == 2 else "same_weekday_last_week"):
+                                if b.get("kwd") is None or float(b.get("kwd") or 0) <= 0.005:
+                                    b["kwd"] = round(float(kwd), 4)
+                        break
         except Exception:
             logger.exception("downtime-detail sales baselines for %s", mid)
 

@@ -1154,6 +1154,7 @@ export function OverallPage({
           periodLabel={downtimeDetail.downtimePeriodLabel || 'Period'}
           todaySec={downtimeDetail.downtimeRow?.todaySec}
           periodSec={downtimeDetail.downtimeRow?.periodSec}
+          trendPct={downtimeDetail.downtimeRow?.trendPct}
           onClose={() => setDowntimeDetail(null)}
         />
       ) : null}

@@ -5,6 +5,7 @@ import { apiGet } from '@/lib/api';
 import {
   formatDowntimeClock,
   formatDowntimeSec,
+  formatDowntimeTrendPct,
   formatHourlyKwd,
   formatLossKwd,
   formatPeakMult,
@@ -15,12 +16,25 @@ import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAler
 
 function ProjectionCalculator({
   projection,
+  baselineMissing,
   heading = 'Projected revenue loss',
 }: {
   projection?: DowntimeProjection | null;
+  baselineMissing?: boolean;
   heading?: string;
 }) {
-  if (!projection) return null;
+  if (!projection || baselineMissing || projection.baselineHourlyKwd == null) {
+    if (!projection && !baselineMissing) return null;
+    return (
+      <section className="operatorWorkflowSection" style={{ marginTop: 10 }}>
+        <h3 className="salesHistoryCompareTitle">{heading}</h3>
+        <p className="salesHistoryNote">
+          No sales baseline for this machine (recent same-elapsed days had ~0 KD). Cannot project revenue
+          loss until there is a positive hourly rate from yesterday or another recent day.
+        </p>
+      </section>
+    );
+  }
   const rows: Array<{ factor: string; amount: string; impact: string }> = [
     {
       factor: 'Revenue baseline',
@@ -81,6 +95,7 @@ export function DowntimeDetailModal({
   periodLabel = 'Period',
   todaySec,
   periodSec,
+  trendPct: trendPctProp,
   onClose,
 }: {
   machineId: string;
@@ -89,6 +104,7 @@ export function DowntimeDetailModal({
   periodLabel?: string;
   todaySec?: number | null;
   periodSec?: number | null;
+  trendPct?: number | null;
   onClose: () => void;
 }) {
   useAlertModal(onClose);
@@ -112,6 +128,17 @@ export function DowntimeDetailModal({
   const projection = data?.projection;
   const primaryBaseline = baselines.find((b) => b.primary) ?? baselines[0];
 
+  const todayMins = todaySec ?? data?.todayMergedOperationalSec;
+  const yestMins = periodSec ?? data?.yesterdaySameElapsedSec;
+  const trendPct =
+    trendPctProp != null && Number.isFinite(Number(trendPctProp))
+      ? Number(trendPctProp)
+      : data?.trendPct != null && Number.isFinite(Number(data.trendPct))
+        ? Number(data.trendPct)
+        : null;
+  const worse = trendPct != null && trendPct > 0;
+  const better = trendPct != null && trendPct < 0;
+
   return createPortal(
     <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
       <div className="salesHistoryModal" {...panel}>
@@ -127,23 +154,32 @@ export function DowntimeDetailModal({
         </div>
 
         <section className="operatorWorkflowSection">
-          <p className="salesHistoryNote">
-            {todayLabel}: <strong>{formatDowntimeSec(todaySec ?? data?.todayMergedOperationalSec)}</strong>
+          <p className="salesHistoryNote" style={{ fontSize: '0.95rem' }}>
+            {todayLabel}: <strong>{formatDowntimeSec(todayMins)}</strong>
             {' · '}
-            {periodLabel}: <strong>{formatDowntimeSec(periodSec)}</strong>
+            vs {periodLabel} (same elapsed): <strong>{formatDowntimeSec(yestMins)}</strong>
+            {trendPct != null ? (
+              <>
+                {' · '}
+                <strong className={worse ? 'alertSalesDown' : better ? 'alertSalesUp' : undefined}>
+                  {worse ? '▲ ' : better ? '▼ ' : ''}
+                  {formatDowntimeTrendPct(trendPct)}
+                </strong>
+              </>
+            ) : null}
             {projection?.finalEconomicImpactKwd != null ? (
               <>
                 {' · '}
-                Projected impact:{' '}
-                <strong>{formatLossKwd(projection.finalEconomicImpactKwd)}</strong>
+                Projected impact: <strong>{formatLossKwd(projection.finalEconomicImpactKwd)}</strong>
               </>
             ) : null}
           </p>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
             <strong>Projected loss</strong> = baseline hourly revenue × downtime hours × peak multiplier
-            (+ spoilage). Baseline = yesterday same-elapsed KD ÷ hours. Peak bands (Kuwait): off-peak ×0.35,
-            morning ×0.85, peak 09–14 ×1.9, afternoon ×1.15, evening ×0.65. Observed same-clock sales on
-            comparison days are shown for reference.
+            (+ spoilage). Baseline prefers yesterday same-elapsed with sales &gt; 0, else recent positive
+            days / live window. Peak bands (Kuwait): off-peak ×0.35, morning ×0.85, peak 09–14 ×1.9,
+            afternoon ×1.15, evening ×0.65. Observed same-clock sales on comparison days are shown for
+            reference.
           </p>
         </section>
 
@@ -152,7 +188,12 @@ export function DowntimeDetailModal({
           <p className="stitchOpsAlert">{(q.error as Error).message || 'Could not load downtime detail'}</p>
         ) : null}
 
-        {!q.isLoading ? <ProjectionCalculator projection={projection} /> : null}
+        {!q.isLoading ? (
+          <ProjectionCalculator
+            projection={projection}
+            baselineMissing={Boolean(data?.baselineMissing) || projection?.baselineHourlyKwd == null}
+          />
+        ) : null}
 
         {baselines.length ? (
           <section className="operatorWorkflowSection" style={{ marginTop: 10 }}>

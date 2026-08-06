@@ -98,6 +98,9 @@ def project_downtime_loss(
     peak = weighted_peak_multiplier(clip_lo, clip_hi)
     hours = max(0.0, float(operational_sec) / 3600.0)
     base = float(baseline_hourly_kwd) if baseline_hourly_kwd is not None else None
+    # Zero / near-zero rates are "no baseline", not a real 0 KD/h projection.
+    if base is not None and base <= 0.005:
+        base = None
     mult = float(peak["peakMultiplier"])
     opportunity = round(base * hours * mult, 3) if base is not None and hours > 0 else None
     spoil = max(0.0, float(spoilage_kwd or 0.0))
@@ -289,8 +292,10 @@ def compute_machine_downtime_summary(
     Returns payload for GET /api/alert/overall/downtime-summary.
 
     todaySec  — operational OFF seconds for Kuwait today through now
-    periodSec — operational OFF seconds for the compare baseline window (period B)
-                e.g. Yesterday on today_vs_yesterday — clipped at now if open-ended
+    periodSec — operational OFF seconds for the compare baseline window (period B).
+                For single-day baselines (e.g. Yesterday), clipped to the same clock
+                elapsed as today so far (fair vs-today compare).
+    trendPct / trendDeltaSec — today vs periodSec (positive = more downtime)
     """
     tz = ZoneInfo("Asia/Kuwait")
     now = datetime.now(timezone.utc)
@@ -305,6 +310,16 @@ def compute_machine_downtime_summary(
     period_hi_ts = min(_kuwait_day_start_ts(period_hi_excl), now_ts)
     if period_hi_ts < period_lo_ts:
         period_hi_ts = period_lo_ts
+
+    # Single-day baselines (Yest. / LW day): same clock elapsed as today so far —
+    # comparing today 0→now vs a full yesterday overstates the prior period.
+    period_days = max(0, (period_hi_excl - period_lo).days)
+    same_elapsed = period_days == 1 and period_hi_excl <= today
+    if same_elapsed:
+        elapsed = max(0, today_hi_ts - today_lo_ts)
+        period_hi_ts = min(period_lo_ts + elapsed, _kuwait_day_start_ts(period_hi_excl))
+        if period_hi_ts < period_lo_ts:
+            period_hi_ts = period_lo_ts
 
     cache_day_lo = min(period_lo, today) - timedelta(days=_LOOKBACK_DAYS)
     cache_day_hi = today + timedelta(days=1)
@@ -349,7 +364,7 @@ def compute_machine_downtime_summary(
     for m in machine_list:
         cleaning_by_mid[m["id"]] = resolve_cleaning_context(m["name"], cleaning_rules)
 
-    by_machine: Dict[str, Dict[str, int]] = {}
+    by_machine: Dict[str, Dict[str, Any]] = {}
     mids = set(cleaning_by_mid.keys()) | set(off_by_mid.keys())
     for mid in mids:
         ctx = cleaning_by_mid.get(mid)
@@ -358,7 +373,13 @@ def compute_machine_downtime_summary(
         period_sec = _sum_off_operational_seconds(off_list, period_lo_ts, period_hi_ts, now_ts, ctx)
         if today_sec <= 0 and period_sec <= 0:
             continue
-        by_machine[mid] = {"todaySec": today_sec, "periodSec": period_sec}
+        trend = _trend_vs_period(today_sec, period_sec)
+        by_machine[mid] = {
+            "todaySec": today_sec,
+            "periodSec": period_sec,
+            "trendDeltaSec": trend["trendDeltaSec"],
+            "trendPct": trend["trendPct"],
+        }
 
     return {
         "ok": True,
@@ -367,6 +388,7 @@ def compute_machine_downtime_summary(
         "dateToday": today.isoformat(),
         "periodStart": period_lo.isoformat(),
         "periodEndExclusive": period_hi_excl.isoformat(),
+        "sameElapsedCompare": same_elapsed,
         "generatedAt": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "source": "vendon_off_events",
         "offTypes": sorted(OFF_DISPLAY_NAMES),
@@ -403,7 +425,12 @@ def _collect_off_by_mid(
 
 
 def _derive_baseline_hourly_kwd(baselines_out: List[Dict[str, Any]]) -> Optional[float]:
-    """KD/hour from same-elapsed day rates (prefer primary; else weighted average)."""
+    """KD/hour from same-elapsed day rates.
+
+    Prefer primary day when it has positive sales; otherwise weighted average of
+    days with sales > 0. A 0 KD day must not produce a 0 KD/h baseline (that
+    makes projected loss look like “all zeros”).
+    """
     primary_rate = None
     sum_kwd = 0.0
     sum_hours = 0.0
@@ -412,19 +439,34 @@ def _derive_baseline_hourly_kwd(baselines_out: List[Dict[str, Any]]) -> Optional
         el_f = b.get("elapsedSec")
         if kwd_f is None or el_f is None or float(el_f) <= 0:
             continue
+        kwd_v = float(kwd_f)
         hours = float(el_f) / 3600.0
-        if hours <= 0:
+        if hours <= 0 or kwd_v <= 0.005:
             continue
-        hourly = float(kwd_f) / hours
+        hourly = kwd_v / hours
         if b.get("primary") and primary_rate is None:
             primary_rate = hourly
-        sum_kwd += float(kwd_f)
+        sum_kwd += kwd_v
         sum_hours += hours
-    if primary_rate is not None:
+    if primary_rate is not None and primary_rate > 0:
         return round(primary_rate, 4)
-    if sum_hours > 0:
+    if sum_hours > 0 and sum_kwd > 0:
         return round(sum_kwd / sum_hours, 4)
     return None
+
+
+def _trend_vs_period(today_sec: int, period_sec: int) -> Dict[str, Optional[float]]:
+    """Signed downtime change today vs compare period (same-elapsed when applicable)."""
+    t = max(0, int(today_sec or 0))
+    p = max(0, int(period_sec or 0))
+    delta = t - p
+    if p > 0:
+        pct = round((delta / float(p)) * 100.0, 1)
+    elif t > 0:
+        pct = 100.0
+    else:
+        pct = 0.0
+    return {"trendDeltaSec": delta, "trendPct": pct}
 
 
 def compute_machine_downtime_detail(
@@ -544,11 +586,11 @@ def compute_machine_downtime_detail(
             }
         )
 
-    hourly = (
-        float(baseline_hourly_kwd)
-        if baseline_hourly_kwd is not None
-        else _derive_baseline_hourly_kwd(baselines_out)
-    )
+    hourly = None
+    if baseline_hourly_kwd is not None and float(baseline_hourly_kwd) > 0.005:
+        hourly = float(baseline_hourly_kwd)
+    if hourly is None:
+        hourly = _derive_baseline_hourly_kwd(baselines_out)
 
     def _shift_window(clip_lo: int, clip_hi: int, baseline_day: date) -> Tuple[int, int]:
         """Map today's [clip_lo, clip_hi) onto the same clock on baseline_day (Kuwait)."""
@@ -726,9 +768,22 @@ def compute_machine_downtime_detail(
     for b in baselines_out:
         b.pop("baselineDay", None)
 
+    # Same-elapsed yesterday for modal trend (fair vs today 0→now).
+    yest = today - timedelta(days=1)
+    yest_lo_ts = _kuwait_day_start_ts(yest)
+    elapsed_today = max(0, now_ts - today_lo_ts)
+    yest_hi_ts = min(yest_lo_ts + elapsed_today, _kuwait_day_start_ts(today))
+    if yest_hi_ts < yest_lo_ts:
+        yest_hi_ts = yest_lo_ts
+    yesterday_sec = _sum_off_operational_seconds(
+        _off_pairs_only(typed), yest_lo_ts, yest_hi_ts, now_ts, ctx
+    )
+    trend = _trend_vs_period(today_merged_sec, yesterday_sec)
+
     method = (
         "Projected Loss = Baseline Hourly Revenue × Downtime Hours × Peak Multiplier (+ spoilage). "
-        "Baseline hourly = machine same-elapsed KD ÷ elapsed hours (primary: yesterday). "
+        "Baseline hourly = machine same-elapsed KD ÷ elapsed hours (prefer yesterday with sales > 0; "
+        "else average of recent positive days). "
         "Peak multiplier is seconds-weighted across Kuwait bands "
         "(off-peak ~0.35, morning 0.85, peak 1.9, afternoon 1.15, evening 0.65). "
         "Volume = opportunity ÷ avg vend. Concurrent OFF types listed separately; today total merges overlaps. "
@@ -742,7 +797,11 @@ def compute_machine_downtime_detail(
         "dateToday": today.isoformat(),
         "generatedAt": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "todayMergedOperationalSec": today_merged_sec,
+        "yesterdaySameElapsedSec": yesterday_sec,
+        "trendDeltaSec": trend["trendDeltaSec"],
+        "trendPct": trend["trendPct"],
         "projection": today_projection,
+        "baselineMissing": hourly is None,
         "estimatedLossTodayPrimaryKwd": today_opp_r,
         "estimatedLossTodayKwd": total_by,
         "observedSalesTodayKwd": total_by,

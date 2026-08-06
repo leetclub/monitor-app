@@ -10,15 +10,28 @@ export function formatDowntimeSec(sec: number | null | undefined): string {
   return `${h}h ${m}m`;
 }
 
+/** Signed % change today vs compare period (more downtime = positive). */
+export function formatDowntimeTrendPct(pct: number): string {
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  const body = abs >= 10 ? abs.toFixed(0) : abs.toFixed(1);
+  const sign = n > 0 ? '+' : n < 0 ? '−' : '';
+  return `${sign}${body}%`;
+}
+
 export type DowntimeMachineRow = {
   todaySec?: number | null;
   periodSec?: number | null;
+  trendDeltaSec?: number | null;
+  trendPct?: number | null;
 };
 
 export type DowntimeSummaryResponse = {
   ok?: boolean;
   labelToday?: string | null;
   labelPeriod?: string | null;
+  sameElapsedCompare?: boolean;
   byMachineId?: Record<string, DowntimeMachineRow>;
 };
 
@@ -68,7 +81,11 @@ export type DowntimeDetailResponse = {
   machineName?: string;
   dateToday?: string;
   todayMergedOperationalSec?: number | null;
+  yesterdaySameElapsedSec?: number | null;
+  trendDeltaSec?: number | null;
+  trendPct?: number | null;
   projection?: DowntimeProjection | null;
+  baselineMissing?: boolean;
   estimatedLossTodayPrimaryKwd?: number | null;
   estimatedLossTodayKwd?: Record<string, number | null | undefined>;
   observedSalesTodayKwd?: Record<string, number | null | undefined>;
