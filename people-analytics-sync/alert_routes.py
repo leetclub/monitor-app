@@ -534,6 +534,9 @@ def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], 
     """
     Port of monitoring-app-v1 calculateWaste / location aggregate (wastePercent formula).
     wastePercent = totalWaste / (totalSales + totalWaste) * 100 when denominator > 0.
+
+    Units: totalWaste / totalSales are cup/unit counts (stock available − sold), not KD.
+    Meta also returns avgVendKwd + estimatedWasteKwd (cups × avg sold vend price) for Alert.
     """
     overrides, oerr = _fetch_motion_area_overrides(machine_id, date_str)
     if oerr:
@@ -547,6 +550,7 @@ def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], 
         return None, verr, {}
 
     sales_by_stock: Dict[str, int] = {}
+    vend_amounts: List[float] = []
     for sale in vends:
         if not isinstance(sale, dict):
             continue
@@ -555,6 +559,9 @@ def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], 
             continue
         k = str(sid)
         sales_by_stock[k] = sales_by_stock.get(k, 0) + 1
+        amt = _vend_amount_kwd(sale)
+        if amt > 0:
+            vend_amounts.append(amt)
 
     total_waste = 0
     total_sales = 0
@@ -577,11 +584,28 @@ def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], 
         total_waste += waste
         total_sales += sales
 
+    avg_vend = round(sum(vend_amounts) / len(vend_amounts), 4) if vend_amounts else None
+    waste_cups = max(0, int(total_waste))
+    # Fallback ticket when there are waste cups but no priced vends today (same default as downtime lib).
+    ticket = avg_vend if avg_vend is not None and avg_vend > 0 else (0.30 if waste_cups > 0 else None)
+    estimated_waste_kwd = (
+        round(float(waste_cups) * float(ticket), 3) if ticket is not None and waste_cups > 0 else 0.0
+    )
+
+    meta: Dict[str, Any] = {
+        "totalWaste": total_waste,
+        "totalSales": total_sales,
+        "wasteCups": waste_cups,
+        "avgVendKwd": ticket,
+        "estimatedWasteKwd": estimated_waste_kwd,
+        "source": "motion_area_overrides+vendon_vends",
+    }
+
     denom = total_sales + total_waste
     if denom <= 0:
-        return 0.0, None, {"totalWaste": total_waste, "totalSales": total_sales}
+        return 0.0, None, meta
     pct = (float(total_waste) / float(denom)) * 100.0
-    return pct, None, {"totalWaste": total_waste, "totalSales": total_sales}
+    return pct, None, meta
 
 
 # ---------------------------------------------------------------------------
@@ -2903,9 +2927,10 @@ def register_alert_routes(app) -> None:
         """
         Per-machine OFF events for Kuwait today + projected revenue loss.
 
-        Query: machine_id (required), machine_name (optional), spoilage_kwd (optional).
+        Query: machine_id (required), machine_name (optional), spoilage_kwd (optional override).
         Primary: baseline hourly KD × downtime hours × peak multiplier (+ spoilage).
-        Secondary: observed same-clock sales on yesterday / day before / same weekday last week.
+        Spoilage default: Monitor waste for Kuwait today (motion area-overrides − Vendon sales)
+        converted to KD as waste cups × avg vend price. Same source as Overall Waste % column.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -2918,15 +2943,54 @@ def register_alert_routes(app) -> None:
         if not mid:
             return jsonify({"ok": False, "error": "machine_id required", "events": []}), 400
 
-        try:
-            spoilage_kwd = float(request.args.get("spoilage_kwd") or request.args.get("spoilageKwd") or 0)
-        except (TypeError, ValueError):
-            spoilage_kwd = 0.0
-        spoilage_kwd = max(0.0, spoilage_kwd)
+        spoilage_explicit = False
+        spoilage_kwd = 0.0
+        raw_spoil = request.args.get("spoilage_kwd")
+        if raw_spoil is None:
+            raw_spoil = request.args.get("spoilageKwd")
+        if raw_spoil is not None and str(raw_spoil).strip() != "":
+            try:
+                spoilage_kwd = max(0.0, float(raw_spoil))
+                spoilage_explicit = True
+            except (TypeError, ValueError):
+                spoilage_kwd = 0.0
+                spoilage_explicit = False
 
         tz = ZoneInfo("Asia/Kuwait")
         now_local = datetime.now(tz)
         today = now_local.date()
+
+        # Auto spoilage from Monitor waste (motion refills − Vendon sales) × avg vend KD.
+        waste_meta: Dict[str, Any] = {}
+        avg_vend_from_waste: Optional[float] = None
+        if not spoilage_explicit:
+            if not MOTION_AREA_OVERRIDES_API_KEY:
+                waste_meta = {
+                    "skipped": True,
+                    "reason": "MOTION_AREA_OVERRIDES_API_KEY not configured (same source as Monitor waste tab)",
+                }
+            else:
+                try:
+                    _pct, werr, wmeta = _waste_metrics_v1(mid, today.isoformat())
+                    waste_meta = dict(wmeta or {})
+                    if werr:
+                        waste_meta["error"] = werr
+                    if _pct is not None:
+                        waste_meta["wastePct"] = round(float(_pct), 2)
+                    est = waste_meta.get("estimatedWasteKwd")
+                    if est is not None:
+                        try:
+                            spoilage_kwd = max(0.0, float(est))
+                        except (TypeError, ValueError):
+                            spoilage_kwd = 0.0
+                    if waste_meta.get("avgVendKwd") is not None:
+                        try:
+                            avg_vend_from_waste = float(waste_meta["avgVendKwd"])
+                        except (TypeError, ValueError):
+                            avg_vend_from_waste = None
+                except Exception as ex:
+                    logger.exception("downtime-detail waste for %s", mid)
+                    waste_meta = {"error": str(ex)}
 
         def _elapsed_sec_for_day(d: date) -> int:
             ws = int(datetime.combine(d, dt_time.min, tzinfo=tz).timestamp())
@@ -3037,8 +3101,16 @@ def register_alert_routes(app) -> None:
                 sales_baselines=sales_baselines,
                 fetch_window_sales=_window_sales,
                 baseline_hourly_kwd=baseline_hourly,
+                avg_vend_kwd=avg_vend_from_waste,
                 spoilage_kwd=spoilage_kwd,
             )
+            payload["spoilageSource"] = (
+                "explicit_query"
+                if spoilage_explicit
+                else ("monitor_waste" if waste_meta and not waste_meta.get("skipped") else "none")
+            )
+            payload["spoilageExplicit"] = spoilage_explicit
+            payload["waste"] = waste_meta
             return jsonify(payload)
         except Exception as ex:
             logger.exception("alert overall downtime detail")

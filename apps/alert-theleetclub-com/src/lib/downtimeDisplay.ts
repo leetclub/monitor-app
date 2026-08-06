@@ -95,6 +95,21 @@ export type DowntimeDetailResponse = {
   events?: DowntimeEventRow[];
   liveEventsError?: string | null;
   peakBands?: Array<{ fromHour?: number; toHour?: number; multiplier?: number; label?: string }>;
+  spoilageSource?: 'explicit_query' | 'monitor_waste' | 'none' | string;
+  spoilageExplicit?: boolean;
+  waste?: {
+    wastePct?: number | null;
+    wasteCups?: number | null;
+    totalWaste?: number | null;
+    totalSales?: number | null;
+    avgVendKwd?: number | null;
+    estimatedWasteKwd?: number | null;
+    source?: string | null;
+    note?: string | null;
+    error?: string | null;
+    skipped?: boolean;
+    reason?: string | null;
+  } | null;
 };
 
 export function formatDowntimeClock(iso: string | null | undefined): string {

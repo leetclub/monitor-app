@@ -17,10 +17,14 @@ import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAler
 function ProjectionCalculator({
   projection,
   baselineMissing,
+  spoilageSource,
+  waste,
   heading = 'Projected revenue loss',
 }: {
   projection?: DowntimeProjection | null;
   baselineMissing?: boolean;
+  spoilageSource?: string | null;
+  waste?: DowntimeDetailResponse['waste'];
   heading?: string;
 }) {
   if (!projection || baselineMissing || projection.baselineHourlyKwd == null) {
@@ -40,6 +44,15 @@ function ProjectionCalculator({
       ? Number(projection.spoilageKwd)
       : null;
   const spoilTracked = spoil != null && spoil > 0.004;
+  const spoilFromWaste = spoilageSource === 'monitor_waste';
+  const wasteNote =
+    spoilFromWaste && waste
+      ? `Monitor waste today: ${waste.wasteCups != null ? `${waste.wasteCups} cups` : '—'}${
+          waste.wastePct != null ? ` · ${Number(waste.wastePct).toFixed(1)}%` : ''
+        } × avg vend ${formatLossKwd(waste.avgVendKwd)} (stock − sales, same as Overall Waste)`
+      : spoilFromWaste
+        ? 'Monitor waste (stock − sales) × avg vend — same source as Overall Waste %'
+        : 'Direct cost of wasted / expired inventory';
   const rows: Array<{ factor: string; amount: string; impact: string }> = [
     {
       factor: 'Revenue baseline',
@@ -52,18 +65,24 @@ function ProjectionCalculator({
       impact: `Baseline × ${projection.downtimeHours != null ? `${Number(projection.downtimeHours).toFixed(2)}h` : '—'} × peak ${formatPeakMult(projection.peakMultiplier)}`,
     },
   ];
-  if (spoilTracked) {
+  if (spoilTracked || spoilFromWaste) {
     rows.push({
       factor: 'Spoilage impact',
-      amount: formatLossKwd(spoil),
-      impact: 'Direct cost of wasted / expired inventory',
+      amount: spoilTracked ? formatLossKwd(spoil) : '0.00 KD',
+      impact: waste?.error
+        ? `Waste lookup failed: ${waste.error}`
+        : waste?.skipped
+          ? String(waste.reason || 'Waste API key not configured')
+          : waste?.note === 'no_refill_data'
+            ? 'No refill / area-override data for today yet'
+            : wasteNote,
     });
   }
   rows.push(
     {
       factor: spoilTracked ? 'Final economic impact' : 'Projected revenue loss',
       amount: formatLossKwd(projection.finalEconomicImpactKwd ?? projection.opportunityCostKwd),
-      impact: spoilTracked ? 'Missed sales + inventory loss' : 'Missed sales only (spoilage not tracked yet)',
+      impact: spoilTracked ? 'Missed sales + estimated waste KD' : 'Missed sales only (no waste cups today)',
     },
     {
       factor: 'Volume impact',
@@ -185,10 +204,9 @@ export function DowntimeDetailModal({
           </p>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
             <strong>Projected loss</strong> = yesterday same-elapsed KD/h × today downtime hours × peak
-            multiplier. Peak bands (Kuwait): off-peak ×0.35, morning ×0.85, peak 09–14 ×1.9, afternoon
-            ×1.15, evening ×0.65. Spoilage is not auto-calculated (no inventory feed). The reference
-            block below is actual vends in the same clock minutes as today&apos;s OFF — often 0 if that
-            slice was quiet.
+            multiplier. Spoilage = Monitor waste for today (motion refills − Vendon sales) × avg vend —
+            same source as Overall Waste %. The reference block below is actual vends in the same clock
+            minutes as today&apos;s OFF — often 0 if that slice was quiet.
           </p>
         </section>
 
@@ -201,6 +219,8 @@ export function DowntimeDetailModal({
           <ProjectionCalculator
             projection={projection}
             baselineMissing={Boolean(data?.baselineMissing) || projection?.baselineHourlyKwd == null}
+            spoilageSource={data?.spoilageSource}
+            waste={data?.waste}
           />
         ) : null}
 

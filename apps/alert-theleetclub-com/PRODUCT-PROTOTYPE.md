@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-06 | **Downtime spoilage from Monitor waste:** Popup pulls today’s waste via the same path as Overall Waste % / Monitor waste tab (motion area-overrides − Vendon sales), converts cups × avg vend → KD for Spoilage impact. |
 | 2026-08-06 | **Downtime popup clarity:** Hide Spoilage when not tracked (was always 0.00 KD — no inventory feed). Reference block shows day same-elapsed KD vs actual vends in the OFF clock window (often 0). |
 | 2026-08-06 | **Downtime projected loss + today trend:** Zero-sales days no longer produce a 0 KD/h baseline (all-zero calculator). Baseline prefers yesterday with sales &gt; 0, else recent positive days / live window; UI shows a clear “no baseline” note when none. Summary uses **same-elapsed** single-day compare; cell + popup show **today mins** and **trend % vs yesterday** (more downtime = red). |
 | 2026-08-03 | **Downtime revenue-loss calculator:** Projected Loss = baseline hourly KD × downtime hours × peak multiplier (+ spoilage). Baseline = yesterday same-elapsed ÷ hours; Kuwait peak bands (off-peak ×0.35 … peak 09–14 ×1.9). Modal shows Revenue baseline / Opportunity / Spoilage / Final impact / Volume. Same-clock observed sales kept as reference. |
