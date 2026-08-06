@@ -463,6 +463,7 @@ export function useV2OverallData(compare?: CompareSelection) {
             dt.trendPct != null && Number.isFinite(Number(dt.trendPct)) ? Number(dt.trendPct) : null,
             t,
             p,
+            { compact: true },
           );
           return `${formatDowntimeSec(dt.todaySec)} · ${formatDowntimeSec(dt.periodSec)}${
             label ? ` · ${label.text}` : ''
@@ -512,6 +513,7 @@ export function useV2OverallData(compare?: CompareSelection) {
             dt?.trendPct != null && Number.isFinite(Number(dt.trendPct)) ? Number(dt.trendPct) : null,
             t,
             p,
+            { compact: true },
           );
           return [
             {

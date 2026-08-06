@@ -189,6 +189,7 @@ export function DowntimeDetailModal({
                   className={
                     trendLabel.worse ? 'alertSalesDown' : trendLabel.better ? 'alertSalesUp' : undefined
                   }
+                  title={trendLabel.title}
                 >
                   {trendLabel.worse ? '▲ ' : trendLabel.better ? '▼ ' : ''}
                   {trendLabel.text}

@@ -50,7 +50,7 @@
   line-height: 1.2;
   width: 100%;
   box-sizing: border-box;
-  overflow: visible;
+  overflow: hidden;
   min-width: 0;
 }
 
@@ -120,6 +120,9 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Two-box stacks (Sales / Downtime): column must fit both boxes + table cell padding.

@@ -1,5 +1,6 @@
 import {
   formatDowntimeSec,
+  formatDowntimeSecCompact,
   formatDowntimeTrendLabel,
   type DowntimeMachineRow,
 } from '@/lib/downtimeDisplay';
@@ -8,8 +9,7 @@ import { bindStopRowClick } from '@/lib/stopRowClick';
 /**
  * Two-box downtime stack: Today + compare baseline (e.g. Yesterday).
  * Trend chip = today vs same-elapsed period (more downtime = worse / red).
- * Reuses salesStack layout so cell height matches Sales / Target columns.
- * Tap opens event list + estimated KD loss modal.
+ * Compact labels so the chip stays inside the metric box.
  */
 function DowntimeTrendLine({
   trendPct,
@@ -20,13 +20,13 @@ function DowntimeTrendLine({
   todaySec: number;
   periodSec: number;
 }) {
-  const label = formatDowntimeTrendLabel(trendPct, todaySec, periodSec);
+  const label = formatDowntimeTrendLabel(trendPct, todaySec, periodSec, { compact: true });
   if (!label) {
     return <span className="salesStackTrend salesStackTrendMuted">—</span>;
   }
   const tone = label.worse ? 'alertSalesDown' : label.better ? 'alertSalesUp' : 'salesStackTrendMuted';
   return (
-    <span className={`salesStackTrend ${tone}`}>
+    <span className={`salesStackTrend ${tone}`} title={label.title || label.text}>
       {label.worse ? '▲ ' : label.better ? '▼ ' : ''}
       {label.text}
     </span>
@@ -54,18 +54,18 @@ export function DowntimeStack({
   const trendPct =
     row?.trendPct != null && Number.isFinite(Number(row.trendPct)) ? Number(row.trendPct) : null;
   const hasAny = todaySec > 0 || periodSec > 0;
-  const trendLabel = formatDowntimeTrendLabel(trendPct, todaySec, periodSec);
+  const trendLabel = formatDowntimeTrendLabel(trendPct, todaySec, periodSec, { compact: true });
   const tip =
     title ||
     `Operational downtime (Vendon Machine OFF / KNet OFF / Vendon OFF). Cleaning windows subtracted. ${todayLabel}: ${formatDowntimeSec(todaySec)}. ${periodLabel}: ${formatDowntimeSec(periodSec)}${
-      trendLabel ? `. vs ${periodLabel}: ${trendLabel.text}` : ''
+      trendLabel?.title ? `. ${trendLabel.title}` : trendLabel ? `. vs ${periodLabel}: ${trendLabel.text}` : ''
     }. Tap for events and estimated loss.`;
 
   const inner = (
     <>
       <div className={`salesStackBox salesStackBoxToday${todaySec > 0 ? '' : ' salesStackBoxMuted'}`}>
         <span className="salesStackLabel">{todayLabel}</span>
-        <span className="salesStackVal">{hasAny || row ? formatDowntimeSec(todaySec) : '—'}</span>
+        <span className="salesStackVal">{hasAny || row ? formatDowntimeSecCompact(todaySec) : '—'}</span>
         <DowntimeTrendLine
           trendPct={hasAny || row ? trendPct : null}
           todaySec={todaySec}
@@ -74,7 +74,7 @@ export function DowntimeStack({
       </div>
       <div className={`salesStackBox salesStackBoxYest${periodSec > 0 ? '' : ' salesStackBoxMuted'}`}>
         <span className="salesStackLabel">{periodLabel}</span>
-        <span className="salesStackVal">{hasAny || row ? formatDowntimeSec(periodSec) : '—'}</span>
+        <span className="salesStackVal">{hasAny || row ? formatDowntimeSecCompact(periodSec) : '—'}</span>
       </div>
     </>
   );

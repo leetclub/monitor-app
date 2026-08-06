@@ -13,6 +13,18 @@ export function formatDowntimeSec(sec: number | null | undefined): string {
   return `${h}h ${m}m`;
 }
 
+/** Shorter duration for table trend chips (no seconds once ≥1m). */
+export function formatDowntimeSecCompact(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec) || sec <= 0) return '0m';
+  const s = Math.max(0, Math.round(sec));
+  if (s < 60) return `${s}s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s % 3600) / 60);
+  if (h <= 0) return `${Math.max(1, m)}m`;
+  if (m <= 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 /** Need ≥1 minute baseline before % change is meaningful. */
 export const DOWNTIME_TREND_MIN_BASE_SEC = 60;
 
@@ -27,25 +39,33 @@ export function formatDowntimeTrendPct(pct: number): string {
 }
 
 /**
- * Operator-facing trend: avoid absurd % when yesterday is ~0 / sub-minute
- * (e.g. 3h20m vs 9s → +133711% while UI showed "0m").
+ * Operator-facing trend: avoid absurd % when yesterday is ~0 / sub-minute.
+ * compact=true → short chip for table boxes (fits salesStack).
  */
 export function formatDowntimeTrendLabel(
   trendPct: number | null | undefined,
   todaySec: number,
   periodSec: number,
-): { text: string; worse: boolean; better: boolean } | null {
+  opts?: { compact?: boolean },
+): { text: string; worse: boolean; better: boolean; title?: string } | null {
+  const compact = Boolean(opts?.compact);
   const t = Number.isFinite(todaySec) ? Math.max(0, todaySec) : 0;
   const p = Number.isFinite(periodSec) ? Math.max(0, periodSec) : 0;
   if (t <= 0 && p <= 0) return null;
+  const fmt = compact ? formatDowntimeSecCompact : formatDowntimeSec;
 
   if (p < DOWNTIME_TREND_MIN_BASE_SEC) {
-    if (t <= 0) return { text: 'flat', worse: false, better: false };
+    if (t <= 0) return { text: 'flat', worse: false, better: false, title: 'No downtime either period' };
     const delta = Math.max(0, t - p);
+    // Yesterday ~0: no meaningful % — show absolute increase only (not "new").
     return {
-      text: p <= 0 ? `new · +${formatDowntimeSec(t)}` : `+${formatDowntimeSec(delta)}`,
+      text: `+${fmt(delta)}`,
       worse: true,
       better: false,
+      title:
+        p <= 0
+          ? `No downtime yesterday (same elapsed). Today is +${formatDowntimeSec(t)} vs 0.`
+          : `Yesterday only ${formatDowntimeSec(p)} — too small for %; showing +${formatDowntimeSec(delta)}.`,
     };
   }
 
@@ -54,19 +74,20 @@ export function formatDowntimeTrendLabel(
       ? Number(trendPct)
       : ((t - p) / p) * 100;
   if (!Number.isFinite(pct)) return null;
-  // Cap display if somehow huge
   if (Math.abs(pct) >= 1000) {
     const delta = t - p;
     return {
-      text: `${delta >= 0 ? '+' : '−'}${formatDowntimeSec(Math.abs(delta))}`,
+      text: `${delta >= 0 ? '+' : '−'}${fmt(Math.abs(delta))}`,
       worse: delta > 0,
       better: delta < 0,
+      title: `Change ${formatDowntimeSec(Math.abs(delta))} (baseline too small for a stable %)`,
     };
   }
   return {
     text: formatDowntimeTrendPct(pct),
     worse: pct > 0,
     better: pct < 0,
+    title: `${formatDowntimeTrendPct(pct)} vs same-elapsed prior period`,
   };
 }
 
