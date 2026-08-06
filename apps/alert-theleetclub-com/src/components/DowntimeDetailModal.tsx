@@ -35,26 +35,35 @@ function ProjectionCalculator({
       </section>
     );
   }
+  const spoil =
+    projection.spoilageKwd != null && Number.isFinite(Number(projection.spoilageKwd))
+      ? Number(projection.spoilageKwd)
+      : null;
+  const spoilTracked = spoil != null && spoil > 0.004;
   const rows: Array<{ factor: string; amount: string; impact: string }> = [
     {
       factor: 'Revenue baseline',
       amount: formatHourlyKwd(projection.baselineHourlyKwd),
-      impact: 'Income rate per active operating hour',
+      impact: 'Yesterday same-elapsed KD ÷ hours (fallback: recent positive days)',
     },
     {
       factor: 'Opportunity cost',
       amount: formatLossKwd(projection.opportunityCostKwd),
       impact: `Baseline × ${projection.downtimeHours != null ? `${Number(projection.downtimeHours).toFixed(2)}h` : '—'} × peak ${formatPeakMult(projection.peakMultiplier)}`,
     },
-    {
+  ];
+  if (spoilTracked) {
+    rows.push({
       factor: 'Spoilage impact',
-      amount: formatLossKwd(projection.spoilageKwd ?? 0),
+      amount: formatLossKwd(spoil),
       impact: 'Direct cost of wasted / expired inventory',
-    },
+    });
+  }
+  rows.push(
     {
-      factor: 'Final economic impact',
-      amount: formatLossKwd(projection.finalEconomicImpactKwd),
-      impact: 'Missed sales + inventory loss',
+      factor: spoilTracked ? 'Final economic impact' : 'Projected revenue loss',
+      amount: formatLossKwd(projection.finalEconomicImpactKwd ?? projection.opportunityCostKwd),
+      impact: spoilTracked ? 'Missed sales + inventory loss' : 'Missed sales only (spoilage not tracked yet)',
     },
     {
       factor: 'Volume impact',
@@ -64,7 +73,7 @@ function ProjectionCalculator({
           : '—',
       impact: `Est. missed purchases (÷ ${formatLossKwd(projection.avgVendKwd)} avg vend)`,
     },
-  ];
+  );
 
   return (
     <section className="operatorWorkflowSection" style={{ marginTop: 10 }}>
@@ -175,11 +184,11 @@ export function DowntimeDetailModal({
             ) : null}
           </p>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
-            <strong>Projected loss</strong> = baseline hourly revenue × downtime hours × peak multiplier
-            (+ spoilage). Baseline prefers yesterday same-elapsed with sales &gt; 0, else recent positive
-            days / live window. Peak bands (Kuwait): off-peak ×0.35, morning ×0.85, peak 09–14 ×1.9,
-            afternoon ×1.15, evening ×0.65. Observed same-clock sales on comparison days are shown for
-            reference.
+            <strong>Projected loss</strong> = yesterday same-elapsed KD/h × today downtime hours × peak
+            multiplier. Peak bands (Kuwait): off-peak ×0.35, morning ×0.85, peak 09–14 ×1.9, afternoon
+            ×1.15, evening ×0.65. Spoilage is not auto-calculated (no inventory feed). The reference
+            block below is actual vends in the same clock minutes as today&apos;s OFF — often 0 if that
+            slice was quiet.
           </p>
         </section>
 
@@ -197,25 +206,38 @@ export function DowntimeDetailModal({
 
         {baselines.length ? (
           <section className="operatorWorkflowSection" style={{ marginTop: 10 }}>
-            <h3 className="salesHistoryCompareTitle">Observed same-clock sales (reference)</h3>
+            <h3 className="salesHistoryCompareTitle">Reference · same clock as today&apos;s OFF</h3>
+            <p className="salesHistoryNote" style={{ marginTop: 0, opacity: 0.85, fontSize: '0.75rem' }}>
+              Not the loss formula. Day rate = same-elapsed sales used for KD/h. Window = actual KD sold
+              on that day during the exact OFF clock minutes (often 0).
+            </p>
             <ul className="salesHistoryList">
               {baselines.map((b) => {
                 const id = String(b.id || b.label || '');
                 const observed = data?.observedSalesTodayKwd?.[id] ?? data?.estimatedLossTodayKwd?.[id];
+                const dayKwd = b.kwd != null && Number.isFinite(Number(b.kwd)) ? Number(b.kwd) : null;
+                const windowKwd =
+                  observed != null && Number.isFinite(Number(observed)) ? Number(observed) : null;
                 return (
                   <li key={id} className="salesHistoryRow">
-                    <span className="salesHistoryCompareTitle">
-                      {b.label}
-                      {b.primary ? ' · primary rate source' : ''}
-                      {b.date ? ` · ${b.date}` : ''}
-                    </span>
-                    <span className="salesHistoryGridVal">
-                      {observed != null && Number.isFinite(Number(observed))
-                        ? formatLossKwd(Number(observed))
-                        : b.kwd != null && Number.isFinite(b.kwd)
-                          ? `day ${Number(b.kwd).toFixed(2)} KD`
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                      <span className="salesHistoryCompareTitle">
+                        {b.label}
+                        {b.primary ? ' · primary rate' : ''}
+                        {b.date ? ` · ${b.date}` : ''}
+                      </span>
+                      <span className="salesHistoryNote" style={{ margin: 0, opacity: 0.8, fontSize: '0.75rem' }}>
+                        Day same-elapsed:{' '}
+                        {dayKwd != null ? formatLossKwd(dayKwd) : '—'}
+                        {' · '}
+                        In OFF clock window:{' '}
+                        {windowKwd != null
+                          ? windowKwd < 0.005
+                            ? '0 (no vends in that slice)'
+                            : formatLossKwd(windowKwd)
                           : '—'}
-                    </span>
+                      </span>
+                    </div>
                   </li>
                 );
               })}
