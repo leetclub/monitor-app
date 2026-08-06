@@ -18,6 +18,49 @@ body.alert-modal-open {
   overscroll-behavior: none;
 }
 
+/*
+ * Sticky popup chrome: header + X stay on the frame while the body scrolls.
+ * Negative margins cancel modal padding so the bar is flush with the panel edge.
+ */
+.salesHistoryModal .salesHistoryHead,
+.operatorContactModal .operatorContactModalHead,
+.redFlagsDetailModal .redFlagsDetailHead {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  flex-shrink: 0;
+  align-items: flex-start;
+  margin-top: -1rem;
+  margin-left: -1.15rem;
+  margin-right: -1.15rem;
+  margin-bottom: 0.75rem;
+  padding: 1rem 1.15rem 0.75rem;
+  background: linear-gradient(180deg, #1a1b21 78%, rgba(18, 16, 22, 0.96) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 12px 20px -14px rgba(0, 0, 0, 0.75);
+}
+
+.operatorContactModal .operatorContactModalHead,
+.redFlagsDetailModal .redFlagsDetailHead {
+  background: linear-gradient(180deg, #1a1418 78%, rgba(18, 16, 22, 0.96) 100%);
+}
+
+.operatorContactModal .operatorContactModalHead {
+  margin-left: -1.1rem;
+  margin-right: -1.1rem;
+  padding-left: 1.1rem;
+  padding-right: 1.1rem;
+}
+
+.salesHistoryClose,
+.operatorContactClose,
+.redFlagsDetailHead .detailCloseBtn {
+  position: relative;
+  z-index: 31;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
 .salesHistoryBackdrop,
 .operatorContactBackdrop,
 .redFlagsDetailBackdrop {
@@ -35,7 +78,8 @@ body.alert-modal-open {
 .salesHistoryModal .salesHistoryHead,
 .operatorContactModal .operatorContactModalHead,
 .redFlagsDetailModal .redFlagsDetailHead {
-  animation: alertModalContentRise 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
+  /* Opacity only — leftover transform from fill-mode:both breaks position:sticky */
+  animation: alertModalHeadIn 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
 }
 
 .salesHistoryModal > .salesHistoryHead ~ *,
@@ -104,8 +148,9 @@ body.alert-modal-open {
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
+    /* none — not translateY(0) — so sticky headers work inside the scrollport */
+    transform: none;
+    filter: none;
   }
 }
 
@@ -117,6 +162,16 @@ body.alert-modal-open {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Header chrome: no transform so sticky close stays pinned while scrolling */
+@keyframes alertModalHeadIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

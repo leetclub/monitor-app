@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-06 | **Popup close stays pinned:** Modal header + × stick to the panel frame while scrolling (all salesHistory / contact / red-flags detail popups). |
 | 2026-08-06 | **Downtime trend chip:** Dropped confusing `new` label (meant “vs 0 yesterday”). Table shows compact `+16m` and clips overflow inside the box; hover title explains “no downtime yesterday”. |
 | 2026-08-06 | **Downtime trend % sanity:** Sub-minute yesterday was shown as `0m` while % used raw seconds (e.g. +133711%). Now show seconds under 1m; % only when baseline ≥60s, else absolute delta. Spoilage row always visible with waste status. |
 | 2026-08-06 | **Downtime spoilage from Monitor waste:** Popup pulls today’s waste via the same path as Overall Waste % / Monitor waste tab (motion area-overrides − Vendon sales), converts cups × avg vend → KD for Spoilage impact. |
