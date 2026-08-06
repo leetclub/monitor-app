@@ -5,7 +5,7 @@ import { apiGet } from '@/lib/api';
 import {
   formatDowntimeClock,
   formatDowntimeSec,
-  formatDowntimeTrendPct,
+  formatDowntimeTrendLabel,
   formatHourlyKwd,
   formatLossKwd,
   formatPeakMult,
@@ -44,15 +44,22 @@ function ProjectionCalculator({
       ? Number(projection.spoilageKwd)
       : null;
   const spoilTracked = spoil != null && spoil > 0.004;
-  const spoilFromWaste = spoilageSource === 'monitor_waste';
-  const wasteNote =
-    spoilFromWaste && waste
-      ? `Monitor waste today: ${waste.wasteCups != null ? `${waste.wasteCups} cups` : '—'}${
-          waste.wastePct != null ? ` · ${Number(waste.wastePct).toFixed(1)}%` : ''
-        } × avg vend ${formatLossKwd(waste.avgVendKwd)} (stock − sales, same as Overall Waste)`
-      : spoilFromWaste
-        ? 'Monitor waste (stock − sales) × avg vend — same source as Overall Waste %'
-        : 'Direct cost of wasted / expired inventory';
+  const spoilImpact =
+    waste?.error
+      ? `Waste lookup failed: ${waste.error}`
+      : waste?.skipped
+        ? String(waste.reason || 'Waste API key not configured on people-api')
+        : waste?.note === 'no_refill_data'
+          ? 'No refill / area-override data for today yet (Monitor waste empty)'
+          : spoilageSource === 'monitor_waste' && waste
+            ? `Monitor waste today: ${waste.wasteCups != null ? `${waste.wasteCups} cups` : '—'}${
+                waste.wastePct != null ? ` · ${Number(waste.wastePct).toFixed(1)}%` : ''
+              } × avg vend ${formatLossKwd(waste.avgVendKwd)} (stock − sales, same as Overall Waste)`
+            : spoilageSource === 'explicit_query'
+              ? 'Manual spoilage override'
+              : waste
+                ? 'Monitor waste available but estimated KD is 0'
+                : 'Waiting for people-api waste on downtime-detail (motion refills − sales)';
   const rows: Array<{ factor: string; amount: string; impact: string }> = [
     {
       factor: 'Revenue baseline',
@@ -64,25 +71,15 @@ function ProjectionCalculator({
       amount: formatLossKwd(projection.opportunityCostKwd),
       impact: `Baseline × ${projection.downtimeHours != null ? `${Number(projection.downtimeHours).toFixed(2)}h` : '—'} × peak ${formatPeakMult(projection.peakMultiplier)}`,
     },
-  ];
-  if (spoilTracked || spoilFromWaste) {
-    rows.push({
+    {
       factor: 'Spoilage impact',
-      amount: spoilTracked ? formatLossKwd(spoil) : '0.00 KD',
-      impact: waste?.error
-        ? `Waste lookup failed: ${waste.error}`
-        : waste?.skipped
-          ? String(waste.reason || 'Waste API key not configured')
-          : waste?.note === 'no_refill_data'
-            ? 'No refill / area-override data for today yet'
-            : wasteNote,
-    });
-  }
-  rows.push(
+      amount: spoil != null ? formatLossKwd(spoil) : '—',
+      impact: spoilImpact,
+    },
     {
       factor: spoilTracked ? 'Final economic impact' : 'Projected revenue loss',
       amount: formatLossKwd(projection.finalEconomicImpactKwd ?? projection.opportunityCostKwd),
-      impact: spoilTracked ? 'Missed sales + estimated waste KD' : 'Missed sales only (no waste cups today)',
+      impact: spoilTracked ? 'Missed sales + estimated waste KD' : 'Missed sales only (spoilage 0 or unavailable)',
     },
     {
       factor: 'Volume impact',
@@ -92,7 +89,7 @@ function ProjectionCalculator({
           : '—',
       impact: `Est. missed purchases (÷ ${formatLossKwd(projection.avgVendKwd)} avg vend)`,
     },
-  );
+  ];
 
   return (
     <section className="operatorWorkflowSection" style={{ marginTop: 10 }}>
@@ -156,16 +153,15 @@ export function DowntimeDetailModal({
   const projection = data?.projection;
   const primaryBaseline = baselines.find((b) => b.primary) ?? baselines[0];
 
-  const todayMins = todaySec ?? data?.todayMergedOperationalSec;
-  const yestMins = periodSec ?? data?.yesterdaySameElapsedSec;
+  const todayMins = Number(todaySec ?? data?.todayMergedOperationalSec ?? 0);
+  const yestMins = Number(periodSec ?? data?.yesterdaySameElapsedSec ?? 0);
   const trendPct =
     trendPctProp != null && Number.isFinite(Number(trendPctProp))
       ? Number(trendPctProp)
       : data?.trendPct != null && Number.isFinite(Number(data.trendPct))
         ? Number(data.trendPct)
         : null;
-  const worse = trendPct != null && trendPct > 0;
-  const better = trendPct != null && trendPct < 0;
+  const trendLabel = formatDowntimeTrendLabel(trendPct, todayMins, yestMins);
 
   return createPortal(
     <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
@@ -186,12 +182,16 @@ export function DowntimeDetailModal({
             {todayLabel}: <strong>{formatDowntimeSec(todayMins)}</strong>
             {' · '}
             vs {periodLabel} (same elapsed): <strong>{formatDowntimeSec(yestMins)}</strong>
-            {trendPct != null ? (
+            {trendLabel ? (
               <>
                 {' · '}
-                <strong className={worse ? 'alertSalesDown' : better ? 'alertSalesUp' : undefined}>
-                  {worse ? '▲ ' : better ? '▼ ' : ''}
-                  {formatDowntimeTrendPct(trendPct)}
+                <strong
+                  className={
+                    trendLabel.worse ? 'alertSalesDown' : trendLabel.better ? 'alertSalesUp' : undefined
+                  }
+                >
+                  {trendLabel.worse ? '▲ ' : trendLabel.better ? '▼ ' : ''}
+                  {trendLabel.text}
                 </strong>
               </>
             ) : null}

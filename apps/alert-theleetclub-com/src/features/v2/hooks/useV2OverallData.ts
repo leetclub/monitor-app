@@ -10,7 +10,7 @@ import {
   pickLastTransactionTs,
 } from '@/features/redflags/redFlagsModel';
 import { formatLastTxCompact } from '@/features/redflags/redFlagsFreqUi';
-import { formatDowntimeSec, formatDowntimeTrendPct } from '@/lib/downtimeDisplay';
+import { formatDowntimeSec, formatDowntimeTrendLabel } from '@/lib/downtimeDisplay';
 import {
   formatKwd,
   formatSalesTrendPct,
@@ -457,10 +457,15 @@ export function useV2OverallData(compare?: CompareSelection) {
         downtime: (() => {
           const dt = downtimeQ.data?.byMachineId?.[m.id];
           if (!dt) return '—';
+          const t = Number(dt.todaySec || 0);
+          const p = Number(dt.periodSec || 0);
+          const label = formatDowntimeTrendLabel(
+            dt.trendPct != null && Number.isFinite(Number(dt.trendPct)) ? Number(dt.trendPct) : null,
+            t,
+            p,
+          );
           return `${formatDowntimeSec(dt.todaySec)} · ${formatDowntimeSec(dt.periodSec)}${
-            dt.trendPct != null && Number.isFinite(Number(dt.trendPct))
-              ? ` · ${formatDowntimeTrendPct(Number(dt.trendPct))}`
-              : ''
+            label ? ` · ${label.text}` : ''
           }`;
         })(),
         salesTrend:
@@ -501,8 +506,13 @@ export function useV2OverallData(compare?: CompareSelection) {
           const dt = downtimeQ.data?.byMachineId?.[m.id];
           const todayL = downtimeQ.data?.labelToday?.trim() || 'Today';
           const periodL = downtimeQ.data?.labelPeriod?.trim() || 'Period';
-          const trend =
-            dt?.trendPct != null && Number.isFinite(Number(dt.trendPct)) ? Number(dt.trendPct) : null;
+          const t = Number(dt?.todaySec || 0);
+          const p = Number(dt?.periodSec || 0);
+          const label = formatDowntimeTrendLabel(
+            dt?.trendPct != null && Number.isFinite(Number(dt.trendPct)) ? Number(dt.trendPct) : null,
+            t,
+            p,
+          );
           return [
             {
               label: todayL,
@@ -516,15 +526,8 @@ export function useV2OverallData(compare?: CompareSelection) {
             },
             {
               label: `vs ${periodL}`,
-              value: trend != null ? formatDowntimeTrendPct(trend) : '—',
-              tone:
-                trend == null
-                  ? ('muted' as V2MetricTone)
-                  : trend > 0
-                    ? ('crit' as V2MetricTone)
-                    : trend < 0
-                      ? ('up' as V2MetricTone)
-                      : ('muted' as V2MetricTone),
+              value: label?.text ?? '—',
+              tone: label?.worse ? ('crit' as V2MetricTone) : label?.better ? ('up' as V2MetricTone) : ('muted' as V2MetricTone),
             },
           ];
         })(),

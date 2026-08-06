@@ -456,16 +456,18 @@ def _derive_baseline_hourly_kwd(baselines_out: List[Dict[str, Any]]) -> Optional
 
 
 def _trend_vs_period(today_sec: int, period_sec: int) -> Dict[str, Optional[float]]:
-    """Signed downtime change today vs compare period (same-elapsed when applicable)."""
+    """Signed downtime change today vs compare period (same-elapsed when applicable).
+
+    Percentage is only returned when the baseline has ≥60s — otherwise a few seconds
+    of yesterday vs hours today produces meaningless values like +133711%.
+    """
     t = max(0, int(today_sec or 0))
     p = max(0, int(period_sec or 0))
     delta = t - p
-    if p > 0:
-        pct = round((delta / float(p)) * 100.0, 1)
-    elif t > 0:
-        pct = 100.0
+    if p >= 60:
+        pct: Optional[float] = round((delta / float(p)) * 100.0, 1)
     else:
-        pct = 0.0
+        pct = None
     return {"trendDeltaSec": delta, "trendPct": pct}
 
 

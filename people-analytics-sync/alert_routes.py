@@ -2898,7 +2898,7 @@ def register_alert_routes(app) -> None:
         )
 
         cache_key = (
-            f"alert-downtime:v3:{preset}:{b_lo.isoformat()}:{b_hi.isoformat()}:"
+            f"alert-downtime:v4:{preset}:{b_lo.isoformat()}:{b_hi.isoformat()}:"
             f"{request.args.get('bStart') or ''}:{request.args.get('bEnd') or ''}"
         )
         cached = _alert_cache_get(cache_key, _ALERT_DOWNTIME_CACHE_SEC)
