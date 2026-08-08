@@ -34,6 +34,7 @@ import {
 } from './redFlagsModel';
 import { GoCheckWorkflowModal } from '@/components/GoCheckWorkflowModal';
 import { DowntimeDetailModal } from '@/components/DowntimeDetailModal';
+import { ProductExtremesModal } from '@/components/ProductExtremesModal';
 import { freshnessNotice } from '@/lib/dataFreshness';
 import {
   aggregateFleetSalesForPreset,
@@ -408,6 +409,10 @@ export function RedFlagsPage({
     machineId: string;
     sxRow?: SxAccelerationRow | null;
   } | null>(null);
+  const [drinksDetail, setDrinksDetail] = useState<{
+    machineName: string;
+    machineId: string;
+  } | null>(null);
   const [goCheckDetail, setGoCheckDetail] = useState<{
     machineId: string;
     machineName: string;
@@ -627,7 +632,15 @@ export function RedFlagsPage({
         labelB?: string | null;
         byMachineId?: Record<
           string,
-          { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+          {
+            aSalesKwd?: number | null;
+            bSalesKwd?: number | null;
+            trendPct?: number | null;
+            topProduct?: { name?: string | null; count?: number | null } | null;
+            lowProduct?: { name?: string | null; count?: number | null } | null;
+            topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+            lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+          }
         >;
       }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compare.preset, compare)}`),
     enabled: q.isFetched,
@@ -1289,6 +1302,28 @@ export function RedFlagsPage({
             onClose={() => setGoCheckDetail(null)}
           />
         ) : null}
+        {drinksDetail ? (
+          <ProductExtremesModal
+            machineName={drinksDetail.machineName}
+            machineId={drinksDetail.machineId}
+            topProducts={
+              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProducts?.length
+                ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProducts
+                : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProduct
+                  ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProduct!]
+                  : []
+            }
+            lowProducts={
+              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProducts?.length
+                ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProducts
+                : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProduct
+                  ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProduct!]
+                  : []
+            }
+            periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
+            onClose={() => setDrinksDetail(null)}
+          />
+        ) : null}
       </>
     );
   }
@@ -1625,6 +1660,21 @@ export function RedFlagsPage({
                           sxRow: sxQ.data?.byMachineId?.[machId] ?? null,
                         });
                       },
+                      topDrinkName:
+                        vendonSummaryQ.data?.byMachineId?.[machId]?.topProducts?.[0]?.name ||
+                        vendonSummaryQ.data?.byMachineId?.[machId]?.topProduct?.name ||
+                        null,
+                      lowDrinkName:
+                        vendonSummaryQ.data?.byMachineId?.[machId]?.lowProducts?.[0]?.name ||
+                        vendonSummaryQ.data?.byMachineId?.[machId]?.lowProduct?.name ||
+                        null,
+                      onOpenDrinks: machId
+                        ? () =>
+                            setDrinksDetail({
+                              machineId: machId,
+                              machineName: String(row.machineName || machId),
+                            })
+                        : undefined,
                       onGoCheck: () => {
                         setGoCheckDetail({
                           machineId: machId,
@@ -1768,6 +1818,28 @@ export function RedFlagsPage({
           machineName={goCheckDetail.machineName}
           alertType={goCheckDetail.alertType}
           onClose={() => setGoCheckDetail(null)}
+        />
+      ) : null}
+      {drinksDetail ? (
+        <ProductExtremesModal
+          machineName={drinksDetail.machineName}
+          machineId={drinksDetail.machineId}
+          topProducts={
+            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProducts?.length
+              ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProducts
+              : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProduct
+                ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProduct!]
+                : []
+          }
+          lowProducts={
+            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProducts?.length
+              ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProducts
+              : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProduct
+                ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProduct!]
+                : []
+          }
+          periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
+          onClose={() => setDrinksDetail(null)}
         />
       ) : null}
     </>

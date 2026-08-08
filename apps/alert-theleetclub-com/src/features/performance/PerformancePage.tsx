@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
+import { MachineProductSalesModal } from '@/components/MachineProductSalesModal';
 import { formatSalesTrendPct } from '@/lib/salesDisplay';
 import { StitchOpsPanel } from '@/components/StitchOpsPanel';
 import { V2Panel } from '@/features/v2/v2Ui';
@@ -63,6 +64,9 @@ export function PerformancePage({
   const [loadProducts, setLoadProducts] = useState(false);
   const [selected, setSelected] = useState<Set<string> | null>(() =>
     urlIds.length ? new Set(urlIds) : focusId ? new Set([focusId]) : null,
+  );
+  const [productMix, setProductMix] = useState<{ machineId: string; machineName: string } | null>(
+    null,
   );
   const qc = useQueryClient();
 
@@ -317,6 +321,9 @@ export function PerformancePage({
               loading={fleetQ.isLoading}
               fleetRanking={fleetRanking}
               selectionLabel={selectionLabel}
+              onOpenMachineProducts={(machineId, machineName) =>
+                setProductMix({ machineId, machineName })
+              }
             />
 
             {fleetMachines.length ? (
@@ -371,10 +378,20 @@ export function PerformancePage({
             {!multi && detail && !detail.error ? (
               <>
                 <div className="perfKpiRow">
-                  <div className="perfKpi">
-                    <span className="perfKpiLabel">Location</span>
+                  <button
+                    type="button"
+                    className="perfKpi perfKpiClick"
+                    onClick={() =>
+                      setProductMix({
+                        machineId: detail.machineId,
+                        machineName: detail.machineName,
+                      })
+                    }
+                    title="Open product mix (day / week / month + YoY)"
+                  >
+                    <span className="perfKpiLabel">Location · product mix</span>
                     <strong>{detail.machineName}</strong>
-                  </div>
+                  </button>
                   <div className="perfKpi">
                     <span className="perfKpiLabel">Product</span>
                     <strong>{detail.productName || 'Americano Max'}</strong>
@@ -434,6 +451,14 @@ export function PerformancePage({
             ) : null}
           </div>
         </div>
+
+        {productMix ? (
+          <MachineProductSalesModal
+            machineId={productMix.machineId}
+            machineName={productMix.machineName}
+            onClose={() => setProductMix(null)}
+          />
+        ) : null}
     </>
   );
 

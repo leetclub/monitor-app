@@ -179,7 +179,15 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
         labelB?: string | null;
         byMachineId?: Record<
           string,
-          { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+          {
+            aSalesKwd?: number | null;
+            bSalesKwd?: number | null;
+            trendPct?: number | null;
+            topProduct?: { name?: string | null } | null;
+            lowProduct?: { name?: string | null } | null;
+            topProducts?: Array<{ name?: string | null }> | null;
+            lowProducts?: Array<{ name?: string | null }> | null;
+          }
         >;
       }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compareSel.preset, compareSel)}`),
     enabled: snapQ.isFetched,
@@ -512,6 +520,14 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
           today != null && Number.isFinite(Number(today))
             ? `${formatKwd(Number(today))}${trendPctNum != null ? ` · ${formatSalesTrendPct(trendPctNum)}` : ''}`
             : '—',
+        topLowDrinks: (() => {
+          const high =
+            vendonSales?.topProducts?.[0]?.name || vendonSales?.topProduct?.name || '';
+          const low =
+            vendonSales?.lowProducts?.[0]?.name || vendonSales?.lowProduct?.name || '';
+          if (!high && !low) return '—';
+          return `${String(high || '—')} / ${String(low || '—')}`;
+        })(),
         mtdSales: mtd != null && Number.isFinite(Number(mtd)) ? formatKwd(Number(mtd)) : '—',
         mtdYoySales:
           yoyPct != null && Number.isFinite(yoyPct)

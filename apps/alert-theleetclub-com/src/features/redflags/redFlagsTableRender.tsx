@@ -131,6 +131,9 @@ export type RedFlagsRowBundle = {
   onOpenSales: () => void;
   onOpenTarget: () => void;
   onOpenPerformance: () => void;
+  onOpenDrinks?: () => void;
+  topDrinkName?: string | null;
+  lowDrinkName?: string | null;
   onGoCheck: () => void;
 };
 
@@ -146,6 +149,7 @@ export function redFlagsHeaderClass(key: RedFlagsColumnKey): string {
     case 'operatorActivity':
       return styles.thActivity;
     case 'dailySales':
+    case 'topLowDrinks':
     case 'mtdSales':
     case 'dailyTarget':
     case 'salesAcceleration':
@@ -182,6 +186,7 @@ export function redFlagsBodyCellClass(key: RedFlagsColumnKey): string {
     case 'operatorActivity':
       return `${styles.td} ${styles.tdActivity}`;
     case 'dailySales':
+    case 'topLowDrinks':
     case 'mtdSales':
     case 'dailyTarget':
     case 'salesAcceleration':
@@ -502,6 +507,25 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           onOpenDetail={b.onOpenSales}
         />
       );
+    case 'topLowDrinks': {
+      const high = (b.topDrinkName || '').trim();
+      const low = (b.lowDrinkName || '').trim();
+      const tip = RED_FLAGS_COLUMNS.topLowDrinks.placeholderNote;
+      const inner = (
+        <div className="drinksStackCell" title={tip}>
+          <span className="drinksStackHigh">{high || '—'}</span>
+          <span className="drinksStackLow">{low || '—'}</span>
+        </div>
+      );
+      if (b.onOpenDrinks && (high || low)) {
+        return (
+          <button type="button" className="drinksStackBtn" title={tip} {...bindStopRowClick(b.onOpenDrinks)}>
+            {inner}
+          </button>
+        );
+      }
+      return inner;
+    }
     case 'mtdSales':
       return <MtdSalesCell kwd={b.mtdSalesKwd} />;
     case 'mtdYoySales':

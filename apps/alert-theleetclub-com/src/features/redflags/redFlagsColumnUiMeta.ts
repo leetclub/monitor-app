@@ -16,6 +16,7 @@ export const RED_FLAGS_COLUMN_UI: Record<RedFlagsColumnKey, RedFlagsColumnUiMeta
   operatorActivity: { abbr: 'Door', label: 'Op. activity', family: 'people' },
   lastTransaction: { abbr: 'Tx', label: 'Last tx', family: 'alerts' },
   dailySales: { abbr: 'Today', label: 'Sales today', family: 'sales' },
+  topLowDrinks: { abbr: 'Drink', label: 'Top / low drink', family: 'sales' },
   mtdSales: { abbr: 'MTD', label: 'Sales MTD', family: 'sales' },
   mtdYoySales: { abbr: 'YoY', label: 'YoY month', family: 'sales' },
   dailyTarget: { abbr: 'Tgt', label: 'Target', family: 'sales' },

@@ -6,6 +6,7 @@ export const RED_FLAGS_XLSX_ORDER = [
   'operatorActivity',
   'lastTransaction',
   'dailySales',
+  'topLowDrinks',
   'mtdSales',
   'mtdYoySales',
   'dailyTarget',
@@ -38,6 +39,7 @@ export const RED_FLAGS_HEADER_SHORT: Record<RedFlagsColumnKey, string> = {
   operatorActivity: 'Op. activity',
   lastTransaction: 'Last tx',
   dailySales: 'Daily sales',
+  topLowDrinks: 'Top / low drink',
   mtdSales: 'MTD sales',
   mtdYoySales: 'MTD vs LY',
   dailyTarget: 'Target',
@@ -95,6 +97,12 @@ export const RED_FLAGS_COLUMNS: Record<
     sub: 'Today vs yesterday (same time)',
     placeholderNote:
       'Kuwait today through current clock vs yesterday until the same elapsed time (Vendon vends). Tap header to sort today sales high→low.',
+  },
+  topLowDrinks: {
+    title: 'Top / low drink',
+    sub: 'Highest · lowest selling SKU',
+    placeholderNote:
+      'Highest and lowest selling drinks (cups) in the sales compare period. Tap for top 5 and lowest 5 names.',
   },
   mtdSales: {
     title: 'MTD sales',

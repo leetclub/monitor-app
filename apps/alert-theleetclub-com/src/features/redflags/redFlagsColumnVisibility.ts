@@ -19,6 +19,7 @@ export const RED_FLAGS_PRESET_SALES: RedFlagsColumnKey[] = [
   'operatorActivity',
   'lastTransaction',
   'dailySales',
+  'topLowDrinks',
   'mtdSales',
   'mtdYoySales',
   'dailyTarget',
@@ -54,7 +55,7 @@ export const RED_FLAGS_COLUMN_GROUPS: Record<
     label: 'Sales & targets',
     help:
       'Today vs yesterday (elapsed Kuwait clock), month-to-date, YoY month MTD with % vs same days last year, and daily target progress. Tap Sales today / MTD headers to sort high→low.',
-    keys: ['dailySales', 'mtdSales', 'mtdYoySales', 'dailyTarget', 'salesAcceleration'],
+    keys: ['dailySales', 'topLowDrinks', 'mtdSales', 'mtdYoySales', 'dailyTarget', 'salesAcceleration'],
   },
   people: {
     label: 'People',

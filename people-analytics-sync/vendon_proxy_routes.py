@@ -1402,13 +1402,17 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
 
             top_product = None
             low_product = None
+            top_products: List[Dict[str, Any]] = []
+            low_products: List[Dict[str, Any]] = []
             if product_counts:
                 # Sort by count desc, name asc
                 ordered = sorted(product_counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
                 top_product = {"name": ordered[0][0], "count": int(ordered[0][1])}
+                top_products = [{"name": n, "count": int(c)} for n, c in ordered[:5]]
                 # Lowest non-zero (count asc, name asc)
                 ordered_low = sorted(product_counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
                 low_product = {"name": ordered_low[0][0], "count": int(ordered_low[0][1])}
+                low_products = [{"name": n, "count": int(c)} for n, c in ordered_low[:5]]
 
             peak_hour = None
             if hour_counts:
@@ -1429,6 +1433,10 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                     "totalTransactions": total_tx,
                     "topProduct": top_product,
                     "lowProduct": low_product,
+                    "topProducts": top_products,
+                    "lowProducts": low_products,
+                    # Full mix for period rollups (Alert product popups / Performance).
+                    "productCounts": {str(k): int(v) for k, v in product_counts.items()},
                     "peakHour": peak_hour,
                 },
                 created_at=datetime.utcnow(),

@@ -10,6 +10,7 @@ export const RED_FLAGS_TABLE_HEADERS: Record<RedFlagsColumnKey, HeaderDisplay> =
   operatorActivity: { main: 'Op.', sub: 'activity' },
   lastTransaction: { main: 'Last', sub: 'tx' },
   dailySales: { main: 'Sales', sub: 'today' },
+  topLowDrinks: { main: 'Top / low', sub: 'drink' },
   mtdSales: { main: 'Sales', sub: 'MTD' },
   mtdYoySales: { main: 'YoY', sub: 'month MTD' },
   dailyTarget: { main: 'Target', sub: 'today' },

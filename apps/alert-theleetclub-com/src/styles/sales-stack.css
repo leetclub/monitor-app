@@ -721,3 +721,135 @@
     grid-template-columns: 1fr;
   }
 }
+
+.productExtremesGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .productExtremesGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.productExtremesList {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+
+.productExtremesList li {
+  margin: 0.2rem 0;
+}
+
+.drinksStackCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.drinksStackCell .drinksStackHigh,
+.drinksStackCell .drinksStackLow {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 7.5rem;
+}
+
+.drinksStackCell .drinksStackHigh {
+  color: #86efac;
+  font-weight: 700;
+}
+
+.drinksStackCell .drinksStackLow {
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+.drinksStackBtn {
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+}
+
+.drinksStackBtn:hover {
+  filter: brightness(1.08);
+}
+
+.productExtremesModal,
+.machineProductSalesModal {
+  max-width: min(720px, 96vw);
+}
+
+.productExtremesGrid,
+.productMixPanels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@media (max-width: 560px) {
+  .productExtremesGrid,
+  .productMixPanels {
+    grid-template-columns: 1fr;
+  }
+}
+
+.productExtremesCol,
+.productMixPanel {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.productExtremesHigh {
+  border-color: rgba(134, 239, 172, 0.28);
+}
+
+.productExtremesLow {
+  border-color: rgba(252, 165, 165, 0.28);
+}
+
+.productExtremesList {
+  margin: 8px 0 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.productExtremesList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.productMixCups {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #94a3b8);
+  font-weight: 600;
+  flex-shrink: 0;
+}

@@ -22,6 +22,7 @@ export const RED_FLAGS_SORTABLE_COLUMNS = new Set<RedFlagsColumnKey>([
   'operatorActivity',
   'lastTransaction',
   'dailySales',
+  'topLowDrinks',
   'mtdSales',
   'mtdYoySales',
   'dailyTarget',
@@ -69,7 +70,15 @@ export type RedFlagsSortContext = {
   mtdYoyReady: boolean;
   vendonByMachine?: Record<
     string,
-    { aSalesKwd?: number | null; bSalesKwd?: number | null; trendPct?: number | null }
+    {
+      aSalesKwd?: number | null;
+      bSalesKwd?: number | null;
+      trendPct?: number | null;
+      topProduct?: { name?: string | null; count?: number | null } | null;
+      lowProduct?: { name?: string | null; count?: number | null } | null;
+      topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+      lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+    }
   >;
   creditsByMachine?: Record<string, { credits_sent?: number; dispense_tests?: number }>;
   incidentsByMachine?: Record<string, IncidentsElapsedRow>;
@@ -137,6 +146,17 @@ function compareRedFlagsRow(
         0,
       );
       return compareNumbers(sa, sb, dir);
+    }
+    case 'topLowDrinks': {
+      const topA =
+        ctx.vendonByMachine?.[idA]?.topProducts?.[0]?.name ||
+        ctx.vendonByMachine?.[idA]?.topProduct?.name ||
+        '';
+      const topB =
+        ctx.vendonByMachine?.[idB]?.topProducts?.[0]?.name ||
+        ctx.vendonByMachine?.[idB]?.topProduct?.name ||
+        '';
+      return compareStrings(String(topA), String(topB), dir);
     }
     case 'mtdSales': {
       if (!ctx.mtdReady) return 0;

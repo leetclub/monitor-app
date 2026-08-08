@@ -2747,6 +2747,55 @@ def register_alert_routes(app) -> None:
                 latest_payload = r.payload_json if isinstance(r.payload_json, dict) else None
         return sales, tx, latest_payload
 
+    def _aggregate_product_counts_in_range(
+        rows: List[VendonDailyMachineRevenueCache],
+        start_incl: date,
+        end_excl: date,
+    ) -> Dict[str, int]:
+        totals: Dict[str, int] = {}
+        for r in rows:
+            cd = r.cache_date
+            if cd is None or cd < start_incl or cd >= end_excl:
+                continue
+            payload = r.payload_json if isinstance(r.payload_json, dict) else {}
+            pc = payload.get("productCounts") if isinstance(payload.get("productCounts"), dict) else None
+            if not pc:
+                # Legacy cache: fold single top/low into the mix.
+                for key in ("topProduct", "lowProduct"):
+                    item = payload.get(key)
+                    if isinstance(item, dict) and item.get("name"):
+                        name = str(item.get("name") or "").strip()
+                        if not name:
+                            continue
+                        try:
+                            c = int(item.get("count") or 0)
+                        except (TypeError, ValueError):
+                            c = 0
+                        if c > 0:
+                            totals[name] = max(int(totals.get(name) or 0), c)
+                continue
+            for name_raw, cnt_raw in pc.items():
+                name = str(name_raw or "").strip()
+                if not name:
+                    continue
+                try:
+                    c = int(cnt_raw or 0)
+                except (TypeError, ValueError):
+                    c = 0
+                if c <= 0:
+                    continue
+                totals[name] = int(totals.get(name) or 0) + c
+        return totals
+
+    def _product_extremes_from_counts(counts: Dict[str, int], *, n: int = 5) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        if not counts:
+            return [], []
+        ordered = sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
+        ordered_low = sorted(counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
+        top = [{"name": name, "count": int(c)} for name, c in ordered[:n]]
+        low = [{"name": name, "count": int(c)} for name, c in ordered_low[:n]]
+        return top, low
+
     @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
     def alert_overall_vendon_sales_summary():
         """
@@ -2851,6 +2900,39 @@ def register_alert_routes(app) -> None:
                     if isinstance(y_ph, dict) and y_ph.get("label"):
                         peak_hour = {**y_ph, "label": f"{y_ph.get('label')} yest."}
                         peak_hour_from_yesterday = True
+                a_counts = _aggregate_product_counts_in_range(rows, a_lo, a_hi)
+                top_products, low_products = _product_extremes_from_counts(a_counts, n=5)
+                if not top_products:
+                    # Prefer lists from latest day payload; else single top/low.
+                    raw_top = payload.get("topProducts") if isinstance(payload.get("topProducts"), list) else None
+                    raw_low = payload.get("lowProducts") if isinstance(payload.get("lowProducts"), list) else None
+                    if raw_top:
+                        top_products = [
+                            {"name": str(x.get("name") or "").strip(), "count": int(x.get("count") or 0)}
+                            for x in raw_top
+                            if isinstance(x, dict) and str(x.get("name") or "").strip()
+                        ][:5]
+                    elif isinstance(payload.get("topProduct"), dict) and payload["topProduct"].get("name"):
+                        top_products = [
+                            {
+                                "name": str(payload["topProduct"].get("name")),
+                                "count": int(payload["topProduct"].get("count") or 0),
+                            }
+                        ]
+                    if raw_low:
+                        low_products = [
+                            {"name": str(x.get("name") or "").strip(), "count": int(x.get("count") or 0)}
+                            for x in raw_low
+                            if isinstance(x, dict) and str(x.get("name") or "").strip()
+                        ][:5]
+                    elif isinstance(payload.get("lowProduct"), dict) and payload["lowProduct"].get("name"):
+                        low_products = [
+                            {
+                                "name": str(payload["lowProduct"].get("name")),
+                                "count": int(payload["lowProduct"].get("count") or 0),
+                            }
+                        ]
+
                 out["byMachineId"][mid] = {
                     "aSalesKwd": round(a_sales, 4),
                     "bSalesKwd": round(b_sales, 4),
@@ -2859,8 +2941,12 @@ def register_alert_routes(app) -> None:
                     "trendPct": round(trend_pct, 2) if trend_pct is not None else None,
                     "peakHour": peak_hour,
                     "peakHourFromYesterday": peak_hour_from_yesterday,
-                    "topProduct": payload.get("topProduct"),
-                    "lowProduct": payload.get("lowProduct"),
+                    "topProduct": payload.get("topProduct")
+                    or (top_products[0] if top_products else None),
+                    "lowProduct": payload.get("lowProduct")
+                    or (low_products[0] if low_products else None),
+                    "topProducts": top_products,
+                    "lowProducts": low_products,
                 }
 
             return jsonify(out)
@@ -3290,6 +3376,211 @@ def register_alert_routes(app) -> None:
         except Exception as ex:
             logger.exception("alert overall sales acceleration")
             return jsonify({"error": "failed", "message": str(ex)}), 500
+        finally:
+            db.close()
+
+    @app.route("/api/alert/performance/machine-products", methods=["GET", "OPTIONS"])
+    def alert_performance_machine_products():
+        """
+        Per-machine product mix for Performance / Red Flags popups.
+
+        Query: machineId (required), machineName (optional).
+        Returns day / week / month grains with cups, vs prior period, vs same dates last year,
+        top5 / lowest5 names, and YoY top5 comparison.
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        mid = (request.args.get("machineId") or request.args.get("machine_id") or "").strip()
+        mname = (request.args.get("machineName") or request.args.get("machine_name") or "").strip()
+        if not mid:
+            return jsonify({"error": "machineId required"}), 400
+
+        cache_key = f"perf:machine-products:v1:{mid}"
+        cached = _alert_cache_get(cache_key, 120)
+        if cached is not None:
+            return jsonify(cached)
+
+        from alert_targets_lib import resolve_perf_window
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+
+        def _grain_windows(grain: str) -> Tuple[date, date, date, date, date, date, str]:
+            """current start/end, prev start/end, yoy start/end, label."""
+            if grain == "day":
+                cur_s = cur_e = today
+                prev_s = prev_e = today - timedelta(days=1)
+                try:
+                    yoy_s = yoy_e = date(today.year - 1, today.month, today.day)
+                except ValueError:
+                    yoy_s = yoy_e = today - timedelta(days=365)
+                return cur_s, cur_e, prev_s, prev_e, yoy_s, yoy_e, "Today"
+            preset = "this_week" if grain == "week" else "this_month"
+            win_s, win_e, prev_s, prev_e, _pid = resolve_perf_window(
+                today=today, preset=preset, history_days=31
+            )
+            span = (win_e - win_s).days
+            try:
+                yoy_s = date(win_s.year - 1, win_s.month, win_s.day)
+            except ValueError:
+                yoy_s = win_s - timedelta(days=365)
+            yoy_e = yoy_s + timedelta(days=span)
+            label = "This week (WTD)" if grain == "week" else "This month (MTD)"
+            return win_s, win_e, prev_s, prev_e, yoy_s, yoy_e, label
+
+        def _trend(cur: float, base: float) -> Optional[float]:
+            if base > 0:
+                return round(((cur - base) / base) * 100.0, 1)
+            if cur > 0:
+                return 100.0
+            return 0.0
+
+        def _slice_from_counts(
+            cur: Dict[str, int],
+            prev: Dict[str, int],
+            yoy: Dict[str, int],
+            *,
+            label: str,
+            cur_s: date,
+            cur_e: date,
+            prev_s: date,
+            prev_e: date,
+            yoy_s: date,
+            yoy_e: date,
+        ) -> Dict[str, Any]:
+            names = set(cur) | set(prev) | set(yoy)
+            products = []
+            for name in names:
+                cups = int(cur.get(name) or 0)
+                prev_cups = int(prev.get(name) or 0)
+                yoy_cups = int(yoy.get(name) or 0)
+                products.append(
+                    {
+                        "name": name,
+                        "cups": cups,
+                        "prevCups": prev_cups,
+                        "yoyCups": yoy_cups,
+                        "trendPct": _trend(float(cups), float(prev_cups)),
+                        "yoyTrendPct": _trend(float(cups), float(yoy_cups)),
+                    }
+                )
+            products.sort(key=lambda p: (-int(p["cups"]), str(p["name"]).lower()))
+            top5 = [{"name": p["name"], "cups": p["cups"]} for p in products[:5] if p["cups"] > 0]
+            lowest_src = [p for p in products if p["cups"] > 0]
+            lowest_src.sort(key=lambda p: (int(p["cups"]), str(p["name"]).lower()))
+            lowest5 = [{"name": p["name"], "cups": p["cups"]} for p in lowest_src[:5]]
+            yoy_ranked = sorted(
+                [{"name": n, "cups": int(c)} for n, c in yoy.items() if int(c) > 0],
+                key=lambda p: (-int(p["cups"]), str(p["name"]).lower()),
+            )[:5]
+            yoy_compare = []
+            for p in top5:
+                yoy_cups = int(yoy.get(p["name"]) or 0)
+                yoy_compare.append(
+                    {
+                        "name": p["name"],
+                        "cups": p["cups"],
+                        "yoyCups": yoy_cups,
+                        "yoyTrendPct": _trend(float(p["cups"]), float(yoy_cups)),
+                    }
+                )
+            return {
+                "label": label,
+                "window": {
+                    "start": cur_s.isoformat(),
+                    "end": cur_e.isoformat(),
+                    "prevStart": prev_s.isoformat(),
+                    "prevEnd": prev_e.isoformat(),
+                    "yoyStart": yoy_s.isoformat(),
+                    "yoyEnd": yoy_e.isoformat(),
+                },
+                "products": products,
+                "top5": top5,
+                "lowest5": lowest5,
+                "top5Yoy": yoy_ranked,
+                "yoyCompare": yoy_compare,
+            }
+
+        db = _pa_session()
+        try:
+            # Pull enough history for month + YoY month.
+            fetch_lo = date(today.year - 1, 1, 1)
+            fetch_hi = today
+            rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.machine_id == mid,
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date <= fetch_hi,
+                )
+                .all()
+            )
+            if not mname:
+                for r in rows:
+                    if (r.machine_name or "").strip():
+                        mname = str(r.machine_name).strip()
+                        break
+            if not mname:
+                mname = mid
+
+            by_grain: Dict[str, Any] = {}
+            for grain in ("day", "week", "month"):
+                cur_s, cur_e, prev_s, prev_e, yoy_s, yoy_e, label = _grain_windows(grain)
+                # Cache ranges are inclusive end days; _aggregate uses end_excl.
+                cur = _aggregate_product_counts_in_range(rows, cur_s, cur_e + timedelta(days=1))
+                prev = _aggregate_product_counts_in_range(rows, prev_s, prev_e + timedelta(days=1))
+                yoy = _aggregate_product_counts_in_range(rows, yoy_s, yoy_e + timedelta(days=1))
+
+                # Live fallback for current grain when cache has no productCounts yet.
+                if not cur:
+                    try:
+                        from_ts, _ = _kuwait_day_bounds_utc(cur_s.isoformat())
+                        _, to_ts = _kuwait_day_bounds_utc(cur_e.isoformat())
+                        vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
+                        from vendon_proxy_routes import _stats_vend_product_fields
+
+                        live: Dict[str, int] = {}
+                        for v in vends or []:
+                            if not isinstance(v, dict):
+                                continue
+                            pn, _sel = _stats_vend_product_fields(v)
+                            pn = (pn or "").strip()
+                            if pn:
+                                live[pn] = int(live.get(pn) or 0) + 1
+                        cur = live
+                    except Exception:
+                        logger.exception("machine-products live vends %s %s", mid, grain)
+
+                by_grain[grain] = _slice_from_counts(
+                    cur,
+                    prev,
+                    yoy,
+                    label=label,
+                    cur_s=cur_s,
+                    cur_e=cur_e,
+                    prev_s=prev_s,
+                    prev_e=prev_e,
+                    yoy_s=yoy_s,
+                    yoy_e=yoy_e,
+                )
+
+            body = {
+                "ok": True,
+                "machineId": mid,
+                "machineName": mname,
+                "asOf": now_local.replace(microsecond=0).isoformat(),
+                "byGrain": by_grain,
+            }
+            _alert_cache_set(cache_key, body)
+            return jsonify(body)
+        except Exception as ex:
+            logger.exception("alert_performance_machine_products")
+            return jsonify({"ok": False, "error": str(ex)}), 500
         finally:
             db.close()
 

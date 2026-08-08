@@ -878,6 +878,22 @@
   border-bottom: 1px solid var(--border-soft);
 }
 
+.perfSortThBtn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.perfSortThBtn:hover {
+  color: #e2e8f0;
+}
+
 .perfGrowthTable th {
   position: sticky;
   top: 0;
@@ -892,11 +908,21 @@
 .perfGrowthTable td:nth-child(2),
 .perfGrowthTable td:nth-child(3),
 .perfGrowthTable td:nth-child(4),
+.perfGrowthTable td:nth-child(5),
 .perfGrowthTable th:nth-child(2),
 .perfGrowthTable th:nth-child(3),
-.perfGrowthTable th:nth-child(4) {
+.perfGrowthTable th:nth-child(4),
+.perfGrowthTable th:nth-child(5) {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.perfGrowthRowClick {
+  cursor: pointer;
+}
+
+.perfGrowthRowClick:hover {
+  background: rgba(45, 212, 191, 0.08);
 }
 
 .perfGrowthFoot {
@@ -1093,6 +1119,19 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-soft);
   background: var(--panel2);
+}
+
+button.perfKpiClick {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.perfKpiClick:hover {
+  border-color: rgba(45, 212, 191, 0.45);
+  filter: brightness(1.05);
 }
 
 .perfKpiLabel {

@@ -265,6 +265,7 @@ export function PerfOverviewSection({
   loading,
   fleetRanking = true,
   selectionLabel,
+  onOpenMachineProducts,
 }: {
   machines: FleetMachine[];
   aggregateDays: PerfDay[];
@@ -283,6 +284,7 @@ export function PerfOverviewSection({
   loading?: boolean;
   fleetRanking?: boolean;
   selectionLabel?: string;
+  onOpenMachineProducts?: (machineId: string, machineName: string) => void;
 }) {
   const [view, setView] = useState<PerfViewMode>('all');
   const [combined, setCombined] = useState(false);
@@ -827,6 +829,14 @@ export function PerfOverviewSection({
           compareLabel="Prior KD"
           indexLabel="% of prior"
           groups={kpis.growthVsPrev}
+          onOpenMachineProducts={
+            onOpenMachineProducts
+              ? (id, name) => {
+                  setGrowthModal(null);
+                  onOpenMachineProducts(id, name);
+                }
+              : undefined
+          }
           onClose={() => setGrowthModal(null)}
         />
       ) : null}
@@ -844,6 +854,14 @@ export function PerfOverviewSection({
           compareLabel="Then KD"
           indexLabel="% of then"
           groups={kpis.growthVsYoy}
+          onOpenMachineProducts={
+            onOpenMachineProducts
+              ? (id, name) => {
+                  setGrowthModal(null);
+                  onOpenMachineProducts(id, name);
+                }
+              : undefined
+          }
           onClose={() => setGrowthModal(null)}
         />
       ) : null}
