@@ -92,6 +92,7 @@ export function RedFlagsCardList({
   onOpenDetail,
   onOpenSales,
   onOpenTrend,
+  onOpenDrinks,
   slackEmailMap,
   slackTeamId,
 }: {
@@ -121,6 +122,7 @@ export function RedFlagsCardList({
     strikeEmail: string | null | undefined,
     opName: string,
   ) => void;
+  onOpenDrinks?: (machineName: string, machineId: string) => void;
   onOpenTrend: (
     machineName: string,
     machineId: string,
@@ -300,6 +302,47 @@ export function RedFlagsCardList({
                     }}
                   />
                 </div>
+
+                {onOpenDrinks ? (
+                  <button
+                    type="button"
+                    className={cardStyles.salesBlock}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 8,
+                      background: 'rgba(0,0,0,0.18)',
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      color: 'inherit',
+                      font: 'inherit',
+                    }}
+                    {...bindStopRowClick(() =>
+                      onOpenDrinks(String(row.machineName || machId), machId),
+                    )}
+                    title="Top 5 and lowest 5 drink names"
+                  >
+                    <span className={cardStyles.metricLabel}>Top / low drink</span>
+                    <div className="drinksStackCell">
+                      <span className="drinksStackHigh">
+                        {String(
+                          vendonSales?.topProducts?.[0]?.name ||
+                            vendonSales?.topProduct?.name ||
+                            '—',
+                        )}
+                      </span>
+                      <span className="drinksStackLow">
+                        {String(
+                          vendonSales?.lowProducts?.[0]?.name ||
+                            vendonSales?.lowProduct?.name ||
+                            '—',
+                        )}
+                      </span>
+                    </div>
+                  </button>
+                ) : null}
 
                 <div className={cardStyles.freqRow}>
                   {canOpenTrend ? (

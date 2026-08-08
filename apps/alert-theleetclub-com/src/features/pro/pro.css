@@ -382,6 +382,24 @@
   min-height: 72px;
 }
 
+button.proMetricBtn {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  appearance: none;
+}
+
+button.proMetricBtn:hover:not(:disabled) {
+  border-color: #2dd4bf;
+}
+
+button.proMetricBtn:disabled {
+  cursor: default;
+}
+
 .proMetricLabel {
   display: block;
   font-size: 11px;

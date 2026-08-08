@@ -83,6 +83,7 @@ export function ProRedFlagsView({
   onOpenDetail,
   onOpenSales,
   onOpenTrend,
+  onOpenDrinks,
 }: {
   ranked: RankedRedAlertRow[];
   kpis: StitchKpi[];
@@ -116,6 +117,7 @@ export function ProRedFlagsView({
   onOpenDetail: (row: RankedRedAlertRow) => void;
   onOpenSales: (row: RankedRedAlertRow) => void;
   onOpenTrend: (row: RankedRedAlertRow) => void;
+  onOpenDrinks?: (row: RankedRedAlertRow) => void;
 }) {
   return (
     <div className="proWorkspace">
@@ -288,6 +290,29 @@ export function ProRedFlagsView({
                             : salesPair.caption || 'vs compare'}
                         </span>
                       </div>
+                      <button
+                        type="button"
+                        className="proMetric proMetricBtn"
+                        {...bindStopRowClick(() => onOpenDrinks?.(d))}
+                        disabled={!onOpenDrinks}
+                        title="Top 5 and lowest 5 drink names"
+                      >
+                        <span className="proMetricLabel">Top / low drink</span>
+                        <span className="proMetricValue" style={{ fontSize: '0.85rem' }}>
+                          {String(
+                            vendonSales?.topProducts?.[0]?.name ||
+                              vendonSales?.topProduct?.name ||
+                              '—',
+                          ).slice(0, 22)}
+                        </span>
+                        <span className="proMetricHint">
+                          {String(
+                            vendonSales?.lowProducts?.[0]?.name ||
+                              vendonSales?.lowProduct?.name ||
+                              'Tap for top/low 5',
+                          ).slice(0, 28)}
+                        </span>
+                      </button>
                       <div className="proMetric">
                         <span className="proMetricLabel">Frequency</span>
                         <span className="proMetricValue">

@@ -8,7 +8,8 @@ export type RedFlagsColumnPreset = 'all' | 'sales' | 'alerts' | 'custom';
 /** Total workbook columns (machine + data columns). */
 export const RED_FLAGS_TOTAL_COLUMNS = RED_FLAGS_XLSX_ORDER.length;
 
-export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v1';
+/** Bump when new workbook columns must appear for existing localStorage presets. */
+export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v2';
 
 /** Machine column is always shown. */
 export const RED_FLAGS_PINNED_COLUMN: RedFlagsColumnKey = 'vendingMachine';
@@ -114,15 +115,31 @@ export function normalizeStoredRedFlagsColumns(raw: Partial<StoredRedFlagsColumn
     else custom.push('lastTransaction');
     custom = RED_FLAGS_XLSX_ORDER.filter((k) => custom.includes(k));
   }
+  // Migrated workbook columns: insert after a neighbor when the old save omitted them.
+  if (custom.includes('dailySales') && !custom.includes('topLowDrinks')) {
+    const afterSales = custom.indexOf('dailySales');
+    custom.splice(afterSales + 1, 0, 'topLowDrinks');
+  }
+  custom = RED_FLAGS_XLSX_ORDER.filter((k) => custom.includes(k));
   return { preset, custom: custom.length ? custom : [...RED_FLAGS_XLSX_ORDER] };
 }
 
 export function loadStoredRedFlagsColumns(): StoredRedFlagsColumns {
   if (typeof window === 'undefined') return defaultStoredRedFlagsColumns();
   try {
-    const raw = localStorage.getItem(RED_FLAGS_COLUMNS_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(RED_FLAGS_COLUMNS_STORAGE_KEY) ||
+      localStorage.getItem('alert_redflags_column_preset_v1');
     if (!raw) return defaultStoredRedFlagsColumns();
-    return normalizeStoredRedFlagsColumns(JSON.parse(raw) as StoredRedFlagsColumns);
+    const normalized = normalizeStoredRedFlagsColumns(JSON.parse(raw) as StoredRedFlagsColumns);
+    // Persist under v2 so migration (e.g. topLowDrinks) sticks after first load.
+    persistRedFlagsColumns(normalized);
+    try {
+      localStorage.removeItem('alert_redflags_column_preset_v1');
+    } catch {
+      /* ignore */
+    }
+    return normalized;
   } catch {
     return defaultStoredRedFlagsColumns();
   }

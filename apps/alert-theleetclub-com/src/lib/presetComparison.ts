@@ -19,10 +19,19 @@ export type CompareMetricPair = {
   caption: string;
 };
 
+export type VendonProductExtreme = {
+  name?: string | null;
+  count?: number | null;
+};
+
 export type VendonPresetSalesRow = {
   aSalesKwd?: number | null;
   bSalesKwd?: number | null;
   trendPct?: number | null;
+  topProduct?: VendonProductExtreme | null;
+  lowProduct?: VendonProductExtreme | null;
+  topProducts?: VendonProductExtreme[] | null;
+  lowProducts?: VendonProductExtreme[] | null;
 };
 
 export type FootfallPresetRow = {

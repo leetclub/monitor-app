@@ -1225,6 +1225,14 @@ export function RedFlagsPage({
             const machId = String(getMachineIdRaw(d.row) || '');
             openTrendHistory(d.row, machId);
           }}
+          onOpenDrinks={(d) => {
+            const machId = String(getMachineIdRaw(d.row) || '');
+            if (!machId) return;
+            setDrinksDetail({
+              machineId: machId,
+              machineName: String(d.row.machineName || machId),
+            });
+          }}
         />
         {detail
           ? createPortal(<DetailModal view={detail} onClose={() => setDetail(null)} />, getAlertModalPortal())
@@ -1431,6 +1439,9 @@ export function RedFlagsPage({
                 operatorName: opName,
                 strikeOperatorEmail: strikeEmail,
               })
+            }
+            onOpenDrinks={(machineName, machineId) =>
+              setDrinksDetail({ machineName, machineId })
             }
             onOpenTrend={(machineName, machineId, row, snapTrend, freqCtx, strikeEmail, opName) =>
               setTrendDetail({
