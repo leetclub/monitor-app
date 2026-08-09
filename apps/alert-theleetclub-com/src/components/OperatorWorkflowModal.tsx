@@ -118,6 +118,7 @@ export function OperatorWorkflowModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         {contactLoading ? <AlertModalAnticipate hint="Contact channels incoming" lines={3} /> : (
           <OperatorContactIcons
@@ -229,7 +230,8 @@ export function OperatorWorkflowModal({
             </p>
           )}
         </section>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

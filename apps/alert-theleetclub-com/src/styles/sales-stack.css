@@ -179,23 +179,36 @@
 }
 
 .salesHistoryModal {
+  display: flex;
+  flex-direction: column;
   width: min(420px, 100%);
   max-height: min(88dvh, 640px);
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--ops-surface-border, #5d3f3b);
   background: linear-gradient(165deg, #1a1b21, #121016);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
-  padding: 1rem 1.15rem 1.2rem;
+  padding: 0;
 }
 
 .salesHistoryHead {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin: 0;
   align-items: flex-start;
+  flex-shrink: 0;
+  padding: 1rem 1.15rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, #1a1b21 78%, rgba(18, 16, 22, 0.96) 100%);
+}
+
+.salesHistoryBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.85rem 1.15rem 1.2rem;
 }
 
 .salesHistoryEyebrow {
@@ -713,7 +726,6 @@
 
 .salesHistoryModal {
   max-height: min(92vh, 820px);
-  overflow-y: auto;
 }
 
 @media (max-width: 520px) {

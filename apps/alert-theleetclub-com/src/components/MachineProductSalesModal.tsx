@@ -283,6 +283,7 @@ export function MachineProductSalesModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <div className="perfModePills" role="tablist" aria-label="Period grain">
           {GRAIN_TABS.map((t) => (
@@ -358,7 +359,8 @@ export function MachineProductSalesModal({
             </table>
           </div>
         </section>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

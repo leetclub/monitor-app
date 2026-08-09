@@ -192,6 +192,7 @@ export function QaVisitModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <div className="qaVisitMetaGrid">
           <div>
@@ -352,7 +353,8 @@ export function QaVisitModal({
           <p className="qaVisitHistoryHint">Select an inspection above to view findings and download its PDF.</p>
         )}
         {downloadErr ? <p className="salesHistoryEmpty">{downloadErr}</p> : null}
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

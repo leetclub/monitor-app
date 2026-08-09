@@ -84,6 +84,7 @@ export function GoCheckWorkflowModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
         {notConfigured ? (
           <p className="salesHistoryEmpty">{notConfigured}</p>
         ) : (
@@ -107,7 +108,8 @@ export function GoCheckWorkflowModal({
             {result ? <p className="salesHistoryNote">{result}</p> : null}
           </form>
         )}
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

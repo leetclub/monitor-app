@@ -116,6 +116,7 @@ export function TechVisitWorkflowModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
         {q.isLoading && !lastVisitIso ? (
           <AlertModalAnticipate hint="Tech visit record incoming" lines={3} />
         ) : null}
@@ -212,7 +213,8 @@ export function TechVisitWorkflowModal({
             </p>
           )}
         </section>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

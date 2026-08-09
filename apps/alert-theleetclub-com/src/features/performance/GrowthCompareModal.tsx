@@ -151,6 +151,7 @@ export function GrowthCompareModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <div className="perfGrowthModalBody">
           {explain?.length ? (
@@ -240,7 +241,8 @@ export function GrowthCompareModal({
             );
           })}
         </div>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

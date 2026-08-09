@@ -269,6 +269,7 @@ export function SxDetailModal({
             </button>
           </div>
         </div>
+        <div className="salesHistoryBody">
 
         <AlertModalAnticipate />
 
@@ -338,7 +339,8 @@ export function SxDetailModal({
             </div>
           </div>
         </section>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

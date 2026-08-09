@@ -116,6 +116,7 @@ export function TargetDetailModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         {showFetchError ? (
           <p className="salesHistoryNote">
@@ -248,7 +249,8 @@ export function TargetDetailModal({
           </section>
         ) : null}
       </div>
-    </div>,
+    
+        </div></div>,
     getAlertModalPortal(),
   );
 }

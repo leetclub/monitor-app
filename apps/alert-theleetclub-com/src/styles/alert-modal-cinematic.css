@@ -19,44 +19,29 @@ body.alert-modal-open {
 }
 
 /*
- * Sticky popup chrome: header + X stay on the frame while the body scrolls.
- * Negative margins cancel modal padding so the bar is flush with the panel edge.
+ * Pinned popup chrome: header stays outside the scrollport (flex column + body scroll).
+ * Avoid position:sticky here — transforms/will-change on the panel clipped the first body line.
  */
 .salesHistoryModal .salesHistoryHead,
 .operatorContactModal .operatorContactModalHead,
 .redFlagsDetailModal .redFlagsDetailHead {
-  position: sticky;
-  top: 0;
-  z-index: 30;
+  position: relative;
+  z-index: 2;
   flex-shrink: 0;
   align-items: flex-start;
-  margin-top: -1rem;
-  margin-left: -1.15rem;
-  margin-right: -1.15rem;
-  margin-bottom: 0.75rem;
-  padding: 1rem 1.15rem 0.75rem;
-  background: linear-gradient(180deg, #1a1b21 78%, rgba(18, 16, 22, 0.96) 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 12px 20px -14px rgba(0, 0, 0, 0.75);
 }
 
 .operatorContactModal .operatorContactModalHead,
 .redFlagsDetailModal .redFlagsDetailHead {
   background: linear-gradient(180deg, #1a1418 78%, rgba(18, 16, 22, 0.96) 100%);
-}
-
-.operatorContactModal .operatorContactModalHead {
-  margin-left: -1.1rem;
-  margin-right: -1.1rem;
-  padding-left: 1.1rem;
-  padding-right: 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .salesHistoryClose,
 .operatorContactClose,
 .redFlagsDetailHead .detailCloseBtn {
   position: relative;
-  z-index: 31;
+  z-index: 3;
   flex-shrink: 0;
   align-self: flex-start;
 }
@@ -72,56 +57,21 @@ body.alert-modal-open {
 .redFlagsDetailModal {
   animation: alertModalPanelIn 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: 50% 48%;
-  will-change: transform, opacity, filter;
 }
 
 .salesHistoryModal .salesHistoryHead,
 .operatorContactModal .operatorContactModalHead,
 .redFlagsDetailModal .redFlagsDetailHead {
-  /* Opacity only — leftover transform from fill-mode:both breaks position:sticky */
   animation: alertModalHeadIn 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
 }
 
-.salesHistoryModal > .salesHistoryHead ~ *,
-.operatorContactModal > .operatorContactModalHead ~ *,
-.redFlagsDetailModal > .redFlagsDetailHead ~ * {
-  animation: alertModalSectionIn 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.salesHistoryModal > .salesHistoryHead ~ *:nth-child(2),
-.operatorContactModal > .operatorContactModalHead ~ *:nth-child(2),
-.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(2) {
-  animation-delay: 130ms;
-}
-
-.salesHistoryModal > .salesHistoryHead ~ *:nth-child(3),
-.operatorContactModal > .operatorContactModalHead ~ *:nth-child(3),
-.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(3) {
-  animation-delay: 190ms;
-}
-
-.salesHistoryModal > .salesHistoryHead ~ *:nth-child(4),
-.operatorContactModal > .operatorContactModalHead ~ *:nth-child(4),
-.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(4) {
-  animation-delay: 250ms;
-}
-
-.salesHistoryModal > .salesHistoryHead ~ *:nth-child(5),
-.operatorContactModal > .operatorContactModalHead ~ *:nth-child(5),
-.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(5) {
-  animation-delay: 310ms;
-}
-
-.salesHistoryModal > .salesHistoryHead ~ *:nth-child(6),
-.operatorContactModal > .operatorContactModalHead ~ *:nth-child(6),
-.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(6) {
-  animation-delay: 370ms;
-}
-
-.salesHistoryModal > .salesHistoryHead ~ *:nth-child(n + 7),
-.operatorContactModal > .operatorContactModalHead ~ *:nth-child(n + 7),
-.redFlagsDetailModal > .redFlagsDetailHead ~ *:nth-child(n + 7) {
-  animation-delay: 430ms;
+.salesHistoryModal > .salesHistoryBody,
+.operatorContactModal > .operatorContactModalBody,
+.redFlagsDetailModal > .redFlagsDetailBody,
+.salesHistoryModal > .salesHistoryHead ~ *:not(.salesHistoryBody),
+.operatorContactModal > .operatorContactModalHead ~ *:not(.operatorContactModalBody),
+.redFlagsDetailModal > .redFlagsDetailHead ~ *:not(.redFlagsDetailBody) {
+  animation: alertModalSectionIn 560ms cubic-bezier(0.16, 1, 0.3, 1) 130ms both;
 }
 
 @keyframes alertModalBackdropIn {
@@ -140,16 +90,10 @@ body.alert-modal-open {
 @keyframes alertModalPanelIn {
   from {
     opacity: 0;
-    transform: translateY(32px) scale(0.9);
-    filter: blur(12px);
-  }
-  55% {
-    filter: blur(2px);
+    filter: blur(8px);
   }
   to {
     opacity: 1;
-    /* none — not translateY(0) — so sticky headers work inside the scrollport */
-    transform: none;
     filter: none;
   }
 }
@@ -314,6 +258,9 @@ body.alert-modal-open {
   .salesHistoryModal .salesHistoryHead,
   .operatorContactModal .operatorContactModalHead,
   .redFlagsDetailModal .redFlagsDetailHead,
+  .salesHistoryModal > .salesHistoryBody,
+  .operatorContactModal > .operatorContactModalBody,
+  .redFlagsDetailModal > .redFlagsDetailBody,
   .salesHistoryModal > .salesHistoryHead ~ *,
   .operatorContactModal > .operatorContactModalHead ~ *,
   .redFlagsDetailModal > .redFlagsDetailHead ~ *,
@@ -347,6 +294,9 @@ body.alert-modal-open {
   .salesHistoryModal .salesHistoryHead,
   .operatorContactModal .operatorContactModalHead,
   .redFlagsDetailModal .redFlagsDetailHead,
+  .salesHistoryModal > .salesHistoryBody,
+  .operatorContactModal > .operatorContactModalBody,
+  .redFlagsDetailModal > .redFlagsDetailBody,
   .salesHistoryModal > .salesHistoryHead ~ *,
   .operatorContactModal > .operatorContactModalHead ~ *,
   .redFlagsDetailModal > .redFlagsDetailHead ~ *,
@@ -368,9 +318,9 @@ body.alert-modal-open {
     -webkit-backdrop-filter: blur(6px);
   }
 
-  .salesHistoryModal,
-  .operatorContactModal,
-  .redFlagsDetailModal {
+  .salesHistoryBody,
+  .operatorContactModalBody,
+  .redFlagsDetailBody {
     -webkit-overflow-scrolling: touch;
   }
 }

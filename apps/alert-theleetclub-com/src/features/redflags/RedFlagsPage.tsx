@@ -236,6 +236,7 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
           </button>
         </div>
 
+        <div className={`${styles.detailBody} redFlagsDetailBody`}>
         <div className={styles.detailStatusRow}>
           <span className={styles.detailStatusPill}>{payload.statusLabel}</span>
           {payload.duringScheduledCleaningNow ? (
@@ -341,6 +342,7 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
             </a>
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

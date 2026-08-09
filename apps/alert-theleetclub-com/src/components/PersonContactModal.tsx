@@ -51,20 +51,22 @@ export function PersonContactModal({
           </button>
         </div>
 
-        {loading ? (
-          <AlertModalAnticipate hint="Contact channels incoming" lines={3} />
-        ) : (
-          <div className="operatorContactIconsWrap alertModalContentReveal">
-            <OperatorContactIcons
-              layout="modal"
-              iconsOnly
-              channels={channels}
-              machineLabel={machineLabel || title}
-              slackEmailMap={slackEmailMap}
-              slackTeamId={slackTeamId}
-            />
-          </div>
-        )}
+        <div className="operatorContactModalBody">
+          {loading ? (
+            <AlertModalAnticipate hint="Contact channels incoming" lines={3} />
+          ) : (
+            <div className="operatorContactIconsWrap alertModalContentReveal">
+              <OperatorContactIcons
+                layout="modal"
+                iconsOnly
+                channels={channels}
+                machineLabel={machineLabel || title}
+                slackEmailMap={slackEmailMap}
+                slackTeamId={slackTeamId}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>,
     getAlertModalPortal(),

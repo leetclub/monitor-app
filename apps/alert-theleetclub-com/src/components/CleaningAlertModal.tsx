@@ -158,6 +158,7 @@ export function CleaningAlertModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <p className="salesHistoryNote cleaningAlertCriteria">
           Criteria met: last clean more than <strong>15 hours</strong> ago
@@ -222,7 +223,8 @@ export function CleaningAlertModal({
             {sendResult ? <p className="salesHistoryNote">{sendResult}</p> : null}
           </div>
         ) : null}
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

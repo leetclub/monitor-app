@@ -69,6 +69,7 @@ export function LeetWorkflowDmModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
         <p className="salesHistoryNote">
           Sends a message to the <strong>scheduled operator</strong> Workflow DM inbox
           {email ? (
@@ -87,7 +88,8 @@ export function LeetWorkflowDmModal({
           {busy ? 'Sending…' : 'Send workflow DM'}
         </button>
         {result ? <p className="salesHistoryNote">{result}</p> : null}
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

@@ -100,6 +100,7 @@ export function TrendHistoryModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <section className="historyModalContact">
           <h3 className="historyModalSectionTitle">Contact operator</h3>
@@ -132,7 +133,8 @@ export function TrendHistoryModal({
           comparisonNote={meta?.comparisonNote}
         />
         <p className="historyModalNoteMuted">{legend}</p>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

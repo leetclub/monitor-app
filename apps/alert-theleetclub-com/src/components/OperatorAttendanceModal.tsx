@@ -38,6 +38,7 @@ export function OperatorAttendanceModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
         {loading ? <AlertModalAnticipate hint="Schedule incoming" lines={4} /> : null}
         {error ? <p className="stitchOpsAlert">{error}</p> : null}
         {notConfigured ? (
@@ -81,7 +82,8 @@ export function OperatorAttendanceModal({
             </ul>
           </div>
         ) : null}
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

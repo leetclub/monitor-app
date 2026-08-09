@@ -176,6 +176,7 @@ export function DowntimeDetailModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <section className="operatorWorkflowSection">
           <p className="salesHistoryNote" style={{ fontSize: '0.95rem' }}>
@@ -326,7 +327,8 @@ export function DowntimeDetailModal({
             </ul>
           ) : null}
         </section>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

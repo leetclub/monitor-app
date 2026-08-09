@@ -194,6 +194,7 @@ function GraphMachinePickerModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
         <div className="perfGrowthModalBody">
           <div className="perfGraphPickQuick" role="group" aria-label="Quick picks">
             <button type="button" className="perfSegPill" onClick={applyTopLowest}>
@@ -248,7 +249,8 @@ function GraphMachinePickerModal({
             </button>
           </div>
         </div>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

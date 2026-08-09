@@ -76,6 +76,7 @@ export function SalesHistoryModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <section className="historyModalContact">
           <h3 className="historyModalSectionTitle">Contact operator</h3>
@@ -159,7 +160,8 @@ export function SalesHistoryModal({
         ) : (
           <AlertModalAnticipate hint="Prior-day comparisons incoming" lines={3} />
         )}
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );

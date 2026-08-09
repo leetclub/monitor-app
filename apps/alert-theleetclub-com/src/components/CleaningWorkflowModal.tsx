@@ -162,67 +162,68 @@ export function CleaningWorkflowModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
+          {loading && !iso ? <AlertModalAnticipate hint="Last clean record incoming" lines={3} /> : null}
+          {errText && !iso ? <p className="stitchOpsAlert">{errText}</p> : null}
 
-        {loading && !iso ? <AlertModalAnticipate hint="Last clean record incoming" lines={3} /> : null}
-        {errText && !iso ? <p className="stitchOpsAlert">{errText}</p> : null}
-
-        {iso ? (
-          <div className="alertModalContentReveal">
-            <p className="salesHistoryNote">
-              Last cleaning: <strong>{formatKuwaitDateTime(iso)}</strong>
-              {sourceBits.length ? ` · ${sourceBits.join(' · ')}` : ''}
+          {iso ? (
+            <div className="alertModalContentReveal">
+              <p className="salesHistoryNote">
+                Last cleaning: <strong>{formatKuwaitDateTime(iso)}</strong>
+                {sourceBits.length ? ` · ${sourceBits.join(' · ')}` : ''}
+              </p>
+              {(data?.highRisk || data?.ghostCheck) && (
+                <p className="salesHistoryNote cleaningFlagsRow">
+                  {data?.highRisk ? <span className="cleaningFlagPill cleaningFlagPill--risk">High risk</span> : null}
+                  {data?.ghostCheck ? <span className="cleaningFlagPill cleaningFlagPill--ghost">Ghost check</span> : null}
+                </p>
+              )}
+              {ccLabel ? (
+                <p
+                  className={`salesHistoryNote cleaningCcStatus${
+                    data?.commandCenterVerified ? ' cleaningCcStatus--verified' : ' cleaningCcStatus--pending'
+                  }`}
+                >
+                  {ccLabel}
+                </p>
+              ) : null}
+              {comments.length ? (
+                <>
+                  <p className="salesHistoryEyebrow">Operator comments</p>
+                  <ul className="salesHistoryList">
+                    {comments.map((c, i) => (
+                      <li key={`c-${i}`} className="salesHistoryRow">
+                        <span>{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {media.length ? (
+                <>
+                  <p className="salesHistoryEyebrow">Media · {media.length} file{media.length === 1 ? '' : 's'}</p>
+                  <ul className="salesHistoryList">
+                    {media.map((m) => (
+                      <li key={mediaUrlKey(m.url)} className="salesHistoryRow">
+                        <a href={m.url} target="_blank" rel="noopener noreferrer">
+                          {m.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {footnote ? <p className="salesHistoryEmpty salesHistoryFootnote">{footnote}</p> : null}
+              {workflowNote ? (
+                <p className="salesHistoryEmpty salesHistoryFootnote">{workflowNote}</p>
+              ) : null}
+            </div>
+          ) : !loading ? (
+            <p className="salesHistoryEmpty">
+              {workflowNote || errText || 'No last cleaning time on record for this machine'}
             </p>
-            {(data?.highRisk || data?.ghostCheck) && (
-              <p className="salesHistoryNote cleaningFlagsRow">
-                {data?.highRisk ? <span className="cleaningFlagPill cleaningFlagPill--risk">High risk</span> : null}
-                {data?.ghostCheck ? <span className="cleaningFlagPill cleaningFlagPill--ghost">Ghost check</span> : null}
-              </p>
-            )}
-            {ccLabel ? (
-              <p
-                className={`salesHistoryNote cleaningCcStatus${
-                  data?.commandCenterVerified ? ' cleaningCcStatus--verified' : ' cleaningCcStatus--pending'
-                }`}
-              >
-                {ccLabel}
-              </p>
-            ) : null}
-            {comments.length ? (
-              <>
-                <p className="salesHistoryEyebrow">Operator comments</p>
-                <ul className="salesHistoryList">
-                  {comments.map((c, i) => (
-                    <li key={`c-${i}`} className="salesHistoryRow">
-                      <span>{c}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-            {media.length ? (
-              <>
-                <p className="salesHistoryEyebrow">Media · {media.length} file{media.length === 1 ? '' : 's'}</p>
-                <ul className="salesHistoryList">
-                  {media.map((m) => (
-                    <li key={mediaUrlKey(m.url)} className="salesHistoryRow">
-                      <a href={m.url} target="_blank" rel="noopener noreferrer">
-                        {m.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-            {footnote ? <p className="salesHistoryEmpty salesHistoryFootnote">{footnote}</p> : null}
-            {workflowNote ? (
-              <p className="salesHistoryEmpty salesHistoryFootnote">{workflowNote}</p>
-            ) : null}
-          </div>
-        ) : !loading ? (
-          <p className="salesHistoryEmpty">
-            {workflowNote || errText || 'No last cleaning time on record for this machine'}
-          </p>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </div>,
     getAlertModalPortal(),

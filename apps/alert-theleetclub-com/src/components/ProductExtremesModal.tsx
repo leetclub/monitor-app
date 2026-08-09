@@ -46,6 +46,7 @@ export function ProductExtremesModal({
             ×
           </button>
         </div>
+        <div className="salesHistoryBody">
 
         <p className="salesHistoryNote">Names only — highest and lowest selling drinks (cups) in the sales compare period.</p>
 
@@ -75,7 +76,8 @@ export function ProductExtremesModal({
             )}
           </section>
         </div>
-      </div>
+      
+        </div></div>
     </div>,
     getAlertModalPortal(),
   );
