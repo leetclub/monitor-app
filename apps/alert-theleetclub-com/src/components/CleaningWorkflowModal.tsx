@@ -31,6 +31,42 @@ function ccStatusLabel(data?: CleaningWorkflowPayload): string | null {
   return null;
 }
 
+function asCommentLines(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const c of raw) {
+    if (typeof c === 'string' && c.trim()) out.push(c.trim());
+    else if (c && typeof c === 'object') {
+      const o = c as Record<string, unknown>;
+      const txt = String(o.text || o.body || o.comment || o.message || '').trim();
+      if (txt) out.push(txt);
+    }
+  }
+  return out;
+}
+
+function asMediaLinks(
+  data?: CleaningWorkflowPayload,
+): Array<{ url: string; label: string }> {
+  const fromList = Array.isArray(data?.media) ? data!.media! : [];
+  const built = fromList
+    .map((m) => {
+      if (!m || typeof m !== 'object') return null;
+      const url = String((m as { url?: string }).url || '').trim();
+      if (!url) return null;
+      const label = String((m as { label?: string }).label || 'Download / view').trim() || 'Download / view';
+      return { url, label };
+    })
+    .filter(Boolean) as Array<{ url: string; label: string }>;
+  if (built.length) return built;
+  const fallback = [
+    data?.monitorRecordUrl ? { url: String(data.monitorRecordUrl).trim(), label: 'Monitor-style record' } : null,
+    data?.eodVideoUrl ? { url: String(data.eodVideoUrl).trim(), label: 'EOD video' } : null,
+    data?.videoUrl ? { url: String(data.videoUrl).trim(), label: 'Cleaning video' } : null,
+  ].filter((x): x is { url: string; label: string } => Boolean(x?.url));
+  return fallback;
+}
+
 export function CleaningWorkflowModal({
   machineName,
   machineId,
@@ -61,35 +97,37 @@ export function CleaningWorkflowModal({
   const workflowNote = workflowCleaningUnavailable(data, Boolean(iso));
   const footnote = workflowCleaningFootnote(data);
   const ccLabel = ccStatusLabel(data);
-  const comments = data?.comments?.length ? data.comments : [];
-  const media =
-    data?.media?.length
-      ? data.media
-      : [
-          data?.monitorRecordUrl ? { url: data.monitorRecordUrl, label: 'Monitor-style record' } : null,
-          data?.eodVideoUrl ? { url: data.eodVideoUrl, label: 'EOD video' } : null,
-          data?.videoUrl ? { url: data.videoUrl, label: 'Cleaning video' } : null,
-        ].filter(Boolean) as Array<{ url: string; label?: string }>;
+  const comments = asCommentLines(data?.comments);
+  const media = asMediaLinks(data);
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
+  const errText = error ? String(error).trim() : '';
 
   return createPortal(
-    <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
-      <div className="salesHistoryModal" {...panel}>
+    <div
+      className="salesHistoryBackdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cleaning-workflow-title"
+      {...backdrop}
+    >
+      <div className="salesHistoryModal cleaningWorkflowModal" {...panel}>
         <div className="salesHistoryHead">
           <div>
             <p className="salesHistoryEyebrow">Last clean</p>
-            <h2 className="salesHistoryTitle">{machineName}</h2>
+            <h2 id="cleaning-workflow-title" className="salesHistoryTitle">
+              {machineName}
+            </h2>
             <p className="salesHistorySub">#{machineId}</p>
           </div>
           <button type="button" className="salesHistoryClose" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
-        {loading && !iso ? (
-          <AlertModalAnticipate hint="Last clean record incoming" lines={3} />
-        ) : null}
-        {error && !iso ? <p className="stitchOpsAlert">{error}</p> : null}
+
+        {loading && !iso ? <AlertModalAnticipate hint="Last clean record incoming" lines={3} /> : null}
+        {errText && !iso ? <p className="stitchOpsAlert">{errText}</p> : null}
+
         {iso ? (
           <div className="alertModalContentReveal">
             <p className="salesHistoryNote">
@@ -97,6 +135,7 @@ export function CleaningWorkflowModal({
               {source === 'attendance_cache' ? ' · Vendon daily cleaning' : null}
               {source === 'live_dashboard' ? ' · Live Dashboard' : null}
               {source === 'workflow' ? ' · Workflow upload' : null}
+              {source === 'snapshot' ? ' · Red Alert snapshot' : null}
               {data?.highRisk ? ' · High risk' : ''}
               {data?.ghostCheck ? ' · Ghost check' : ''}
             </p>
@@ -112,9 +151,11 @@ export function CleaningWorkflowModal({
             {comments.length ? (
               <>
                 <p className="salesHistoryEyebrow">Operator comments</p>
-                <ul className="detailReasonList">
+                <ul className="salesHistoryList">
                   {comments.map((c, i) => (
-                    <li key={i}>{c}</li>
+                    <li key={`c-${i}`} className="salesHistoryRow">
+                      <span>{c}</span>
+                    </li>
                   ))}
                 </ul>
               </>
@@ -124,9 +165,9 @@ export function CleaningWorkflowModal({
                 <p className="salesHistoryEyebrow">Media</p>
                 <ul className="salesHistoryList">
                   {media.map((m, i) => (
-                    <li key={i} className="salesHistoryRow">
+                    <li key={`m-${i}-${m.url}`} className="salesHistoryRow">
                       <a href={m.url} target="_blank" rel="noopener noreferrer">
-                        {m.label || 'Download / view'}
+                        {m.label}
                       </a>
                     </li>
                   ))}
@@ -140,7 +181,7 @@ export function CleaningWorkflowModal({
           </div>
         ) : !loading ? (
           <p className="salesHistoryEmpty">
-            {workflowNote || error || 'No last cleaning time on record for this machine'}
+            {workflowNote || errText || 'No last cleaning time on record for this machine'}
           </p>
         ) : null}
       </div>

@@ -205,6 +205,13 @@ export function redFlagsBodyCellClass(key: RedFlagsColumnKey): string {
     case 'qaVisit':
     case 'techVisit':
       return `${styles.td} ${styles.tdMetric}`;
+    case 'lastCleaning':
+      return `${styles.td} opsColLastCleaned`;
+    case 'alertType':
+      return styles.td;
+    case 'operator':
+    case 'lastTransaction':
+      return styles.td;
     case 'callOp':
       return `${styles.td} ${styles.tdCallOp} opsStickyColRight opsStickyColRightOp`;
     case 'callAm':
@@ -434,8 +441,19 @@ export function renderRedFlagsHeaderCell(key: RedFlagsColumnKey, ctx: RedFlagsHe
           className={className}
         />
       );
-    default:
-      return null;
+    default: {
+      // Never omit a <th> — a missing header shifts every cell under the wrong title.
+      const k = key as RedFlagsColumnKey;
+      return (
+        <AlertTableHeader
+          key={k}
+          label={RED_FLAGS_TABLE_HEADERS[k] || { main: String(k) }}
+          title={redFlagsHeaderTooltip(k)}
+          className={className}
+          {...sortProps}
+        />
+      );
+    }
   }
 }
 

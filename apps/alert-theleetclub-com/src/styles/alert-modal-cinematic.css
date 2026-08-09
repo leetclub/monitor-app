@@ -157,11 +157,9 @@ body.alert-modal-open {
 @keyframes alertModalContentRise {
   from {
     opacity: 0;
-    transform: translateY(14px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -175,14 +173,13 @@ body.alert-modal-open {
   }
 }
 
+/* Opacity only — transform leftovers (even translateY(0)) break sticky/layout inside modals. */
 @keyframes alertModalSectionIn {
   from {
     opacity: 0;
-    transform: translateY(16px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -250,13 +247,9 @@ body.alert-modal-open {
 @keyframes alertModalContentReveal {
   from {
     opacity: 0;
-    transform: translateY(12px);
-    filter: blur(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
   }
 }
 
