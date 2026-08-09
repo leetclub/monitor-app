@@ -436,6 +436,19 @@ def _parse_cleaning_record(row: Dict[str, Any]) -> Dict[str, Any]:
                 comments.append(txt)
 
     media: List[Dict[str, str]] = []
+    seen_urls: set[str] = set()
+
+    def _add_media(url: str, label: str) -> None:
+        u = (url or "").strip()
+        if not u:
+            return
+        # Normalize for dedupe (strip query noise that often duplicates the same file).
+        key = u.split("?", 1)[0].rstrip("/")
+        if key in seen_urls:
+            return
+        seen_urls.add(key)
+        media.append({"url": u, "label": (label or "Media").strip() or "Media"})
+
     for key in ("media", "attachments", "files", "videos"):
         val = row.get(key)
         if not isinstance(val, list):
@@ -446,8 +459,7 @@ def _parse_cleaning_record(row: Dict[str, Any]) -> Dict[str, Any]:
             url = str(m.get("url") or m.get("download_url") or m.get("public_url") or "").strip()
             if not url:
                 continue
-            label = _media_label(m)
-            media.append({"url": url, "label": label})
+            _add_media(url, _media_label(m))
     for url_key, label in (
         ("video_url", "Cleaning video"),
         ("monitor_record_url", "Monitor record"),
@@ -455,7 +467,7 @@ def _parse_cleaning_record(row: Dict[str, Any]) -> Dict[str, Any]:
     ):
         url = str(row.get(url_key) or "").strip()
         if url:
-            media.append({"url": url, "label": label})
+            _add_media(url, label)
 
     high_risk, ghost_check = _audit_flags_from_vm_review(vm_review)
 

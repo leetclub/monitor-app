@@ -1,3 +1,40 @@
+.cleaningFlagsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.cleaningFlagPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.cleaningFlagPill--risk {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.45);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.cleaningFlagPill--ghost {
+  color: #e9d5ff;
+  background: rgba(76, 29, 149, 0.4);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+}
+
+.cleaningCcStatus--verified {
+  color: #86efac;
+}
+
+.cleaningCcStatus--pending {
+  color: #fca5a5;
+}
+
 .cleaningCellBox {
   position: relative;
   display: inline-flex;

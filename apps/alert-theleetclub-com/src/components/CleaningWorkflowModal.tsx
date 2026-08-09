@@ -15,9 +15,16 @@ function workflowCleaningUnavailable(data?: CleaningWorkflowPayload, hasTimestam
   return null;
 }
 
-function workflowCleaningFootnote(data?: CleaningWorkflowPayload): string | null {
+function workflowCleaningFootnote(data?: CleaningWorkflowPayload, ccLabel?: string | null): string | null {
   const note = String(data?.note ?? '').trim();
-  if (note) return note;
+  if (note) {
+    // Avoid duplicating the CC status line already shown above.
+    if (ccLabel) {
+      const n = note.toLowerCase();
+      if (n.includes('command center') || n.includes('pending command center')) return null;
+    }
+    return note;
+  }
   const err = String(data?.error ?? '').trim();
   if (!err || err.includes('GET /api/v1/')) return null;
   if (/not available|Task Manager/i.test(err)) return null;
@@ -34,37 +41,62 @@ function ccStatusLabel(data?: CleaningWorkflowPayload): string | null {
 function asCommentLines(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   const out: string[] = [];
+  const seen = new Set<string>();
   for (const c of raw) {
-    if (typeof c === 'string' && c.trim()) out.push(c.trim());
+    let txt = '';
+    if (typeof c === 'string') txt = c.trim();
     else if (c && typeof c === 'object') {
       const o = c as Record<string, unknown>;
-      const txt = String(o.text || o.body || o.comment || o.message || '').trim();
-      if (txt) out.push(txt);
+      txt = String(o.text || o.body || o.comment || o.message || '').trim();
     }
+    if (!txt) continue;
+    const key = txt.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(txt);
   }
   return out;
 }
 
-function asMediaLinks(
-  data?: CleaningWorkflowPayload,
-): Array<{ url: string; label: string }> {
-  const fromList = Array.isArray(data?.media) ? data!.media! : [];
-  const built = fromList
-    .map((m) => {
-      if (!m || typeof m !== 'object') return null;
-      const url = String((m as { url?: string }).url || '').trim();
-      if (!url) return null;
-      const label = String((m as { label?: string }).label || 'Download / view').trim() || 'Download / view';
-      return { url, label };
-    })
-    .filter(Boolean) as Array<{ url: string; label: string }>;
-  if (built.length) return built;
-  const fallback = [
-    data?.monitorRecordUrl ? { url: String(data.monitorRecordUrl).trim(), label: 'Monitor-style record' } : null,
-    data?.eodVideoUrl ? { url: String(data.eodVideoUrl).trim(), label: 'EOD video' } : null,
-    data?.videoUrl ? { url: String(data.videoUrl).trim(), label: 'Cleaning video' } : null,
-  ].filter((x): x is { url: string; label: string } => Boolean(x?.url));
-  return fallback;
+function mediaUrlKey(url: string): string {
+  return url.split('?', 1)[0].replace(/\/+$/, '').toLowerCase();
+}
+
+/** Unique URLs; number repeated labels (Cleaning video 1 / 2, Refilled photo 1…). */
+function asMediaLinks(data?: CleaningWorkflowPayload): Array<{ url: string; label: string }> {
+  const raw: Array<{ url: string; label: string }> = [];
+  const seen = new Set<string>();
+
+  const push = (urlRaw: string, labelRaw: string) => {
+    const url = String(urlRaw || '').trim();
+    if (!url) return;
+    const key = mediaUrlKey(url);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const label = String(labelRaw || 'Media').trim() || 'Media';
+    raw.push({ url, label });
+  };
+
+  for (const m of data?.media || []) {
+    if (!m || typeof m !== 'object') continue;
+    push(String((m as { url?: string }).url || ''), String((m as { label?: string }).label || 'Media'));
+  }
+  if (!raw.length) {
+    if (data?.monitorRecordUrl) push(String(data.monitorRecordUrl), 'Monitor-style record');
+    if (data?.eodVideoUrl) push(String(data.eodVideoUrl), 'EOD video');
+    if (data?.videoUrl) push(String(data.videoUrl), 'Cleaning video');
+  }
+
+  const labelCounts = new Map<string, number>();
+  for (const m of raw) labelCounts.set(m.label, (labelCounts.get(m.label) || 0) + 1);
+  const labelIdx = new Map<string, number>();
+  return raw.map((m) => {
+    const total = labelCounts.get(m.label) || 1;
+    if (total <= 1) return m;
+    const n = (labelIdx.get(m.label) || 0) + 1;
+    labelIdx.set(m.label, n);
+    return { url: m.url, label: `${m.label} ${n}` };
+  });
 }
 
 export function CleaningWorkflowModal({
@@ -95,13 +127,19 @@ export function CleaningWorkflowModal({
       ? data?.cleaningSource || 'snapshot'
       : null;
   const workflowNote = workflowCleaningUnavailable(data, Boolean(iso));
-  const footnote = workflowCleaningFootnote(data);
   const ccLabel = ccStatusLabel(data);
+  const footnote = workflowCleaningFootnote(data, ccLabel);
   const comments = asCommentLines(data?.comments);
   const media = asMediaLinks(data);
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
   const errText = error ? String(error).trim() : '';
+
+  const sourceBits: string[] = [];
+  if (source === 'attendance_cache') sourceBits.push('Vendon daily cleaning');
+  if (source === 'live_dashboard') sourceBits.push('Live Dashboard');
+  if (source === 'workflow') sourceBits.push('Workflow upload');
+  if (source === 'snapshot') sourceBits.push('Red Alert snapshot');
 
   return createPortal(
     <div
@@ -132,13 +170,14 @@ export function CleaningWorkflowModal({
           <div className="alertModalContentReveal">
             <p className="salesHistoryNote">
               Last cleaning: <strong>{formatKuwaitDateTime(iso)}</strong>
-              {source === 'attendance_cache' ? ' · Vendon daily cleaning' : null}
-              {source === 'live_dashboard' ? ' · Live Dashboard' : null}
-              {source === 'workflow' ? ' · Workflow upload' : null}
-              {source === 'snapshot' ? ' · Red Alert snapshot' : null}
-              {data?.highRisk ? ' · High risk' : ''}
-              {data?.ghostCheck ? ' · Ghost check' : ''}
+              {sourceBits.length ? ` · ${sourceBits.join(' · ')}` : ''}
             </p>
+            {(data?.highRisk || data?.ghostCheck) && (
+              <p className="salesHistoryNote cleaningFlagsRow">
+                {data?.highRisk ? <span className="cleaningFlagPill cleaningFlagPill--risk">High risk</span> : null}
+                {data?.ghostCheck ? <span className="cleaningFlagPill cleaningFlagPill--ghost">Ghost check</span> : null}
+              </p>
+            )}
             {ccLabel ? (
               <p
                 className={`salesHistoryNote cleaningCcStatus${
@@ -162,10 +201,10 @@ export function CleaningWorkflowModal({
             ) : null}
             {media.length ? (
               <>
-                <p className="salesHistoryEyebrow">Media</p>
+                <p className="salesHistoryEyebrow">Media · {media.length} file{media.length === 1 ? '' : 's'}</p>
                 <ul className="salesHistoryList">
-                  {media.map((m, i) => (
-                    <li key={`m-${i}-${m.url}`} className="salesHistoryRow">
+                  {media.map((m) => (
+                    <li key={mediaUrlKey(m.url)} className="salesHistoryRow">
                       <a href={m.url} target="_blank" rel="noopener noreferrer">
                         {m.label}
                       </a>
