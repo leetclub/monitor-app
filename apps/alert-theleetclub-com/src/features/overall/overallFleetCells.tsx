@@ -87,6 +87,9 @@ export type FleetRowBundle = {
   workflowConfigured?: boolean;
   cleanIso: string;
   cleanStatus: ReturnType<typeof lastCleanedStatus> | null;
+  cleaningWindows?: { startMin: number; endMin: number }[];
+  noSalesAlert?: boolean;
+  noSalesHours?: number;
   vendFailSummary: string;
   mostIssue: string;
   downtimeRow?: import('@/lib/downtimeDisplay').DowntimeMachineRow | null;
@@ -323,6 +326,7 @@ function renderOverallColumn(
           machineName={b.m.name || b.m.id}
           cleaningOverdue15h={b.cleaningOverdue15h}
           hoursSinceCleaning={b.snap?.hoursSinceCleaning}
+          cleaningWindows={b.cleaningWindows}
           operatorName={b.operator || b.snap?.operator || b.workflowAttendance?.operatorName}
           strikeOperatorEmail={b.snap?.strikeOperatorEmail || b.snap?.operatorEmail || b.workflowAttendance?.operatorEmail}
           workflowAttendance={b.workflowAttendance}
@@ -349,6 +353,8 @@ function renderOverallColumn(
           snapshotGeneratedAt={b.snapTime ?? null}
           vendonTxIso={b.vendonTxIso}
           part="sale"
+          noSalesAlert={Boolean(b.noSalesAlert)}
+          noSalesHours={b.noSalesHours}
         />
       );
     case 'salesTrend':

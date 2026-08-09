@@ -9,6 +9,14 @@ import {
 } from '@/lib/comparePresetBridge';
 import { apiGet } from '@/lib/api';
 import { cleaningWindowsFromAdmin, lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
+import { FleetOpsToolbarExtras } from '@/components/FleetOpsToolbarExtras';
+import {
+  fleetRiskScore,
+  isNoSalesAlert,
+  lastTxAgeMinutes,
+  machineMatchesSearch,
+  NO_SALES_ALERT_HOURS,
+} from '@/lib/fleetOpsTools';
 import { fetchCleaningWorkflowMapBatched, fetchMachineAttendanceMapBatched } from '@/lib/leetWorkflowApi';
 import { freshnessNotice } from '@/lib/dataFreshness';
 import { safeText } from '@/lib/safeText';
@@ -307,6 +315,8 @@ export function OverallPage({
   );
   const [salesDetail, setSalesDetail] = useState<FleetRowBundle | null>(null);
   const [downtimeDetail, setDowntimeDetail] = useState<FleetRowBundle | null>(null);
+  const [fleetSearch, setFleetSearch] = useState('');
+  const [riskSort, setRiskSort] = useState(false);
   const [columnSort, setColumnSort] = useState<ColumnSortState<OverallColumnKey>>({
     column: null,
     dir: null,
@@ -607,10 +617,46 @@ export function OverallPage({
     setColumnSort((prev) => cycleColumnSort(prev, key));
   }, []);
 
-  const sortedFleetMachines = useMemo(
-    () => sortFleetMachines(fleetMachines, columnSort, overallSortCtx),
-    [fleetMachines, columnSort, overallSortCtx],
-  );
+  const sortedFleetMachines = useMemo(() => {
+    const sorted = sortFleetMachines(fleetMachines, columnSort, overallSortCtx);
+    const filtered = sorted.filter((m) => machineMatchesSearch(fleetSearch, m));
+    if (!riskSort) return filtered;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return filtered.slice().sort((a, b) => {
+      const snapA = snapshotByMachineId.get(a.id);
+      const snapB = snapshotByMachineId.get(b.id);
+      const txA = vendonLastTxQ.data?.byMachineId?.[a.id]?.timestamp;
+      const txB = vendonLastTxQ.data?.byMachineId?.[b.id]?.timestamp;
+      const scoreA = fleetRiskScore({
+        downtimeTodaySec: downtimeQ.data?.byMachineId?.[a.id]?.todaySec,
+        lastTxAgeMin:
+          lastTxAgeMinutes(txA != null ? Number(txA) : null, nowSec) ??
+          (snapA?.minutesSinceLastTransaction != null ? Number(snapA.minutesSinceLastTransaction) : null),
+        cleaningOverdue15h: Boolean(snapA?.cleaningOverdue15h),
+        reasonCount: Array.isArray(snapA?.reasons) ? snapA!.reasons!.length : 0,
+        inactiveToday: Boolean((snapA as { inactiveToday?: boolean } | undefined)?.inactiveToday),
+      });
+      const scoreB = fleetRiskScore({
+        downtimeTodaySec: downtimeQ.data?.byMachineId?.[b.id]?.todaySec,
+        lastTxAgeMin:
+          lastTxAgeMinutes(txB != null ? Number(txB) : null, nowSec) ??
+          (snapB?.minutesSinceLastTransaction != null ? Number(snapB.minutesSinceLastTransaction) : null),
+        cleaningOverdue15h: Boolean(snapB?.cleaningOverdue15h),
+        reasonCount: Array.isArray(snapB?.reasons) ? snapB!.reasons!.length : 0,
+        inactiveToday: Boolean((snapB as { inactiveToday?: boolean } | undefined)?.inactiveToday),
+      });
+      return scoreB - scoreA;
+    });
+  }, [
+    fleetMachines,
+    columnSort,
+    overallSortCtx,
+    fleetSearch,
+    riskSort,
+    snapshotByMachineId,
+    vendonLastTxQ.data?.byMachineId,
+    downtimeQ.data?.byMachineId,
+  ]);
 
   const vendonSalesLabels = useMemo(
     () => ({
@@ -621,7 +667,7 @@ export function OverallPage({
   );
 
   const fleetRevenueTotals = useMemo(() => {
-    const ids = fleetMachines.map((m) => m.id).filter(Boolean);
+    const ids = sortedFleetMachines.map((m) => m.id).filter(Boolean);
     const rowTotals = aggregateFleetSalesForPreset(
       ids,
       compare.preset,
@@ -633,7 +679,7 @@ export function OverallPage({
     );
     return applyApiFleetElapsedTotals(compare.preset, rowTotals, dailySalesQ.data, dailySalesQ.isSuccess);
   }, [
-    fleetMachines,
+    sortedFleetMachines,
     compare,
     dailySalesQ.data,
     dailySalesQ.isSuccess,
@@ -644,7 +690,7 @@ export function OverallPage({
 
   const fleetYesterdayOverall = useMemo(() => {
     if (compare.preset !== 'today_vs_yesterday') return null;
-    const ids = fleetMachines.map((m) => m.id).filter(Boolean);
+    const ids = sortedFleetMachines.map((m) => m.id).filter(Boolean);
     const kwd = fleetYesterdayFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
     const dayBefore = fleetDayBeforeFullDayKwd(dailySalesQ.data, ids, dailySalesQ.data?.byMachineId);
     return {
@@ -652,7 +698,7 @@ export function OverallPage({
       dayBeforeKwd: dayBefore,
       trendVsDayBeforePct: resolveSalesTrendPct(null, kwd, dayBefore),
     };
-  }, [compare, fleetMachines, dailySalesQ.data]);
+  }, [compare, sortedFleetMachines, dailySalesQ.data]);
 
   const snapshotMachineCount = snapshotByMachineId.size;
 
@@ -1047,6 +1093,20 @@ export function OverallPage({
                   workflowConfigured: workflowAttendanceQ.data?.configured !== false,
                   cleanIso,
                   cleanStatus,
+                  cleaningWindows: cleanWins,
+                  noSalesAlert: (() => {
+                    const ageFromSnap =
+                      snap?.minutesSinceLastTransaction != null
+                        ? Number(snap.minutesSinceLastTransaction)
+                        : snap?.minutes_since_last_transaction != null
+                          ? Number(snap.minutes_since_last_transaction)
+                          : null;
+                    const txTs = vendonTx?.timestamp;
+                    const age =
+                      ageFromSnap ?? lastTxAgeMinutes(txTs != null ? Number(txTs) : null);
+                    return isNoSalesAlert(age);
+                  })(),
+                  noSalesHours: NO_SALES_ALERT_HOURS,
                   vendFailSummary,
                   mostIssue,
                   downtimeRow: downtimeQ.data?.byMachineId?.[m.id] ?? null,
@@ -1203,6 +1263,12 @@ export function OverallPage({
         kpis={overallKpis}
         toolbar={
           <>
+            <FleetOpsToolbarExtras
+              search={fleetSearch}
+              onSearchChange={setFleetSearch}
+              riskSort={riskSort}
+              onRiskSortChange={setRiskSort}
+            />
             <span className="stitchOpsLive">
               <span className="stitchOpsLiveDot" aria-hidden />
               Auto · ~1m

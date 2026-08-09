@@ -13,6 +13,14 @@ import {
 import { apiGet } from '@/lib/api';
 import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
 import { cleaningWindowsFromAdmin, lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
+import { FleetOpsToolbarExtras } from '@/components/FleetOpsToolbarExtras';
+import {
+  fleetRiskScore,
+  isNoSalesAlert,
+  lastTxAgeMinutes,
+  machineMatchesSearch,
+  NO_SALES_ALERT_HOURS,
+} from '@/lib/fleetOpsTools';
 import { useSlackUserMap } from '@/lib/useSlackUserMap';
 import type { RedAlertCompareMode, RedAlertDetailPayload, RedAlertRow } from './redAlertTypes';
 import {
@@ -419,6 +427,8 @@ export function RedFlagsPage({
     alertType: string;
   } | null>(null);
   const salesComparisonNote = useMemo(() => presetLabels(compare.preset).caption, [compare.preset]);
+  const [fleetSearch, setFleetSearch] = useState('');
+  const [riskSort, setRiskSort] = useState(false);
   const [columnSort, setColumnSort] = useState<ColumnSortState<RedFlagsColumnKey>>({
     column: null,
     dir: null,
@@ -1056,10 +1066,50 @@ export function RedFlagsPage({
     setColumnSort((prev) => cycleColumnSort(prev, key));
   }, []);
 
-  const displayRanked = useMemo(
-    () => sortRankedRedFlags(ranked, columnSort, redFlagsSortCtx),
-    [ranked, columnSort, redFlagsSortCtx],
-  );
+  const displayRanked = useMemo(() => {
+    const sorted = sortRankedRedFlags(ranked, columnSort, redFlagsSortCtx);
+    const filtered = sorted.filter((d) =>
+      machineMatchesSearch(fleetSearch, {
+        id: getMachineIdRaw(d.row),
+        name: d.row.machineName,
+      }),
+    );
+    if (!riskSort) return filtered;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return filtered.slice().sort((a, b) => {
+      const idA = String(getMachineIdRaw(a.row) || '');
+      const idB = String(getMachineIdRaw(b.row) || '');
+      const txA = vendonLastTxQ.data?.byMachineId?.[idA]?.timestamp;
+      const txB = vendonLastTxQ.data?.byMachineId?.[idB]?.timestamp;
+      const scoreA = fleetRiskScore({
+        downtimeTodaySec: downtimeQ.data?.byMachineId?.[idA]?.todaySec,
+        lastTxAgeMin:
+          lastTxAgeMinutes(txA != null ? Number(txA) : null, nowSec) ??
+          (a.row.minutesSinceLastTransaction != null ? Number(a.row.minutesSinceLastTransaction) : null),
+        cleaningOverdue15h: Boolean(a.row.cleaningOverdue15h),
+        reasonCount: Array.isArray(a.row.reasons) ? a.row.reasons.length : 0,
+        inactiveToday: Boolean((a.row as { inactiveToday?: boolean }).inactiveToday),
+      });
+      const scoreB = fleetRiskScore({
+        downtimeTodaySec: downtimeQ.data?.byMachineId?.[idB]?.todaySec,
+        lastTxAgeMin:
+          lastTxAgeMinutes(txB != null ? Number(txB) : null, nowSec) ??
+          (b.row.minutesSinceLastTransaction != null ? Number(b.row.minutesSinceLastTransaction) : null),
+        cleaningOverdue15h: Boolean(b.row.cleaningOverdue15h),
+        reasonCount: Array.isArray(b.row.reasons) ? b.row.reasons.length : 0,
+        inactiveToday: Boolean((b.row as { inactiveToday?: boolean }).inactiveToday),
+      });
+      return scoreB - scoreA;
+    });
+  }, [
+    ranked,
+    columnSort,
+    redFlagsSortCtx,
+    fleetSearch,
+    riskSort,
+    vendonLastTxQ.data?.byMachineId,
+    downtimeQ.data?.byMachineId,
+  ]);
 
   const freqHeading = useMemo(
     () => freqHeadingForComparePreset(compare.preset, compareMode),
@@ -1570,6 +1620,21 @@ export function RedFlagsPage({
                       vendsResolved,
                       cleanIso,
                       cleanStatus,
+                      cleaningWindows: cleanWins,
+                      noSalesAlert: (() => {
+                        const ageFromSnap =
+                          row.minutesSinceLastTransaction != null
+                            ? Number(row.minutesSinceLastTransaction)
+                            : row.minutes_since_last_transaction != null
+                              ? Number(row.minutes_since_last_transaction)
+                              : null;
+                        const txTs = vendonLastTxQ.data?.byMachineId?.[machId]?.timestamp;
+                        const age =
+                          ageFromSnap ??
+                          lastTxAgeMinutes(txTs != null ? Number(txTs) : null);
+                        return isNoSalesAlert(age);
+                      })(),
+                      noSalesHours: NO_SALES_ALERT_HOURS,
                       incidentsRow: incidentsRow ?? { todayHits: undefined },
                       freqCtx,
                       fq,
@@ -1906,6 +1971,12 @@ export function RedFlagsPage({
         kpis={redKpis}
         toolbar={
           <>
+            <FleetOpsToolbarExtras
+              search={fleetSearch}
+              onSearchChange={setFleetSearch}
+              riskSort={riskSort}
+              onRiskSortChange={setRiskSort}
+            />
             <span className="stitchOpsLive">
               <span className="stitchOpsLiveDot" aria-hidden />
               Live · ~1m

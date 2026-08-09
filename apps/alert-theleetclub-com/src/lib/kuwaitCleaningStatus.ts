@@ -76,3 +76,52 @@ export function cleaningStatusTitle(
   }
   return `Last clean today (${when || 'Kuwait'}). Status: ${status.label}.`;
 }
+
+export type NextCleaningEta = {
+  /** Short UI label, e.g. "Next in 3h", "Tomorrow", "Now (window)". */
+  label: string;
+  /** Whole days until next window start (0 = today). */
+  daysLeft: number;
+  /** Hours until next window start (fractional ok). */
+  hoursLeft: number;
+  nextStartIso?: string;
+};
+
+/** Next Admin cleaning-window start in Kuwait (today remaining, else tomorrow’s first). */
+export function nextCleaningEta(
+  cleaningWindows: { startMin: number; endMin: number }[],
+  now: Date = new Date(),
+): NextCleaningEta | null {
+  if (!cleaningWindows.length) return null;
+  const sorted = cleaningWindows
+    .filter((w) => Number.isFinite(w.startMin) && Number.isFinite(w.endMin))
+    .slice()
+    .sort((a, b) => a.startMin - b.startMin);
+  if (!sorted.length) return null;
+
+  const nowMin = kuwaitMinutesOfDay(now.toISOString());
+  if (nowMin == null) return null;
+
+  const inWindow = sorted.some((w) => nowMin >= w.startMin && nowMin <= w.endMin);
+  if (inWindow) {
+    return { label: 'Window now', daysLeft: 0, hoursLeft: 0 };
+  }
+
+  const laterToday = sorted.find((w) => w.startMin > nowMin);
+  if (laterToday) {
+    const hoursLeft = (laterToday.startMin - nowMin) / 60;
+    const daysLeft = 0;
+    const label =
+      hoursLeft < 1
+        ? `Next in ${Math.max(1, Math.round(hoursLeft * 60))}m`
+        : `Next in ${hoursLeft < 10 ? hoursLeft.toFixed(1) : Math.round(hoursLeft)}h`;
+    return { label, daysLeft, hoursLeft };
+  }
+
+  // Next is tomorrow’s first window
+  const first = sorted[0];
+  const hoursLeft = (24 * 60 - nowMin + first.startMin) / 60;
+  const daysLeft = hoursLeft >= 24 ? Math.floor(hoursLeft / 24) : 0;
+  const label = daysLeft >= 1 ? `Next in ${daysLeft}d` : `Tomorrow · ${Math.round(hoursLeft)}h`;
+  return { label, daysLeft: Math.max(1, daysLeft || 1), hoursLeft };
+}

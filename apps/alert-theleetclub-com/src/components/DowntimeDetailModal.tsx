@@ -69,7 +69,7 @@ function ProjectionCalculator({
     {
       factor: 'Opportunity cost',
       amount: formatLossKwd(projection.opportunityCostKwd),
-      impact: `Baseline × ${projection.downtimeHours != null ? `${Number(projection.downtimeHours).toFixed(2)}h` : '—'} × peak ${formatPeakMult(projection.peakMultiplier)}`,
+      impact: `Baseline × ${projection.downtimeHours != null ? `${Number(projection.downtimeHours).toFixed(2)}h` : '—'} billable (after ${projection.graceMinutes != null ? Number(projection.graceMinutes) : 5}m grace) × peak ${formatPeakMult(projection.peakMultiplier)}`,
     },
     {
       factor: 'Spoilage impact',
@@ -204,10 +204,10 @@ export function DowntimeDetailModal({
             ) : null}
           </p>
           <p className="salesHistoryNote" style={{ opacity: 0.85, fontSize: '0.78rem' }}>
-            <strong>Projected loss</strong> = yesterday same-elapsed KD/h × today downtime hours × peak
-            multiplier. Spoilage = Monitor waste for today (motion refills − Vendon sales) × avg vend —
-            same source as Overall Waste %. The reference block below is actual vends in the same clock
-            minutes as today&apos;s OFF — often 0 if that slice was quiet.
+            <strong>Projected loss</strong> = yesterday same-elapsed KD/h × billable downtime hours (after
+            5‑minute grace) × peak multiplier. Spoilage = Monitor waste for today (motion refills −
+            Vendon sales) × avg vend — same source as Overall Waste %. The reference block below is
+            actual vends in the same clock minutes as today&apos;s OFF — often 0 if that slice was quiet.
           </p>
         </section>
 

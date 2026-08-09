@@ -50,11 +50,20 @@ logger = logging.getLogger(__name__)
 VENDON_API_BASE = (os.environ.get("VENDON_API_BASE") or "").strip().rstrip("/")
 VENDON_API_KEY = (os.environ.get("VENDON_API_KEY") or "").strip()
 
-TX_STALE_MIN = 30
-STALE_SALE_SEC = 30 * 60
+# Predefined “no sales / stale last tx” period (minutes). Override via env without redeploying code.
+try:
+    TX_STALE_MIN = max(1, int(os.environ.get("ALERT_TX_STALE_MINUTES", "30")))
+except (TypeError, ValueError):
+    TX_STALE_MIN = 30
+STALE_SALE_SEC = TX_STALE_MIN * 60
 OFF_STALE_SEC = 30 * 60
 VEND_FAIL_MIN_24H = 5
 RAW_VEND_FAIL = "Product dispense/vend failed"
+# Longer no-sales cue (hours) surfaced in snapshot meta for UI badges.
+try:
+    NO_SALES_ALERT_HOURS = max(1, int(os.environ.get("ALERT_NO_SALES_HOURS", "4")))
+except (TypeError, ValueError):
+    NO_SALES_ALERT_HOURS = 4
 
 # Read cached snapshot if present and newer than this (seconds). Cron should run more often (e.g. every 2–3 min).
 RED_ALERT_CACHE_TTL_SEC = int(os.environ.get("RED_ALERT_CACHE_TTL_SEC", "300"))
@@ -1274,12 +1283,16 @@ def _compute_red_alert_payload() -> Dict[str, Any]:
         },
         "criteria": {
             "lastTransactionStaleMinutes": TX_STALE_MIN,
+            "noSalesAlertHours": NO_SALES_ALERT_HOURS,
             "offStaleMinutes": OFF_STALE_SEC // 60,
             "vendFailMin24h": VEND_FAIL_MIN_24H,
             "boardRule": (
-                "A machine is on the board if ANY of: (1) no sale/transaction on that machine for ≥30 minutes; "
+                "A machine is on the board if ANY of: (1) no sale/transaction on that machine for ≥%s minutes "
+                "(ALERT_TX_STALE_MINUTES); "
                 "(2) an unresolved KNet OFF or Machine OFF event aged ≥30 minutes (from received_at; last 48h of events scanned); "
-                "(3) ≥5 Product dispense/vend failed events in the rolling last 24 hours."
+                "(3) ≥5 Product dispense/vend failed events in the rolling last 24 hours. "
+                "UI also highlights machines with no sales for ≥%s hours (ALERT_NO_SALES_HOURS)."
+                % (TX_STALE_MIN, NO_SALES_ALERT_HOURS)
             ),
             "frequencyDefinition": (
                 "Per-machine weekly frequency (this Kuwait week WTD vs last full Kuwait week): "

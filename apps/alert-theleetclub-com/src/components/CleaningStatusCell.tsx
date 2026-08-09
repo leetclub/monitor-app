@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatKuwaitCleaningWhen, formatKuwaitDateTime } from '@/lib/formatKuwait';
-import { cleaningStatusTitle, lastCleanedStatus } from '@/lib/kuwaitCleaningStatus';
+import { cleaningStatusTitle, lastCleanedStatus, nextCleaningEta } from '@/lib/kuwaitCleaningStatus';
 import { CleaningWorkflowModal } from '@/components/CleaningWorkflowModal';
 import { CleaningAlertModal } from '@/components/CleaningAlertModal';
 import { bindStopRowClick } from '@/lib/stopRowClick';
@@ -62,6 +62,7 @@ export function CleaningStatusCell({
   machineName,
   cleaningOverdue15h,
   hoursSinceCleaning,
+  cleaningWindows,
   operatorName,
   strikeOperatorEmail,
   workflowAttendance,
@@ -76,6 +77,7 @@ export function CleaningStatusCell({
   machineName?: string;
   cleaningOverdue15h?: boolean;
   hoursSinceCleaning?: number | null;
+  cleaningWindows?: { startMin: number; endMin: number }[];
   operatorName?: string | null;
   strikeOperatorEmail?: string | null;
   workflowAttendance?: MachineAttendanceSummary;
@@ -127,6 +129,7 @@ export function CleaningStatusCell({
   }
 
   const when = formatKuwaitCleaningWhen(displayIso);
+  const nextEta = nextCleaningEta(cleaningWindows || []);
   const ccTip =
     ccVerified === true
       ? 'Command Center verified on Workflow'
@@ -138,6 +141,7 @@ export function CleaningStatusCell({
     ccTip ??
     RED_FLAGS_COLUMNS.lastCleaning.placeholderNote ??
     (status && !workflowIso ? cleaningStatusTitle(displayIso, status) : formatKuwaitDateTime(displayIso));
+  const tipWithNext = nextEta ? `${tip} · ${nextEta.label}` : tip;
 
   const alertTip = overdue
     ? `Cleaning overdue (>15h) — tap bell for operator message preview (Slack, Email, WhatsApp, Workflow Received)`
@@ -156,6 +160,12 @@ export function CleaningStatusCell({
           ) : (
             <span className="cleaningCellDate">{formatKuwaitDateTime(displayIso)}</span>
           )}
+          {nextEta ? (
+            <span className="cleaningCellTime" style={{ opacity: 0.85, fontSize: '0.72em' }}>
+              {nextEta.label}
+              {nextEta.daysLeft >= 1 ? ` · ${nextEta.daysLeft}d left` : ''}
+            </span>
+          ) : null}
         </div>
       </div>
       {ccPill ? (
@@ -179,7 +189,7 @@ export function CleaningStatusCell({
           <button
             type="button"
             className={`cleaningCell cleaningCellBtn${ccClass}`}
-            title={tip}
+            title={tipWithNext}
             {...bindStopRowClick(() => setOpenCleaning(true))}
           >
             {inner}
@@ -232,7 +242,7 @@ export function CleaningStatusCell({
   }
 
   return (
-    <div className={`cleaningCell${ccClass}`} title={tip}>
+    <div className={`cleaningCell${ccClass}`} title={tipWithNext}>
       {inner}
     </div>
   );

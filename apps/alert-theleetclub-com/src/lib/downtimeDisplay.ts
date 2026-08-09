@@ -119,6 +119,10 @@ export type DowntimeLossBaseline = {
 export type DowntimeProjection = {
   baselineHourlyKwd?: number | null;
   downtimeHours?: number | null;
+  rawDowntimeHours?: number | null;
+  graceSec?: number | null;
+  graceMinutes?: number | null;
+  billableSec?: number | null;
   peakMultiplier?: number | null;
   peakBand?: string | null;
   opportunityCostKwd?: number | null;

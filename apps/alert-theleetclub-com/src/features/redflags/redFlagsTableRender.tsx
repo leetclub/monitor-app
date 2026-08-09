@@ -76,6 +76,9 @@ export type RedFlagsRowBundle = {
   vendsResolved?: string;
   cleanIso: string;
   cleanStatus: ReturnType<typeof import('@/lib/kuwaitCleaningStatus').lastCleanedStatus> | null;
+  cleaningWindows?: { startMin: number; endMin: number }[];
+  noSalesAlert?: boolean;
+  noSalesHours?: number;
   incidentsRow: IncidentsElapsedRow;
   freqCtx: FreqColumnContext;
   fq: FreqSplit;
@@ -519,6 +522,8 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           snapshotGeneratedAt={b.snapTime ?? null}
           vendonTxIso={b.vendonTxIso}
           part="sale"
+          noSalesAlert={Boolean(b.noSalesAlert)}
+          noSalesHours={b.noSalesHours}
         />
       );
     case 'dailySales':
@@ -730,6 +735,7 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
           machineName={String(row.machineName || machId)}
           cleaningOverdue15h={!!row.cleaningOverdue15h}
           hoursSinceCleaning={row.hoursSinceCleaning}
+          cleaningWindows={b.cleaningWindows}
           operatorName={String(row.operator || row.cleaningOperator || b.workflowAttendance?.operatorName || '').trim() || null}
           strikeOperatorEmail={row.strikeOperatorEmail || row.operatorEmail || b.workflowAttendance?.operatorEmail}
           workflowAttendance={b.workflowAttendance}

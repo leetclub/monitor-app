@@ -35,6 +35,8 @@ _PEAK_BANDS: Tuple[Tuple[int, int, float, str], ...] = (
 )
 
 _DEFAULT_AVG_VEND_KWD = 0.30  # fallback ticket size for volume impact
+# First N operational seconds of an OFF episode are free (no projected loss).
+DOWNTIME_LOSS_GRACE_SEC = 5 * 60
 
 
 def _peak_multiplier_for_hour(hour: int) -> Tuple[float, str]:
@@ -90,19 +92,31 @@ def project_downtime_loss(
     clip_hi: int,
     spoilage_kwd: float = 0.0,
     avg_vend_kwd: Optional[float] = None,
+    grace_sec: int = DOWNTIME_LOSS_GRACE_SEC,
 ) -> Dict[str, Any]:
     """
-    Projected Loss = Baseline Hourly Revenue × Downtime Hours × Peak Multiplier
-    (+ spoilage). Volume = opportunity / avg ticket.
+    Projected Loss = Baseline Hourly Revenue × Billable Downtime Hours × Peak Multiplier
+    (+ spoilage). First ``grace_sec`` operational seconds are excluded (default 5 min).
+    Volume = opportunity / avg ticket.
     """
-    peak = weighted_peak_multiplier(clip_lo, clip_hi)
-    hours = max(0.0, float(operational_sec) / 3600.0)
+    grace = max(0, int(grace_sec or 0))
+    raw_op = max(0, int(operational_sec or 0))
+    billable_sec = max(0, raw_op - grace)
+    # Peak bands apply to the billable tail of the OFF window.
+    billable_lo = min(int(clip_hi), int(clip_lo) + grace) if grace > 0 else int(clip_lo)
+    peak = weighted_peak_multiplier(billable_lo, int(clip_hi)) if billable_sec > 0 else weighted_peak_multiplier(clip_lo, clip_hi)
+    hours = max(0.0, float(billable_sec) / 3600.0)
     base = float(baseline_hourly_kwd) if baseline_hourly_kwd is not None else None
     # Zero / near-zero rates are "no baseline", not a real 0 KD/h projection.
     if base is not None and base <= 0.005:
         base = None
     mult = float(peak["peakMultiplier"])
-    opportunity = round(base * hours * mult, 3) if base is not None and hours > 0 else None
+    if base is not None and raw_op > 0 and billable_sec <= 0:
+        opportunity = 0.0
+    elif base is not None and hours > 0:
+        opportunity = round(base * hours * mult, 3)
+    else:
+        opportunity = None
     spoil = max(0.0, float(spoilage_kwd or 0.0))
     final = round(opportunity + spoil, 3) if opportunity is not None else None
     ticket = float(avg_vend_kwd) if avg_vend_kwd and avg_vend_kwd > 0 else _DEFAULT_AVG_VEND_KWD
@@ -110,6 +124,10 @@ def project_downtime_loss(
     return {
         "baselineHourlyKwd": round(base, 4) if base is not None else None,
         "downtimeHours": round(hours, 4),
+        "rawDowntimeHours": round(float(raw_op) / 3600.0, 4),
+        "graceSec": grace,
+        "graceMinutes": round(grace / 60.0, 2),
+        "billableSec": billable_sec,
         "peakMultiplier": mult,
         "peakBand": peak.get("peakBand"),
         "peakBandsSeconds": peak.get("byBand"),
@@ -118,7 +136,7 @@ def project_downtime_loss(
         "finalEconomicImpactKwd": final,
         "avgVendKwd": round(ticket, 4),
         "volumeImpact": volume,
-        "formula": "baseline_hourly × downtime_hours × peak_multiplier (+ spoilage)",
+        "formula": "baseline_hourly × max(0, downtime_hours − grace) × peak_multiplier (+ spoilage)",
     }
 
 # Look back this many days before the period start so unresolved / long OFF episodes clip correctly.
@@ -783,7 +801,8 @@ def compute_machine_downtime_detail(
     trend = _trend_vs_period(today_merged_sec, yesterday_sec)
 
     method = (
-        "Projected Loss = Baseline Hourly Revenue × Downtime Hours × Peak Multiplier (+ spoilage). "
+        "Projected Loss = Baseline Hourly Revenue × Billable Downtime Hours × Peak Multiplier (+ spoilage). "
+        "First 5 minutes of each OFF episode are grace (not billed). "
         "Baseline hourly = machine same-elapsed KD ÷ elapsed hours (prefer yesterday with sales > 0; "
         "else average of recent positive days). "
         "Peak multiplier is seconds-weighted across Kuwait bands "

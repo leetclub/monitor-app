@@ -175,11 +175,16 @@ export function LastTxLines({
   vendonTxIso,
   /** sale = last vend only (Last / tx column); offEvent = machine OFF line under Machine; both = legacy combined */
   part = 'both',
+  /** Highlight when no sales for ≥ N hours (default 4). */
+  noSalesAlert = false,
+  noSalesHours = 4,
 }: {
   row: RedAlertRow;
   snapshotGeneratedAt?: string | null;
   vendonTxIso?: string | null;
   part?: 'sale' | 'offEvent' | 'both';
+  noSalesAlert?: boolean;
+  noSalesHours?: number;
 }) {
   const snapTx = pickLastTransactionTs(row, snapshotGeneratedAt);
   const vendonTx = vendonTxIso?.trim() || null;
@@ -193,11 +198,17 @@ export function LastTxLines({
   const minStr = minOnly != null ? String(minOnly).trim() : '';
   const showSale = part === 'sale' || part === 'both';
   const showOff = part === 'offEvent' || part === 'both';
+  const noSalesTip = noSalesAlert ? `No sales for ≥${noSalesHours}h` : undefined;
 
   if (showSale && part === 'sale') {
     const lines = hasTx ? formatLastTxLines(String(txRaw)) : null;
+    const baseTip = hasTx ? undefined : minStr !== '' ? 'Minutes since last sale (no ISO timestamp)' : undefined;
     return (
-      <div className="lastTxBox salesStackBox" title={hasTx ? undefined : minStr !== '' ? 'Minutes since last sale (no ISO timestamp)' : undefined}>
+      <div
+        className={`lastTxBox salesStackBox${noSalesAlert ? ' lastTxBoxNoSales' : ''}`}
+        title={[baseTip, noSalesTip].filter(Boolean).join(' · ') || undefined}
+        style={noSalesAlert ? { outline: '1px solid rgba(220, 80, 60, 0.55)', background: 'rgba(220, 80, 60, 0.12)' } : undefined}
+      >
         {lines ? (
           <>
             <span className="lastTxLine lastTxLineWd">{lines.weekday}</span>
@@ -209,6 +220,7 @@ export function LastTxLines({
         ) : (
           <span className="salesStackVal lastTxBoxVal">—</span>
         )}
+        {noSalesAlert ? <span className="lastTxBoxEst">no sales {noSalesHours}h+</span> : null}
         {hasTx && estimated ? <span className="lastTxBoxEst">est.</span> : null}
         {!hasTx && minStr !== '' ? <span className="lastTxBoxEst">no ISO</span> : null}
       </div>
