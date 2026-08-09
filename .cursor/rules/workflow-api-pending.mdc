@@ -20,11 +20,11 @@ Also apply mentally when editing `leet_workflow_lib.py`, `task_manager_client.py
 | #3 Tech / QC visit | `GET /api/v1/quality-control` | Tech visit modal → `/api/alert/workflow/tech-visit` (SC fallback) |
 | #4 Cleaning overdue inbox | `POST /api/v1/notifications/cleaning-overdue` | Cleaning alert → `/api/alert/workflow/cleaning-overdue` |
 
-## Still open with Workflow team
+## Live updates (2026-08-09)
 
-- **#5 Daily checks CC review:** need approved/rejected sample JSON (`review_status` + `vm_review`).
-- **#6 Daily-checks date range:** need `from`/`until` (and ideally `updated_since` / webhook).
-- **#3 naming:** confirm QC list is the intended **tech visit** source.
+- **#6** `from`/`until` on daily-checks → **200 Live**; Alert cleaning fetch uses it.
+- **#5** Live samples: `pending` / `complete` + `vm_review.check_result_*`. Parser updated. Still want explicit **rejected** sample if used.
+- **#3 naming:** confirm QC list is the intended **tech visit** source (Live QC has visitor/date/issue/result).
 
 ## Do not regress
 

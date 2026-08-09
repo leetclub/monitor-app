@@ -283,24 +283,39 @@ def _daily_check_vendon_id(row: Dict[str, Any]) -> str:
 
 
 def _cc_from_vm_review(vm_review: Any) -> Optional[bool]:
+    """
+    Live Workflow vm_review (2026-08): check_result_cleaned / refilled / presentable / camera
+    plus load_audit_type. Older shapes used cleaned/presentable/camera + reviewed_at.
+    """
     if not isinstance(vm_review, dict) or not vm_review:
         return None
     for key in ("command_center_verified", "commandCenterVerified", "verified", "approved"):
         if vm_review.get(key) is not None:
             return _boolish(vm_review.get(key))
-    reviewed_at = (
-        vm_review.get("reviewed_at")
+    checks = [
+        vm_review.get("check_result_cleaned"),
+        vm_review.get("check_result_refilled"),
+        vm_review.get("check_result_presentable"),
+        vm_review.get("check_result_camera"),
+        vm_review.get("cleaned"),
+        vm_review.get("refilled"),
+        vm_review.get("presentable"),
+        vm_review.get("camera"),
+    ]
+    present = [v for v in checks if v is not None]
+    if present:
+        return all(_boolish(v) for v in present)
+    # Any structured review payload implies CC completed the audit.
+    if (
+        vm_review.get("load_audit_type")
+        or vm_review.get("load_audit_type_label")
+        or vm_review.get("reviewed_at")
         or vm_review.get("completed_at")
         or vm_review.get("audited_at")
         or vm_review.get("updated_at")
-    )
-    if not reviewed_at:
-        return None
-    checks = [vm_review.get("cleaned"), vm_review.get("presentable"), vm_review.get("camera")]
-    present = [v for v in checks if v is not None]
-    if not present:
+    ):
         return True
-    return all(_boolish(v) for v in present)
+    return None
 
 
 def _audit_flags_from_vm_review(vm_review: Any) -> Tuple[Optional[bool], Optional[bool]]:
@@ -497,6 +512,46 @@ def _daily_checks_list_for_day(day_iso: str, vendon_id: Optional[str] = None) ->
     return [r for r in rows if isinstance(r, dict)], None
 
 
+def _daily_checks_list_for_range(
+    from_iso: str,
+    until_iso: str,
+    vendon_id: Optional[str] = None,
+) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    """
+    Prefer Live `from`/`until` (verified 2026-08-09). Falls back to per-day `date=` if range fails.
+    """
+    params: Dict[str, Any] = {"all": "true", "from": from_iso, "until": until_iso, "per_page": 200}
+    if vendon_id:
+        params["vendon_id"] = vendon_id
+    data, err = _get("/api/v1/daily-checks", params)
+    if not err and isinstance(data, dict):
+        rows = data.get("data")
+        if isinstance(rows, list):
+            return [r for r in rows if isinstance(r, dict)], None
+        return [], None
+    # Fallback: day loop (older deployments / rate-limit quirks)
+    try:
+        start = date.fromisoformat(from_iso)
+        end = date.fromisoformat(until_iso)
+    except ValueError:
+        return None, err or "invalid from/until"
+    if end < start:
+        start, end = end, start
+    merged: List[Dict[str, Any]] = []
+    last_err = err
+    d = start
+    while d <= end:
+        rows, day_err = _daily_checks_list_for_day(d.isoformat(), vendon_id=vendon_id)
+        if day_err:
+            last_err = day_err
+        elif rows:
+            merged.extend(rows)
+        d += timedelta(days=1)
+    if merged:
+        return merged, None
+    return None, last_err
+
+
 def _pick_latest_daily_check(rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     parsed_rows: List[Tuple[str, Dict[str, Any]]] = []
     for row in rows:
@@ -538,26 +593,21 @@ def get_machine_cleaning_record(machine_id: str) -> Tuple[Optional[Dict[str, Any
                 return _parse_cleaning_record(_resolve_daily_check_row(row)), None
 
     today = kuwait_today()
-    last_err: Optional[str] = None
-    for i in range(_cleaning_days_back()):
-        day_iso = (today - timedelta(days=i)).isoformat()
-        rows, err = _daily_checks_list_for_day(day_iso, vendon_id=mid)
-        if err:
-            last_err = err
-            continue
-        if not rows:
-            continue
-        row = _pick_latest_daily_check(rows)
-        if not row:
-            continue
-        return _parse_cleaning_record(_resolve_daily_check_row(row)), None
-    return None, last_err
+    from_iso = (today - timedelta(days=max(0, _cleaning_days_back() - 1))).isoformat()
+    until_iso = today.isoformat()
+    rows, err = _daily_checks_list_for_range(from_iso, until_iso, vendon_id=mid)
+    if err:
+        return None, err
+    row = _pick_latest_daily_check(rows or [])
+    if not row:
+        return None, None
+    return _parse_cleaning_record(_resolve_daily_check_row(row)), None
 
 
 def get_machine_cleaning_records_batch(
     machine_ids: List[str],
 ) -> Dict[str, Tuple[Optional[Dict[str, Any]], Optional[str]]]:
-    """Batch latest daily checks for many machines (one list call per day)."""
+    """Batch latest daily checks for many machines (prefer one from/until call)."""
     ids = [str(x).strip() for x in machine_ids if str(x).strip()]
     out: Dict[str, Tuple[Optional[Dict[str, Any]], Optional[str]]] = {mid: (None, None) for mid in ids}
     if not ids:
@@ -570,25 +620,21 @@ def get_machine_cleaning_records_batch(
     best_row_by_mid: Dict[str, Dict[str, Any]] = {}
     best_ts_by_mid: Dict[str, str] = {}
     today = kuwait_today()
-    last_err: Optional[str] = None
+    from_iso = (today - timedelta(days=max(0, _cleaning_days_back() - 1))).isoformat()
+    until_iso = today.isoformat()
+    rows, last_err = _daily_checks_list_for_range(from_iso, until_iso)
 
-    for i in range(_cleaning_days_back()):
-        day_iso = (today - timedelta(days=i)).isoformat()
-        rows, err = _daily_checks_list_for_day(day_iso)
-        if err:
-            last_err = err
+    for row in rows or []:
+        vid = _daily_check_vendon_id(row)
+        if not vid or vid not in want:
             continue
-        for row in rows or []:
-            vid = _daily_check_vendon_id(row)
-            if not vid or vid not in want:
-                continue
-            parsed = _parse_cleaning_record(row)
-            ts = str(parsed.get("lastCleaningAt") or row.get("date") or "").strip()
-            prev = best_ts_by_mid.get(vid)
-            if prev is not None and ts <= prev:
-                continue
-            best_ts_by_mid[vid] = ts
-            best_row_by_mid[vid] = row
+        parsed = _parse_cleaning_record(row)
+        ts = str(parsed.get("lastCleaningAt") or row.get("check_date") or row.get("date") or "").strip()
+        prev = best_ts_by_mid.get(vid)
+        if prev is not None and ts <= prev:
+            continue
+        best_ts_by_mid[vid] = ts
+        best_row_by_mid[vid] = row
 
     for mid in ids:
         row = best_row_by_mid.get(mid)

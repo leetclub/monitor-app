@@ -4,7 +4,7 @@ Upstream for Alert **Attendance**, **Last clean**, and (pending) GO CHECK / DM /
 
 ## Pending vs Alert needs
 
-See **[PENDING-ALERT-INTEGRATION.md](./PENDING-ALERT-INTEGRATION.md)** — maps the six email asks to what shipped in the 2026-07-28 Postman/PDF package vs what is still open (especially daily-checks CC review samples + date range).
+See **[PENDING-ALERT-INTEGRATION.md](./PENDING-ALERT-INTEGRATION.md)** — maps the six email asks to Postman/PDF (2026-07-28) and Live re-probes. **#1–#4 wired**; **#6 from/until Live OK**; **#5** has `complete` + `vm_review` samples (rejected sample still welcome).
 
 ## Postman / PDF
 
@@ -13,22 +13,23 @@ See **[PENDING-ALERT-INTEGRATION.md](./PENDING-ALERT-INTEGRATION.md)** — maps 
 - `Task-Manager-API-Live.postman_environment.example.json` — production base URL; copy and set `api_key` locally.
 - `Task-Manager-API-Test.postman_environment.example.json` — staging base URL (`task.almaghrerb.com:8890`).
 
-**Daily checks (Last clean) — still evolving per Workflow:**
+**Daily checks (Last clean):**
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/v1/daily-checks?all=true&date=YYYY-MM-DD` | List all VM checks for a day |
+| `GET /api/v1/daily-checks?all=true&from=&until=` | Date range (Live OK 2026-08-09) |
 | `GET /api/v1/daily-checks?...&vendon_id=` | Filter by Vendon machine id |
-| `GET /api/v1/daily-checks/{id}` | Full detail — `media`, `vm_review` (Command Center audit) |
+| `GET /api/v1/daily-checks/{id}` | Full detail — `media`, `vm_review` (`check_result_*`, `load_audit_type`) |
 
-**New write / QC (documented; Alert wiring pending Live confirm):**
+**Write / QC (wired in Alert):**
 
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /api/v1/tasks/urgent-operator` | Urgent task → Received inbox |
 | `POST /api/v1/direct-messages` | System DM to operator |
 | `POST /api/v1/notifications/cleaning-overdue` | Cleaning-overdue DM |
-| `GET /api/v1/quality-control` | QC visits (confirm before using as tech visit) |
+| `GET /api/v1/quality-control` | QC visits (used as tech visit + SC fallback) |
 
 ## people-analytics-api proxy
 
