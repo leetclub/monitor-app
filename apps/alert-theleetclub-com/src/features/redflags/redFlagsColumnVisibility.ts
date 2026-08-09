@@ -14,6 +14,9 @@ export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v2';
 /** Machine column is always shown. */
 export const RED_FLAGS_PINNED_COLUMN: RedFlagsColumnKey = 'vendingMachine';
 
+/** Always on the board (after Daily sales when that column is present). */
+export const RED_FLAGS_ALWAYS_VISIBLE: RedFlagsColumnKey[] = ['topLowDrinks'];
+
 export const RED_FLAGS_PRESET_SALES: RedFlagsColumnKey[] = [
   'vendingMachine',
   'operator',
@@ -33,6 +36,7 @@ export const RED_FLAGS_PRESET_ALERTS: RedFlagsColumnKey[] = [
   'operator',
   'operatorActivity',
   'lastTransaction',
+  'topLowDrinks',
   'frequency',
   'downtime',
   'goCheck',
@@ -160,6 +164,11 @@ export function visibleRedFlagsColumns(stored: StoredRedFlagsColumns): RedFlagsC
   else if (stored.preset === 'custom') keys = [...stored.custom];
   else keys = [...RED_FLAGS_XLSX_ORDER];
 
+  // Board must always show Top/low drink — never depend on picker preset.
+  for (const k of RED_FLAGS_ALWAYS_VISIBLE) {
+    if (!keys.includes(k)) keys.push(k);
+  }
+
   const seen = new Set<RedFlagsColumnKey>();
   const out: RedFlagsColumnKey[] = [];
   for (const k of RED_FLAGS_XLSX_ORDER) {
@@ -177,10 +186,15 @@ export function toggleCustomColumn(
   on: boolean,
 ): RedFlagsColumnKey[] {
   if (key === RED_FLAGS_PINNED_COLUMN) return custom.includes(key) ? custom : [RED_FLAGS_PINNED_COLUMN, ...custom];
+  if (RED_FLAGS_ALWAYS_VISIBLE.includes(key) && !on) {
+    // Cannot hide always-visible board columns.
+    return RED_FLAGS_XLSX_ORDER.filter((k) => custom.includes(k) || RED_FLAGS_ALWAYS_VISIBLE.includes(k) || k === RED_FLAGS_PINNED_COLUMN);
+  }
   const set = new Set(custom);
   if (on) set.add(key);
   else set.delete(key);
   set.add(RED_FLAGS_PINNED_COLUMN);
+  for (const k of RED_FLAGS_ALWAYS_VISIBLE) set.add(k);
   return RED_FLAGS_XLSX_ORDER.filter((k) => set.has(k));
 }
 
@@ -199,9 +213,11 @@ export function setGroupColumns(
   const set = new Set(custom);
   for (const k of groupKeys) {
     if (k === RED_FLAGS_PINNED_COLUMN) continue;
+    if (RED_FLAGS_ALWAYS_VISIBLE.includes(k) && !on) continue;
     if (on) set.add(k);
     else set.delete(k);
   }
   set.add(RED_FLAGS_PINNED_COLUMN);
+  for (const k of RED_FLAGS_ALWAYS_VISIBLE) set.add(k);
   return RED_FLAGS_XLSX_ORDER.filter((k) => set.has(k));
 }

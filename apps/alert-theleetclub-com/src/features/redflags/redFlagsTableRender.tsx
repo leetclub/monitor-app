@@ -278,6 +278,16 @@ export function renderRedFlagsHeaderCell(key: RedFlagsColumnKey, ctx: RedFlagsHe
           {...sortProps}
         />
       );
+    case 'topLowDrinks':
+      return (
+        <AlertTableHeader
+          key={key}
+          label={RED_FLAGS_TABLE_HEADERS.topLowDrinks}
+          title={RED_FLAGS_COLUMNS.topLowDrinks.placeholderNote}
+          className={className}
+          {...sortProps}
+        />
+      );
     case 'mtdSales':
       return (
         <AlertTableHeader

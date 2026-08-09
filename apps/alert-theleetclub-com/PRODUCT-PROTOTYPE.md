@@ -102,7 +102,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-08-09 | **Top/low drinks + Performance product mix:** Red Flags **Top / low drink** column (sales preset) shows highest/lowest SKU; tap → top 5 + lowest 5 names only (`vendon-sales-summary`). Performance: tap machine sales in growth popups (or single-location KPI) → product mix by day/week/month with cups, trends, YoY top 5; growth + product tables are sortable. API `GET /api/alert/performance/machine-products`. |
+| 2026-08-09 | **Top/low drink header fix:** Missing header cell for the new column shifted every column after Sales (wrong data under wrong headers). Header restored; column always visible on the Red Flags board (not picker-dependent). |
+| 2026-08-09 | **Top/low drinks + Performance product mix:** Red Flags **Top / low drink** column shows highest/lowest SKU; tap → top 5 + lowest 5 names only (`vendon-sales-summary`). Performance: tap machine sales in growth popups (or single-location KPI) → product mix by day/week/month with cups, trends, YoY top 5; growth + product tables are sortable. API `GET /api/alert/performance/machine-products`. |
 | 2026-08-06 | **Popup close stays pinned:** Modal header + × stick to the panel frame while scrolling (all salesHistory / contact / red-flags detail popups). |
 | 2026-08-06 | **Downtime trend chip:** Dropped confusing `new` label (meant “vs 0 yesterday”). Table shows compact `+16m` and clips overflow inside the box; hover title explains “no downtime yesterday”. |
 | 2026-08-06 | **Downtime trend % sanity:** Sub-minute yesterday was shown as `0m` while % used raw seconds (e.g. +133711%). Now show seconds under 1m; % only when baseline ≥60s, else absolute delta. Spoilage row always visible with waste status. |
