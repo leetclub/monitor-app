@@ -102,6 +102,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-09 | **Last clean media / CC dedupe:** Duplicate attachment links (same file from overlapping TM media fields) and a repeated Command Center footnote removed; same-type files numbered; High risk shown as a pill. |
 | 2026-08-09 | **Alerts sheet gap-close:** Red Flags / Overall — machine search + highest-risk sort; downtime loss **5‑min grace**; Last clean next window / days left; Last TX no-sales ≥4h highlight; `ALERT_TX_STALE_MINUTES` / `ALERT_NO_SALES_HOURS` env. |
 | 2026-08-09 | **Last clean + all modals:** Last clean popup used a missing CSS class and modal section animations left `transform` on content (sticky/layout corruption). Fixed cleaning modal markup + opacity-only modal section animations for all salesHistory popups. |
 | 2026-08-09 | **Top/low drink header fix:** Missing header cell for the new column shifted every column after Sales (wrong data under wrong headers). Header restored; column always visible on the Red Flags board (not picker-dependent). |
