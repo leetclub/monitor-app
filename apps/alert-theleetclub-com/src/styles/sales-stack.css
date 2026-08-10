@@ -845,6 +845,63 @@
   max-width: min(420px, 100%);
 }
 
+.productMixGrainRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 8px;
+}
+
+.perfSortThWithTip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.machineProductSalesModal .infoTipBtn {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  font-size: 12px;
+}
+
+.machineProductSalesModal .helpTip {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
+.machineProductSalesModal .helpTipBubble {
+  z-index: 40;
+  max-width: min(320px, 86vw);
+  white-space: normal;
+}
+
+@media (pointer: coarse) {
+  .machineProductSalesModal .infoTipBtn {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    font-size: 13px;
+  }
+
+  .machineProductSalesModal .helpTip {
+    width: 32px;
+    height: 32px;
+  }
+
+  .infoTipPopoverPortal {
+    max-width: min(340px, 90vw);
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 12px 14px;
+  }
+}
+
 .productExtremesGrid,
 .productMixPanels {
   display: grid;

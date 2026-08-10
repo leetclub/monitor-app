@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import { InfoTip } from '@/components/InfoTip';
 import { MachineIdSearchSelect } from '@/components/MachineSearchSelect';
 import {
   formatCupsN,
@@ -32,6 +33,36 @@ const GRAIN_TABS: Array<{ id: GrainKey; label: string }> = [
   { id: 'month', label: 'Month' },
 ];
 
+const GRAIN_HELP =
+  'Day = today. Week = this week to date (WTD). Month = this month to date (MTD). All dates use Asia/Kuwait. Tap ? on column headers for KD / Prior / LY / YoY (works on iPad — tap to pin).';
+
+function columnHelp(grain: GrainKey): Record<SortKey, string> {
+  const period =
+    grain === 'day' ? 'today' : grain === 'week' ? 'this week (WTD)' : 'this month (MTD)';
+  const prior =
+    grain === 'day'
+      ? 'yesterday'
+      : grain === 'week'
+        ? 'the matching prior-week window'
+        : 'the matching prior-month window';
+  const ly =
+    grain === 'day'
+      ? 'the same calendar date last year'
+      : grain === 'week'
+        ? 'the same week dates one year earlier'
+        : 'the same month-to-date dates one year earlier';
+  return {
+    name: 'Drink / product name from Vendon sales.',
+    revenue: `Sales revenue (KD) for ${period}. Top / lowest lists and default sort use this.`,
+    prevRevenue: `Prior KD — sales revenue for ${prior}. Not last year.`,
+    trendPct: `Trend vs prior = (this period KD − Prior KD) ÷ Prior KD. Positive means up vs ${prior}.`,
+    yoyRevenue: `LY KD = last-year KD — sales for ${ly}. Not a full-year total.`,
+    yoyTrendPct:
+      'YoY = (this period KD − LY KD) ÷ LY KD. Example: 3.90 vs 16.30 LY ≈ −76% vs last year.',
+    cups: 'Cup count for this period only — secondary to KD ranking.',
+  };
+}
+
 function formatKwdCell(x: number | null | undefined): string {
   if (x == null || !Number.isFinite(Number(x))) return '—';
   return formatKwd(Number(x));
@@ -52,19 +83,24 @@ function SortTh({
   col,
   sort,
   onSort,
+  help,
 }: {
   label: string;
   col: SortKey;
   sort: ColumnSortState<SortKey>;
   onSort: (k: SortKey) => void;
+  help?: string;
 }) {
   const dir = sortDirForColumn(sort, col);
   const glyph = dir === 'desc' ? '▼' : dir === 'asc' ? '▲' : '⇅';
   return (
     <th>
-      <button type="button" className="perfSortThBtn" onClick={() => onSort(col)}>
-        {label} {glyph}
-      </button>
+      <span className="perfSortThWithTip">
+        <button type="button" className="perfSortThBtn" onClick={() => onSort(col)}>
+          {label} {glyph}
+        </button>
+        {help ? <InfoTip text={help} label={`${label} — help`} /> : null}
+      </span>
     </th>
   );
 }
@@ -101,8 +137,36 @@ function NameList({
 
 type YoySortKey = 'name' | 'revenue' | 'yoyRevenue' | 'yoyTrendPct';
 
+function YoySortTh({
+  label,
+  col,
+  sort,
+  onSort,
+  help,
+}: {
+  label: string;
+  col: YoySortKey;
+  sort: ColumnSortState<YoySortKey>;
+  onSort: (k: YoySortKey) => void;
+  help: string;
+}) {
+  const dir = sortDirForColumn(sort, col);
+  const glyph = dir === 'desc' ? '▼' : dir === 'asc' ? '▲' : '⇅';
+  return (
+    <th>
+      <span className="perfSortThWithTip">
+        <button type="button" className="perfSortThBtn" onClick={() => onSort(col)}>
+          {label} {glyph}
+        </button>
+        <InfoTip text={help} label={`${label} — help`} />
+      </span>
+    </th>
+  );
+}
+
 function YoyCompareTable({
   rows,
+  grain,
 }: {
   rows: Array<{
     name?: string | null;
@@ -110,8 +174,10 @@ function YoyCompareTable({
     yoyRevenueKwd?: number | null;
     yoyTrendPct?: number | null;
   }>;
+  grain: GrainKey;
 }) {
   const [sort, setSort] = useState<ColumnSortState<YoySortKey>>({ column: 'revenue', dir: 'desc' });
+  const help = columnHelp(grain);
   const sorted = useMemo(() => {
     const out = [...rows];
     const col = sort.column;
@@ -136,70 +202,45 @@ function YoyCompareTable({
 
   return (
     <section className="productMixPanel" style={{ marginTop: 12 }}>
-      <h3 className="salesHistoryCompareTitle">Top 5 vs last year · KD</h3>
+      <h3 className="salesHistoryCompareTitle pageHeroRow">
+        Top 5 vs last year · KD
+        <InfoTip text="Compares this period’s top sellers to the same dates last year. Tap ? on a column (works on iPad) for definitions." label="Top 5 vs last year — help" />
+      </h3>
       <p className="salesHistoryNote" style={{ marginTop: 0 }}>
-        Ranked by sales revenue. Tap headers to sort.
+        Ranked by sales revenue. Tap headers to sort · tap ? for help.
       </p>
       <div className="perfGrowthTableWrap">
         <table className="perfGrowthTable">
           <thead>
             <tr>
-              <th>
-                <button
-                  type="button"
-                  className="perfSortThBtn"
-                  onClick={() => setSort((s) => cycleColumnSort(s, 'name'))}
-                >
-                  Product{' '}
-                  {sortDirForColumn(sort, 'name') === 'desc'
-                    ? '▼'
-                    : sortDirForColumn(sort, 'name') === 'asc'
-                      ? '▲'
-                      : '⇅'}
-                </button>
-              </th>
-              <th>
-                <button
-                  type="button"
-                  className="perfSortThBtn"
-                  onClick={() => setSort((s) => cycleColumnSort(s, 'revenue'))}
-                >
-                  KD{' '}
-                  {sortDirForColumn(sort, 'revenue') === 'desc'
-                    ? '▼'
-                    : sortDirForColumn(sort, 'revenue') === 'asc'
-                      ? '▲'
-                      : '⇅'}
-                </button>
-              </th>
-              <th>
-                <button
-                  type="button"
-                  className="perfSortThBtn"
-                  onClick={() => setSort((s) => cycleColumnSort(s, 'yoyRevenue'))}
-                >
-                  LY KD{' '}
-                  {sortDirForColumn(sort, 'yoyRevenue') === 'desc'
-                    ? '▼'
-                    : sortDirForColumn(sort, 'yoyRevenue') === 'asc'
-                      ? '▲'
-                      : '⇅'}
-                </button>
-              </th>
-              <th>
-                <button
-                  type="button"
-                  className="perfSortThBtn"
-                  onClick={() => setSort((s) => cycleColumnSort(s, 'yoyTrendPct'))}
-                >
-                  YoY{' '}
-                  {sortDirForColumn(sort, 'yoyTrendPct') === 'desc'
-                    ? '▼'
-                    : sortDirForColumn(sort, 'yoyTrendPct') === 'asc'
-                      ? '▲'
-                      : '⇅'}
-                </button>
-              </th>
+              <YoySortTh
+                label="Product"
+                col="name"
+                sort={sort}
+                help={help.name}
+                onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+              />
+              <YoySortTh
+                label="KD"
+                col="revenue"
+                sort={sort}
+                help={help.revenue}
+                onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+              />
+              <YoySortTh
+                label="LY KD"
+                col="yoyRevenue"
+                sort={sort}
+                help={help.yoyRevenue}
+                onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+              />
+              <YoySortTh
+                label="YoY"
+                col="yoyTrendPct"
+                sort={sort}
+                help={help.yoyTrendPct}
+                onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+              />
             </tr>
           </thead>
           <tbody>
@@ -274,6 +315,7 @@ export function MachineProductSalesModal({
 
   const slice: MachineProductGrain | undefined = q.data?.byGrain?.[grain];
   const label = slice?.label || GRAIN_TABS.find((t) => t.id === grain)?.label || grain;
+  const tips = useMemo(() => columnHelp(grain), [grain]);
 
   const sortedProducts = useMemo(() => {
     const rows = (slice?.products || []).map((p) => normalizeProductRow(p as MachineProductRow));
@@ -362,19 +404,22 @@ export function MachineProductSalesModal({
             </div>
           ) : null}
 
-          <div className="perfModePills" role="tablist" aria-label="Period grain">
-            {GRAIN_TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={grain === t.id}
-                className={`perfSegPill ${grain === t.id ? 'active' : ''}`}
-                onClick={() => setGrain(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="productMixGrainRow">
+            <div className="perfModePills" role="tablist" aria-label="Period grain">
+              {GRAIN_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={grain === t.id}
+                  className={`perfSegPill ${grain === t.id ? 'active' : ''}`}
+                  onClick={() => setGrain(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <InfoTip text={GRAIN_HELP} label="Period tabs — help" />
           </div>
 
           <p className="salesHistoryNote">
@@ -383,7 +428,7 @@ export function MachineProductSalesModal({
               ? ` · ${slice.window.start} → ${slice.window.end}`
               : ''}
             {' · '}
-            Ranked by KD sales (not cups).
+            Ranked by KD sales (not cups). Tap ? on columns for Prior / LY / YoY (iPad: tap to open).
           </p>
 
           {q.isLoading ? <p className="salesHistoryNote">Loading product mix…</p> : null}
@@ -395,27 +440,75 @@ export function MachineProductSalesModal({
             <NameList title="Lowest 5 · KD" items={lowest5} empty="No low products yet." />
           </div>
 
-          <YoyCompareTable rows={yoyCompare} />
+          <YoyCompareTable rows={yoyCompare} grain={grain} />
           <section className="productMixPanel" style={{ marginTop: 12 }}>
             <NameList title="Top 5 last year · KD" items={top5Yoy} empty="No last-year mix." />
           </section>
 
           <section className="productMixPanel" style={{ marginTop: 12 }}>
-            <h3 className="salesHistoryCompareTitle">All products · revenue</h3>
+            <h3 className="salesHistoryCompareTitle pageHeroRow">
+              All products · revenue
+              <InfoTip
+                text="Full mix for the selected Day/Week/Month. Prior = previous period; LY KD = same dates last year; YoY uses LY KD. Tap ? next to each header (iPad-friendly)."
+                label="All products — help"
+              />
+            </h3>
             <p className="salesHistoryNote" style={{ marginTop: 0 }}>
-              Tap headers to sort. Trend = vs prior {grain}; YoY = vs same dates last year. Cups are secondary.
+              Tap headers to sort. Tap ? for column tips.
             </p>
             <div className="perfGrowthTableWrap machineProductTableWrap">
               <table className="perfGrowthTable">
                 <thead>
                   <tr>
-                    <SortTh label="Product" col="name" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
-                    <SortTh label="KD" col="revenue" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
-                    <SortTh label="Prior KD" col="prevRevenue" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
-                    <SortTh label="Trend" col="trendPct" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
-                    <SortTh label="LY KD" col="yoyRevenue" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
-                    <SortTh label="YoY" col="yoyTrendPct" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
-                    <SortTh label="Cups" col="cups" sort={sort} onSort={(k) => setSort((s) => cycleColumnSort(s, k))} />
+                    <SortTh
+                      label="Product"
+                      col="name"
+                      sort={sort}
+                      help={tips.name}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
+                    <SortTh
+                      label="KD"
+                      col="revenue"
+                      sort={sort}
+                      help={tips.revenue}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
+                    <SortTh
+                      label="Prior KD"
+                      col="prevRevenue"
+                      sort={sort}
+                      help={tips.prevRevenue}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
+                    <SortTh
+                      label="Trend"
+                      col="trendPct"
+                      sort={sort}
+                      help={tips.trendPct}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
+                    <SortTh
+                      label="LY KD"
+                      col="yoyRevenue"
+                      sort={sort}
+                      help={tips.yoyRevenue}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
+                    <SortTh
+                      label="YoY"
+                      col="yoyTrendPct"
+                      sort={sort}
+                      help={tips.yoyTrendPct}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
+                    <SortTh
+                      label="Cups"
+                      col="cups"
+                      sort={sort}
+                      help={tips.cups}
+                      onSort={(k) => setSort((s) => cycleColumnSort(s, k))}
+                    />
                   </tr>
                 </thead>
                 <tbody>

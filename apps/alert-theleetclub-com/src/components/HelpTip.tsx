@@ -12,12 +12,16 @@ export function HelpTip(props: { text: string; id?: string }) {
 
   useEffect(() => {
     if (!pinned) return;
-    const close = (e: MouseEvent) => {
+    const close = (e: MouseEvent | TouchEvent) => {
       if (wrapRef.current?.contains(e.target as Node)) return;
       setPinned(false);
     };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('touchstart', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('touchstart', close);
+    };
   }, [pinned]);
 
   return (

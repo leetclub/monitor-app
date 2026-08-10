@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 | Date (UTC) | Summary |
 |------------|---------|
 | 2026-08-10 | **Machine lookup everywhere:** Shared searchable machine pickers (`MachineIdSearchSelect` / `MachineMultiSearchSelect`) on Admin Machines (Vending machine), Targets (single + bulk), Promo (single + day targets), QA visit admin. Fleet toolbar search on Red Flags/Overall and QA/Performance location filters unchanged. |
+| 2026-08-10 | **Product mix column tips:** Product mix popup adds ⓘ / ? helpers for Day·Week·Month, KD, Prior, LY KD, YoY, Cups — hover on desktop, tap-to-pin on iPad (touch targets enlarged). |
 | 2026-08-10 | **Product mix insights card:** Performance hero KPI row includes **Product mix → Open insights** (opens mix for the chart’s lead machine; switch any location inside). Toolbar **Product mix…** remains. |
 | 2026-08-10 | **Performance product mix UX:** Wider growth + product popups (readable KD tables). **Product mix…** on the Performance toolbar opens any machine (search inside the popup) — growth-compare rows are only a shortcut to that group. |
 | 2026-08-10 | **Product mix = sales revenue:** Top/low drinks and Performance product popups rank by **KD sales** (not cups). Tables show KD / prior / YoY; cups stay as a secondary column. RF popup remains names-only. |
