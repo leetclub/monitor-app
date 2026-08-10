@@ -1961,6 +1961,30 @@ def register_vendon_proxy_routes(app) -> None:
             return jsonify({"error": "Unauthorized"}), 401
         body = request.get_json(silent=True) or {}
         date_str = (body.get("date") or "").strip()
+        days_back = body.get("daysBack") or body.get("days_back")
+        # Optional range backfill for productCounts (Alert drink / Performance mix).
+        # Runs in background — full fleet × many days is too slow for one HTTP call.
+        if days_back is not None and not date_str:
+            try:
+                n = max(1, min(int(days_back), 400))
+            except (TypeError, ValueError):
+                return jsonify({"error": "daysBack must be an integer"}), 400
+            today = datetime.now(ZoneInfo("Asia/Kuwait")).date()
+            dates = [(today - timedelta(days=i)).isoformat() for i in range(n)]
+
+            def _run_range() -> None:
+                for ds in dates:
+                    try:
+                        res = _refresh_revenue_cache_single_day(ds)
+                        if not res.get("ok"):
+                            logger.warning("cache-revenue daysBack failed %s: %s", ds, res.get("error"))
+                    except Exception:
+                        logger.exception("cache-revenue daysBack error %s", ds)
+
+            import threading
+
+            threading.Thread(target=_run_range, daemon=True).start()
+            return jsonify({"ok": True, "queued": True, "days": n, "from": dates[-1], "to": dates[0]}), 202
         if not date_str:
             date_str = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
         res = _refresh_revenue_cache_single_day(date_str)

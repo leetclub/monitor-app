@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import { ProductExtremesModal } from '@/components/ProductExtremesModal';
 import {
   useV2CompareSelection,
   useV2RedFlagsData,
@@ -25,6 +26,12 @@ export function V2RedFlagsPage() {
   const data = useV2RedFlagsData(compare);
   const [q, setQ] = useState('');
   const [severity, setSeverity] = useState<SeverityFilter>('all');
+  const [drinksDetail, setDrinksDetail] = useState<{
+    machineId: string;
+    machineName: string;
+    topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+    lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+  } | null>(null);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -50,6 +57,29 @@ export function V2RedFlagsPage() {
               {e.isNew ? <em className="v2PillNew">New</em> : null}
             </div>
           </div>
+        );
+      } else if (key === 'topLowDrinks') {
+        cells[key] = (
+          <button
+            type="button"
+            className="v2DrinksOpen"
+            title="Top 5 and lowest 5 drink names"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              setDrinksDetail({
+                machineId: e.id,
+                machineName: e.machineName,
+                topProducts: e.topProducts,
+                lowProducts: e.lowProducts,
+              });
+            }}
+          >
+            {e.stacks.topLowDrinks?.length ? (
+              <V2MetricStack items={e.stacks.topLowDrinks} />
+            ) : (
+              <span>{e.fields.topLowDrinks || '—'}</span>
+            )}
+          </button>
         );
       } else if (e.stacks[key]?.length) {
         cells[key] = <V2MetricStack items={e.stacks[key]} />;
@@ -149,10 +179,19 @@ export function V2RedFlagsPage() {
                 description="No red flags recorded for machines in your scope."
               />
             }
-            footer="Same Classic sort as /red-flags · Use ← → or drag to browse every field"
           />
         )}
       </V2Panel>
+
+      {drinksDetail ? (
+        <ProductExtremesModal
+          machineId={drinksDetail.machineId}
+          machineName={drinksDetail.machineName}
+          topProducts={drinksDetail.topProducts}
+          lowProducts={drinksDetail.lowProducts}
+          onClose={() => setDrinksDetail(null)}
+        />
+      ) : null}
     </div>
   );
 }

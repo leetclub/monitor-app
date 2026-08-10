@@ -389,8 +389,9 @@ export function PerformancePage({
                     }
                     title="Open product mix (day / week / month + YoY)"
                   >
-                    <span className="perfKpiLabel">Location · product mix</span>
+                    <span className="perfKpiLabel">Location sales · product mix</span>
                     <strong>{detail.machineName}</strong>
+                    <span className="perfKpiHint">Tap for day / week / month products + YoY</span>
                   </button>
                   <div className="perfKpi">
                     <span className="perfKpiLabel">Product</span>

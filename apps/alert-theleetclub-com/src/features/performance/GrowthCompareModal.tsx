@@ -163,7 +163,8 @@ export function GrowthCompareModal({
           ) : null}
           {onOpenMachineProducts ? (
             <p className="perfMuted" style={{ marginTop: 0 }}>
-              Tap a machine row for product mix (top 5 / trends / YoY).
+              Tap any machine row (or Period KD) for product mix — name, cups, day/week/month trends, top 5 vs last year.
+              Column headers sort the table.
             </p>
           ) : null}
           {keys.map((key) => {

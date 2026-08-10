@@ -1192,6 +1192,25 @@ a.v2NavLink.v2NavLinkActive {
   font-weight: 600;
 }
 
+.v2DrinksOpen {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.v2DrinksOpen:hover,
+.v2DrinksOpen:focus-visible {
+  outline: none;
+  filter: brightness(1.08);
+}
+
 .v2MetricTone-up {
   border-color: rgba(52, 211, 153, 0.4);
   background: rgba(16, 185, 129, 0.12);

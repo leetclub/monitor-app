@@ -89,6 +89,8 @@ export type V2ExceptionRow = {
   fields: Record<RedFlagsColumnKey, string>;
   stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>>;
   reasons: string[];
+  topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+  lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
 };
 
 /** Classic priority: tier 1 = immediate (Critical), tier 2 = cleaning-window Watch. */
@@ -576,6 +578,22 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
         compareMode === 'sameWeekdayLw';
 
       const stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>> = {
+        topLowDrinks: [
+          {
+            label: 'Top',
+            value: String(
+              vendonSales?.topProducts?.[0]?.name || vendonSales?.topProduct?.name || '—',
+            ).slice(0, 28),
+            tone: 'teal',
+          },
+          {
+            label: 'Low',
+            value: String(
+              vendonSales?.lowProducts?.[0]?.name || vendonSales?.lowProduct?.name || '—',
+            ).slice(0, 28),
+            tone: 'muted',
+          },
+        ],
         dailySales: [
           {
             label: salesPair.primaryLabel || 'Primary',
@@ -747,6 +765,8 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
         fields,
         stacks,
         reasons,
+        topProducts: vendonSales?.topProducts || (vendonSales?.topProduct ? [vendonSales.topProduct] : null),
+        lowProducts: vendonSales?.lowProducts || (vendonSales?.lowProduct ? [vendonSales.lowProduct] : null),
       });
     }
     return out;

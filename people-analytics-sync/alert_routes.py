@@ -163,7 +163,23 @@ def _vendon_revenue_cache_has_day(db: Session, day: date) -> bool:
     )
 
 
-def _maybe_seed_vendon_revenue_cache(day: date) -> None:
+def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
+    """True when the day is missing or still on legacy payloads without productCounts."""
+    rows = (
+        db.query(VendonDailyMachineRevenueCache.payload_json)
+        .filter(VendonDailyMachineRevenueCache.cache_date == day)
+        .limit(8)
+        .all()
+    )
+    if not rows:
+        return True
+    for (payload,) in rows:
+        if isinstance(payload, dict) and isinstance(payload.get("productCounts"), dict) and payload.get("productCounts"):
+            return False
+    return True
+
+
+def _maybe_seed_vendon_revenue_cache(day: date, *, force_product_mix: bool = False) -> None:
     """Queue background warm of vendon_daily_machine_revenue_cache (never blocks the HTTP request)."""
     throttle_key = f"revenue_seed:{day.isoformat()}"
     cached = _alert_cache_get(throttle_key, _ALERT_REVENUE_CACHE_SEED_TTL_SEC)
@@ -171,7 +187,9 @@ def _maybe_seed_vendon_revenue_cache(day: date) -> None:
         return
     db = _pa_session()
     try:
-        if _vendon_revenue_cache_has_day(db, day):
+        exists = _vendon_revenue_cache_has_day(db, day)
+        needs_mix = force_product_mix or _vendon_revenue_cache_day_needs_product_mix(db, day)
+        if exists and not needs_mix:
             _alert_cache_set(throttle_key, {"ok": True, "skipped": "exists"})
             return
     finally:
@@ -2760,7 +2778,23 @@ def register_alert_routes(app) -> None:
             payload = r.payload_json if isinstance(r.payload_json, dict) else {}
             pc = payload.get("productCounts") if isinstance(payload.get("productCounts"), dict) else None
             if not pc:
-                # Legacy cache: fold single top/low into the mix.
+                # Legacy cache: fold top/low lists (or singles) so RF / Performance still get names.
+                for key in ("topProducts", "lowProducts"):
+                    raw = payload.get(key)
+                    if not isinstance(raw, list):
+                        continue
+                    for item in raw:
+                        if not isinstance(item, dict) or not item.get("name"):
+                            continue
+                        name = str(item.get("name") or "").strip()
+                        if not name:
+                            continue
+                        try:
+                            c = int(item.get("count") or 0)
+                        except (TypeError, ValueError):
+                            c = 0
+                        if c > 0:
+                            totals[name] = int(totals.get(name) or 0) + c
                 for key in ("topProduct", "lowProduct"):
                     item = payload.get(key)
                     if isinstance(item, dict) and item.get("name"):
@@ -3536,11 +3570,10 @@ def register_alert_routes(app) -> None:
                 prev = _aggregate_product_counts_in_range(rows, prev_s, prev_e + timedelta(days=1))
                 yoy = _aggregate_product_counts_in_range(rows, yoy_s, yoy_e + timedelta(days=1))
 
-                # Live fallback for current grain when cache has no productCounts yet.
-                if not cur:
+                def _live_counts(start_d: date, end_d: date) -> Dict[str, int]:
                     try:
-                        from_ts, _ = _kuwait_day_bounds_utc(cur_s.isoformat())
-                        _, to_ts = _kuwait_day_bounds_utc(cur_e.isoformat())
+                        from_ts, _ = _kuwait_day_bounds_utc(start_d.isoformat())
+                        _, to_ts = _kuwait_day_bounds_utc(end_d.isoformat())
                         vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
                         from vendon_proxy_routes import _stats_vend_product_fields
 
@@ -3552,9 +3585,26 @@ def register_alert_routes(app) -> None:
                             pn = (pn or "").strip()
                             if pn:
                                 live[pn] = int(live.get(pn) or 0) + 1
-                        cur = live
+                        return live
                     except Exception:
-                        logger.exception("machine-products live vends %s %s", mid, grain)
+                        logger.exception("machine-products live vends %s %s→%s", mid, start_d, end_d)
+                        return {}
+
+                # Live fallback when cache still lacks productCounts for the window.
+                if not cur:
+                    cur = _live_counts(cur_s, cur_e)
+                if not prev:
+                    prev = _live_counts(prev_s, prev_e)
+                if not yoy:
+                    yoy = _live_counts(yoy_s, yoy_e)
+
+                # Queue enrich for days in the windows that still lack productCounts.
+                for d0, d1 in ((cur_s, cur_e), (prev_s, prev_e), (yoy_s, yoy_e)):
+                    d = d0
+                    while d <= d1:
+                        if d >= today - timedelta(days=400):
+                            _maybe_seed_vendon_revenue_cache(d, force_product_mix=False)
+                        d += timedelta(days=1)
 
                 by_grain[grain] = _slice_from_counts(
                     cur,
