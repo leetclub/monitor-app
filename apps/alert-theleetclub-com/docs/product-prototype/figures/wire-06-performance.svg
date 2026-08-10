@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360">
   <rect width="800" height="360" fill="#0f172a"/>
   <text x="24" y="28" fill="#e2e8f0" font-family="Segoe UI, sans-serif" font-size="16" font-weight="700">Performance — Trajectory + searchable locations</text>
-  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">Select all (batched) · Page ‹ › of 12 · Growth popup: sort + tap machine → product mix (day/week/month · YoY)</text>
+  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">Product mix… (any machine) · Growth popup = group only · Wide KD tables · Switch location search in mix</text>
+  <rect x="620" y="18" width="156" height="28" rx="14" fill="rgba(45,212,191,0.18)" stroke="#2dd4bf"/>
+  <text x="648" y="36" fill="#e2e8f0" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">Product mix…</text>
   <!-- Filter rail: searchable dropdown -->
   <rect x="24" y="60" width="150" height="278" rx="8" fill="#1e293b" stroke="#334155"/>
   <text x="36" y="82" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">Locations</text>

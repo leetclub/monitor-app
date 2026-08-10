@@ -163,8 +163,8 @@ export function GrowthCompareModal({
           ) : null}
           {onOpenMachineProducts ? (
             <p className="perfMuted" style={{ marginTop: 0 }}>
-              Tap any machine row (or Period KD) for product mix — name, cups, day/week/month trends, top 5 vs last year.
-              Column headers sort the table.
+              This list is the growth group only (All / Top 5 / Lowest 5). Tap a row for a shortcut — or use{' '}
+              <strong>Product mix</strong> on the Performance page to search any machine.
             </p>
           ) : null}
           {keys.map((key) => {

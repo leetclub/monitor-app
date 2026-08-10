@@ -283,6 +283,27 @@ export function PerformancePage({
           <Link className="perfBackLink" to={manus ? '/v2/red-flags' : '/red-flags'}>
             ← Red Flags
           </Link>
+          <button
+            type="button"
+            className="perfSegPill perfSegPillEmphasis"
+            disabled={!filterMachines.length}
+            title="Search any location for product mix (KD by day / week / month)"
+            onClick={() => {
+              const id =
+                (selectedIds.length === 1 ? selectedIds[0] : null) ||
+                selectedIds[0] ||
+                filterMachines[0]?.id ||
+                '';
+              if (!id) return;
+              const hit = filterMachines.find((m) => m.id === id) || machineRows.find((m) => m.id === id);
+              setProductMix({
+                machineId: id,
+                machineName: hit?.name || id,
+              });
+            }}
+          >
+            Product mix…
+          </button>
         </div>
 
         {machinesQ.isError && !machineRows.length ? (
@@ -457,6 +478,7 @@ export function PerformancePage({
           <MachineProductSalesModal
             machineId={productMix.machineId}
             machineName={productMix.machineName}
+            machines={filterMachines.length ? filterMachines : machineRows}
             onClose={() => setProductMix(null)}
           />
         ) : null}

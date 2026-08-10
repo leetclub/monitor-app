@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import { MachineIdSearchSelect } from '@/components/MachineSearchSelect';
 import {
   formatCupsN,
   normalizeProductRow,
@@ -224,12 +225,15 @@ function YoyCompareTable({
 }
 
 export function MachineProductSalesModal({
-  machineId,
-  machineName,
+  machineId: initialMachineId,
+  machineName: initialMachineName,
+  machines = [],
   onClose,
 }: {
   machineId: string;
   machineName: string;
+  /** Full fleet — search any location, not only the growth-compare subset. */
+  machines?: Array<{ id: string; name: string }>;
   onClose: () => void;
 }) {
   useAlertModal(onClose);
@@ -237,6 +241,26 @@ export function MachineProductSalesModal({
   const panel = modalPanelHandlers();
   const [grain, setGrain] = useState<GrainKey>('day');
   const [sort, setSort] = useState<ColumnSortState<SortKey>>({ column: 'revenue', dir: 'desc' });
+  const [machineId, setMachineId] = useState(initialMachineId);
+  const [machineName, setMachineName] = useState(initialMachineName);
+
+  useEffect(() => {
+    setMachineId(initialMachineId);
+    setMachineName(initialMachineName);
+  }, [initialMachineId, initialMachineName]);
+
+  const machineOptions = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const m of machines) {
+      const id = String(m.id || '').trim();
+      if (!id) continue;
+      byId.set(id, { id, name: String(m.name || id).trim() || id });
+    }
+    if (machineId && !byId.has(machineId)) {
+      byId.set(machineId, { id: machineId, name: machineName || machineId });
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [machines, machineId, machineName]);
 
   const q = useQuery({
     queryKey: ['alert-machine-products', machineId, 'revenue'],
@@ -320,6 +344,24 @@ export function MachineProductSalesModal({
           </button>
         </div>
         <div className="salesHistoryBody">
+          {machineOptions.length > 1 ? (
+            <div className="machineProductPicker">
+              <MachineIdSearchSelect
+                machines={machineOptions}
+                value={machineId}
+                allowEmpty={false}
+                label="Switch location"
+                placeholder="Search any machine…"
+                onChange={(id) => {
+                  const hit = machineOptions.find((m) => m.id === id);
+                  if (!hit) return;
+                  setMachineId(hit.id);
+                  setMachineName(hit.name);
+                }}
+              />
+            </div>
+          ) : null}
+
           <div className="perfModePills" role="tablist" aria-label="Period grain">
             {GRAIN_TABS.map((t) => (
               <button
@@ -363,7 +405,7 @@ export function MachineProductSalesModal({
             <p className="salesHistoryNote" style={{ marginTop: 0 }}>
               Tap headers to sort. Trend = vs prior {grain}; YoY = vs same dates last year. Cups are secondary.
             </p>
-            <div className="perfGrowthTableWrap" style={{ maxHeight: 280 }}>
+            <div className="perfGrowthTableWrap machineProductTableWrap">
               <table className="perfGrowthTable">
                 <thead>
                   <tr>
