@@ -5,6 +5,7 @@ import { fetchQaManualSummaryAdmin, saveQaManualSummary } from '@/lib/leetWorkfl
 import { countBulletLines, validateBulletSummary } from '@/lib/qaManualSummary';
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { HelpTip } from '@/components/HelpTip';
+import { MachineIdSearchSelect } from '@/components/MachineSearchSelect';
 
 type MachineRow = { id: string; name: string };
 
@@ -75,21 +76,17 @@ export function QaVisitAdminSection() {
       <div className="adminGroup">
         <div className="adminGroupLabel">Machine</div>
         <div className="adminFieldCell" style={{ maxWidth: 420 }}>
-          <select
+          <MachineIdSearchSelect
+            aria-label="Machine"
+            machines={machines}
             value={machineId}
-            onChange={(e) => {
-              setMachineId(e.target.value);
+            placeholder="Type to search, then pick…"
+            disabled={machinesQ.isLoading}
+            onChange={(id) => {
+              setMachineId(id);
               setFormErr(null);
             }}
-            disabled={machinesQ.isLoading}
-          >
-            <option value="">Choose…</option>
-            {machines.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         {machinesQ.isError ? (
           <p className="muted">Could not load machines: {(machinesQ.error as Error).message}</p>

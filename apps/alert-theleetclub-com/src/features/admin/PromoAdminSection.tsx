@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
 import { HelpTip } from '@/components/HelpTip';
+import { MachineIdSearchSelect, MachineMultiSearchSelect } from '@/components/MachineSearchSelect';
 import { qaTodayIso } from '@/lib/qaVisitDateRange';
 import {
   DEFAULT_PROMO_PRODUCT,
@@ -183,17 +184,16 @@ export function PromoAdminSection() {
               </select>
             </label>
           ) : (
-            <label className="promoField">
+            <div className="promoField">
               Machine
-              <select value={machineId} onChange={(e) => setMachineId(e.target.value)}>
-                <option value="">Select…</option>
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <MachineIdSearchSelect
+                aria-label="Machine"
+                machines={machines}
+                value={machineId}
+                placeholder="Type to search, then pick…"
+                onChange={setMachineId}
+              />
+            </div>
           )}
           <label className="promoField">
             Product (from Vendon)
@@ -260,21 +260,15 @@ export function PromoAdminSection() {
               </button>
             ))}
           </p>
-          <label className="promoField">
+          <div className="promoField">
             Machines
-            <select
-              multiple
-              size={6}
+            <MachineMultiSearchSelect
+              aria-label="Machines for day targets"
+              machines={machines}
               value={selectedMachines}
-              onChange={(e) => setSelectedMachines(Array.from(e.target.selectedOptions, (o) => o.value))}
-            >
-              {machines.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={setSelectedMachines}
+            />
+          </div>
           <label className="promoField">
             Target cups / day
             <input value={targetCups} onChange={(e) => setTargetCups(e.target.value)} />

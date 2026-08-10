@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
 import { Fragment, type Dispatch, type SetStateAction, useCallback, useMemo, useState } from 'react';
 import { HelpTip } from '@/components/HelpTip';
+import { MachineIdSearchSelect } from '@/components/MachineSearchSelect';
 import { fleetTagSourceDescription } from '@/lib/fleetTagSourceHint';
 import {
   emptyInactiveSchedule,
@@ -654,11 +655,13 @@ export function MachineProfileSection() {
           <div className="adminMachineCoreRow">
             <div className="adminFieldCell">
               <span className="adminFieldCaption">Vending machine</span>
-              <select
+              <MachineIdSearchSelect
                 title="Machines from the catalog"
+                aria-label="Vending machine"
+                machines={machines}
                 value={machineId}
-                onChange={(e) => {
-                  const id = e.target.value;
+                placeholder="Type to search, then pick…"
+                onChange={(id) => {
                   setFormErr(null);
                   const prof = rows.find((r) => r.machine_id === id);
                   if (prof) {
@@ -671,14 +674,7 @@ export function MachineProfileSection() {
                     clearForm();
                   }
                 }}
-              >
-                <option value="">Choose…</option>
-                {machines.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div className="adminFieldCell">
               <span className="adminFieldCaption">Location Owner</span>

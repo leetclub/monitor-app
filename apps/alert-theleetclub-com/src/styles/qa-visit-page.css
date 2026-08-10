@@ -167,7 +167,10 @@
 }
 
 .machineSearchSelectOption {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   padding: 8px 10px;
   border: 0;
@@ -183,6 +186,142 @@
 .machineSearchSelectOption--active {
   background: rgba(196, 92, 74, 0.16);
   color: #fff;
+}
+
+.machineSearchSelectOptionName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.machineSearchSelectOptionMeta {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: #8a9aab;
+  font-variant-numeric: tabular-nums;
+}
+
+.machineIdSearchSelect,
+.machineMultiSearchSelect {
+  width: 100%;
+}
+
+.adminAppRoot .machineSearchSelectControl input,
+.adminAppRoot .machineMultiSearchTrigger,
+.adminAppRoot .machineMultiSearchInput {
+  width: 100%;
+}
+
+.machineMultiSearchTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border, #5d3f3b);
+  border-radius: var(--radius-md, 8px);
+  background: var(--panel, #171c23);
+  color: var(--text, #dee2ec);
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.machineMultiSearchSummary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.machineMultiSearchPanel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid #5d3f3b;
+  background: #171c23;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.machineMultiSearchToolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(93, 63, 59, 0.55);
+}
+
+.machineMultiSearchInput {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #5d3f3b;
+  border-radius: 6px;
+  background: #0f141a;
+  color: #dee2ec;
+}
+
+.machineMultiSearchActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.machineMultiSearchActions button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #5d3f3b;
+  background: transparent;
+  color: #c9d2de;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.machineMultiSearchList {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow: auto;
+  flex: 1 1 auto;
+}
+
+.machineMultiSearchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #dee2ec;
+  font-size: 0.84rem;
+}
+
+.machineMultiSearchRow--on,
+.machineMultiSearchRow:hover {
+  background: rgba(196, 92, 74, 0.16);
+}
+
+.machineMultiSearchRow .machineSearchSelectOptionName {
+  flex: 1 1 auto;
+}
+
+.machineMultiSearchRow .machineSearchSelectOptionMeta {
+  margin-left: auto;
+}
+
+.promoField .machineSearchSelect,
+.promoField .machineIdSearchSelect,
+.promoField .machineMultiSearchSelect {
+  width: 100%;
 }
 
 /* —— Fleet / audit tables —— */

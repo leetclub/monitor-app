@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiJson } from '@/lib/api';
 import { HelpTip } from '@/components/HelpTip';
+import { MachineIdSearchSelect, MachineMultiSearchSelect } from '@/components/MachineSearchSelect';
 
 type MachineRow = { id: string; name: string };
 type TargetMetric = 'revenue' | 'cups';
@@ -422,21 +423,16 @@ export function TargetsAdminSection() {
         <div className="adminGroup">
           <div className="adminGroupLabel">Machine</div>
           <div className="adminFieldCell" style={{ maxWidth: 420 }}>
-            <select
+            <MachineIdSearchSelect
+              aria-label="Machine"
+              machines={machines}
               value={machineId}
-              onChange={(e) => {
-                const id = e.target.value;
+              placeholder="Type to search, then pick…"
+              onChange={(id) => {
                 if (!id) clearForm();
                 else loadMachine(id);
               }}
-            >
-              <option value="">Choose…</option>
-              {machines.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         </div>
 
@@ -529,22 +525,15 @@ export function TargetsAdminSection() {
             <div className="adminGroupLabel">1b · Apply location target to many machines</div>
             <HelpTip text="Sets the same location KD/cups + period on every selected machine. Does not change promoted products — those stay per location." />
           </div>
-          <label className="adminFieldCell" style={{ maxWidth: 480 }}>
+          <div className="adminFieldCell" style={{ maxWidth: 480 }}>
             <span className="adminFieldCaption">Machines (multi-select)</span>
-            <select
-              multiple
-              size={6}
-              value={bulkMachineIds}
-              onChange={(e) => setBulkMachineIds(Array.from(e.target.selectedOptions, (o) => o.value))}
+            <MachineMultiSearchSelect
               aria-label="Machines for bulk location target"
-            >
-              {machines.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              machines={machines}
+              value={bulkMachineIds}
+              onChange={setBulkMachineIds}
+            />
+          </div>
           <div className="adminSaveBar" style={{ marginTop: 10, borderTop: 'none', paddingTop: 0 }}>
             <button
               type="button"
@@ -558,16 +547,6 @@ export function TargetsAdminSection() {
               {bulkLocMut.isPending
                 ? 'Applying…'
                 : `Apply location target to ${bulkMachineIds.length || '…'} machine(s)`}
-            </button>
-            <button
-              type="button"
-              disabled={!machines.length}
-              onClick={() => setBulkMachineIds(machines.map((m) => m.id))}
-            >
-              Select all
-            </button>
-            <button type="button" disabled={!bulkMachineIds.length} onClick={() => setBulkMachineIds([])}>
-              Clear selection
             </button>
           </div>
           {bulkMsg ? (

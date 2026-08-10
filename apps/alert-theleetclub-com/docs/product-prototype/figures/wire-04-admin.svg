@@ -41,7 +41,7 @@
     <text x="216" y="146" class="hint" font-size="8px">1 · Single machine: location + per-location products. 1b · Bulk location only.</text>
 
     <rect class="box" x="216" y="158" width="320" height="28" rx="4"/>
-    <text x="228" y="176" class="tiny">Machine (single edit)</text>
+    <text x="228" y="176" class="tiny">Machine · type to search, then pick</text>
     <text x="216" y="208" class="label" font-size="9px">Location target (KD)</text>
     <rect class="box" x="216" y="214" width="140" height="26" rx="4"/>
     <text x="228" y="231" class="tiny">e.g. 45 · Insight ▾</text>
@@ -50,7 +50,7 @@
     <text x="382" y="231" class="tiny">not changed by bulk</text>
     <text x="216" y="268" class="label" font-size="9px">1b · Multi-select machines</text>
     <rect class="box" x="216" y="274" width="200" height="48" rx="4"/>
-    <text x="228" y="292" class="tiny">☑ Vend-A12  ☑ Vend-B3 …</text>
+    <text x="228" y="292" class="tiny">Search · ☑ Vend-A12  ☑ Vend-B3 …</text>
     <text x="228" y="308" class="tiny">Select all · Apply same KD/cups</text>
     <text x="430" y="268" class="label" font-size="9px">Bulk applies</text>
     <rect class="box" x="430" y="274" width="160" height="48" rx="4"/>
