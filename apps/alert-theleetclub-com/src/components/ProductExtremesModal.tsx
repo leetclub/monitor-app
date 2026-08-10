@@ -48,7 +48,9 @@ export function ProductExtremesModal({
         </div>
         <div className="salesHistoryBody">
 
-        <p className="salesHistoryNote">Names only — highest and lowest selling drinks (cups) in the sales compare period.</p>
+        <p className="salesHistoryNote">
+          Names only — highest and lowest by <strong>sales revenue (KD)</strong> in the compare period.
+        </p>
 
         <div className="productExtremesGrid">
           <section className="productExtremesCol productExtremesHigh">

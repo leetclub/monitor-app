@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 | Date (UTC) | Summary |
 |------------|---------|
 | 2026-08-10 | **Machine lookup everywhere:** Shared searchable machine pickers (`MachineIdSearchSelect` / `MachineMultiSearchSelect`) on Admin Machines (Vending machine), Targets (single + bulk), Promo (single + day targets), QA visit admin. Fleet toolbar search on Red Flags/Overall and QA/Performance location filters unchanged. |
+| 2026-08-10 | **Product mix = sales revenue:** Top/low drinks and Performance product popups rank by **KD sales** (not cups). Tables show KD / prior / YoY; cups stay as a secondary column. RF popup remains names-only. |
 | 2026-08-10 | **Product mix completion:** Revenue cache now backfills `productCounts` for older days (seed re-runs when mix missing). Performance product popup live-fills day/week/month + YoY when cache is thin; Red Flags `/v2` Top/low drink opens names-only top 5 / lowest 5. Growth tables remain sortable. |
 | 2026-08-09 | **Modal header clip fix:** Sticky header + panel transform clipped the first body line (e.g. “Last cleaning…” half-hidden). Headers are pinned outside the scroll area; body scrolls underneath. |
 | 2026-08-09 | **Last clean media / CC dedupe:** Duplicate attachment links (same file from overlapping TM media fields) and a repeated Command Center footnote removed; same-type files numbered; High risk shown as a pill. |

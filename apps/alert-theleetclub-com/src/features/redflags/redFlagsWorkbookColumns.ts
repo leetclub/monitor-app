@@ -100,9 +100,9 @@ export const RED_FLAGS_COLUMNS: Record<
   },
   topLowDrinks: {
     title: 'Top / low drink',
-    sub: 'Highest · lowest selling SKU',
+    sub: 'Highest · lowest by KD',
     placeholderNote:
-      'Highest and lowest selling drinks (cups) in the sales compare period. Tap for top 5 and lowest 5 names.',
+      'Highest and lowest by sales revenue (KD) in the sales compare period. Tap for top 5 and lowest 5 names.',
   },
   mtdSales: {
     title: 'MTD sales',

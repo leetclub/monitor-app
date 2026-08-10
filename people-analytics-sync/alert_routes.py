@@ -164,7 +164,7 @@ def _vendon_revenue_cache_has_day(db: Session, day: date) -> bool:
 
 
 def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
-    """True when the day is missing or still on legacy payloads without productCounts."""
+    """True when the day is missing or still lacks productSales (KD mix) for ranking."""
     rows = (
         db.query(VendonDailyMachineRevenueCache.payload_json)
         .filter(VendonDailyMachineRevenueCache.cache_date == day)
@@ -174,8 +174,20 @@ def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
     if not rows:
         return True
     for (payload,) in rows:
-        if isinstance(payload, dict) and isinstance(payload.get("productCounts"), dict) and payload.get("productCounts"):
+        if (
+            isinstance(payload, dict)
+            and isinstance(payload.get("productSales"), dict)
+            and payload.get("productSales")
+        ):
             return False
+        # Older enrich had cups only — still needs KD mix.
+        if (
+            isinstance(payload, dict)
+            and isinstance(payload.get("productCounts"), dict)
+            and payload.get("productCounts")
+            and not payload.get("productSales")
+        ):
+            return True
     return True
 
 
@@ -2765,6 +2777,63 @@ def register_alert_routes(app) -> None:
                 latest_payload = r.payload_json if isinstance(r.payload_json, dict) else None
         return sales, tx, latest_payload
 
+    def _aggregate_product_sales_in_range(
+        rows: List[VendonDailyMachineRevenueCache],
+        start_incl: date,
+        end_excl: date,
+    ) -> Dict[str, float]:
+        """Sum product KD revenue in [start, end). Falls back to cups-only legacy payloads."""
+        totals: Dict[str, float] = {}
+        for r in rows:
+            cd = r.cache_date
+            if cd is None or cd < start_incl or cd >= end_excl:
+                continue
+            payload = r.payload_json if isinstance(r.payload_json, dict) else {}
+            ps = payload.get("productSales") if isinstance(payload.get("productSales"), dict) else None
+            if ps:
+                for name_raw, kwd_raw in ps.items():
+                    name = str(name_raw or "").strip()
+                    if not name:
+                        continue
+                    try:
+                        kwd = float(kwd_raw or 0)
+                    except (TypeError, ValueError):
+                        kwd = 0.0
+                    if kwd <= 0:
+                        continue
+                    totals[name] = float(totals.get(name) or 0.0) + kwd
+                continue
+            # Legacy: fold top/low revenueKwd or approximate from count (no price → skip KD).
+            for key in ("topProducts", "lowProducts"):
+                raw = payload.get(key)
+                if not isinstance(raw, list):
+                    continue
+                for item in raw:
+                    if not isinstance(item, dict) or not item.get("name"):
+                        continue
+                    name = str(item.get("name") or "").strip()
+                    if not name:
+                        continue
+                    try:
+                        kwd = float(item.get("revenueKwd") or 0)
+                    except (TypeError, ValueError):
+                        kwd = 0.0
+                    if kwd > 0:
+                        totals[name] = float(totals.get(name) or 0.0) + kwd
+            for key in ("topProduct", "lowProduct"):
+                item = payload.get(key)
+                if isinstance(item, dict) and item.get("name"):
+                    name = str(item.get("name") or "").strip()
+                    if not name:
+                        continue
+                    try:
+                        kwd = float(item.get("revenueKwd") or 0)
+                    except (TypeError, ValueError):
+                        kwd = 0.0
+                    if kwd > 0:
+                        totals[name] = max(float(totals.get(name) or 0.0), kwd)
+        return totals
+
     def _aggregate_product_counts_in_range(
         rows: List[VendonDailyMachineRevenueCache],
         start_incl: date,
@@ -2821,13 +2890,38 @@ def register_alert_routes(app) -> None:
                 totals[name] = int(totals.get(name) or 0) + c
         return totals
 
+    def _product_extremes_from_sales(
+        sales: Dict[str, float],
+        counts: Optional[Dict[str, int]] = None,
+        *,
+        n: int = 5,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Top / lowest by KD revenue (names + revenueKwd; cups optional)."""
+        if not sales:
+            return [], []
+        counts = counts or {}
+        ordered = sorted(sales.items(), key=lambda kv: (-float(kv[1]), str(kv[0]).lower()))
+        ordered_low = sorted(sales.items(), key=lambda kv: (float(kv[1]), str(kv[0]).lower()))
+
+        def _row(name: str, kwd: float) -> Dict[str, Any]:
+            return {
+                "name": name,
+                "revenueKwd": round(float(kwd), 4),
+                "count": int(counts.get(name) or 0),
+            }
+
+        top = [_row(name, kwd) for name, kwd in ordered[:n] if float(kwd) > 0]
+        low = [_row(name, kwd) for name, kwd in ordered_low[:n] if float(kwd) > 0]
+        return top, low
+
     def _product_extremes_from_counts(counts: Dict[str, int], *, n: int = 5) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Legacy cups ranking — prefer _product_extremes_from_sales when KD available."""
         if not counts:
             return [], []
         ordered = sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
         ordered_low = sorted(counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
-        top = [{"name": name, "count": int(c)} for name, c in ordered[:n]]
-        low = [{"name": name, "count": int(c)} for name, c in ordered_low[:n]]
+        top = [{"name": name, "count": int(c), "revenueKwd": None} for name, c in ordered[:n]]
+        low = [{"name": name, "count": int(c), "revenueKwd": None} for name, c in ordered_low[:n]]
         return top, low
 
     @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
@@ -2934,8 +3028,14 @@ def register_alert_routes(app) -> None:
                     if isinstance(y_ph, dict) and y_ph.get("label"):
                         peak_hour = {**y_ph, "label": f"{y_ph.get('label')} yest."}
                         peak_hour_from_yesterday = True
+                a_sales_by_product = _aggregate_product_sales_in_range(rows, a_lo, a_hi)
                 a_counts = _aggregate_product_counts_in_range(rows, a_lo, a_hi)
-                top_products, low_products = _product_extremes_from_counts(a_counts, n=5)
+                if a_sales_by_product:
+                    top_products, low_products = _product_extremes_from_sales(
+                        a_sales_by_product, a_counts, n=5
+                    )
+                else:
+                    top_products, low_products = _product_extremes_from_counts(a_counts, n=5)
                 if not top_products:
                     # Prefer lists from latest day payload; else single top/low.
                     raw_top = payload.get("topProducts") if isinstance(payload.get("topProducts"), list) else None
@@ -3433,7 +3533,7 @@ def register_alert_routes(app) -> None:
         if not mid:
             return jsonify({"error": "machineId required"}), 400
 
-        cache_key = f"perf:machine-products:v1:{mid}"
+        cache_key = f"perf:machine-products:v2-rev:{mid}"
         cached = _alert_cache_get(cache_key, 120)
         if cached is not None:
             return jsonify(cached)
@@ -3474,10 +3574,11 @@ def register_alert_routes(app) -> None:
                 return 100.0
             return 0.0
 
-        def _slice_from_counts(
-            cur: Dict[str, int],
-            prev: Dict[str, int],
-            yoy: Dict[str, int],
+        def _slice_from_sales(
+            cur: Dict[str, float],
+            prev: Dict[str, float],
+            yoy: Dict[str, float],
+            cur_cups: Dict[str, int],
             *,
             label: str,
             cur_s: date,
@@ -3490,41 +3591,51 @@ def register_alert_routes(app) -> None:
             names = set(cur) | set(prev) | set(yoy)
             products = []
             for name in names:
-                cups = int(cur.get(name) or 0)
-                prev_cups = int(prev.get(name) or 0)
-                yoy_cups = int(yoy.get(name) or 0)
+                kwd = float(cur.get(name) or 0)
+                prev_kwd = float(prev.get(name) or 0)
+                yoy_kwd = float(yoy.get(name) or 0)
+                cups = int(cur_cups.get(name) or 0)
                 products.append(
                     {
                         "name": name,
+                        "revenueKwd": round(kwd, 4),
+                        "prevRevenueKwd": round(prev_kwd, 4),
+                        "yoyRevenueKwd": round(yoy_kwd, 4),
                         "cups": cups,
-                        "prevCups": prev_cups,
-                        "yoyCups": yoy_cups,
-                        "trendPct": _trend(float(cups), float(prev_cups)),
-                        "yoyTrendPct": _trend(float(cups), float(yoy_cups)),
+                        "trendPct": _trend(kwd, prev_kwd),
+                        "yoyTrendPct": _trend(kwd, yoy_kwd),
                     }
                 )
-            products.sort(key=lambda p: (-int(p["cups"]), str(p["name"]).lower()))
-            top5 = [{"name": p["name"], "cups": p["cups"]} for p in products[:5] if p["cups"] > 0]
-            lowest_src = [p for p in products if p["cups"] > 0]
-            lowest_src.sort(key=lambda p: (int(p["cups"]), str(p["name"]).lower()))
-            lowest5 = [{"name": p["name"], "cups": p["cups"]} for p in lowest_src[:5]]
+            products.sort(key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()))
+            top5 = [
+                {"name": p["name"], "revenueKwd": p["revenueKwd"], "count": p["cups"]}
+                for p in products[:5]
+                if float(p["revenueKwd"]) > 0
+            ]
+            lowest_src = [p for p in products if float(p["revenueKwd"]) > 0]
+            lowest_src.sort(key=lambda p: (float(p["revenueKwd"]), str(p["name"]).lower()))
+            lowest5 = [
+                {"name": p["name"], "revenueKwd": p["revenueKwd"], "count": p["cups"]}
+                for p in lowest_src[:5]
+            ]
             yoy_ranked = sorted(
-                [{"name": n, "cups": int(c)} for n, c in yoy.items() if int(c) > 0],
-                key=lambda p: (-int(p["cups"]), str(p["name"]).lower()),
+                [{"name": n, "revenueKwd": round(float(c), 4)} for n, c in yoy.items() if float(c) > 0],
+                key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()),
             )[:5]
             yoy_compare = []
             for p in top5:
-                yoy_cups = int(yoy.get(p["name"]) or 0)
+                yoy_kwd = float(yoy.get(p["name"]) or 0)
                 yoy_compare.append(
                     {
                         "name": p["name"],
-                        "cups": p["cups"],
-                        "yoyCups": yoy_cups,
-                        "yoyTrendPct": _trend(float(p["cups"]), float(yoy_cups)),
+                        "revenueKwd": p["revenueKwd"],
+                        "yoyRevenueKwd": round(yoy_kwd, 4),
+                        "yoyTrendPct": _trend(float(p["revenueKwd"]), yoy_kwd),
                     }
                 )
             return {
                 "label": label,
+                "metric": "revenueKwd",
                 "window": {
                     "start": cur_s.isoformat(),
                     "end": cur_e.isoformat(),
@@ -3565,40 +3676,48 @@ def register_alert_routes(app) -> None:
             by_grain: Dict[str, Any] = {}
             for grain in ("day", "week", "month"):
                 cur_s, cur_e, prev_s, prev_e, yoy_s, yoy_e, label = _grain_windows(grain)
-                # Cache ranges are inclusive end days; _aggregate uses end_excl.
-                cur = _aggregate_product_counts_in_range(rows, cur_s, cur_e + timedelta(days=1))
-                prev = _aggregate_product_counts_in_range(rows, prev_s, prev_e + timedelta(days=1))
-                yoy = _aggregate_product_counts_in_range(rows, yoy_s, yoy_e + timedelta(days=1))
+                cur = _aggregate_product_sales_in_range(rows, cur_s, cur_e + timedelta(days=1))
+                prev = _aggregate_product_sales_in_range(rows, prev_s, prev_e + timedelta(days=1))
+                yoy = _aggregate_product_sales_in_range(rows, yoy_s, yoy_e + timedelta(days=1))
+                cur_cups = _aggregate_product_counts_in_range(rows, cur_s, cur_e + timedelta(days=1))
 
-                def _live_counts(start_d: date, end_d: date) -> Dict[str, int]:
+                def _live_sales(start_d: date, end_d: date) -> Tuple[Dict[str, float], Dict[str, int]]:
                     try:
                         from_ts, _ = _kuwait_day_bounds_utc(start_d.isoformat())
                         _, to_ts = _kuwait_day_bounds_utc(end_d.isoformat())
                         vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
                         from vendon_proxy_routes import _stats_vend_product_fields
 
-                        live: Dict[str, int] = {}
+                        live_s: Dict[str, float] = {}
+                        live_c: Dict[str, int] = {}
                         for v in vends or []:
                             if not isinstance(v, dict):
                                 continue
                             pn, _sel = _stats_vend_product_fields(v)
                             pn = (pn or "").strip()
-                            if pn:
-                                live[pn] = int(live.get(pn) or 0) + 1
-                        return live
+                            if not pn:
+                                continue
+                            try:
+                                price = float(v.get("price") or 0)
+                            except (TypeError, ValueError):
+                                price = 0.0
+                            live_s[pn] = float(live_s.get(pn) or 0.0) + price
+                            live_c[pn] = int(live_c.get(pn) or 0) + 1
+                        return live_s, live_c
                     except Exception:
                         logger.exception("machine-products live vends %s %s→%s", mid, start_d, end_d)
-                        return {}
+                        return {}, {}
 
-                # Live fallback when cache still lacks productCounts for the window.
                 if not cur:
-                    cur = _live_counts(cur_s, cur_e)
+                    live_s, live_c = _live_sales(cur_s, cur_e)
+                    cur = live_s
+                    if live_c:
+                        cur_cups = live_c
                 if not prev:
-                    prev = _live_counts(prev_s, prev_e)
+                    prev, _ = _live_sales(prev_s, prev_e)
                 if not yoy:
-                    yoy = _live_counts(yoy_s, yoy_e)
+                    yoy, _ = _live_sales(yoy_s, yoy_e)
 
-                # Queue enrich for days in the windows that still lack productCounts.
                 for d0, d1 in ((cur_s, cur_e), (prev_s, prev_e), (yoy_s, yoy_e)):
                     d = d0
                     while d <= d1:
@@ -3606,10 +3725,11 @@ def register_alert_routes(app) -> None:
                             _maybe_seed_vendon_revenue_cache(d, force_product_mix=False)
                         d += timedelta(days=1)
 
-                by_grain[grain] = _slice_from_counts(
+                by_grain[grain] = _slice_from_sales(
                     cur,
                     prev,
                     yoy,
+                    cur_cups,
                     label=label,
                     cur_s=cur_s,
                     cur_e=cur_e,
