@@ -93,12 +93,17 @@ function KpiBox({
   hint,
   tone,
   onClick,
+  title,
+  action,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: 'up' | 'down' | 'neutral';
   onClick?: () => void;
+  title?: string;
+  /** Emphasize as a direct jump (e.g. product mix insights). */
+  action?: boolean;
 }) {
   const cls =
     tone === 'up' ? 'perfKpiToneUp' : tone === 'down' ? 'perfKpiToneDown' : 'perfKpiToneNeutral';
@@ -113,9 +118,9 @@ function KpiBox({
     return (
       <button
         type="button"
-        className={`perfKpi perfKpiWide ${cls} perfKpiClickable`}
+        className={`perfKpi perfKpiWide ${cls} perfKpiClickable${action ? ' perfKpiAction' : ''}`}
         onClick={onClick}
-        title="Open breakdown (All / Top 5 / Lowest 5)"
+        title={title || 'Open breakdown (All / Top 5 / Lowest 5)'}
       >
         {body}
       </button>
@@ -624,6 +629,8 @@ export function PerfOverviewSection({
     else goPrevPage();
   };
 
+  const mixSeed = seriesMachines[0] || ranked[0];
+
   return (
     <section className="perfOverviewHero" aria-labelledby="perf-hero-title">
       <header className="perfOverviewHead">
@@ -772,6 +779,24 @@ export function PerfOverviewSection({
       </div>
 
       <div className="perfKpiRow perfKpiRowHero">
+        {onOpenMachineProducts ? (
+          <KpiBox
+            label="Product mix"
+            value="Open insights"
+            hint={
+              mixSeed
+                ? `Starts at ${mixSeed.machineName} · search any`
+                : 'Day / week / month · YoY by KD'
+            }
+            tone="neutral"
+            action
+            title="Product mix insights — day / week / month sales KD, top & low drinks, YoY. Switch location inside."
+            onClick={() => {
+              if (!mixSeed) return;
+              onOpenMachineProducts(mixSeed.machineId, mixSeed.machineName);
+            }}
+          />
+        ) : null}
         <KpiBox
           label="Deficit"
           value={

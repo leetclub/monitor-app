@@ -793,6 +793,17 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.perfKpiAction {
+  border-color: color-mix(in srgb, #2dd4bf 55%, var(--border-soft));
+  background: color-mix(in srgb, #2dd4bf 10%, var(--panel));
+}
+
+.perfKpiAction strong {
+  color: #2dd4bf;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
 .perfKpiClickable:hover,
 .perfKpiClickable:focus-visible {
   border-color: color-mix(in srgb, var(--accent, #2dd4bf) 55%, var(--border-soft));
