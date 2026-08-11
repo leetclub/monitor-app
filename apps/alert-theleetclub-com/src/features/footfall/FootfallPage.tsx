@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { TargetsPage } from '@/features/footfall/TargetsPage';
 import { AnalyticsPage } from '@/features/footfall/AnalyticsPage';
 import {
   FootfallViewModeProvider,
   type FootfallViewMode,
 } from '@/features/footfall/FootfallViewMode';
+import { documentIsDarkMode, subscribeColorMode } from '@/lib/colorMode';
 import '@/features/footfall/footfall-targets.css';
 import '@/features/footfall/footfall-alert.css';
+
+function useAlertDarkMode(): boolean {
+  return useSyncExternalStore(subscribeColorMode, documentIsDarkMode, () => true);
+}
 
 /**
  * Alert Footfall tab — full Leet Target experience (weekday Targets + Analytics report)
@@ -15,9 +20,10 @@ import '@/features/footfall/footfall-alert.css';
 export function FootfallPage() {
   const [sub, setSub] = useState<'targets' | 'analytics'>('targets');
   const [mode, setMode] = useState<FootfallViewMode>('adjusted');
+  const darkMode = useAlertDarkMode();
 
   return (
-    <div className="alertFootfallRoot">
+    <div className={darkMode ? 'alertFootfallRoot alertFootfallDark' : 'alertFootfallRoot'}>
       <div className="ffAlertToolbar" role="toolbar" aria-label="Footfall controls">
         <div className="ffAlertSubTabs" role="tablist" aria-label="Footfall views">
           <button

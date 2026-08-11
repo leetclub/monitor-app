@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useSyncExternalStore, type ReactNode } from 'react';
 import { NightChartContext } from '@/features/footfall/NightChartContext';
+import { documentIsDarkMode, subscribeColorMode } from '@/lib/colorMode';
 
 type Props = {
   id: string;
@@ -9,10 +10,16 @@ type Props = {
   className?: string;
 };
 
+function useAlertDarkMode(): boolean {
+  return useSyncExternalStore(subscribeColorMode, documentIsDarkMode, () => true);
+}
+
 export function DetailSection({ id, focusMode, focusedSection, children, className }: Props) {
+  const darkMode = useAlertDarkMode();
   const dimmed = Boolean(focusMode && focusedSection && focusedSection !== id);
   const active = Boolean(focusMode && focusedSection === id);
-  const nightCharts = active && focusMode;
+  /* Alert dark mode → night chart palette; night-focus mode still forces night on the active panel. */
+  const nightCharts = darkMode || (active && focusMode);
 
   return (
     <NightChartContext.Provider value={nightCharts}>

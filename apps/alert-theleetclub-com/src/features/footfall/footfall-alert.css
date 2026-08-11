@@ -58,3 +58,268 @@
 .alertFootfallRoot .ffTopBar h1 {
   font-size: 1.15rem;
 }
+
+/*
+ * Dark mode — Targets CSS still hardcodes many light surfaces (#fff / pale blues).
+ * Force Alert panel tokens so Footfall matches the rest of the shell.
+ */
+html[data-mode='dark'] .alertFootfallRoot,
+.alertFootfallDark {
+  --bg: var(--panel, #141922);
+  --card: var(--panel-elevated, #1c2330);
+  --border: var(--border, #3a414d);
+  --text: var(--text, #dee2ec);
+  --muted: var(--muted, #8a9aab);
+  color: var(--text);
+}
+
+html[data-mode='dark'] .alertFootfallRoot .btnSecondary,
+.alertFootfallDark .btnSecondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffd4c2;
+  border-color: var(--border);
+}
+
+html[data-mode='dark'] .alertFootfallRoot .dateRow input[type='date'],
+html[data-mode='dark'] .alertFootfallRoot .dateField input[type='date'],
+html[data-mode='dark'] .alertFootfallRoot select,
+html[data-mode='dark'] .alertFootfallRoot input[type='search'],
+html[data-mode='dark'] .alertFootfallRoot input[type='text'],
+html[data-mode='dark'] .alertFootfallRoot input[type='number'],
+.alertFootfallDark .dateRow input[type='date'],
+.alertFootfallDark .dateField input[type='date'],
+.alertFootfallDark select,
+.alertFootfallDark input[type='search'],
+.alertFootfallDark input[type='text'],
+.alertFootfallDark input[type='number'] {
+  background: #121820 !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  color-scheme: dark;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .dayTable .avgRow,
+.alertFootfallDark .dayTable .avgRow {
+  background: rgba(46, 158, 90, 0.12) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .dayTable .cmpRow,
+.alertFootfallDark .dayTable .cmpRow {
+  background: rgba(196, 92, 74, 0.1) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .kpi,
+html[data-mode='dark'] .alertFootfallRoot .sidebar,
+html[data-mode='dark'] .alertFootfallRoot .detail,
+html[data-mode='dark'] .alertFootfallRoot .chartPanel,
+html[data-mode='dark'] .alertFootfallRoot .hourlyChartBlock,
+html[data-mode='dark'] .alertFootfallRoot .insightCard,
+html[data-mode='dark'] .alertFootfallRoot .insightsPanel,
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCard,
+html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner,
+html[data-mode='dark'] .alertFootfallRoot .fleetHeatmapSection,
+html[data-mode='dark'] .alertFootfallRoot .fleetPanel,
+html[data-mode='dark'] .alertFootfallRoot .compareQuickBar,
+html[data-mode='dark'] .alertFootfallRoot .filterBar,
+html[data-mode='dark'] .alertFootfallRoot .locCard,
+html[data-mode='dark'] .alertFootfallRoot .locSidebarCard,
+html[data-mode='dark'] .alertFootfallRoot .targetsPeriodBar,
+html[data-mode='dark'] .alertFootfallRoot .kuWeekTabs,
+html[data-mode='dark'] .alertFootfallRoot .panelExportWrap,
+html[data-mode='dark'] .alertFootfallRoot .chartExportWrap,
+html[data-mode='dark'] .alertFootfallRoot .metricsTableWrap,
+html[data-mode='dark'] .alertFootfallRoot .dataQualityBanner,
+html[data-mode='dark'] .alertFootfallRoot .mirrorNote,
+html[data-mode='dark'] .alertFootfallRoot .sectionFlyBar,
+html[data-mode='dark'] .alertFootfallRoot .netTrafficBlock,
+html[data-mode='dark'] .alertFootfallRoot .comparePeriodKpis,
+html[data-mode='dark'] .alertFootfallRoot .periodCompareCard,
+.alertFootfallDark .kpi,
+.alertFootfallDark .sidebar,
+.alertFootfallDark .detail,
+.alertFootfallDark .chartPanel,
+.alertFootfallDark .hourlyChartBlock,
+.alertFootfallDark .insightCard,
+.alertFootfallDark .insightsPanel,
+.alertFootfallDark .hourlyCaptureCard,
+.alertFootfallDark .hourlyGapBanner,
+.alertFootfallDark .fleetHeatmapSection,
+.alertFootfallDark .fleetPanel,
+.alertFootfallDark .compareQuickBar,
+.alertFootfallDark .filterBar,
+.alertFootfallDark .locCard,
+.alertFootfallDark .locSidebarCard,
+.alertFootfallDark .targetsPeriodBar,
+.alertFootfallDark .kuWeekTabs,
+.alertFootfallDark .panelExportWrap,
+.alertFootfallDark .chartExportWrap,
+.alertFootfallDark .metricsTableWrap,
+.alertFootfallDark .dataQualityBanner,
+.alertFootfallDark .mirrorNote,
+.alertFootfallDark .sectionFlyBar,
+.alertFootfallDark .netTrafficBlock,
+.alertFootfallDark .comparePeriodKpis,
+.alertFootfallDark .periodCompareCard {
+  background: var(--card) !important;
+  background-color: var(--card) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .kpiLabel,
+html[data-mode='dark'] .alertFootfallRoot .hint,
+html[data-mode='dark'] .alertFootfallRoot .kpiHint,
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureHint,
+html[data-mode='dark'] .alertFootfallRoot .insightCardHint,
+html[data-mode='dark'] .alertFootfallRoot .insightsPanelSummary,
+html[data-mode='dark'] .alertFootfallRoot .subtitle,
+html[data-mode='dark'] .alertFootfallRoot .periodBadge,
+html[data-mode='dark'] .alertFootfallRoot .footfallNote,
+html[data-mode='dark'] .alertFootfallRoot .muted,
+.alertFootfallDark .kpiLabel,
+.alertFootfallDark .hint,
+.alertFootfallDark .kpiHint,
+.alertFootfallDark .hourlyCaptureHint,
+.alertFootfallDark .insightCardHint,
+.alertFootfallDark .insightsPanelSummary,
+.alertFootfallDark .subtitle,
+.alertFootfallDark .periodBadge,
+.alertFootfallDark .footfallNote,
+.alertFootfallDark .muted {
+  color: var(--muted) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .sectionTitle,
+html[data-mode='dark'] .alertFootfallRoot .locTitle,
+html[data-mode='dark'] .alertFootfallRoot .dayTableTitle,
+html[data-mode='dark'] .alertFootfallRoot .subsectionTitle,
+html[data-mode='dark'] .alertFootfallRoot .kpiValue,
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureValue,
+html[data-mode='dark'] .alertFootfallRoot .insightCardValue,
+html[data-mode='dark'] .alertFootfallRoot .metricValue,
+html[data-mode='dark'] .alertFootfallRoot .ffTopBar h1,
+.alertFootfallDark .sectionTitle,
+.alertFootfallDark .locTitle,
+.alertFootfallDark .dayTableTitle,
+.alertFootfallDark .subsectionTitle,
+.alertFootfallDark .kpiValue,
+.alertFootfallDark .hourlyCaptureValue,
+.alertFootfallDark .insightCardValue,
+.alertFootfallDark .metricValue,
+.alertFootfallDark .ffTopBar h1 {
+  color: var(--text) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .metricsTable,
+html[data-mode='dark'] .alertFootfallRoot .dayTable,
+html[data-mode='dark'] .alertFootfallRoot .fleetTable,
+.alertFootfallDark .metricsTable,
+.alertFootfallDark .dayTable,
+.alertFootfallDark .fleetTable {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .metricsTable th,
+html[data-mode='dark'] .alertFootfallRoot .dayTable th,
+html[data-mode='dark'] .alertFootfallRoot .fleetTable th,
+.alertFootfallDark .metricsTable th,
+.alertFootfallDark .dayTable th,
+.alertFootfallDark .fleetTable th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .metricsTable td,
+html[data-mode='dark'] .alertFootfallRoot .dayTable td,
+html[data-mode='dark'] .alertFootfallRoot .fleetTable td,
+.alertFootfallDark .metricsTable td,
+.alertFootfallDark .dayTable td,
+.alertFootfallDark .fleetTable td {
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .metricsTable tr:nth-child(even) td,
+html[data-mode='dark'] .alertFootfallRoot .dayTable tr:nth-child(even) td,
+html[data-mode='dark'] .alertFootfallRoot .fleetTable tr:nth-child(even) td,
+.alertFootfallDark .metricsTable tr:nth-child(even) td,
+.alertFootfallDark .dayTable tr:nth-child(even) td,
+.alertFootfallDark .fleetTable tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locSegPill-KU,
+.alertFootfallDark .locSegPill-KU {
+  background: rgba(59, 130, 246, 0.22) !important;
+  color: #93c5fd !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locSegPill-MOH,
+.alertFootfallDark .locSegPill-MOH {
+  background: rgba(249, 115, 22, 0.22) !important;
+  color: #fdba74 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .tag,
+html[data-mode='dark'] .alertFootfallRoot .badge,
+.alertFootfallDark .tag,
+.alertFootfallDark .badge {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .sidebar button,
+html[data-mode='dark'] .alertFootfallRoot .locBtn,
+html[data-mode='dark'] .alertFootfallRoot .kuWeekTab,
+html[data-mode='dark'] .alertFootfallRoot .sectionFlyLink,
+.alertFootfallDark .sidebar button,
+.alertFootfallDark .locBtn,
+.alertFootfallDark .kuWeekTab,
+.alertFootfallDark .sectionFlyLink {
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  background: transparent !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .sidebar button.active,
+html[data-mode='dark'] .alertFootfallRoot .locBtn.active,
+html[data-mode='dark'] .alertFootfallRoot .kuWeekTab.active,
+html[data-mode='dark'] .alertFootfallRoot .sectionFlyLink.active,
+.alertFootfallDark .sidebar button.active,
+.alertFootfallDark .locBtn.active,
+.alertFootfallDark .kuWeekTab.active,
+.alertFootfallDark .sectionFlyLink.active {
+  background: rgba(196, 92, 74, 0.18) !important;
+  border-color: #c45c4a !important;
+  color: #ffd4c2 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .chartPanelNight,
+html[data-mode='dark'] .alertFootfallRoot .hourlyChartBlockNight .chartPanel,
+.alertFootfallDark .chartPanelNight,
+.alertFootfallDark .hourlyChartBlockNight .chartPanel {
+  background: #0a0e14 !important;
+}
+
+/* Soften remaining pale-blue / cream banners that Targets CSS hardcodes */
+html[data-mode='dark'] .alertFootfallRoot [class*='Banner'],
+html[data-mode='dark'] .alertFootfallRoot [class*='Callout'],
+html[data-mode='dark'] .alertFootfallRoot [class*='Note']:not(.footfallNote),
+.alertFootfallDark [class*='Banner'],
+.alertFootfallDark [class*='Callout'] {
+  border-color: var(--border) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .dataQualityBanner,
+html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner,
+.alertFootfallDark .dataQualityBanner,
+.alertFootfallDark .hourlyGapBanner {
+  background: rgba(251, 191, 36, 0.1) !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+  color: #fde68a !important;
+}

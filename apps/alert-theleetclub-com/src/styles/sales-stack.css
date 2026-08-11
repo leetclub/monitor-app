@@ -805,6 +805,67 @@
 }
 
 .productExtremesModal,
+.salesHistoryModal.remoteCreditsModal {
+  width: min(560px, 96vw);
+  max-width: min(560px, 96vw);
+  max-height: min(92dvh, 820px);
+}
+
+.remoteCreditsLossHero {
+  margin: 0 0 1rem;
+  padding: 1rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid rgba(196, 92, 74, 0.5);
+  background: linear-gradient(135deg, rgba(196, 92, 74, 0.28), rgba(196, 92, 74, 0.08));
+}
+
+.remoteCreditsLossHeroLabel {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #8a9aab);
+}
+
+.remoteCreditsLossHeroValue {
+  margin: 0.35rem 0 0.45rem;
+  font-size: clamp(1.55rem, 4vw, 1.9rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: #ffb4a2;
+  line-height: 1.15;
+}
+
+.remoteCreditsLossHeroHint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--muted, #8a9aab);
+}
+
+.remoteCreditsLogSection {
+  margin-top: 12px;
+}
+
+.remoteCreditsLogMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.remoteCreditsLogSub {
+  font-size: 0.78rem;
+}
+
+.remoteCreditsLogAmt {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .machineProductSalesModal,
 .salesHistoryModal.machineProductSalesModal,
 .salesHistoryModal.perfGrowthModal {

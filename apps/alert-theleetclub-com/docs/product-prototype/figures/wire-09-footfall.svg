@@ -15,7 +15,7 @@
   <g transform="translate(8, 28)">
     <rect class="box" x="0" y="0" width="784" height="240" rx="6"/>
     <text x="12" y="28" class="title">Footfall</text>
-    <text x="12" y="46" class="hint">Leet Target layout in Alert theme · Targets + Full report</text>
+    <text x="12" y="46" class="hint">Leet Target layout · Alert dark theme · Targets + Full report</text>
     <rect class="pill" x="12" y="60" width="72" height="22" rx="6"/>
     <text x="22" y="75" class="tiny">Targets</text>
     <rect class="pill" x="92" y="60" width="88" height="22" rx="6"/>
@@ -23,8 +23,8 @@
     <rect class="pill" x="520" y="60" width="120" height="22" rx="6"/>
     <text x="532" y="75" class="tiny">Adjusted · Raw camera</text>
     <text x="12" y="110" class="label">Segment tabs · location sidebar · heatmap / hourly / fleet</text>
-    <text x="12" y="132" class="hint">Adjusted = mirror + unique ratio. Raw = camera detections only (mirrored ’ 0).</text>
+    <text x="12" y="132" class="hint">Adjusted = mirror + unique ratio. Raw = camera detections only (mirrored = 0).</text>
     <text x="12" y="160" class="label">Credits sent (Red Flags)</text>
-    <text x="12" y="180" class="hint">Tap count ’ WEB cashless categories + KD loss (tests / refunds / unidentified).</text>
+    <text x="12" y="180" class="hint">Tap count ? scrollable popup; hero = est. lost revenue; breakdown + events below.</text>
   </g>
 </svg>

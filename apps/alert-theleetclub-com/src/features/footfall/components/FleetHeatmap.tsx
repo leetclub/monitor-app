@@ -16,6 +16,7 @@ import {
   visualMapForMetric,
   type FleetHeatmapMetric,
 } from '@/features/footfall/lib/fleetHeatmapMetrics';
+import { useNightChart } from '@/features/footfall/NightChartContext';
 
 type Props = {
   report: ReportPayload;
@@ -39,6 +40,7 @@ function pickFleetRows(locations: LocationReport[]): LocationReport[] {
 export function FleetHeatmap({ report, locations, onSelect }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
 
   const salesWeekOnly = locations.some((l) => l.daily.periodsAligned === false);
   const hasNet = fleetHasNetHourly(locations);
@@ -91,15 +93,17 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
     chartInst.current = chart;
 
     const seriesName = FLEET_HEATMAP_METRICS.find((m) => m.id === metric)?.label ?? metric;
+    const axisMuted = nightMode ? '#8899aa' : '#64748b';
 
     chart.setOption(
       {
+        backgroundColor: nightMode ? '#0a0e14' : '#ffffff',
         title: {
           text: heatmapTitle(metric, salesWeekOnly),
           subtext: heatmapSubtext(metric, salesWeekOnly),
           left: 'center',
-          textStyle: { fontSize: 13, fontWeight: 600 },
-          subtextStyle: { fontSize: 10, color: '#64748b' },
+          textStyle: { fontSize: 13, fontWeight: 600, color: nightMode ? '#f0f8ff' : '#0f2942' },
+          subtextStyle: { fontSize: 10, color: axisMuted },
         },
         tooltip: {
           position: 'top',
@@ -113,13 +117,21 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
           },
         },
         grid: { left: 140, right: 28, top: 72, bottom: 56 },
-        xAxis: { type: 'category', data: hours, splitArea: { show: true } },
+        xAxis: {
+          type: 'category',
+          data: hours,
+          splitArea: { show: true },
+          axisLabel: { color: axisMuted },
+        },
         yAxis: {
           type: 'category',
           data: top.map((l) => l.locationName),
-          axisLabel: { width: 130, overflow: 'truncate', fontSize: 10 },
+          axisLabel: { width: 130, overflow: 'truncate', fontSize: 10, color: axisMuted },
         },
-        visualMap: visualMapForMetric(metric, data, report.benchmarkConversionPct),
+        visualMap: {
+          ...visualMapForMetric(metric, data, report.benchmarkConversionPct),
+          textStyle: { color: axisMuted },
+        },
         series: [
           {
             name: seriesName,
@@ -128,7 +140,7 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
             label: {
               show: true,
               fontSize: 9,
-              color: '#0f2942',
+              color: nightMode ? '#e8f8ff' : '#0f2942',
               formatter: (params: unknown) => {
                 const row = params as { data: [number, number, number] };
                 const [xi, yi] = row.data;
@@ -163,7 +175,7 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
       chart.dispose();
       chartInst.current = null;
     };
-  }, [report, locations, onSelect, salesWeekOnly, metric]);
+  }, [report, locations, onSelect, salesWeekOnly, metric, nightMode]);
 
   const hasData = locations.some(
     (l) => (l.daily.projectedFootfall ?? l.daily.totalFootfall) > 0 || l.daily.totalCups > 0,

@@ -69,13 +69,23 @@ function CreditsDetailModal({
   const portal = getAlertModalPortal();
   if (!portal) return null;
 
+  const lossKd = s?.loss_kd;
+  const lossNum = lossKd != null && Number.isFinite(Number(lossKd)) ? Number(lossKd) : null;
+
   return createPortal(
     <div className="salesHistoryBackdrop" role="presentation" {...backdrop}>
-      <div className="salesHistoryPanel" role="dialog" aria-modal="true" aria-labelledby="rc-credits-title" {...panel}>
+      <div
+        className="salesHistoryModal remoteCreditsModal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rc-credits-title"
+        {...panel}
+      >
         <header className="salesHistoryHead">
           <div>
+            <p className="salesHistoryEyebrow">Credits sent · lost revenue</p>
             <h2 id="rc-credits-title" className="salesHistoryTitle">
-              Credits sent · {machineName || machineId}
+              {machineName || machineId}
             </h2>
             <p className="salesHistorySub">
               #{machineId}
@@ -90,59 +100,70 @@ function CreditsDetailModal({
           {detailQ.isLoading ? <AlertModalAnticipate hint="Credits insight incoming" lines={4} /> : null}
           {detailQ.isError ? <p className="salesHistoryNote">{(detailQ.error as Error).message}</p> : null}
           {detailQ.data?.error ? <p className="salesHistoryNote">{detailQ.data.error}</p> : null}
+
           {s ? (
-            <section className="operatorWorkflowSection">
-              <h3 className="salesHistoryCompareTitle">Today insight</h3>
-              <ul className="salesHistoryList">
-                <li className="salesHistoryRow">
-                  <span>WEB cashless events</span>
-                  <strong>{s.credits_sent ?? 0}</strong>
-                </li>
-                <li className="salesHistoryRow">
-                  <span>WEB cashless KD (all)</span>
-                  <strong>{fmtKd(s.total_kd)}</strong>
-                </li>
-                <li className="salesHistoryRow">
-                  <span>Drink tests</span>
-                  <strong>
-                    {s.drink_tests_count ?? 0} · {fmtKd(s.drink_tests_kd)}
-                  </strong>
-                </li>
-                <li className="salesHistoryRow">
-                  <span>Custom refunds</span>
-                  <strong>
-                    {s.custom_refunds_count ?? 0} · {fmtKd(s.custom_refunds_kd)}
-                  </strong>
-                </li>
-                <li className="salesHistoryRow">
-                  <span>Reason unidentified</span>
-                  <strong>
-                    {s.reason_unidentified_count ?? 0} · {fmtKd(s.reason_unidentified_kd)}
-                  </strong>
-                </li>
-                <li className="salesHistoryRow">
-                  <span>Est. non-revenue loss</span>
-                  <strong>{fmtKd(s.loss_kd)}</strong>
-                </li>
-              </ul>
-              <p className="salesHistoryNote">{detailQ.data?.note}</p>
-            </section>
+            <>
+              <section className="remoteCreditsLossHero" aria-live="polite">
+                <p className="remoteCreditsLossHeroLabel">Est. lost revenue today</p>
+                <p className="remoteCreditsLossHeroValue">{fmtKd(lossNum)}</p>
+                <p className="remoteCreditsLossHeroHint">
+                  Drink tests + custom refunds + reason unidentified (WEB cashless non-sale KD). Not
+                  subtracted from board sales.
+                </p>
+              </section>
+
+              <section className="operatorWorkflowSection">
+                <h3 className="salesHistoryCompareTitle">Breakdown</h3>
+                <ul className="salesHistoryList">
+                  <li className="salesHistoryRow">
+                    <span>WEB cashless events</span>
+                    <strong>{s.credits_sent ?? 0}</strong>
+                  </li>
+                  <li className="salesHistoryRow">
+                    <span>WEB cashless KD (all)</span>
+                    <strong>{fmtKd(s.total_kd)}</strong>
+                  </li>
+                  <li className="salesHistoryRow">
+                    <span>Drink tests</span>
+                    <strong>
+                      {s.drink_tests_count ?? 0} · {fmtKd(s.drink_tests_kd)}
+                    </strong>
+                  </li>
+                  <li className="salesHistoryRow">
+                    <span>Custom refunds</span>
+                    <strong>
+                      {s.custom_refunds_count ?? 0} · {fmtKd(s.custom_refunds_kd)}
+                    </strong>
+                  </li>
+                  <li className="salesHistoryRow">
+                    <span>Reason unidentified</span>
+                    <strong>
+                      {s.reason_unidentified_count ?? 0} · {fmtKd(s.reason_unidentified_kd)}
+                    </strong>
+                  </li>
+                </ul>
+                {detailQ.data?.note ? <p className="salesHistoryNote">{detailQ.data.note}</p> : null}
+              </section>
+            </>
           ) : null}
+
           {(detailQ.data?.logs?.length || 0) > 0 ? (
-            <section className="operatorWorkflowSection" style={{ marginTop: 12 }}>
-              <h3 className="salesHistoryCompareTitle">Recent events</h3>
-              <ul className="salesHistoryList">
+            <section className="operatorWorkflowSection remoteCreditsLogSection">
+              <h3 className="salesHistoryCompareTitle">
+                Recent events ({detailQ.data!.logs!.length})
+              </h3>
+              <ul className="salesHistoryList remoteCreditsLogList">
                 {detailQ.data!.logs!.map((row, i) => (
                   <li key={`${row.datetime}-${i}`} className="salesHistoryRow">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                    <div className="remoteCreditsLogMeta">
                       <strong>{row.category || '—'}</strong>
-                      <span className="muted" style={{ fontSize: '0.78rem' }}>
+                      <span className="muted remoteCreditsLogSub">
                         {[row.datetime, row.product_name, row.user_name].filter(Boolean).join(' · ')}
                         {row.matched_remote_credit ? ' · matched remote credit' : ''}
                         {row.matched_failed_dispense ? ' · matched failed dispense' : ''}
                       </span>
                     </div>
-                    <strong>{fmtKd(row.credit_amount)}</strong>
+                    <strong className="remoteCreditsLogAmt">{fmtKd(row.credit_amount)}</strong>
                   </li>
                 ))}
               </ul>
@@ -174,7 +195,7 @@ export function RemoteCreditsCell({
       <button
         type="button"
         className={`rfCreditsBtn ${toneClassName}`.trim()}
-        title="Open credits insights (WEB cashless / tests / refunds)"
+        title="Open credits insights — lost revenue (WEB cashless / tests / refunds)"
         {...bindStopRowClick(() => setOpen(true))}
       >
         {String(count)}

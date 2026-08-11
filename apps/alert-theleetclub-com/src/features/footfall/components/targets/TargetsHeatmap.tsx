@@ -9,6 +9,7 @@ import {
   targetsBenchmarkForLocation,
 } from '@/features/footfall/lib/targetsBenchmark';
 import { footfallCupsColonRatio } from '@/features/footfall/lib/ratioLabel';
+import { useNightChart } from '@/features/footfall/NightChartContext';
 
 type HeatMetric = 'cups' | 'ratio' | 'conversion';
 
@@ -53,6 +54,7 @@ type Props = {
 export function TargetsHeatmap({ locations, onSelect }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const [metric, setMetric] = useState<HeatMetric>('cups');
   const [popup, setPopup] = useState<{
     loc: LocationReport;
@@ -97,22 +99,35 @@ export function TargetsHeatmap({ locations, onSelect }: Props) {
       metric === 'conversion'
         ? Math.max(25, ...top.map((l) => targetsBenchmarkForLocation(l) * 1.5), maxVal)
         : maxVal;
+    const axisMuted = nightMode ? '#8899aa' : '#64748b';
+    const cupsRamp = nightMode
+      ? ['#1a2e14', '#3f6212', '#84cc16', '#d9f99d']
+      : ['#fff9e6', '#fde68a', '#a3e635', '#4d7c0f'];
+    const mixRamp = nightMode
+      ? ['#7f1d1d', '#c2410c', '#ca8a04', '#4d7c0f', '#22c55e']
+      : ['#c0392b', '#e67e22', '#f9e79f', '#aed581', '#2e9e5a'];
 
     chart.setOption({
+      backgroundColor: nightMode ? '#0a0e14' : '#ffffff',
       title: {
         text: `Heatmap — ${metricMeta.label}`,
         subtext: `${metricMeta.explain} · Cell labels omit % · click for detail`,
         left: 'center',
-        textStyle: { fontSize: 13, fontWeight: 600 },
-        subtextStyle: { fontSize: 10, color: '#64748b' },
+        textStyle: { fontSize: 13, fontWeight: 600, color: nightMode ? '#f0f8ff' : '#0f2942' },
+        subtextStyle: { fontSize: 10, color: axisMuted },
       },
       tooltip: { show: false },
       grid: { left: 140, right: 28, top: 80, bottom: 56 },
-      xAxis: { type: 'category', data: hours, splitArea: { show: true } },
+      xAxis: {
+        type: 'category',
+        data: hours,
+        splitArea: { show: true },
+        axisLabel: { color: axisMuted },
+      },
       yAxis: {
         type: 'category',
         data: top.map((l) => l.locationName),
-        axisLabel: { width: 130, overflow: 'truncate', fontSize: 10 },
+        axisLabel: { width: 130, overflow: 'truncate', fontSize: 10, color: axisMuted },
       },
       visualMap: {
         min: 0,
@@ -121,11 +136,9 @@ export function TargetsHeatmap({ locations, onSelect }: Props) {
         orient: 'horizontal',
         left: 'center',
         bottom: 0,
+        textStyle: { color: axisMuted },
         inRange: {
-          color:
-            metric === 'cups'
-              ? ['#fff9e6', '#fde68a', '#a3e635', '#4d7c0f']
-              : ['#c0392b', '#e67e22', '#f9e79f', '#aed581', '#2e9e5a'],
+          color: metric === 'cups' ? cupsRamp : mixRamp,
         },
       },
       series: [
@@ -140,6 +153,7 @@ export function TargetsHeatmap({ locations, onSelect }: Props) {
               return cellLabel(metric, v, h);
             },
             fontSize: 9,
+            color: nightMode ? '#e8f8ff' : '#0f172a',
           },
         },
       ],
@@ -164,7 +178,7 @@ export function TargetsHeatmap({ locations, onSelect }: Props) {
       chart.dispose();
       chartInst.current = null;
     };
-  }, [top, metric, metricMeta, onSelect]);
+  }, [top, metric, metricMeta, onSelect, nightMode]);
 
   const popupBench = popup ? targetsBenchmarkForLocation(popup.loc) : 0;
   const popupConv = popup ? hourConversionPct(popup.h) : 0;
