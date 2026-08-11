@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAccess } from '@/context/AccessContext';
 import { NoAccessPage } from '@/pages/NoAccessPage';
@@ -8,7 +9,10 @@ import { OverallPage } from '@/features/overall/OverallPage';
 import { PerformancePage } from '@/features/performance/PerformancePage';
 import { QaVisitPage } from '@/features/qavisit/QaVisitPage';
 import { PromoPage } from '@/features/promo/PromoPage';
-import { FootfallPage } from '@/features/footfall/FootfallPage';
+
+const FootfallPage = lazy(() =>
+  import('@/features/footfall/FootfallPage').then((m) => ({ default: m.FootfallPage })),
+);
 
 /**
  * Authenticated Alert v2 — Manus shell + Classic boards (same APIs, cells, and popups as `/`).
@@ -43,18 +47,20 @@ export function V2App() {
   }
 
   return (
-    <Routes>
-      <Route element={<V2Shell />}>
-        <Route index element={<Navigate to="red-flags" replace />} />
-        <Route path="red-flags" element={<RedFlagsPage variant="manus" />} />
-        <Route path="overall" element={<OverallPage variant="manus" />} />
-        <Route path="qa-visit" element={<QaVisitPage variant="manus" />} />
-        <Route path="performance" element={<PerformancePage variant="manus" />} />
-        <Route path="footfall" element={<FootfallPage />} />
-        <Route path="promo" element={<PromoPage variant="manus" />} />
-        <Route path="admin" element={<V2AdminPage />} />
-        <Route path="*" element={<Navigate to="red-flags" replace />} />
-      </Route>
-    </Routes>
+    <Suspense fallback={<div className="v2LoginShell v2LoginShellSolo"><p className="v2LoginMuted">Loading…</p></div>}>
+      <Routes>
+        <Route element={<V2Shell />}>
+          <Route index element={<Navigate to="red-flags" replace />} />
+          <Route path="red-flags" element={<RedFlagsPage variant="manus" />} />
+          <Route path="overall" element={<OverallPage variant="manus" />} />
+          <Route path="qa-visit" element={<QaVisitPage variant="manus" />} />
+          <Route path="performance" element={<PerformancePage variant="manus" />} />
+          <Route path="footfall" element={<FootfallPage />} />
+          <Route path="promo" element={<PromoPage variant="manus" />} />
+          <Route path="admin" element={<V2AdminPage />} />
+          <Route path="*" element={<Navigate to="red-flags" replace />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, NavLink, Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AdminPage } from './features/admin/AdminPage';
 import { RedFlagsPage } from './features/redflags/RedFlagsPage';
@@ -6,7 +6,6 @@ import { OverallPage } from './features/overall/OverallPage';
 import { QaVisitPage } from './features/qavisit/QaVisitPage';
 import { PerformancePage } from './features/performance/PerformancePage';
 import { PromoPage } from './features/promo/PromoPage';
-import { FootfallPage } from './features/footfall/FootfallPage';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AccessProvider, useAccess } from '@/context/AccessContext';
 import { LoginPage } from '@/pages/LoginPage';
@@ -25,6 +24,11 @@ import {
   coerceNavExpandedForViewport,
   type NavLayout,
 } from '@/lib/navDrawer';
+
+/** Lazy so Footfall CSS does not load on Red Flags / Overall. */
+const FootfallPage = lazy(() =>
+  import('./features/footfall/FootfallPage').then((m) => ({ default: m.FootfallPage })),
+);
 
 function kuwaitClockLabel(d: Date): string {
   try {
@@ -245,18 +249,20 @@ function V2LoginRedirect() {
 
 function AppRoutesOutlet() {
   return (
-    <Routes>
-      <Route path="/" element={<DefaultRedirect />} />
-      <Route path="/home" element={<DefaultRedirect />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/red-flags" element={<RedFlagsPage />} />
-      <Route path="/overall" element={<OverallPage />} />
-      <Route path="/qa-visit" element={<QaVisitPage />} />
-      <Route path="/performance" element={<PerformancePage />} />
-      <Route path="/footfall" element={<FootfallPage />} />
-      <Route path="/promo" element={<PromoPage />} />
-      <Route path="*" element={<DefaultRedirect />} />
-    </Routes>
+    <Suspense fallback={<div className="panel" style={{ margin: 16 }}>Loading…</div>}>
+      <Routes>
+        <Route path="/" element={<DefaultRedirect />} />
+        <Route path="/home" element={<DefaultRedirect />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/red-flags" element={<RedFlagsPage />} />
+        <Route path="/overall" element={<OverallPage />} />
+        <Route path="/qa-visit" element={<QaVisitPage />} />
+        <Route path="/performance" element={<PerformancePage />} />
+        <Route path="/footfall" element={<FootfallPage />} />
+        <Route path="/promo" element={<PromoPage />} />
+        <Route path="*" element={<DefaultRedirect />} />
+      </Routes>
+    </Suspense>
   );
 }
 

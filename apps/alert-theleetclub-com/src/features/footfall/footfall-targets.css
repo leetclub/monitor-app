@@ -1,5 +1,5 @@
 /* Alert Footfall tab — Targets UI themed for Alert shell */
-.alertFootfallRoot {
+.alertFootfallRoot{
   --ff-page: var(--bg, #111318);
   --card: var(--panel, #1e1f25);
   --card-soft: var(--surface-container-high, #282a2f);
@@ -17,10 +17,10 @@
   padding: 0.35rem 0 2rem;
   box-sizing: border-box;
 }
-.alertFootfallRoot *, .alertFootfallRoot *::before, .alertFootfallRoot *::after { box-sizing: border-box; }
-.alertFootfallRoot .appShell { max-width: none; margin: 0; padding: 0; }
+.alertFootfallRoot *, .alertFootfallRoot *::before, .alertFootfallRoot *::after{ box-sizing: border-box; }
+.alertFootfallRoot .appShell{ max-width: none; margin: 0; padding: 0; }
 
-.ffTopBar {
+.alertFootfallRoot .ffTopBar{
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -34,20 +34,20 @@
   box-shadow: 0 4px 24px rgba(30, 111, 214, 0.06);
 }
 
-.ffTopBar h1 {
+.alertFootfallRoot .ffTopBar h1{
   margin: 0;
   font-size: 1.45rem;
   font-weight: 700;
 }
 
-.subtitle {
+.alertFootfallRoot .subtitle{
   margin: 0.35rem 0 0;
   color: var(--muted);
   font-size: 0.88rem;
   max-width: 52rem;
 }
 
-.dateFilters {
+.alertFootfallRoot .dateFilters{
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -55,7 +55,7 @@
   margin-bottom: 0.65rem;
 }
 
-.periodContextBar {
+.alertFootfallRoot .periodContextBar{
   position: sticky;
   top: 0;
   z-index: 48;
@@ -68,7 +68,7 @@
   box-shadow: 0 4px 20px rgba(15, 41, 66, 0.2);
 }
 
-.periodContextInner {
+.alertFootfallRoot .periodContextInner{
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -77,7 +77,7 @@
   line-height: 1.35;
 }
 
-.periodContextTag {
+.alertFootfallRoot .periodContextTag{
   font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -85,38 +85,37 @@
   color: #8ec5f0;
 }
 
-.periodContextPrimary,
-.periodContextCompare {
+.alertFootfallRoot .periodContextPrimary, .alertFootfallRoot .periodContextCompare{
   font-weight: 600;
 }
 
-.periodContextVs {
+.alertFootfallRoot .periodContextVs{
   font-size: 0.82rem;
   color: #9eb4c8;
   font-weight: 600;
 }
 
-.periodContextLocation {
+.alertFootfallRoot .periodContextLocation{
   font-weight: 600;
   color: #fff;
 }
 
-.periodContextSep {
+.alertFootfallRoot .periodContextSep{
   color: #6a8aa8;
 }
 
-.periodContextLoading {
+.alertFootfallRoot .periodContextLoading{
   color: #f4d03f;
   font-size: 0.88rem;
 }
 
-.periodContextDraft {
+.alertFootfallRoot .periodContextDraft{
   color: #f4d03f;
   font-size: 0.82rem;
   font-weight: 600;
 }
 
-.periodContextSub {
+.alertFootfallRoot .periodContextSub{
   display: block;
   margin-top: 0.2rem;
   font-size: 0.72rem;
@@ -124,24 +123,23 @@
   letter-spacing: 0.02em;
 }
 
-.appShellNightFocus .detailFocusActive .periodContextBar {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .periodContextBar{
   z-index: 52;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
 
-.appShellNightFocus .sectionFlyBar {
+.alertFootfallRoot .appShellNightFocus .sectionFlyBar{
   z-index: 55;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-.appShellNightFocus .sectionFlyBarFocusBtnOn {
+.alertFootfallRoot .appShellNightFocus .sectionFlyBarFocusBtnOn{
   box-shadow:
     0 0 14px rgba(57, 255, 200, 0.45),
     0 0 28px rgba(64, 232, 255, 0.18);
 }
 
-.dateRow input[type='date'],
-.dateField input[type='date'] {
+.alertFootfallRoot .dateRow input[type='date'], .alertFootfallRoot .dateField input[type='date']{
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -149,47 +147,46 @@
   background: var(--card);
 }
 
-.periodBadge {
+.alertFootfallRoot .periodBadge{
   font-size: 0.75rem;
   color: var(--muted);
   margin: 0 0 0.5rem;
 }
 
-.dayCompareSection {
+.alertFootfallRoot .dayCompareSection{
   margin: 1rem 0;
 }
 
-.dayCompareSection h3 {
+.alertFootfallRoot .dayCompareSection h3{
   margin: 0 0 0.5rem;
   font-size: 1rem;
 }
 
-.footfallNote {
+.alertFootfallRoot .footfallNote{
   font-size: 0.82rem;
   color: var(--muted);
   margin: 0 0 0.5rem;
 }
 
-.footfallNote .warn {
+.alertFootfallRoot .footfallNote .warn{
   color: #c0392b;
 }
 
-.dayTable .avgRow {
+.alertFootfallRoot .dayTable .avgRow{
   background: var(--card-soft, var(--card));
   font-weight: 600;
 }
 
-.dayTable .cmpRow {
+.alertFootfallRoot .dayTable .cmpRow{
   background: var(--card-soft, var(--card));
 }
 
-.topActions {
+.alertFootfallRoot .topActions{
   display: flex;
   gap: 0.5rem;
 }
 
-.btnPrimary,
-.btnSecondary {
+.alertFootfallRoot .btnPrimary, .alertFootfallRoot .btnSecondary{
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-weight: 600;
@@ -198,24 +195,23 @@
   border: 1px solid var(--border);
 }
 
-.btnPrimary {
+.alertFootfallRoot .btnPrimary{
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
 }
 
-.btnSecondary {
+.alertFootfallRoot .btnSecondary{
   background: var(--card);
   color: var(--accent);
 }
 
-.btnPrimary:disabled,
-.btnSecondary:disabled {
+.alertFootfallRoot .btnPrimary:disabled, .alertFootfallRoot .btnSecondary:disabled{
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.mainGrid {
+.alertFootfallRoot .mainGrid{
   display: grid;
   grid-template-columns: minmax(280px, 340px) 1fr;
   gap: 1.25rem;
@@ -223,12 +219,12 @@
 }
 
 @media (max-width: 1100px) {
-  .mainGrid {
+  .alertFootfallRoot .mainGrid{
     grid-template-columns: 1fr;
   }
 }
 
-.sidebar {
+.alertFootfallRoot .sidebar{
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -239,7 +235,7 @@
   top: 1rem;
 }
 
-.filterBar {
+.alertFootfallRoot .filterBar{
   margin: 0 0 1rem;
   padding: 0.75rem 1rem;
   background: var(--surface);
@@ -247,29 +243,29 @@
   border-radius: 10px;
 }
 
-.filterBarHint {
+.alertFootfallRoot .filterBarHint{
   margin: 0 0 0.6rem;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.filterRowBar {
+.alertFootfallRoot .filterRowBar{
   grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) minmax(180px, 2fr);
   align-items: end;
 }
 
-.searchInputBar {
+.alertFootfallRoot .searchInputBar{
   margin-bottom: 0;
 }
 
-.filterRow {
+.alertFootfallRoot .filterRow{
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.filterLabel {
+.alertFootfallRoot .filterLabel{
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -280,7 +276,7 @@
   letter-spacing: 0.03em;
 }
 
-.filterSelect {
+.alertFootfallRoot .filterSelect{
   font-size: 0.85rem;
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
@@ -289,13 +285,13 @@
   color: inherit;
 }
 
-.filterMeta {
+.alertFootfallRoot .filterMeta{
   font-size: 0.78rem;
   color: var(--muted);
   margin: -0.35rem 0 0.5rem;
 }
 
-.searchInput {
+.alertFootfallRoot .searchInput{
   width: 100%;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--border);
@@ -304,7 +300,7 @@
   font-size: 0.9rem;
 }
 
-.locList {
+.alertFootfallRoot .locList{
   list-style: none;
   margin: 0 0 1rem;
   padding: 0;
@@ -312,7 +308,7 @@
   overflow: auto;
 }
 
-.locBtn {
+.alertFootfallRoot .locBtn{
   width: 100%;
   text-align: left;
   padding: 0.55rem 0.65rem;
@@ -325,44 +321,44 @@
   gap: 0.15rem;
 }
 
-.locBtn:hover {
+.alertFootfallRoot .locBtn:hover{
   background: var(--card-soft, var(--card));
 }
 
-.locBtn.active {
+.alertFootfallRoot .locBtn.active{
   background: #d4ebfa;
   outline: 1px solid var(--accent);
 }
 
-.locName {
+.alertFootfallRoot .locName{
   font-weight: 600;
   font-size: 0.88rem;
 }
 
-.locMeta {
+.alertFootfallRoot .locMeta{
   font-size: 0.75rem;
   color: var(--muted);
 }
 
-.locMirror {
+.alertFootfallRoot .locMirror{
   font-size: 0.72rem;
 }
 
-.detail {
+.alertFootfallRoot .detail{
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem 1.5rem;
 }
 
-.kpiRow {
+.alertFootfallRoot .kpiRow{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.65rem;
   margin-bottom: 1rem;
 }
 
-.kpi {
+.alertFootfallRoot .kpi{
   position: relative;
   padding: 0.65rem 0.75rem;
   background-color: var(--card-soft, var(--card));
@@ -383,12 +379,12 @@
   will-change: transform;
 }
 
-.kpi > * {
+.alertFootfallRoot .kpi > *{
   position: relative;
   z-index: 1;
 }
 
-.kpi:hover {
+.alertFootfallRoot .kpi:hover{
   transform: translateY(-2px);
   border-color: #b9d8f0;
   background-color: var(--card);
@@ -402,17 +398,17 @@
   box-shadow: 0 10px 24px -14px rgba(15, 23, 42, 0.22);
 }
 
-.kpi:active {
+.alertFootfallRoot .kpi:active{
   transform: translateY(-1px);
   box-shadow: 0 6px 14px -10px rgba(15, 23, 42, 0.2);
 }
 
-.kpiAccent {
+.alertFootfallRoot .kpiAccent{
   border-color: #f5c6a0;
   background-color: var(--card-soft, var(--card));
 }
 
-.kpiAccent:hover {
+.alertFootfallRoot .kpiAccent:hover{
   border-color: #f0a86e;
   background-color: var(--card-soft, var(--card));
   background-image: linear-gradient(
@@ -425,93 +421,92 @@
   box-shadow: 0 10px 24px -14px rgba(180, 83, 9, 0.28);
 }
 
-.kpiSalesProxy:hover {
+.alertFootfallRoot .kpiSalesProxy:hover{
   filter: brightness(1.02);
   box-shadow: 0 10px 24px -14px rgba(15, 23, 42, 0.25);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kpi {
+  .alertFootfallRoot .kpi{
     transition: none;
   }
-  .kpi:hover,
-  .kpi:active {
+  .alertFootfallRoot .kpi:hover, .alertFootfallRoot .kpi:active{
     transform: none;
   }
 }
 
-.kpiLabel {
+.alertFootfallRoot .kpiLabel{
   font-size: 0.72rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.kpiValue {
+.alertFootfallRoot .kpiValue{
   font-size: 1rem;
   font-weight: 500;
   margin-top: 0.2rem;
 }
 
-.termKey {
+.alertFootfallRoot .termKey{
   font-weight: 700;
   color: var(--text);
 }
 
-.metricValue {
+.alertFootfallRoot .metricValue{
   font-weight: 500;
 }
 
-.kpiHint {
+.alertFootfallRoot .kpiHint{
   font-size: 0.72rem;
   color: var(--muted);
   margin-top: 0.15rem;
 }
 
-.locTitle {
+.alertFootfallRoot .locTitle{
   margin: 0 0 0.35rem;
   font-size: 1.2rem;
 }
 
-.insight {
+.alertFootfallRoot .insight{
   margin: 0 0 0.85rem;
   color: var(--muted);
   font-size: 0.92rem;
   line-height: 1.45;
 }
 
-.insight.mirror {
+.alertFootfallRoot .insight.mirror{
   font-weight: 600;
 }
 
-.tagRow {
+.alertFootfallRoot .tagRow{
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
-.tag {
+.alertFootfallRoot .tag{
   padding: 0.35rem 0.65rem;
   background: var(--card-soft, var(--card));
   border-radius: 6px;
   font-size: 0.78rem;
 }
 
-.tagLabel {
+.alertFootfallRoot .tagLabel{
   color: var(--muted);
   margin-right: 0.35rem;
 }
 
-.tagValue {
+.alertFootfallRoot .tagValue{
   font-weight: 600;
 }
 
-.hourlyChartBlock {
+.alertFootfallRoot .hourlyChartBlock{
   margin: 0 0 1rem;
 }
 
-.hourlyGapBanner {
+.alertFootfallRoot .hourlyGapBanner{
   margin: 0 0 0.65rem;
   padding: 0.65rem 0.85rem;
   border-radius: 10px;
@@ -522,12 +517,12 @@
   gap: 0.2rem;
 }
 
-.hourlyGapBannerOk {
+.alertFootfallRoot .hourlyGapBannerOk{
   border-color: #b8dfc9;
   background: linear-gradient(135deg, var(--card) 0%, var(--card) 55%);
 }
 
-.hourlyGapBannerLead {
+.alertFootfallRoot .hourlyGapBannerLead{
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -535,45 +530,45 @@
   color: #922b21;
 }
 
-.hourlyGapBannerOk .hourlyGapBannerLead {
+.alertFootfallRoot .hourlyGapBannerOk .hourlyGapBannerLead{
   color: #1e8449;
 }
 
-.hourlyGapBannerStats {
+.alertFootfallRoot .hourlyGapBannerStats{
   font-size: 0.92rem;
   color: var(--text);
   line-height: 1.4;
 }
 
-.hourlyGapEmphasis {
+.alertFootfallRoot .hourlyGapEmphasis{
   color: #c0392b;
   font-weight: 700;
 }
 
-.hourlyChartLead {
+.alertFootfallRoot .hourlyChartLead{
   margin-top: 0;
 }
 
-.hourlyChart {
+.alertFootfallRoot .hourlyChart{
   width: 100%;
   height: 620px;
   margin: 0;
 }
 
-.hourlyChartLegendHint {
+.alertFootfallRoot .hourlyChartLegendHint{
   margin: 0 0 0.5rem;
   font-size: 0.82rem;
   max-width: 52rem;
 }
 
-.hourlyCaptureSummary {
+.alertFootfallRoot .hourlyCaptureSummary{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.55rem;
   margin-top: 0.65rem;
 }
 
-.hourlyCaptureCard {
+.alertFootfallRoot .hourlyCaptureCard{
   padding: 0.55rem 0.7rem;
   background: var(--card);
   border: 1px solid #dceaf5;
@@ -583,12 +578,12 @@
   gap: 0.15rem;
 }
 
-.hourlyCaptureCardWarn {
+.alertFootfallRoot .hourlyCaptureCardWarn{
   border-color: #e8b4b0;
   background: linear-gradient(135deg, var(--card) 0%, var(--card) 100%);
 }
 
-.hourlyCaptureLabel {
+.alertFootfallRoot .hourlyCaptureLabel{
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -596,73 +591,72 @@
   font-weight: 600;
 }
 
-.hourlyCaptureValue {
+.alertFootfallRoot .hourlyCaptureValue{
   font-size: 1.2rem;
   font-weight: 500;
   color: var(--text);
 }
 
-.hourlyCaptureCardWarn .hourlyCaptureValue {
+.alertFootfallRoot .hourlyCaptureCardWarn .hourlyCaptureValue{
   color: #c0392b;
 }
 
-.hourlyCaptureCardFootfall .hourlyCaptureValue {
+.alertFootfallRoot .hourlyCaptureCardFootfall .hourlyCaptureValue{
   color: #2a7cb8;
 }
 
-.hourlyCaptureCardSold .hourlyCaptureValue {
+.alertFootfallRoot .hourlyCaptureCardSold .hourlyCaptureValue{
   color: #1e8449;
 }
 
-.hourlyCaptureCardTarget .hourlyCaptureValue {
+.alertFootfallRoot .hourlyCaptureCardTarget .hourlyCaptureValue{
   color: #d35400;
 }
 
-.hourlyCaptureCardRevenue .hourlyCaptureValue {
+.alertFootfallRoot .hourlyCaptureCardRevenue .hourlyCaptureValue{
   color: #e67e22;
 }
 
-.hourlyCaptureHint {
+.alertFootfallRoot .hourlyCaptureHint{
   font-size: 0.72rem;
   color: var(--muted);
   line-height: 1.3;
 }
 
-.tableWrap {
+.alertFootfallRoot .tableWrap{
   overflow: auto;
 }
 
-.metricsTable {
+.alertFootfallRoot .metricsTable{
   width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
 }
 
-.metricsTable th,
-.metricsTable td {
+.alertFootfallRoot .metricsTable th, .alertFootfallRoot .metricsTable td{
   padding: 0.45rem 0.55rem;
   border-bottom: 1px solid var(--border);
   text-align: left;
 }
 
-.metricsTable th {
+.alertFootfallRoot .metricsTable th{
   background: var(--card-soft, var(--card));
   font-weight: 600;
   position: sticky;
   top: 0;
 }
 
-.rowWeak {
+.alertFootfallRoot .rowWeak{
   background: rgba(192, 57, 43, 0.06);
 }
 
-.dayFootfallSource {
+.alertFootfallRoot .dayFootfallSource{
   font-size: 0.72rem;
   color: var(--muted);
   font-weight: 400;
 }
 
-.dayEstBadge {
+.alertFootfallRoot .dayEstBadge{
   margin-left: 0.25rem;
   font-size: 0.65rem;
   font-weight: 700;
@@ -671,7 +665,7 @@
   letter-spacing: 0.03em;
 }
 
-.daySplitDetails {
+.alertFootfallRoot .daySplitDetails{
   margin-top: 0.85rem;
   padding: 0.5rem 0.65rem;
   border: 1px dashed #c5dff0;
@@ -679,56 +673,56 @@
   background: var(--card-soft, var(--card));
 }
 
-.daySplitDetails summary {
+.alertFootfallRoot .daySplitDetails summary{
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text);
 }
 
-.daySplitDetails .dayTableTitle {
+.alertFootfallRoot .daySplitDetails .dayTableTitle{
   margin-top: 0.75rem;
 }
 
-.rowStrong {
+.alertFootfallRoot .rowStrong{
   background: rgba(46, 158, 90, 0.06);
 }
 
-.mirrorNote {
+.alertFootfallRoot .mirrorNote{
   font-size: 0.85rem;
   margin: 0 0 0.5rem;
 }
 
-.fleetPanel h3 {
+.alertFootfallRoot .fleetPanel h3{
   margin: 0 0 0.65rem;
   font-size: 0.95rem;
 }
 
-.rankBlock {
+.alertFootfallRoot .rankBlock{
   margin-bottom: 0.85rem;
 }
 
-.rankBlock h4 {
+.alertFootfallRoot .rankBlock h4{
   margin: 0 0 0.35rem;
   font-size: 0.78rem;
   color: var(--muted);
   text-transform: uppercase;
 }
 
-.rankHint {
+.alertFootfallRoot .rankHint{
   margin: 0 0 0.35rem;
   font-size: 0.68rem;
   color: var(--muted);
   line-height: 1.25;
 }
 
-.rankBlock ol {
+.alertFootfallRoot .rankBlock ol{
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.rankBlock button {
+.alertFootfallRoot .rankBlock button{
   width: 100%;
   display: grid;
   grid-template-columns: 1.4rem 1fr auto;
@@ -743,22 +737,21 @@
   border-radius: 4px;
 }
 
-.rankBlock button:hover,
-.rankBlock button.active {
+.alertFootfallRoot .rankBlock button:hover, .alertFootfallRoot .rankBlock button.active{
   background: var(--card-soft, var(--card));
 }
 
-.rankNum {
+.alertFootfallRoot .rankNum{
   color: var(--muted);
   font-weight: 700;
 }
 
-.rankVal {
+.alertFootfallRoot .rankVal{
   font-weight: 600;
   color: var(--accent);
 }
 
-.stateBox {
+.alertFootfallRoot .stateBox{
   padding: 2rem;
   text-align: center;
   background: var(--card);
@@ -766,50 +759,50 @@
   border: 1px solid var(--border);
 }
 
-.stateBoxInline {
+.alertFootfallRoot .stateBoxInline{
   padding: 0.65rem 1rem;
   margin-bottom: 0.75rem;
   text-align: left;
 }
 
-.stateBoxInline p {
+.alertFootfallRoot .stateBoxInline p{
   margin: 0;
   font-size: 0.9rem;
 }
 
-.stateBox.error {
+.alertFootfallRoot .stateBox.error{
   color: var(--warn);
 }
 
-.hint {
+.alertFootfallRoot .hint{
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-.dateHint {
+.alertFootfallRoot .dateHint{
   margin: 0.35rem 0 0;
 }
 
-.dayTableTitle {
+.alertFootfallRoot .dayTableTitle{
   margin: 1rem 0 0.35rem;
   font-size: 0.92rem;
   font-weight: 600;
 }
 
-.footer {
+.alertFootfallRoot .footer{
   margin-top: 1.5rem;
   text-align: center;
   font-size: 0.8rem;
   color: var(--muted);
 }
 
-.sectionTitle {
+.alertFootfallRoot .sectionTitle{
   margin: 1.25rem 0 0.5rem;
   font-size: 1.05rem;
   font-weight: 700;
 }
 
-.insightsPanel {
+.alertFootfallRoot .insightsPanel{
   margin: 1rem 0;
   padding: 1rem 1.15rem;
   background: linear-gradient(135deg, var(--card) 0%, var(--card) 100%);
@@ -817,75 +810,75 @@
   border-radius: var(--radius);
 }
 
-.insightsPanelSummary {
+.alertFootfallRoot .insightsPanelSummary{
   margin: 0 0 0.85rem;
   font-size: 0.92rem;
   line-height: 1.45;
 }
 
-.insightsGrid {
+.alertFootfallRoot .insightsGrid{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 0.65rem;
 }
 
-.insightCard {
+.alertFootfallRoot .insightCard{
   padding: 0.55rem 0.65rem;
   background: var(--card);
   border: 1px solid #dceaf5;
   border-radius: 8px;
 }
 
-.insightCardLabel {
+.alertFootfallRoot .insightCardLabel{
   font-size: 0.72rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
-.insightCardValue {
+.alertFootfallRoot .insightCardValue{
   font-size: 1.15rem;
   font-weight: 500;
   margin-top: 0.2rem;
 }
 
-.insightCardValueSmall {
+.alertFootfallRoot .insightCardValueSmall{
   font-size: 0.95rem;
 }
 
-.insightCardValue.accent {
+.alertFootfallRoot .insightCardValue.accent{
   color: var(--warn);
 }
 
-.insightCardHint {
+.alertFootfallRoot .insightCardHint{
   font-size: 0.72rem;
   color: var(--muted);
   margin-top: 0.25rem;
   line-height: 1.3;
 }
 
-.insightsPanelTags {
+.alertFootfallRoot .insightsPanelTags{
   margin: 0.75rem 0 0;
 }
 
-.insightsPanelLead {
+.alertFootfallRoot .insightsPanelLead{
   margin: 0 0 0.65rem;
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-.detailSection {
+.alertFootfallRoot .detailSection{
   scroll-margin-top: 1.5rem;
   scroll-margin-bottom: 5.5rem;
   transition: opacity 0.25s ease, filter 0.25s ease;
 }
 
-.detail [id] {
+.alertFootfallRoot .detail [id]{
   scroll-margin-top: 1.5rem;
   scroll-margin-bottom: 5.5rem;
 }
 
-.btnNightFocus {
+.alertFootfallRoot .btnNightFocus{
   padding: 0.45rem 0.85rem;
   font-size: 0.82rem;
   font-weight: 700;
@@ -898,12 +891,12 @@
   box-shadow: 0 0 12px rgba(57, 255, 200, 0.15);
 }
 
-.btnNightFocus:hover {
+.alertFootfallRoot .btnNightFocus:hover{
   background: #152a3d;
   box-shadow: 0 0 18px rgba(57, 255, 200, 0.28);
 }
 
-.btnNightFocusOn {
+.alertFootfallRoot .btnNightFocusOn{
   background: #0a2e28;
   border-color: #39ffc8;
   color: #39ffc8;
@@ -913,7 +906,7 @@
   text-shadow: 0 0 10px rgba(57, 255, 200, 0.65);
 }
 
-.nightFocusBanner {
+.alertFootfallRoot .nightFocusBanner{
   margin: 0 0 0.75rem;
   padding: 0.55rem 0.85rem;
   border-radius: 8px;
@@ -926,12 +919,12 @@
     inset 0 0 24px rgba(64, 232, 255, 0.06);
 }
 
-.nightFocusBanner strong {
+.alertFootfallRoot .nightFocusBanner strong{
   color: #39ffc8;
   text-shadow: 0 0 12px rgba(57, 255, 200, 0.45);
 }
 
-.appShellNightFocus {
+.alertFootfallRoot .appShellNightFocus{
   --nf-glow: #39ffc8;
   --nf-glow-soft: #7af0dc;
   --nf-glow-blue: #40e8ff;
@@ -944,50 +937,38 @@
   background: #06080c;
 }
 
-.appShellNightFocus .ffTopBar,
-.appShellNightFocus .dateFilters,
-.appShellNightFocus .filterBar,
-.appShellNightFocus .periodContextBar,
-.appShellNightFocus .sidebar,
-.appShellNightFocus .fleetHeatmapSection,
-.appShellNightFocus .compareQuickBar,
-.appShellNightFocus .footer {
+.alertFootfallRoot .appShellNightFocus .ffTopBar, .alertFootfallRoot .appShellNightFocus .dateFilters, .alertFootfallRoot .appShellNightFocus .filterBar, .alertFootfallRoot .appShellNightFocus .periodContextBar, .alertFootfallRoot .appShellNightFocus .sidebar, .alertFootfallRoot .appShellNightFocus .fleetHeatmapSection, .alertFootfallRoot .appShellNightFocus .compareQuickBar, .alertFootfallRoot .appShellNightFocus .footer{
   opacity: 0.22;
   pointer-events: none;
   filter: blur(1px);
 }
 
-.appShellNightFocus .ffTopBar {
+.alertFootfallRoot .appShellNightFocus .ffTopBar{
   pointer-events: auto;
   opacity: 1;
   filter: none;
 }
 
-.appShellNightFocus .ffTopBar .btnNightFocus,
-.appShellNightFocus .ffTopBar .btnSecondary,
-.appShellNightFocus .ffTopBar .btnPrimary {
+.alertFootfallRoot .appShellNightFocus .ffTopBar .btnNightFocus, .alertFootfallRoot .appShellNightFocus .ffTopBar .btnSecondary, .alertFootfallRoot .appShellNightFocus .ffTopBar .btnPrimary{
   pointer-events: auto;
 }
 
-.appShellNightFocusPick .detail {
+.alertFootfallRoot .appShellNightFocusPick .detail{
   opacity: 0.55;
   filter: none;
 }
 
-.appShellNightFocusPick .detail .sectionTitle,
-.appShellNightFocusPick .detail .kpiLabel,
-.appShellNightFocusPick .detail .hint {
+.alertFootfallRoot .appShellNightFocusPick .detail .sectionTitle, .alertFootfallRoot .appShellNightFocusPick .detail .kpiLabel, .alertFootfallRoot .appShellNightFocusPick .detail .hint{
   color: #b8d4e8;
 }
 
-.appShellNightFocus .nightFocusBanner,
-.appShellNightFocus .sectionFlyBar {
+.alertFootfallRoot .appShellNightFocus .nightFocusBanner, .alertFootfallRoot .appShellNightFocus .sectionFlyBar{
   opacity: 1;
   pointer-events: auto;
   filter: none;
 }
 
-.appShellNightFocus .sectionFlyBar {
+.alertFootfallRoot .appShellNightFocus .sectionFlyBar{
   background: #0a1520;
   border-color: rgba(57, 255, 200, 0.4);
   box-shadow:
@@ -995,25 +976,25 @@
     0 8px 32px rgba(0, 0, 0, 0.45);
 }
 
-.appShellNightFocus .sectionFlyBarToggle {
+.alertFootfallRoot .appShellNightFocus .sectionFlyBarToggle{
   background: #152a3d;
   border-color: rgba(57, 255, 200, 0.35);
   color: var(--nf-glow-soft);
 }
 
-.appShellNightFocus .sectionFlyLink {
+.alertFootfallRoot .appShellNightFocus .sectionFlyLink{
   background: rgba(15, 35, 50, 0.85);
   color: var(--nf-glow-soft);
   text-shadow: 0 0 8px rgba(57, 255, 200, 0.25);
 }
 
-.appShellNightFocus .sectionFlyLink:hover {
+.alertFootfallRoot .appShellNightFocus .sectionFlyLink:hover{
   background: rgba(20, 45, 62, 0.95);
   color: var(--nf-glow);
   text-shadow: 0 0 12px rgba(57, 255, 200, 0.45);
 }
 
-.appShellNightFocus .sectionFlyLink.active {
+.alertFootfallRoot .appShellNightFocus .sectionFlyLink.active{
   background: rgba(10, 46, 40, 0.95);
   color: var(--nf-glow);
   border-left-color: var(--nf-glow);
@@ -1023,26 +1004,24 @@
     0 0 16px rgba(64, 232, 255, 0.15);
 }
 
-.appShellNightFocus .detail {
+.alertFootfallRoot .appShellNightFocus .detail{
   background: #0a0e14;
   border-color: rgba(0, 229, 255, 0.15);
   color: var(--nf-text);
   box-shadow: inset 0 0 80px rgba(123, 47, 255, 0.04);
 }
 
-.appShellNightFocus .detail .hint,
-.appShellNightFocus .detail .kpiHint,
-.appShellNightFocus .detail .insight {
+.alertFootfallRoot .appShellNightFocus .detail .hint, .alertFootfallRoot .appShellNightFocus .detail .kpiHint, .alertFootfallRoot .appShellNightFocus .detail .insight{
   color: #9eb4c8;
 }
 
-.appShellNightFocus .detailFocusDimmed {
+.alertFootfallRoot .appShellNightFocus .detailFocusDimmed{
   opacity: 0.07;
   pointer-events: none;
   filter: blur(2px);
 }
 
-.appShellNightFocus .detailFocusActive {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive{
   opacity: 1;
   pointer-events: auto;
   filter: none;
@@ -1060,104 +1039,81 @@
 }
 
 /* Fluorescent readable text across the focused section (not chart-specific). */
-.appShellNightFocus .detailFocusActive .sectionTitle,
-.appShellNightFocus .detailFocusActive .locTitle,
-.appShellNightFocus .detailFocusActive .dayTableTitle,
-.appShellNightFocus .detailFocusActive .subsectionTitle {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .sectionTitle, .alertFootfallRoot .appShellNightFocus .detailFocusActive .locTitle, .alertFootfallRoot .appShellNightFocus .detailFocusActive .dayTableTitle, .alertFootfallRoot .appShellNightFocus .detailFocusActive .subsectionTitle{
   color: var(--nf-glow-blue);
   text-shadow:
     0 0 10px rgba(64, 232, 255, 0.45),
     0 0 22px rgba(57, 255, 200, 0.2);
 }
 
-.appShellNightFocus .detailFocusActive .kpiLabel,
-.appShellNightFocus .detailFocusActive .hourlyCaptureLabel,
-.appShellNightFocus .detailFocusActive .insightCardLabel,
-.appShellNightFocus .detailFocusActive .metricsTable th {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .kpiLabel, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyCaptureLabel, .alertFootfallRoot .appShellNightFocus .detailFocusActive .insightCardLabel, .alertFootfallRoot .appShellNightFocus .detailFocusActive .metricsTable th{
   color: var(--nf-glow-soft);
   text-shadow: 0 0 8px rgba(57, 255, 200, 0.35);
 }
 
-.appShellNightFocus .detailFocusActive .kpiValue,
-.appShellNightFocus .detailFocusActive .hourlyCaptureValue,
-.appShellNightFocus .detailFocusActive .insightCardValue,
-.appShellNightFocus .detailFocusActive .metricValue,
-.appShellNightFocus .detailFocusActive strong {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .kpiValue, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyCaptureValue, .alertFootfallRoot .appShellNightFocus .detailFocusActive .insightCardValue, .alertFootfallRoot .appShellNightFocus .detailFocusActive .metricValue, .alertFootfallRoot .appShellNightFocus .detailFocusActive strong{
   color: var(--nf-glow);
   text-shadow:
     0 0 10px rgba(57, 255, 200, 0.5),
     0 0 20px rgba(64, 232, 255, 0.18);
 }
 
-.appShellNightFocus .detailFocusActive .hint,
-.appShellNightFocus .detailFocusActive .kpiHint,
-.appShellNightFocus .detailFocusActive .hourlyCaptureHint,
-.appShellNightFocus .detailFocusActive .insight,
-.appShellNightFocus .detailFocusActive .insightsPanelSummary,
-.appShellNightFocus .detailFocusActive .insightCardHint,
-.appShellNightFocus .detailFocusActive .metricsTable td {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .hint, .alertFootfallRoot .appShellNightFocus .detailFocusActive .kpiHint, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyCaptureHint, .alertFootfallRoot .appShellNightFocus .detailFocusActive .insight, .alertFootfallRoot .appShellNightFocus .detailFocusActive .insightsPanelSummary, .alertFootfallRoot .appShellNightFocus .detailFocusActive .insightCardHint, .alertFootfallRoot .appShellNightFocus .detailFocusActive .metricsTable td{
   color: var(--nf-muted);
   text-shadow: 0 0 6px rgba(158, 240, 232, 0.25);
 }
 
-.appShellNightFocus .detailFocusActive .termKey {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .termKey{
   color: var(--nf-glow);
   text-shadow: 0 0 10px rgba(57, 255, 200, 0.45);
 }
 
-.appShellNightFocus .detailFocusActive .kpi,
-.appShellNightFocus .detailFocusActive .insightCard,
-.appShellNightFocus .detailFocusActive .hourlyCaptureCard,
-.appShellNightFocus .detailFocusActive .hourlyGapBanner {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .kpi, .alertFootfallRoot .appShellNightFocus .detailFocusActive .insightCard, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyCaptureCard, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyGapBanner{
   background: rgba(12, 28, 40, 0.92);
   border-color: rgba(57, 255, 200, 0.28);
 }
 
-.appShellNightFocus .detailFocusActive .insightsPanel {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .insightsPanel{
   background: linear-gradient(135deg, rgba(10, 24, 36, 0.96) 0%, rgba(8, 18, 28, 0.94) 100%);
   border-color: rgba(57, 255, 200, 0.32);
 }
 
-.appShellNightFocus .detailFocusActive .hourlyGapBannerLead {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyGapBannerLead{
   color: var(--nf-glow-soft);
   text-shadow: 0 0 8px rgba(57, 255, 200, 0.35);
 }
 
-.appShellNightFocus .detailFocusActive .hourlyGapBannerStats,
-.appShellNightFocus .detailFocusActive .hourlyGapEmphasis {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyGapBannerStats, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyGapEmphasis{
   color: var(--nf-glow);
   text-shadow: 0 0 10px rgba(57, 255, 200, 0.4);
 }
 
-.appShellNightFocus .detailFocusActive .tag {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .tag{
   background: rgba(15, 40, 55, 0.9);
   border: 1px solid rgba(57, 255, 200, 0.25);
   color: var(--nf-glow-soft);
 }
 
-.appShellNightFocus .detailFocusActive .metricsTable {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .metricsTable{
   color: var(--nf-text);
 }
 
-.appShellNightFocus .detailFocusActive .dayTable th,
-.appShellNightFocus .detailFocusActive .dayTable td {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .dayTable th, .alertFootfallRoot .appShellNightFocus .detailFocusActive .dayTable td{
   color: var(--nf-muted);
   border-color: rgba(57, 255, 200, 0.15);
 }
 
-.appShellNightFocus .detailFocusActive .dayTable th {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .dayTable th{
   color: var(--nf-glow-soft);
   text-shadow: 0 0 8px rgba(57, 255, 200, 0.3);
 }
 
-.appShellNightFocus .detailFocusActive .mirrorNote {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .mirrorNote{
   color: var(--nf-glow-blue);
   text-shadow: 0 0 8px rgba(64, 232, 255, 0.35);
 }
 
-.appShellNightFocus .detailFocusActive .chartPanel,
-.appShellNightFocus .detailFocusActive .hourlyChart,
-.chartPanelNight {
+.alertFootfallRoot .appShellNightFocus .detailFocusActive .chartPanel, .alertFootfallRoot .appShellNightFocus .detailFocusActive .hourlyChart, .alertFootfallRoot .chartPanelNight{
   background: #0a0e14 !important;
   border-radius: 12px;
   box-shadow:
@@ -1166,27 +1122,26 @@
     inset 0 0 40px rgba(0, 0, 0, 0.35);
 }
 
-.hourlyChartBlockNight .hourlyGapBanner {
+.alertFootfallRoot .hourlyChartBlockNight .hourlyGapBanner{
   background: rgba(20, 24, 32, 0.95);
   border-color: rgba(255, 51, 102, 0.35);
 }
 
-.hourlyChartBlockNight .hourlyGapBannerOk {
+.alertFootfallRoot .hourlyChartBlockNight .hourlyGapBannerOk{
   border-color: rgba(57, 255, 20, 0.35);
 }
 
-.hourlyChartBlockNight .hourlyGapBannerLead {
+.alertFootfallRoot .hourlyChartBlockNight .hourlyGapBannerLead{
   color: var(--nf-glow-magenta);
   text-shadow: 0 0 10px rgba(255, 110, 199, 0.45);
 }
 
-.hourlyChartBlockNight .hourlyGapBannerStats,
-.hourlyChartBlockNight .hourlyGapEmphasis {
+.alertFootfallRoot .hourlyChartBlockNight .hourlyGapBannerStats, .alertFootfallRoot .hourlyChartBlockNight .hourlyGapEmphasis{
   color: var(--nf-text);
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
 }
 
-.sectionFlyBarFocusBtn {
+.alertFootfallRoot .sectionFlyBarFocusBtn{
   padding: 0.35rem 0.5rem;
   font-size: 0.72rem;
   font-weight: 700;
@@ -1198,7 +1153,7 @@
   text-shadow: 0 0 6px rgba(57, 255, 200, 0.3);
 }
 
-.sectionFlyBarFocusBtnOn {
+.alertFootfallRoot .sectionFlyBarFocusBtnOn{
   background: #0a2e28;
   border-color: #39ffc8;
   color: #39ffc8;
@@ -1208,42 +1163,42 @@
   text-shadow: 0 0 8px rgba(57, 255, 200, 0.55);
 }
 
-.panelExportWrap {
+.alertFootfallRoot .panelExportWrap{
   position: relative;
   margin: 0 0 0.75rem;
 }
 
-.panelExportToolbar {
+.alertFootfallRoot .panelExportToolbar{
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
   z-index: 6;
 }
 
-.panelExportCapture {
+.alertFootfallRoot .panelExportCapture{
   padding-top: 0.15rem;
 }
 
-.netTrafficTotalsLine {
+.alertFootfallRoot .netTrafficTotalsLine{
   font-weight: 500;
 }
 
 /* Reserve space so KPIs/charts are not covered by the fixed section nav (desktop). */
 @media (min-width: 1281px) {
-  .appShellWithFlyNav .detail {
+  .alertFootfallRoot .appShellWithFlyNav .detail{
     padding-right: 0.75rem;
   }
 
-  .appShellWithFlyNav .mainGrid {
+  .alertFootfallRoot .appShellWithFlyNav .mainGrid{
     padding-right: 10.75rem;
   }
 
-  .detail [id] {
+  .alertFootfallRoot .detail [id]{
     scroll-margin-right: 10rem;
   }
 }
 
-.sectionFlyBar {
+.alertFootfallRoot .sectionFlyBar{
   position: fixed;
   right: max(0.75rem, calc((100vw - 1600px) / 2 + 0.5rem));
   top: 50%;
@@ -1262,13 +1217,13 @@
   box-shadow: 0 6px 28px rgba(15, 41, 66, 0.14);
 }
 
-.sectionFlyBarCollapsed {
+.alertFootfallRoot .sectionFlyBarCollapsed{
   max-width: 3.25rem;
   padding: 0.35rem;
 }
 
 
-.sectionFlyBarToggle {
+.alertFootfallRoot .sectionFlyBarToggle{
   padding: 0.35rem 0.5rem;
   font-size: 0.72rem;
   font-weight: 700;
@@ -1281,11 +1236,11 @@
   cursor: pointer;
 }
 
-.sectionFlyBarToggle:hover {
+.alertFootfallRoot .sectionFlyBarToggle:hover{
   background: var(--card-soft, var(--card));
 }
 
-.sectionFlyBarList {
+.alertFootfallRoot .sectionFlyBarList{
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1294,7 +1249,7 @@
   gap: 0.2rem;
 }
 
-.sectionFlyLink {
+.alertFootfallRoot .sectionFlyLink{
   width: 100%;
   text-align: left;
   padding: 0.4rem 0.55rem;
@@ -1308,12 +1263,12 @@
   border-left: 3px solid transparent;
 }
 
-.sectionFlyLink:hover {
+.alertFootfallRoot .sectionFlyLink:hover{
   background: var(--card-soft, var(--card));
   color: var(--accent);
 }
 
-.sectionFlyLink.active {
+.alertFootfallRoot .sectionFlyLink.active{
   background: var(--card-soft, var(--card));
   color: var(--accent);
   border-left-color: var(--accent);
@@ -1321,11 +1276,11 @@
 }
 
 @media (max-width: 1280px) {
-  .appShellWithFlyNav .detail {
+  .alertFootfallRoot .appShellWithFlyNav .detail{
     padding-bottom: 5.25rem;
   }
 
-  .sectionFlyBar {
+  .alertFootfallRoot .sectionFlyBar{
     top: auto;
     bottom: 5.25rem;
     right: 0.75rem;
@@ -1339,13 +1294,13 @@
     box-shadow: 0 -4px 20px rgba(15, 41, 66, 0.12);
   }
 
-  .sectionFlyBarCollapsed {
+  .alertFootfallRoot .sectionFlyBarCollapsed{
     max-width: none;
     left: auto;
     width: auto;
   }
 
-  .sectionFlyBarList {
+  .alertFootfallRoot .sectionFlyBarList{
     flex-direction: row;
     flex: 1;
     overflow-x: auto;
@@ -1353,47 +1308,46 @@
     scrollbar-width: thin;
   }
 
-  .sectionFlyLink {
+  .alertFootfallRoot .sectionFlyLink{
     white-space: nowrap;
     border-left: none;
     border-bottom: 3px solid transparent;
   }
 
-  .sectionFlyLink.active {
+  .alertFootfallRoot .sectionFlyLink.active{
     border-left: none;
     border-bottom-color: var(--accent);
   }
 }
 
-.netTrafficSection,
-.periodCompareSection {
+.alertFootfallRoot .netTrafficSection, .alertFootfallRoot .periodCompareSection{
   margin: 1.25rem 0;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
 }
 
-.periodCompareSectionOff {
+.alertFootfallRoot .periodCompareSectionOff{
   background: var(--card-soft, var(--card));
   padding: 0.75rem 1rem;
   border-radius: var(--radius);
   border: 1px dashed var(--border);
 }
 
-.periodCompareList {
+.alertFootfallRoot .periodCompareList{
   margin: 0.35rem 0 0;
   padding-left: 1.25rem;
   font-size: 0.88rem;
   color: var(--muted);
 }
 
-.subsectionTitle {
+.alertFootfallRoot .subsectionTitle{
   margin: 1rem 0 0.35rem;
   font-size: 0.92rem;
   font-weight: 700;
   color: var(--text);
 }
 
-.chartHintWarn {
+.alertFootfallRoot .chartHintWarn{
   color: #9a5b00;
   background: var(--card-soft, var(--card));
   padding: 0.45rem 0.65rem;
@@ -1402,30 +1356,30 @@
 }
 
 
-.comparisonCharts {
+.alertFootfallRoot .comparisonCharts{
   margin: 1rem 0 1.5rem;
   padding: 1rem 0;
   border-top: 2px solid var(--border);
 }
 
-.chartSection {
+.alertFootfallRoot .chartSection{
   margin-bottom: 0.5rem;
 }
 
-.chartExportWrap {
+.alertFootfallRoot .chartExportWrap{
   position: relative;
   margin-bottom: 1rem;
 }
 
-.chartExportWrapBlock {
+.alertFootfallRoot .chartExportWrapBlock{
   width: 100%;
 }
 
-.chartExportWrapMini {
+.alertFootfallRoot .chartExportWrapMini{
   min-width: 0;
 }
 
-.chartExportToolbar {
+.alertFootfallRoot .chartExportToolbar{
   position: absolute;
   top: 0.45rem;
   right: 0.45rem;
@@ -1434,7 +1388,7 @@
   gap: 0.35rem;
 }
 
-.chartExportBtn {
+.alertFootfallRoot .chartExportBtn{
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -1449,58 +1403,58 @@
   box-shadow: 0 2px 8px rgba(15, 41, 66, 0.08);
 }
 
-.chartExportBtn:hover:not(:disabled) {
+.alertFootfallRoot .chartExportBtn:hover:not(:disabled){
   background: var(--card-soft, var(--card));
   border-color: var(--accent);
 }
 
-.chartExportBtn:disabled {
+.alertFootfallRoot .chartExportBtn:disabled{
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.chartExportIcon {
+.alertFootfallRoot .chartExportIcon{
   flex-shrink: 0;
 }
 
-.chartExportBtnText {
+.alertFootfallRoot .chartExportBtnText{
   letter-spacing: 0.02em;
 }
 
-.chartPanel {
+.alertFootfallRoot .chartPanel{
   width: 100%;
   height: 380px;
   margin-bottom: 0;
 }
 
-.chartPanelShort {
+.alertFootfallRoot .chartPanelShort{
   height: 300px;
 }
 
-.chartHint {
+.alertFootfallRoot .chartHint{
   margin-top: 0.25rem;
 }
 
-.fleetHeatmapSection {
+.alertFootfallRoot .fleetHeatmapSection{
   margin-bottom: 1rem;
 }
 
-.fleetHeatmapHeader {
+.alertFootfallRoot .fleetHeatmapHeader{
   margin-bottom: 0.65rem;
 }
 
-.fleetHeatmapLead {
+.alertFootfallRoot .fleetHeatmapLead{
   margin: 0 0 0.5rem;
   font-size: 0.85rem;
 }
 
-.fleetHeatmapMetricBar {
+.alertFootfallRoot .fleetHeatmapMetricBar{
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
 }
 
-.fleetHeatmapMetric {
+.alertFootfallRoot .fleetHeatmapMetric{
   padding: 0.4rem 0.75rem;
   font-size: 0.82rem;
   font-weight: 600;
@@ -1511,57 +1465,57 @@
   cursor: pointer;
 }
 
-.fleetHeatmapMetric:hover {
+.alertFootfallRoot .fleetHeatmapMetric:hover{
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.fleetHeatmapMetric.active {
+.alertFootfallRoot .fleetHeatmapMetric.active{
   background: var(--card-soft, var(--card));
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.fleetHeatmapMetricHeat.active {
+.alertFootfallRoot .fleetHeatmapMetricHeat.active{
   background: var(--card-soft, var(--card));
   border-color: #c0392b;
   color: #922b21;
 }
 
-.fleetHeatmapMetricHeat:not(.active):hover {
+.alertFootfallRoot .fleetHeatmapMetricHeat:not(.active):hover{
   border-color: #e74c3c;
   color: #c0392b;
 }
 
-.chartPanelHeatmap {
+.alertFootfallRoot .chartPanelHeatmap{
   height: 360px;
   min-height: 280px;
 }
 
-.chartPanelHeatmapTall {
+.alertFootfallRoot .chartPanelHeatmapTall{
   height: 400px;
   min-height: 320px;
 }
 
-.trendChartsRow {
+.alertFootfallRoot .trendChartsRow{
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
   margin: 0.75rem 0 1rem;
 }
 
-.chartPanelMini {
+.alertFootfallRoot .chartPanelMini{
   height: 220px;
   min-height: 180px;
 }
 
 @media (max-width: 900px) {
-  .trendChartsRow {
+  .alertFootfallRoot .trendChartsRow{
     grid-template-columns: 1fr;
   }
 }
 
-.dataBanner {
+.alertFootfallRoot .dataBanner{
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -1573,75 +1527,75 @@
   font-size: 0.82rem;
 }
 
-.dataBannerWarn {
+.alertFootfallRoot .dataBannerWarn{
   background: var(--card-soft, var(--card));
   border-color: #f0d9a8;
 }
 
-.dataBannerProxy {
+.alertFootfallRoot .dataBannerProxy{
   background: var(--card-soft, var(--card));
   border-color: #f0d4a8;
 }
 
-.kpiSalesProxy .kpiLabel {
+.alertFootfallRoot .kpiSalesProxy .kpiLabel{
   font-weight: 600;
 }
 
-.salesLegendActual {
+.alertFootfallRoot .salesLegendActual{
   color: #1e6fd6;
   font-weight: 600;
 }
 
-.salesLegendProxyBench {
+.alertFootfallRoot .salesLegendProxyBench{
   color: #b45309;
   font-weight: 600;
 }
 
-.salesLegendProxyNear {
+.alertFootfallRoot .salesLegendProxyNear{
   color: #7c3aed;
   font-weight: 600;
 }
 
-.dataBannerProjected {
+.alertFootfallRoot .dataBannerProjected{
   background: var(--card-soft, var(--card));
   border-color: #99f6e4;
 }
 
-.salesLegendProjected {
+.alertFootfallRoot .salesLegendProjected{
   color: #0d9488;
   font-weight: 600;
 }
 
-.dataBannerMeta {
+.alertFootfallRoot .dataBannerMeta{
   color: var(--muted);
   font-size: 0.78rem;
 }
 
-.dateToolbar {
+.alertFootfallRoot .dateToolbar{
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.dateToolbarPrimary {
+.alertFootfallRoot .dateToolbarPrimary{
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: flex-end;
 }
 
-.dateField {
+.alertFootfallRoot .dateField{
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
 }
 
-.dateFieldNarrow input[type='date'] {
+.alertFootfallRoot .dateFieldNarrow input[type='date']{
   min-width: 10.5rem;
 }
 
-.dateFieldLabel {
+.alertFootfallRoot .dateFieldLabel{
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
@@ -1649,7 +1603,7 @@
   letter-spacing: 0;
 }
 
-.dateQuickSelect {
+.alertFootfallRoot .dateQuickSelect{
   min-width: 16rem;
   max-width: 22rem;
   padding: 0.45rem 0.55rem;
@@ -1660,62 +1614,62 @@
   color: var(--text);
 }
 
-.dateSteppers {
+.alertFootfallRoot .dateSteppers{
   display: flex;
   gap: 0.25rem;
   align-items: flex-end;
   padding-bottom: 1px;
 }
 
-.btnIcon {
+.alertFootfallRoot .btnIcon{
   min-width: 2.25rem;
   padding: 0.45rem 0.55rem !important;
   font-size: 1rem !important;
   line-height: 1;
 }
 
-.dateStatusLine {
+.alertFootfallRoot .dateStatusLine{
   margin: 0;
   font-size: 0.8rem;
   color: var(--muted);
   line-height: 1.4;
 }
 
-.dateStatusApplied {
+.alertFootfallRoot .dateStatusApplied{
   color: var(--text);
   font-weight: 600;
 }
 
-.dateStatusDraft {
+.alertFootfallRoot .dateStatusDraft{
   color: #9a5b00;
   font-weight: 600;
 }
 
-.dateStatusMuted {
+.alertFootfallRoot .dateStatusMuted{
   color: var(--muted);
 }
 
-.dateStatusLoading {
+.alertFootfallRoot .dateStatusLoading{
   color: var(--accent);
   font-style: italic;
 }
 
-.dateStatusAction {
+.alertFootfallRoot .dateStatusAction{
   color: var(--muted);
 }
 
-.dateStatusSep {
+.alertFootfallRoot .dateStatusSep{
   margin: 0 0.25rem;
   color: #cbd5e1;
 }
 
-.dateCompareBlock {
+.alertFootfallRoot .dateCompareBlock{
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
 }
 
-.dateCompareToggle {
+.alertFootfallRoot .dateCompareToggle{
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -1726,19 +1680,19 @@
   margin-bottom: 0.5rem;
 }
 
-.dateCompareFields {
+.alertFootfallRoot .dateCompareFields{
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: flex-end;
 }
 
-.btnSmall {
+.alertFootfallRoot .btnSmall{
   padding: 0.35rem 0.65rem !important;
   font-size: 0.78rem !important;
 }
 
-.stateBoxLoading {
+.alertFootfallRoot .stateBoxLoading{
   min-height: 12rem;
   display: flex;
   flex-direction: column;
@@ -1747,7 +1701,7 @@
   text-align: center;
 }
 
-.filterBar {
+.alertFootfallRoot .filterBar{
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1755,17 +1709,17 @@
   margin-bottom: 1rem;
 }
 
-.filterBarHint {
+.alertFootfallRoot .filterBarHint{
   margin: 0 0 0.5rem;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.filterRowBar {
+.alertFootfallRoot .filterRowBar{
   align-items: center;
 }
 
-.filterLabel {
+.alertFootfallRoot .filterLabel{
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -1773,63 +1727,62 @@
   color: var(--muted);
 }
 
-.filterSelect {
+.alertFootfallRoot .filterSelect{
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   min-width: 10rem;
 }
 
-.filterMeta {
+.alertFootfallRoot .filterMeta{
   margin: 0.45rem 0 0;
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.searchInputBar {
+.alertFootfallRoot .searchInputBar{
   flex: 1;
   min-width: 12rem;
 }
 
-.comparePeriodKpis {
+.alertFootfallRoot .comparePeriodKpis{
   margin: 0.75rem 0 1rem;
 }
 
-.comparePeriodTable td strong {
+.alertFootfallRoot .comparePeriodTable td strong{
   color: var(--text);
 }
 
-.compareAlignedTable {
+.alertFootfallRoot .compareAlignedTable{
   font-size: 0.78rem;
 }
 
-.compareAlignedTable th,
-.compareAlignedTable td {
+.alertFootfallRoot .compareAlignedTable th, .alertFootfallRoot .compareAlignedTable td{
   white-space: nowrap;
 }
 
-.tableWrap {
+.alertFootfallRoot .tableWrap{
   overflow-x: auto;
 }
 
-.netTrafficTotals {
+.alertFootfallRoot .netTrafficTotals{
   margin: 0 0 0.5rem;
   font-size: 0.92rem;
 }
 
-.netTrafficTotalsMeta {
+.alertFootfallRoot .netTrafficTotalsMeta{
   font-weight: 400;
   color: var(--muted);
   font-size: 0.82rem;
 }
 
-.netTrafficWhy {
+.alertFootfallRoot .netTrafficWhy{
   margin: 0 0 0.75rem;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.netTrafficLead {
+.alertFootfallRoot .netTrafficLead{
   margin: 0 0 0.65rem;
   font-size: 0.88rem;
   line-height: 1.45;
@@ -1837,7 +1790,7 @@
   max-width: 52rem;
 }
 
-.netTrafficUseFor {
+.alertFootfallRoot .netTrafficUseFor{
   margin: 0 0 0.65rem;
   padding: 0.65rem 0.85rem;
   background: var(--card-soft, var(--card));
@@ -1846,7 +1799,7 @@
   max-width: 52rem;
 }
 
-.netTrafficUseForTitle {
+.alertFootfallRoot .netTrafficUseForTitle{
   margin: 0 0 0.35rem;
   font-size: 0.72rem;
   font-weight: 700;
@@ -1855,7 +1808,7 @@
   color: var(--accent);
 }
 
-.netTrafficUseFor ul {
+.alertFootfallRoot .netTrafficUseFor ul{
   margin: 0;
   padding-left: 1.1rem;
   font-size: 0.84rem;
@@ -1863,24 +1816,24 @@
   color: var(--text);
 }
 
-.netTrafficNot {
+.alertFootfallRoot .netTrafficNot{
   margin: 0 0 0.5rem;
   font-size: 0.8rem;
 }
 
-.netTrafficWhy summary {
+.alertFootfallRoot .netTrafficWhy summary{
   cursor: pointer;
   color: var(--accent);
   font-weight: 600;
 }
 
-.netTrafficWhy ul {
+.alertFootfallRoot .netTrafficWhy ul{
   margin: 0.45rem 0 0;
   padding-left: 1.15rem;
   line-height: 1.4;
 }
 
-.compareQuickBar {
+.alertFootfallRoot .compareQuickBar{
   position: fixed;
   left: 0;
   right: 0;
@@ -1891,7 +1844,7 @@
   box-shadow: 0 -6px 28px rgba(15, 41, 66, 0.12);
 }
 
-.compareQuickBarInner {
+.alertFootfallRoot .compareQuickBarInner{
   max-width: 1600px;
   margin: 0 auto;
   padding: 0.55rem 1rem;
@@ -1901,28 +1854,27 @@
   gap: 0.5rem 0.75rem;
 }
 
-.compareQuickPrimary,
-.compareQuickCompare {
+.alertFootfallRoot .compareQuickPrimary, .alertFootfallRoot .compareQuickCompare{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem 0.55rem;
 }
 
-.compareQuickLabel {
+.alertFootfallRoot .compareQuickLabel{
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
 
-.compareQuickVs {
+.alertFootfallRoot .compareQuickVs{
   font-size: 0.8rem;
   color: var(--muted);
   font-weight: 600;
 }
 
-.compareQuickToggle {
+.alertFootfallRoot .compareQuickToggle{
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -1930,7 +1882,7 @@
   font-weight: 600;
 }
 
-.compareQuickSelect {
+.alertFootfallRoot .compareQuickSelect{
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1938,25 +1890,25 @@
   max-width: 11rem;
 }
 
-.compareQuickCompareLabel {
+.alertFootfallRoot .compareQuickCompareLabel{
   font-size: 0.82rem;
   color: var(--text);
   font-weight: 600;
 }
 
-.compareQuickHint {
+.alertFootfallRoot .compareQuickHint{
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.compareQuickCompareDrag {
+.alertFootfallRoot .compareQuickCompareDrag{
   outline: 2px dashed var(--accent);
   outline-offset: 2px;
   border-radius: 8px;
   background: var(--card-soft, var(--card));
 }
 
-.compareQuickChips {
+.alertFootfallRoot .compareQuickChips{
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
@@ -1964,7 +1916,7 @@
   min-width: 8rem;
 }
 
-.compareWeekChip {
+.alertFootfallRoot .compareWeekChip{
   padding: 0.28rem 0.55rem;
   font-size: 0.75rem;
   border: 1px solid var(--border);
@@ -1974,17 +1926,17 @@
   cursor: grab;
 }
 
-.compareWeekChip:disabled {
+.alertFootfallRoot .compareWeekChip:disabled{
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.compareWeekChip:not(:disabled):hover {
+.alertFootfallRoot .compareWeekChip:not(:disabled):hover{
   border-color: var(--accent);
   background: var(--card-soft, var(--card));
 }
 
-.btnCompact {
+.alertFootfallRoot .btnCompact{
   padding: 0.35rem 0.65rem !important;
   font-size: 0.82rem !important;
 }
@@ -1993,19 +1945,19 @@
    targets.theleetclub.com � segment / week / explainer / pills
    ============================================================= */
 
-.ffTopBarMain {
+.alertFootfallRoot .ffTopBarMain{
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.segmentTabs {
+.alertFootfallRoot .segmentTabs{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 0.6rem;
   margin: 0 0 0.85rem;
 }
 
-.segmentTab {
+.alertFootfallRoot .segmentTab{
   background: var(--card, var(--card));
   border: 1px solid var(--border, #c5dff0);
   border-radius: var(--radius, 12px);
@@ -2018,24 +1970,24 @@
   transition: all 0.12s ease;
   color: var(--text, #0f2942);
 }
-.segmentTab:hover {
+.alertFootfallRoot .segmentTab:hover{
   border-color: var(--accent, #1e6fd6);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(30, 111, 214, 0.08);
 }
-.segmentTabActive {
+.alertFootfallRoot .segmentTabActive{
   border-color: var(--accent, #1e6fd6);
   background: var(--card);
   box-shadow: 0 0 0 2px var(--accent, #1e6fd6) inset;
 }
-.segmentTabLabel {
+.alertFootfallRoot .segmentTabLabel{
   font-weight: 700;
   font-size: 1rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
-.segmentTabCount {
+.alertFootfallRoot .segmentTabCount{
   background: var(--accent, #1e6fd6);
   color: #fff;
   border-radius: 999px;
@@ -2044,16 +1996,16 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-.segmentTabActive .segmentTabCount {
+.alertFootfallRoot .segmentTabActive .segmentTabCount{
   background: #154b96;
 }
-.segmentTabHint {
+.alertFootfallRoot .segmentTabHint{
   color: var(--muted, #5a7a94);
   font-size: 0.77rem;
   line-height: 1.4;
 }
 
-.weekTabs {
+.alertFootfallRoot .weekTabs{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2064,14 +2016,14 @@
   padding: 0.5rem 0.85rem;
   margin: 0 0 0.85rem;
 }
-.weekTabsLabel {
+.alertFootfallRoot .weekTabsLabel{
   font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted, #5a7a94);
 }
-.weekTab {
+.alertFootfallRoot .weekTab{
   background: transparent;
   border: 1px solid var(--border, #c5dff0);
   border-radius: 999px;
@@ -2082,19 +2034,19 @@
   font-size: 0.85rem;
   transition: all 0.1s ease;
 }
-.weekTab:hover { border-color: var(--accent, #1e6fd6); color: var(--accent, #1e6fd6); }
-.weekTabActive {
+.alertFootfallRoot .weekTab:hover{ border-color: var(--accent, #1e6fd6); color: var(--accent, #1e6fd6); }
+.alertFootfallRoot .weekTabActive{
   background: var(--accent, #1e6fd6);
   border-color: var(--accent, #1e6fd6);
   color: #fff;
 }
-.weekTabsTail {
+.alertFootfallRoot .weekTabsTail{
   font-size: 0.74rem;
   color: var(--muted, #5a7a94);
   font-style: italic;
 }
 
-.targetsPeriodBar {
+.alertFootfallRoot .targetsPeriodBar{
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -2111,25 +2063,25 @@
   z-index: 48;
   box-shadow: 0 4px 20px rgba(15, 41, 66, 0.2);
 }
-.targetsPeriodBar strong { color: #ffffff; }
-.targetsPeriodTag {
+.alertFootfallRoot .targetsPeriodBar strong{ color: #ffffff; }
+.alertFootfallRoot .targetsPeriodTag{
   font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #8ec5f0;
   font-weight: 700;
 }
-.targetsPeriodSeparator { color: #6e8eb0; }
-.targetsPeriodAlt { color: #c2d6ea; }
+.alertFootfallRoot .targetsPeriodSeparator{ color: #6e8eb0; }
+.alertFootfallRoot .targetsPeriodAlt{ color: #c2d6ea; }
 
-.explainer {
+.alertFootfallRoot .explainer{
   background: var(--card-soft, var(--card));
   border: 1px solid #fbbf24;
   border-radius: var(--radius, 12px);
   padding: 0.45rem 0.85rem;
   margin: 0 0 0.85rem;
 }
-.explainerToggle {
+.alertFootfallRoot .explainerToggle{
   width: 100%;
   background: transparent;
   border: 0;
@@ -2143,20 +2095,20 @@
   align-items: center;
   gap: 0.4rem;
 }
-.explainerToggle strong { color: #b45309; }
-.explainerToggleIcon { font-size: 0.8rem; color: var(--muted, #5a7a94); }
-.explainerBody { padding: 0.4rem 0.2rem 0.2rem; font-size: 0.88rem; line-height: 1.55; }
-.explainerBody p { margin: 0 0 0.5rem; }
-.explainerSubhead {
+.alertFootfallRoot .explainerToggle strong{ color: #b45309; }
+.alertFootfallRoot .explainerToggleIcon{ font-size: 0.8rem; color: var(--muted, #5a7a94); }
+.alertFootfallRoot .explainerBody{ padding: 0.4rem 0.2rem 0.2rem; font-size: 0.88rem; line-height: 1.55; }
+.alertFootfallRoot .explainerBody p{ margin: 0 0 0.5rem; }
+.alertFootfallRoot .explainerSubhead{
   margin: 0.75rem 0 0.25rem;
   font-size: 0.92rem;
   font-weight: 600;
   color: var(--text);
 }
-.explainerBody em { font-style: italic; color: #b45309; }
-.explainerSteps { margin: 0.45rem 0 0.6rem 1.25rem; padding: 0; }
-.explainerSteps li { margin-bottom: 0.25rem; }
-.explainerTable {
+.alertFootfallRoot .explainerBody em{ font-style: italic; color: #b45309; }
+.alertFootfallRoot .explainerSteps{ margin: 0.45rem 0 0.6rem 1.25rem; padding: 0; }
+.alertFootfallRoot .explainerSteps li{ margin-bottom: 0.25rem; }
+.alertFootfallRoot .explainerTable{
   width: 100%;
   border-collapse: collapse;
   margin: 0.5rem 0;
@@ -2164,25 +2116,24 @@
   border-radius: 8px;
   overflow: hidden;
 }
-.explainerTable th,
-.explainerTable td {
+.alertFootfallRoot .explainerTable th, .alertFootfallRoot .explainerTable td{
   text-align: left;
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
   font-size: 0.85rem;
 }
-.explainerTable th {
+.alertFootfallRoot .explainerTable th{
   font-weight: 700;
   color: var(--muted, #5a7a94);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 0.72rem;
 }
-.explainerRowActive {
+.alertFootfallRoot .explainerRowActive{
   background: rgba(245, 158, 11, 0.18);
   font-weight: 600;
 }
-.explainerExample {
+.alertFootfallRoot .explainerExample{
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid #fbbf24;
   border-radius: 8px;
@@ -2190,13 +2141,13 @@
   margin: 0.55rem 0;
   font-size: 0.85rem;
 }
-.explainerExample ul { margin: 0.25rem 0 0 1rem; padding: 0; }
-.explainerExample li { margin-bottom: 0.2rem; }
-.explainerMuted { color: var(--muted, #5a7a94); }
-.explainerWarn { color: #b45309; }
-.explainerNote { font-size: 0.78rem; color: var(--muted, #5a7a94); font-style: italic; }
+.alertFootfallRoot .explainerExample ul{ margin: 0.25rem 0 0 1rem; padding: 0; }
+.alertFootfallRoot .explainerExample li{ margin-bottom: 0.2rem; }
+.alertFootfallRoot .explainerMuted{ color: var(--muted, #5a7a94); }
+.alertFootfallRoot .explainerWarn{ color: #b45309; }
+.alertFootfallRoot .explainerNote{ font-size: 0.78rem; color: var(--muted, #5a7a94); font-style: italic; }
 
-.locSegPill {
+.alertFootfallRoot .locSegPill{
   display: inline-block;
   font-size: 0.62rem;
   font-weight: 800;
@@ -2207,12 +2158,12 @@
   text-transform: uppercase;
   vertical-align: middle;
 }
-.locSegPill-KU  { background: var(--card-soft, var(--card)); color: #1e40af; }
-.locSegPill-MOH { background: var(--card-soft, var(--card)); color: #9a3412; }
-.locSegPill-O2  { background: #ddd6fe; color: #5b21b6; }
-.locSegPill-OTHER { background: var(--card); color: #3f3f46; }
+.alertFootfallRoot .locSegPill-KU{ background: var(--card-soft, var(--card)); color: #1e40af; }
+.alertFootfallRoot .locSegPill-MOH{ background: var(--card-soft, var(--card)); color: #9a3412; }
+.alertFootfallRoot .locSegPill-O2{ background: #ddd6fe; color: #5b21b6; }
+.alertFootfallRoot .locSegPill-OTHER{ background: var(--card); color: #3f3f46; }
 
-.locRaw {
+.alertFootfallRoot .locRaw{
   display: block;
   font-size: 0.7rem;
   color: var(--muted, #5a7a94);
@@ -2220,14 +2171,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.locTitleOwner {
+.alertFootfallRoot .locTitleOwner{
   font-weight: 500;
   color: var(--muted, #5a7a94);
   font-size: 0.9rem;
   margin-left: 0.45rem;
 }
 
-.sectionTitleNote {
+.alertFootfallRoot .sectionTitleNote{
   font-size: 0.85rem;
   font-weight: 500;
   color: #b45309;
@@ -2235,14 +2186,14 @@
 }
 
 /* ---- App tabs (Targets vs Analytics) ---- */
-.appMainTabs {
+.alertFootfallRoot .appMainTabs{
   display: flex;
   gap: 0.35rem;
   flex-wrap: wrap;
   align-items: center;
 }
 
-.appMainTab {
+.alertFootfallRoot .appMainTab{
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: 999px;
@@ -2256,25 +2207,25 @@
     transform 180ms ease;
 }
 
-.appMainTab:hover {
+.alertFootfallRoot .appMainTab:hover{
   transform: translateY(-1px);
   border-color: #b9d8f0;
 }
 
-.appMainTab.active {
+.alertFootfallRoot .appMainTab.active{
   background: var(--accent, #1a5f8a);
   color: #fff;
   border-color: var(--accent, #1a5f8a);
 }
 
 /* ---- Analytics gate ---- */
-.analyticsGate {
+.alertFootfallRoot .analyticsGate{
   display: flex;
   justify-content: center;
   padding: 2rem 1rem;
 }
 
-.analyticsGateCard {
+.alertFootfallRoot .analyticsGateCard{
   max-width: 420px;
   width: 100%;
   padding: 1.5rem;
@@ -2284,14 +2235,14 @@
   box-shadow: 0 12px 32px -20px rgba(15, 23, 42, 0.2);
 }
 
-.analyticsGateForm label {
+.alertFootfallRoot .analyticsGateForm label{
   display: block;
   margin-bottom: 0.75rem;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.analyticsGateForm input {
+.alertFootfallRoot .analyticsGateForm input{
   display: block;
   width: 100%;
   margin-top: 0.25rem;
@@ -2300,12 +2251,12 @@
   border-radius: 8px;
 }
 
-.analyticsGateError {
+.alertFootfallRoot .analyticsGateError{
   color: #c0392b;
   font-size: 0.85rem;
 }
 
-.analyticsGateBar {
+.alertFootfallRoot .analyticsGateBar{
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2315,7 +2266,7 @@
 }
 
 /* ---- Targets page ---- */
-.targetsAccessDate {
+.alertFootfallRoot .targetsAccessDate{
   font-size: clamp(1.35rem, 3vw, 1.85rem);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -2324,27 +2275,27 @@
   line-height: 1.2;
 }
 
-.targetsAccessDateNote {
+.alertFootfallRoot .targetsAccessDateNote{
   font-size: 0.55em;
   font-weight: 600;
   color: var(--muted);
 }
 
-.targetsLiveDot {
+.alertFootfallRoot .targetsLiveDot{
   font-size: 0.45em;
   color: #16a34a;
   font-weight: 600;
 }
 
-.targetsMainGrid {
+.alertFootfallRoot .targetsMainGrid{
   align-items: start;
 }
 
-.targetsDetailColumn {
+.alertFootfallRoot .targetsDetailColumn{
   min-width: 0;
 }
 
-.targetsZeroFootfallNote {
+.alertFootfallRoot .targetsZeroFootfallNote{
   margin: 0 0 0.75rem;
   padding: 0.65rem 0.85rem;
   background: var(--card-soft, var(--card));
@@ -2355,24 +2306,24 @@
   line-height: 1.45;
 }
 
-.targetsMirrorChainNote {
+.alertFootfallRoot .targetsMirrorChainNote{
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
 }
 
-.targetsHeatmapBlock {
+.alertFootfallRoot .targetsHeatmapBlock{
   position: relative;
   margin-bottom: 1.25rem;
 }
 
-.heatmapMetricTabs {
+.alertFootfallRoot .heatmapMetricTabs{
   display: flex;
   gap: 0.35rem;
   flex-wrap: wrap;
   margin-bottom: 0.5rem;
 }
 
-.heatmapMetricTab {
+.alertFootfallRoot .heatmapMetricTab{
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: 8px;
@@ -2381,18 +2332,17 @@
   cursor: pointer;
 }
 
-.heatmapMetricTab.active {
+.alertFootfallRoot .heatmapMetricTab.active{
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 700;
 }
 
-.targetsHeatmapChart {
+.alertFootfallRoot .targetsHeatmapChart{
   min-height: 360px;
 }
 
-.targetsCellPopup,
-.targetsGraphModalInner {
+.alertFootfallRoot .targetsCellPopup, .alertFootfallRoot .targetsGraphModalInner{
   position: relative;
   margin-top: 0.75rem;
   padding: 1rem 1.1rem;
@@ -2402,21 +2352,21 @@
   box-shadow: 0 14px 28px -16px rgba(15, 23, 42, 0.25);
 }
 
-.targetsPopupGrid {
+.alertFootfallRoot .targetsPopupGrid{
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
   margin-top: 0.65rem;
 }
 
-.targetsPopupHour {
+.alertFootfallRoot .targetsPopupHour{
   display: block;
   color: var(--muted);
   font-size: 0.85rem;
   margin-top: 0.15rem;
 }
 
-.targetsPopupClose {
+.alertFootfallRoot .targetsPopupClose{
   position: absolute;
   top: 0.35rem;
   right: 0.5rem;
@@ -2428,33 +2378,33 @@
   color: var(--muted);
 }
 
-.targetsGraphSection {
+.alertFootfallRoot .targetsGraphSection{
   margin-top: 1rem;
 }
 
-.targetsGraphHead {
+.alertFootfallRoot .targetsGraphHead{
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
 }
 
-.targetsGraphGrid {
+.alertFootfallRoot .targetsGraphGrid{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.65rem;
 }
 
-.targetsGraphGridModal {
+.alertFootfallRoot .targetsGraphGridModal{
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.targetsMiniChart {
+.alertFootfallRoot .targetsMiniChart{
   height: 180px;
   min-width: 0;
 }
 
-.targetsGraphModal {
+.alertFootfallRoot .targetsGraphModal{
   position: fixed;
   inset: 0;
   z-index: 200;
@@ -2465,7 +2415,7 @@
   padding: 1rem;
 }
 
-.targetsGraphModalInner {
+.alertFootfallRoot .targetsGraphModalInner{
   margin: 0;
   max-width: 960px;
   width: 100%;
@@ -2473,17 +2423,17 @@
   overflow: auto;
 }
 
-.targetsKpiSection {
+.alertFootfallRoot .targetsKpiSection{
   margin: 0.75rem 0 1rem;
 }
 
-.targetsTrajectorySection {
+.alertFootfallRoot .targetsTrajectorySection{
   margin: 0.5rem 0 1.25rem;
   padding-top: 0.5rem;
   border-top: 2px solid var(--border);
 }
 
-.targetsTrajectoryTitle {
+.alertFootfallRoot .targetsTrajectoryTitle{
   font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -2492,7 +2442,7 @@
   color: var(--text, #0f172a);
 }
 
-.targetsTrajectoryTitleDate {
+.alertFootfallRoot .targetsTrajectoryTitleDate{
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -2500,7 +2450,7 @@
   color: var(--muted);
 }
 
-.targetsTrajectoryHead {
+.alertFootfallRoot .targetsTrajectoryHead{
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -2509,18 +2459,18 @@
   margin-bottom: 0.35rem;
 }
 
-.targetsTrajectoryDateBar {
+.alertFootfallRoot .targetsTrajectoryDateBar{
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0.5rem 0.65rem;
 }
 
-.targetsTrajectoryDateField input[type='date'] {
+.alertFootfallRoot .targetsTrajectoryDateField input[type='date']{
   min-width: 10.5rem;
 }
 
-.targetsTrajectoryTodayBtn {
+.alertFootfallRoot .targetsTrajectoryTodayBtn{
   padding: 0.45rem 0.75rem;
   font-size: 0.8rem;
   font-weight: 600;
@@ -2531,36 +2481,36 @@
   cursor: pointer;
 }
 
-.targetsTrajectoryTodayBtn:hover {
+.alertFootfallRoot .targetsTrajectoryTodayBtn:hover{
   background: var(--card-soft, var(--card));
 }
 
-.targetsTrajectoryHint {
+.alertFootfallRoot .targetsTrajectoryHint{
   margin: 0 0 0.85rem;
   font-size: 0.82rem;
   color: var(--muted);
   line-height: 1.45;
 }
 
-.targetsTrajectoryGrid {
+.alertFootfallRoot .targetsTrajectoryGrid{
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
 @media (max-width: 900px) {
-  .targetsTrajectoryGrid {
+  .alertFootfallRoot .targetsTrajectoryGrid{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 520px) {
-  .targetsTrajectoryGrid {
+  .alertFootfallRoot .targetsTrajectoryGrid{
     grid-template-columns: 1fr;
   }
 }
 
-.targetsTrajectoryCard {
+.alertFootfallRoot .targetsTrajectoryCard{
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2579,18 +2529,18 @@
     border-color 180ms ease;
 }
 
-.targetsTrajectoryCard:hover {
+.alertFootfallRoot .targetsTrajectoryCard:hover{
   transform: translateY(-2px);
   border-color: #93c5fd;
   box-shadow: 0 12px 28px -16px rgba(15, 23, 42, 0.25);
 }
 
-.targetsTrajectoryCardAccent {
+.alertFootfallRoot .targetsTrajectoryCardAccent{
   border-color: #f59e0b;
   background: var(--card-soft, var(--card));
 }
 
-.targetsTrajectoryLabel {
+.alertFootfallRoot .targetsTrajectoryLabel{
   font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -2599,20 +2549,20 @@
   line-height: 1.25;
 }
 
-.targetsTrajectoryValue {
+.alertFootfallRoot .targetsTrajectoryValue{
   font-size: 1.45rem;
   font-weight: 800;
   color: var(--text);
   line-height: 1.1;
 }
 
-.targetsTrajectorySub {
+.alertFootfallRoot .targetsTrajectorySub{
   font-size: 0.68rem;
   color: #94a3b8;
   line-height: 1.2;
 }
 
-.targetsSectionTitle {
+.alertFootfallRoot .targetsSectionTitle{
   font-size: 2rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -2620,7 +2570,7 @@
   color: var(--text, #0f172a);
 }
 
-.targetsKpiGrid {
+.alertFootfallRoot .targetsKpiGrid{
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
@@ -2628,18 +2578,18 @@
 }
 
 @media (max-width: 1100px) {
-  .targetsKpiGrid {
+  .alertFootfallRoot .targetsKpiGrid{
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
-  .targetsKpiGrid {
+  .alertFootfallRoot .targetsKpiGrid{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-.targetsKpiCard {
+.alertFootfallRoot .targetsKpiCard{
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2658,18 +2608,18 @@
     border-color 180ms ease;
 }
 
-.targetsKpiCard:hover {
+.alertFootfallRoot .targetsKpiCard:hover{
   transform: translateY(-2px);
   border-color: #93c5fd;
   box-shadow: 0 12px 28px -16px rgba(15, 23, 42, 0.25);
 }
 
-.targetsKpiCardAccent {
+.alertFootfallRoot .targetsKpiCardAccent{
   border-color: #f5c6a0;
   background: var(--card-soft, var(--card));
 }
 
-.targetsKpiCardLabel {
+.alertFootfallRoot .targetsKpiCardLabel{
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -2678,7 +2628,7 @@
   line-height: 1.2;
 }
 
-.targetsKpiCardValue {
+.alertFootfallRoot .targetsKpiCardValue{
   font-size: 2rem;
   font-weight: 800;
   line-height: 1.05;
@@ -2686,7 +2636,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.targetsKpiModalBackdrop {
+.alertFootfallRoot .targetsKpiModalBackdrop{
   position: fixed;
   inset: 0;
   z-index: 1200;
@@ -2697,7 +2647,7 @@
   padding: 1rem;
 }
 
-.targetsKpiModal {
+.alertFootfallRoot .targetsKpiModal{
   position: relative;
   width: min(440px, 100%);
   max-height: 85vh;
@@ -2708,26 +2658,26 @@
   box-shadow: 0 24px 48px -20px rgba(15, 23, 42, 0.35);
 }
 
-.targetsKpiModalTitle {
+.alertFootfallRoot .targetsKpiModalTitle{
   margin: 0 0 0.35rem;
   font-size: 1.1rem;
   font-weight: 700;
 }
 
-.targetsKpiModalLoc {
+.alertFootfallRoot .targetsKpiModalLoc{
   margin: 0 0 0.65rem;
   font-weight: 600;
   color: var(--muted);
 }
 
-.targetsKpiModalMeta {
+.alertFootfallRoot .targetsKpiModalMeta{
   margin: 0 0 0.75rem;
   padding-left: 1.1rem;
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-.targetsKpiModalBody {
+.alertFootfallRoot .targetsKpiModalBody{
   margin: 0;
   padding-left: 1.1rem;
   font-size: 0.88rem;
@@ -2735,21 +2685,20 @@
   color: var(--muted);
 }
 
-.targetsKpiModalBody li + li {
+.alertFootfallRoot .targetsKpiModalBody li + li{
   margin-top: 0.35rem;
 }
 
-.targetsDetail {
+.alertFootfallRoot .targetsDetail{
   margin-top: 1rem;
 }
 
 /* Owners tab */
-.ownersPage,
-.areasPage {
+.alertFootfallRoot .ownersPage, .alertFootfallRoot .areasPage{
   padding: 0 0 2rem;
 }
 
-.ownersLayout {
+.alertFootfallRoot .ownersLayout{
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 1.25rem;
@@ -2757,46 +2706,45 @@
 }
 
 @media (max-width: 900px) {
-  .ownersLayout {
+  .alertFootfallRoot .ownersLayout{
     grid-template-columns: 1fr;
   }
 }
 
-.ownersPanel {
+.alertFootfallRoot .ownersPanel{
   background: var(--card-soft, var(--card));
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem;
 }
 
-.ownersPanelTitle {
+.alertFootfallRoot .ownersPanelTitle{
   margin: 0 0 0.75rem;
   font-size: 1rem;
   font-weight: 700;
 }
 
-.ownersField {
+.alertFootfallRoot .ownersField{
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   margin-bottom: 0.75rem;
 }
 
-.ownersField select,
-.ownersField input {
+.alertFootfallRoot .ownersField select, .alertFootfallRoot .ownersField input{
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.9rem;
 }
 
-.ownersMachineCount {
+.alertFootfallRoot .ownersMachineCount{
   margin: 0 0 0.5rem;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.ownersMachineList {
+.alertFootfallRoot .ownersMachineList{
   max-height: 22rem;
   overflow: auto;
   border: 1px solid var(--border);
@@ -2805,7 +2753,7 @@
   margin-bottom: 0.75rem;
 }
 
-.ownersMachineRow {
+.alertFootfallRoot .ownersMachineRow{
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 0.5rem;
@@ -2816,34 +2764,34 @@
   cursor: pointer;
 }
 
-.ownersMachineName {
+.alertFootfallRoot .ownersMachineName{
   font-weight: 600;
 }
 
-.ownersMachineId {
+.alertFootfallRoot .ownersMachineId{
   font-size: 0.72rem;
   color: #94a3b8;
 }
 
-.ownersActions {
+.alertFootfallRoot .ownersActions{
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.ownersMessage {
+.alertFootfallRoot .ownersMessage{
   margin: 0.65rem 0 0;
   font-size: 0.85rem;
   color: #1d4ed8;
 }
 
-.ownersAreaList {
+.alertFootfallRoot .ownersAreaList{
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.ownersAreaBtn {
+.alertFootfallRoot .ownersAreaBtn{
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -2857,17 +2805,17 @@
   text-align: left;
 }
 
-.ownersAreaBtn:hover {
+.alertFootfallRoot .ownersAreaBtn:hover{
   border-color: #93c5fd;
   background: var(--card-soft, var(--card));
 }
 
-.ownersEmpty {
+.alertFootfallRoot .ownersEmpty{
   color: var(--muted);
   font-size: 0.9rem;
 }
 
-.ownersLoginBlock {
+.alertFootfallRoot .ownersLoginBlock{
   margin: 0.5rem 0 0.85rem;
   padding: 0.75rem;
   background: var(--card-soft, var(--card));
@@ -2875,26 +2823,26 @@
   border-radius: 8px;
 }
 
-.ownersLoginTitle {
+.alertFootfallRoot .ownersLoginTitle{
   margin: 0 0 0.5rem;
   font-size: 0.88rem;
   font-weight: 700;
 }
 
-.ownersLoginStatus {
+.alertFootfallRoot .ownersLoginStatus{
   margin: 0;
   font-size: 0.78rem;
   color: #15803d;
   font-weight: 600;
 }
 
-.ownersEmailReadonly {
+.alertFootfallRoot .ownersEmailReadonly{
   background: var(--card-soft, var(--card));
   color: var(--muted);
   cursor: default;
 }
 
-.areasAdminLoginNote {
+.alertFootfallRoot .areasAdminLoginNote{
   margin: 0 0 1rem;
   padding: 0.65rem 0.75rem;
   font-size: 0.85rem;
@@ -2905,32 +2853,32 @@
   border-radius: 8px;
 }
 
-.ownersLoginMissing {
+.alertFootfallRoot .ownersLoginMissing{
   margin: 0 0 0.5rem;
   font-size: 0.78rem;
   color: #b45309;
   font-weight: 600;
 }
 
-.ownersAreaBtnMain {
+.alertFootfallRoot .ownersAreaBtnMain{
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.15rem;
 }
 
-.ownersAreaLogin {
+.alertFootfallRoot .ownersAreaLogin{
   font-size: 0.72rem;
   color: var(--muted);
   font-weight: 500;
 }
 
-.ownersAreaLoginMissing {
+.alertFootfallRoot .ownersAreaLoginMissing{
   color: #b45309;
 }
 
 /* Areas tab */
-.areasPageHeader {
+.alertFootfallRoot .areasPageHeader{
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -2939,32 +2887,32 @@
   margin-bottom: 0.85rem;
 }
 
-.areasPageTitle {
+.alertFootfallRoot .areasPageTitle{
   margin: 0;
   font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
-.areasPageSubtitle {
+.alertFootfallRoot .areasPageSubtitle{
   margin: 0.35rem 0 0;
   font-size: 0.88rem;
   color: var(--muted);
   max-width: 36rem;
 }
 
-.areasPageHeaderActions {
+.alertFootfallRoot .areasPageHeaderActions{
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0.5rem;
 }
 
-.areasDateField input[type='date'] {
+.alertFootfallRoot .areasDateField input[type='date']{
   min-width: 10.5rem;
 }
 
-.areasTodayBtn {
+.alertFootfallRoot .areasTodayBtn{
   padding: 0.45rem 0.75rem;
   font-size: 0.8rem;
   font-weight: 600;
@@ -2975,11 +2923,11 @@
   cursor: pointer;
 }
 
-.areasTodayBtn:hover {
+.alertFootfallRoot .areasTodayBtn:hover{
   background: var(--card-soft, var(--card));
 }
 
-.areasContextBar {
+.alertFootfallRoot .areasContextBar{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2993,30 +2941,30 @@
   font-size: 0.82rem;
 }
 
-.areasContextItem {
+.alertFootfallRoot .areasContextItem{
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
-.areasContextItemMuted {
+.alertFootfallRoot .areasContextItemMuted{
   color: #94a3b8;
 }
 
-.areasContextLabel {
+.alertFootfallRoot .areasContextLabel{
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #7eb8e8;
 }
 
-.areasContextDivider {
+.alertFootfallRoot .areasContextDivider{
   width: 1px;
   height: 1.75rem;
   background: #2a4a6e;
 }
 
-.areasEmptyState {
+.alertFootfallRoot .areasEmptyState{
   padding: 2rem 1.5rem;
   text-align: center;
   background: var(--card);
@@ -3025,12 +2973,12 @@
   margin-bottom: 1rem;
 }
 
-.areasEmptyState h3 {
+.alertFootfallRoot .areasEmptyState h3{
   margin: 0 0 0.5rem;
   font-size: 1.1rem;
 }
 
-.areasEmptyState p {
+.alertFootfallRoot .areasEmptyState p{
   margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
@@ -3038,7 +2986,7 @@
   margin-inline: auto;
 }
 
-.areasKpiStrip {
+.alertFootfallRoot .areasKpiStrip{
   margin-bottom: 1.25rem;
   padding: 1rem 1.15rem;
   background: var(--card);
@@ -3047,7 +2995,7 @@
   box-shadow: 0 4px 20px rgba(30, 111, 214, 0.05);
 }
 
-.areasKpiStripHead {
+.alertFootfallRoot .areasKpiStripHead{
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -3058,19 +3006,19 @@
   border-bottom: 1px solid var(--border);
 }
 
-.areasKpiStripTitle {
+.alertFootfallRoot .areasKpiStripTitle{
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
 }
 
-.areasKpiStripSub {
+.alertFootfallRoot .areasKpiStripSub{
   margin: 0.2rem 0 0;
   font-size: 0.8rem;
   color: var(--muted);
 }
 
-.areasFleetAchievement {
+.alertFootfallRoot .areasFleetAchievement{
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -3078,7 +3026,7 @@
   text-align: right;
 }
 
-.areasFleetAchievementLabel {
+.alertFootfallRoot .areasFleetAchievementLabel{
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -3086,31 +3034,31 @@
   color: var(--muted);
 }
 
-.areasFleetAchievementValue {
+.alertFootfallRoot .areasFleetAchievementValue{
   font-size: 2rem;
   font-weight: 800;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
-.areasFleetAchievementGap {
+.alertFootfallRoot .areasFleetAchievementGap{
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.areasKpiGrid {
+.alertFootfallRoot .areasKpiGrid{
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.65rem;
 }
 
 @media (max-width: 900px) {
-  .areasKpiGrid {
+  .alertFootfallRoot .areasKpiGrid{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-.areasKpiCard {
+.alertFootfallRoot .areasKpiCard{
   padding: 0.75rem 0.85rem;
   background: var(--card-soft, var(--card));
   border: 1px solid var(--border);
@@ -3118,7 +3066,7 @@
   border-left: 3px solid var(--accent);
 }
 
-.areasKpiCardLabel {
+.alertFootfallRoot .areasKpiCardLabel{
   display: block;
   font-size: 0.68rem;
   font-weight: 600;
@@ -3127,7 +3075,7 @@
   color: var(--muted);
 }
 
-.areasKpiCardValue {
+.alertFootfallRoot .areasKpiCardValue{
   display: block;
   margin-top: 0.25rem;
   font-size: 1.35rem;
@@ -3136,14 +3084,14 @@
   color: var(--text);
 }
 
-.areasKpiCardSub {
+.alertFootfallRoot .areasKpiCardSub{
   display: block;
   margin-top: 0.15rem;
   font-size: 0.72rem;
   color: #94a3b8;
 }
 
-.areasMainGrid {
+.alertFootfallRoot .areasMainGrid{
   display: grid;
   grid-template-columns: 1.15fr 1fr;
   gap: 1rem;
@@ -3152,12 +3100,12 @@
 }
 
 @media (max-width: 1100px) {
-  .areasMainGrid {
+  .alertFootfallRoot .areasMainGrid{
     grid-template-columns: 1fr;
   }
 }
 
-.areasPanel {
+.alertFootfallRoot .areasPanel{
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -3165,15 +3113,15 @@
   box-shadow: 0 4px 16px rgba(15, 41, 66, 0.04);
 }
 
-.areasChartPanel {
+.alertFootfallRoot .areasChartPanel{
   min-height: 100%;
 }
 
-.areasPanelHead {
+.alertFootfallRoot .areasPanelHead{
   margin-bottom: 0.85rem;
 }
 
-.areasPanelHeadRow {
+.alertFootfallRoot .areasPanelHeadRow{
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -3181,25 +3129,25 @@
   gap: 0.75rem;
 }
 
-.areasPanelTitle {
+.alertFootfallRoot .areasPanelTitle{
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
 }
 
-.areasPanelHint {
+.alertFootfallRoot .areasPanelHint{
   margin: 0.2rem 0 0;
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.areasLeaderboard {
+.alertFootfallRoot .areasLeaderboard{
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.areasLeaderRow {
+.alertFootfallRoot .areasLeaderRow{
   display: grid;
   grid-template-columns: 2rem 1fr auto;
   gap: 0.65rem;
@@ -3217,18 +3165,18 @@
     background 0.15s ease;
 }
 
-.areasLeaderRow:hover {
+.alertFootfallRoot .areasLeaderRow:hover{
   border-color: #93c5fd;
   background: var(--card-soft, var(--card));
 }
 
-.areasLeaderRowSelected {
+.alertFootfallRoot .areasLeaderRowSelected{
   border-color: var(--accent);
   background: var(--card-soft, var(--card));
   box-shadow: 0 0 0 2px rgba(30, 111, 214, 0.12);
 }
 
-.areasLeaderRank {
+.alertFootfallRoot .areasLeaderRank{
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3241,26 +3189,26 @@
   color: var(--muted);
 }
 
-.areasLeaderRow:nth-child(1) .areasLeaderRank {
+.alertFootfallRoot .areasLeaderRow:nth-child(1) .areasLeaderRank{
   background: var(--card-soft, var(--card));
   color: #92400e;
 }
 
-.areasLeaderRow:nth-child(2) .areasLeaderRank {
+.alertFootfallRoot .areasLeaderRow:nth-child(2) .areasLeaderRank{
   background: var(--card-soft, var(--card));
   color: var(--muted);
 }
 
-.areasLeaderRow:nth-child(3) .areasLeaderRank {
+.alertFootfallRoot .areasLeaderRow:nth-child(3) .areasLeaderRank{
   background: var(--card-soft, var(--card));
   color: #9a3412;
 }
 
-.areasLeaderBody {
+.alertFootfallRoot .areasLeaderBody{
   min-width: 0;
 }
 
-.areasLeaderTop {
+.alertFootfallRoot .areasLeaderTop{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3268,12 +3216,12 @@
   margin-bottom: 0.2rem;
 }
 
-.areasLeaderName {
+.alertFootfallRoot .areasLeaderName{
   font-size: 0.92rem;
   font-weight: 700;
 }
 
-.areasLeaderMeta {
+.alertFootfallRoot .areasLeaderMeta{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3283,15 +3231,15 @@
   margin-bottom: 0.45rem;
 }
 
-.areasLeaderDot {
+.alertFootfallRoot .areasLeaderDot{
   color: #cbd5e1;
 }
 
-.areasLeaderGap {
+.alertFootfallRoot .areasLeaderGap{
   font-weight: 600;
 }
 
-.areasLeaderTrack {
+.alertFootfallRoot .areasLeaderTrack{
   position: relative;
   height: 0.5rem;
   background: var(--card-soft, var(--card));
@@ -3299,13 +3247,13 @@
   overflow: hidden;
 }
 
-.areasLeaderFill {
+.alertFootfallRoot .areasLeaderFill{
   height: 100%;
   border-radius: 999px;
   transition: width 0.35s ease;
 }
 
-.areasLeaderTargetLine {
+.alertFootfallRoot .areasLeaderTargetLine{
   position: absolute;
   top: 0;
   bottom: 0;
@@ -3317,7 +3265,7 @@
   display: none;
 }
 
-.areasLeaderPct {
+.alertFootfallRoot .areasLeaderPct{
   font-weight: 800;
   font-size: 1rem;
   min-width: 3.25rem;
@@ -3325,7 +3273,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.areasStatusBadge {
+.alertFootfallRoot .areasStatusBadge{
   display: inline-block;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
@@ -3335,75 +3283,75 @@
   letter-spacing: 0.03em;
 }
 
-.areasStatusBadge-achieved {
+.alertFootfallRoot .areasStatusBadge-achieved{
   background: #dcfce7;
   color: #166534;
 }
 
-.areasStatusBadge-on-track {
+.alertFootfallRoot .areasStatusBadge-on-track{
   background: var(--card-soft, var(--card));
   color: #1e40af;
 }
 
-.areasStatusBadge-at-risk {
+.alertFootfallRoot .areasStatusBadge-at-risk{
   background: var(--card-soft, var(--card));
   color: #9a3412;
 }
 
-.areasStatusBadge-behind {
+.alertFootfallRoot .areasStatusBadge-behind{
   background: var(--card-soft, var(--card));
   color: #991b1b;
 }
 
-.areasStatusBadge-none {
+.alertFootfallRoot .areasStatusBadge-none{
   background: var(--card-soft, var(--card));
   color: var(--muted);
 }
 
-.areasChart {
+.alertFootfallRoot .areasChart{
   width: 100%;
   height: min(380px, 42vh);
   min-height: 220px;
 }
 
-.areasDetailCharts {
+.alertFootfallRoot .areasDetailCharts{
   margin-top: 1rem;
 }
 
-.areasDetailChartsHead {
+.alertFootfallRoot .areasDetailChartsHead{
   margin-bottom: 0.75rem;
 }
 
-.areasDetailChartsGrid {
+.alertFootfallRoot .areasDetailChartsGrid{
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
 }
 
 @media (min-width: 1100px) {
-  .areasDetailChartsGrid {
+  .alertFootfallRoot .areasDetailChartsGrid{
     grid-template-columns: 1.1fr 1fr;
   }
 }
 
-.areasDetailChartPanel {
+.alertFootfallRoot .areasDetailChartPanel{
   min-width: 0;
 }
 
-.areasDetailChartTitle {
+.alertFootfallRoot .areasDetailChartTitle{
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
 }
 
-.areasChartToolbar {
+.alertFootfallRoot .areasChartToolbar{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
 }
 
-.areasChartToolbarLabel {
+.alertFootfallRoot .areasChartToolbarLabel{
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--muted);
@@ -3412,17 +3360,17 @@
   margin-right: 0.15rem;
 }
 
-.areasDetailChart {
+.alertFootfallRoot .areasDetailChart{
   width: 100%;
   min-height: 260px;
 }
 
-.areasDetailChartDaily {
+.alertFootfallRoot .areasDetailChartDaily{
   height: 320px;
   min-height: 280px;
 }
 
-.areasChartLoading {
+.alertFootfallRoot .areasChartLoading{
   animation: areasPulse 1.2s ease-in-out infinite;
 }
 
@@ -3436,7 +3384,7 @@
   }
 }
 
-.areasChartEmpty {
+.alertFootfallRoot .areasChartEmpty{
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3447,14 +3395,14 @@
   border-radius: 10px;
 }
 
-.areasTableToolbar {
+.alertFootfallRoot .areasTableToolbar{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 
-.areasTableSearch {
+.alertFootfallRoot .areasTableSearch{
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -3462,13 +3410,13 @@
   min-width: 12rem;
 }
 
-.areasSegFilters {
+.alertFootfallRoot .areasSegFilters{
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
 }
 
-.areasSegFilter {
+.alertFootfallRoot .areasSegFilter{
   padding: 0.3rem 0.55rem;
   font-size: 0.75rem;
   font-weight: 600;
@@ -3479,38 +3427,37 @@
   cursor: pointer;
 }
 
-.areasSegFilter:hover {
+.alertFootfallRoot .areasSegFilter:hover{
   border-color: #93c5fd;
 }
 
-.areasSegFilter.active {
+.alertFootfallRoot .areasSegFilter.active{
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
 
-.areasTableWrap {
+.alertFootfallRoot .areasTableWrap{
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
   max-height: 28rem;
 }
 
-.areasTable {
+.alertFootfallRoot .areasTable{
   width: 100%;
   border-collapse: collapse;
   font-size: 0.84rem;
 }
 
-.areasTable th,
-.areasTable td {
+.alertFootfallRoot .areasTable th, .alertFootfallRoot .areasTable td{
   padding: 0.55rem 0.7rem;
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
 }
 
-.areasTable th {
+.alertFootfallRoot .areasTable th{
   position: sticky;
   top: 0;
   z-index: 1;
@@ -3522,7 +3469,7 @@
   white-space: nowrap;
 }
 
-.areasThBtn {
+.alertFootfallRoot .areasThBtn{
   border: none;
   background: transparent;
   padding: 0;
@@ -3533,41 +3480,40 @@
   letter-spacing: inherit;
 }
 
-.areasThBtn:hover {
+.alertFootfallRoot .areasThBtn:hover{
   color: var(--accent);
 }
 
-.areasThNum,
-.areasTdNum {
+.alertFootfallRoot .areasThNum, .alertFootfallRoot .areasTdNum{
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.areasTdPct {
+.alertFootfallRoot .areasTdPct{
   font-weight: 800;
 }
 
-.areasTdOwner {
+.alertFootfallRoot .areasTdOwner{
   font-weight: 600;
   color: var(--muted);
   white-space: nowrap;
 }
 
-.areasMachineName {
+.alertFootfallRoot .areasMachineName{
   font-weight: 600;
 }
 
-.areasTableEmpty {
+.alertFootfallRoot .areasTableEmpty{
   text-align: center;
   color: var(--muted);
   padding: 1.5rem !important;
 }
 
-.areasTable tbody tr:hover {
+.alertFootfallRoot .areasTable tbody tr:hover{
   background: var(--card-soft, var(--card));
 }
 
-.areasSegPill {
+.alertFootfallRoot .areasSegPill{
   display: inline-block;
   padding: 0.12rem 0.4rem;
   border-radius: 4px;
@@ -3576,33 +3522,33 @@
   letter-spacing: 0.02em;
 }
 
-.areasSegPill-KU {
+.alertFootfallRoot .areasSegPill-KU{
   background: var(--card-soft, var(--card));
   color: #1e40af;
 }
 
-.areasSegPill-MOH {
+.alertFootfallRoot .areasSegPill-MOH{
   background: #dcfce7;
   color: #166534;
 }
 
-.areasSegPill-O2 {
+.alertFootfallRoot .areasSegPill-O2{
   background: var(--card-soft, var(--card));
   color: #6b21a8;
 }
 
-.areasSegPill-OTHER {
+.alertFootfallRoot .areasSegPill-OTHER{
   background: var(--card-soft, var(--card));
   color: var(--muted);
 }
 
-.stateBoxError {
+.alertFootfallRoot .stateBoxError{
   border-color: #fecaca;
   background: var(--card-soft, var(--card));
   color: #991b1b;
 }
 
-.areasMachineFilter {
+.alertFootfallRoot .areasMachineFilter{
   margin-bottom: 1rem;
   padding: 0.85rem 1rem;
   background: var(--card);
@@ -3610,7 +3556,7 @@
   border-radius: var(--radius);
 }
 
-.areasMachineFilterHead {
+.alertFootfallRoot .areasMachineFilterHead{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3618,25 +3564,25 @@
   margin-bottom: 0.65rem;
 }
 
-.areasMachineFilterTitle {
+.alertFootfallRoot .areasMachineFilterTitle{
   margin: 0;
   font-size: 0.92rem;
   font-weight: 700;
 }
 
-.areasMachineFilterCount {
+.alertFootfallRoot .areasMachineFilterCount{
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.areasMachineFilterActions {
+.alertFootfallRoot .areasMachineFilterActions{
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-left: auto;
 }
 
-.areasMachineList {
+.alertFootfallRoot .areasMachineList{
   max-height: 14rem;
   overflow: auto;
   border: 1px solid var(--border);
@@ -3644,7 +3590,7 @@
   background: var(--card);
 }
 
-.areasMachineRow {
+.alertFootfallRoot .areasMachineRow{
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 0.5rem;
@@ -3655,34 +3601,31 @@
   cursor: pointer;
 }
 
-.areasMachineRow:last-child {
+.alertFootfallRoot .areasMachineRow:last-child{
   border-bottom: none;
 }
 
-.areasMachineRowName {
+.alertFootfallRoot .areasMachineRowName{
   font-weight: 600;
 }
 
-.areasMachineRowId {
+.alertFootfallRoot .areasMachineRowId{
   font-size: 0.72rem;
   color: var(--muted);
   font-family: ui-monospace, monospace;
 }
 
-.areasMainGridSingle {
+.alertFootfallRoot .areasMainGridSingle{
   grid-template-columns: 1fr;
 }
 
-.promoPage {
+.alertFootfallRoot .promoPage{
   padding: 1rem 1.25rem 2rem;
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.promoAdminPanel,
-.promoPerfSection,
-.promoSwipeDeck,
-.promoEventsSection {
+.alertFootfallRoot .promoAdminPanel, .alertFootfallRoot .promoPerfSection, .alertFootfallRoot .promoSwipeDeck, .alertFootfallRoot .promoEventsSection{
   margin-bottom: 1.5rem;
   padding: 1rem 1.1rem;
   background: var(--card);
@@ -3690,13 +3633,13 @@
   border-radius: var(--radius);
 }
 
-.promoAdminGrid {
+.alertFootfallRoot .promoAdminGrid{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
 }
 
-.promoField {
+.alertFootfallRoot .promoField{
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -3704,53 +3647,50 @@
   font-size: 0.85rem;
 }
 
-.promoField input,
-.promoField select,
-.promoField textarea {
+.alertFootfallRoot .promoField input, .alertFootfallRoot .promoField select, .alertFootfallRoot .promoField textarea{
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-.promoDateRow {
+.alertFootfallRoot .promoDateRow{
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.promoLocGrid {
+.alertFootfallRoot .promoLocGrid{
   display: grid;
   gap: 1rem;
 }
 
-.promoLocCard {
+.alertFootfallRoot .promoLocCard{
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.85rem 1rem;
   background: var(--card);
 }
 
-.promoLocHead h3 {
+.alertFootfallRoot .promoLocHead h3{
   margin: 0 0 0.25rem;
   font-size: 1rem;
 }
 
-.promoLocProduct,
-.promoLocPct {
+.alertFootfallRoot .promoLocProduct, .alertFootfallRoot .promoLocPct{
   margin: 0.15rem 0;
   font-size: 0.82rem;
   color: var(--muted);
 }
 
-.promoDayGrid {
+.alertFootfallRoot .promoDayGrid{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
 
-.promoDayBarTrack {
+.alertFootfallRoot .promoDayBarTrack{
   display: flex;
   height: 48px;
   border-radius: 6px;
@@ -3759,12 +3699,12 @@
   background: var(--card-soft, var(--card));
 }
 
-.promoDayBarFill {
+.alertFootfallRoot .promoDayBarFill{
   height: 100%;
   transition: width 0.2s ease;
 }
 
-.promoDayBarRemain {
+.alertFootfallRoot .promoDayBarRemain{
   height: 100%;
   background: repeating-linear-gradient(
     -45deg,
@@ -3775,21 +3715,20 @@
   );
 }
 
-.promoDayBarLabel,
-.promoDayBarVal {
+.alertFootfallRoot .promoDayBarLabel, .alertFootfallRoot .promoDayBarVal{
   display: block;
   font-size: 0.68rem;
   text-align: center;
   color: var(--muted);
 }
 
-.promoChipRow {
+.alertFootfallRoot .promoChipRow{
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
 
-.promoChip {
+.alertFootfallRoot .promoChip{
   font-size: 0.75rem;
   padding: 0.2rem 0.45rem;
   border-radius: 999px;
@@ -3797,7 +3736,7 @@
   background: var(--card-soft, var(--card));
 }
 
-.promoSwipeCard {
+.alertFootfallRoot .promoSwipeCard{
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -3805,7 +3744,7 @@
   margin-top: 0.75rem;
 }
 
-.promoSwipeBtn {
+.alertFootfallRoot .promoSwipeBtn{
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 999px;
@@ -3815,23 +3754,23 @@
   cursor: pointer;
 }
 
-.promoSwipeMain {
+.alertFootfallRoot .promoSwipeMain{
   text-align: center;
 }
 
-.promoSwipeName {
+.alertFootfallRoot .promoSwipeName{
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0 0 0.5rem;
 }
 
-.promoSwipeDelta {
+.alertFootfallRoot .promoSwipeDelta{
   margin-top: 0.5rem;
   font-size: 0.85rem;
   color: #15803d;
 }
 
-.promoEventsList {
+.alertFootfallRoot .promoEventsList{
   margin: 0;
   padding-left: 1.1rem;
   font-size: 0.82rem;

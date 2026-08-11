@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-11 | **Footfall CSS isolation:** Targets styles scoped under \.alertFootfallRoot\ + lazy Footfall route so Red Flags/Overall ◀▶ scroll and chrome are not overridden. |
 | 2026-08-11 | **Credits breakdown layout:** Label left, KD + event count right (no glued Custom refunds2). |
 | 2026-08-11 | **Footfall dark = no white panels:** Replaced Targets light `#fff` / pale surfaces with Alert `--panel` tokens; charts use night chrome (`#0a0e14`) in dark mode. |
 | 2026-08-11 | **Credits popup scroll + lost revenue hero; Footfall dark mode:** Credits sent modal uses scrollable `salesHistoryModal` and leads with **Est. lost revenue**. Footfall dark mode remaps light Targets surfaces and uses night chart palette. |
