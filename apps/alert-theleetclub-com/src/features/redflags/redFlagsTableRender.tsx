@@ -4,6 +4,7 @@ import { bindStopRowClick } from '@/lib/stopRowClick';
 import { CallAmCell } from '@/components/CallAmCell';
 import { CallOpCell } from '@/components/CallOpCell';
 import { CleaningStatusCell } from '@/components/CleaningStatusCell';
+import { RemoteCreditsCell } from '@/components/RemoteCreditsCell';
 import { OperatorActivityCell } from '@/components/OperatorActivityCell';
 import { OperatorCell } from '@/components/OperatorCell';
 import { MtdSalesCell } from '@/components/MtdSalesCell';
@@ -710,7 +711,12 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
       );
     case 'sendCredit':
       return machId && b.cred?.credits_sent != null ? (
-        <span className={sendCreditToneClass(b.creditsSentN)}>{String(b.cred.credits_sent ?? 0)}</span>
+        <RemoteCreditsCell
+          machineId={machId}
+          machineName={String(row.machineName || machId)}
+          count={Number(b.cred.credits_sent ?? 0)}
+          toneClassName={sendCreditToneClass(b.creditsSentN)}
+        />
       ) : (
         <span className={styles.wireDash}>—</span>
       );

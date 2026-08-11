@@ -18,6 +18,12 @@ export const V2_NAV: V2NavItem[] = [
     icon: 'performance',
   },
   {
+    to: '/v2/footfall',
+    title: 'Footfall',
+    description: 'Targets & camera report',
+    icon: 'footfall',
+  },
+  {
     to: '/v2/promo',
     title: 'Promo',
     description: 'Campaign cups',

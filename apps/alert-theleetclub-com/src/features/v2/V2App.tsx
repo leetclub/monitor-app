@@ -8,6 +8,7 @@ import { OverallPage } from '@/features/overall/OverallPage';
 import { PerformancePage } from '@/features/performance/PerformancePage';
 import { QaVisitPage } from '@/features/qavisit/QaVisitPage';
 import { PromoPage } from '@/features/promo/PromoPage';
+import { FootfallPage } from '@/features/footfall/FootfallPage';
 
 /**
  * Authenticated Alert v2 — Manus shell + Classic boards (same APIs, cells, and popups as `/`).
@@ -49,6 +50,7 @@ export function V2App() {
         <Route path="overall" element={<OverallPage variant="manus" />} />
         <Route path="qa-visit" element={<QaVisitPage variant="manus" />} />
         <Route path="performance" element={<PerformancePage variant="manus" />} />
+        <Route path="footfall" element={<FootfallPage />} />
         <Route path="promo" element={<PromoPage variant="manus" />} />
         <Route path="admin" element={<V2AdminPage />} />
         <Route path="*" element={<Navigate to="red-flags" replace />} />

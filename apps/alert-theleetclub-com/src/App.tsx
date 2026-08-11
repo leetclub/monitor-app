@@ -6,6 +6,7 @@ import { OverallPage } from './features/overall/OverallPage';
 import { QaVisitPage } from './features/qavisit/QaVisitPage';
 import { PerformancePage } from './features/performance/PerformancePage';
 import { PromoPage } from './features/promo/PromoPage';
+import { FootfallPage } from './features/footfall/FootfallPage';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AccessProvider, useAccess } from '@/context/AccessContext';
 import { LoginPage } from '@/pages/LoginPage';
@@ -131,6 +132,15 @@ function NavLinks({ onNavigate, className }: { onNavigate?: () => void; classNam
         <span className="navLinkTitle">Performance</span>
       </NavLink>
       <NavLink
+        to="/footfall"
+        title="Footfall"
+        className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
+        onClick={onNavigate}
+      >
+        <NavIcon name="footfall" />
+        <span className="navLinkTitle">Footfall</span>
+      </NavLink>
+      <NavLink
         to="/promo"
         title="Promo"
         className={({ isActive }) => `navLink ${isActive ? 'navLinkActive' : ''}`}
@@ -243,6 +253,7 @@ function AppRoutesOutlet() {
       <Route path="/overall" element={<OverallPage />} />
       <Route path="/qa-visit" element={<QaVisitPage />} />
       <Route path="/performance" element={<PerformancePage />} />
+      <Route path="/footfall" element={<FootfallPage />} />
       <Route path="/promo" element={<PromoPage />} />
       <Route path="*" element={<DefaultRedirect />} />
     </Routes>

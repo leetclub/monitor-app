@@ -1197,12 +1197,22 @@ def _compute_remote_credits_logs_classic(start_date: str, end_date: str, machine
             }
         totals_by_machine[mid_s]["total_amount"] += float(wc.get("credit_amount") or 0)
         totals_by_machine[mid_s]["count"] += 1
+        amt = float(wc.get("credit_amount") or 0)
         if category == "Custom Refunds":
             totals_by_machine[mid_s]["custom_refunds_count"] += 1
+            totals_by_machine[mid_s]["custom_refunds_amount"] = (
+                float(totals_by_machine[mid_s].get("custom_refunds_amount") or 0) + amt
+            )
         elif category == "Drink Tests":
             totals_by_machine[mid_s]["drink_tests_count"] += 1
+            totals_by_machine[mid_s]["drink_tests_amount"] = (
+                float(totals_by_machine[mid_s].get("drink_tests_amount") or 0) + amt
+            )
         elif category == "Reason Unidentified":
             totals_by_machine[mid_s]["reason_unidentified_count"] += 1
+            totals_by_machine[mid_s]["reason_unidentified_amount"] = (
+                float(totals_by_machine[mid_s].get("reason_unidentified_amount") or 0) + amt
+            )
 
     logs_out.sort(key=lambda a: int(a.get("timestamp") or 0), reverse=True)
     totals_list = sorted(totals_by_machine.values(), key=lambda x: int(x.get("count") or 0), reverse=True)
@@ -1376,6 +1386,7 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
             total_sales = 0.0
             total_tx = 0
             product_counts: Dict[str, int] = {}
+            product_sales: Dict[str, float] = {}
             hour_counts: Dict[int, int] = {}
             tz_kw = ZoneInfo("Asia/Kuwait")
             for v in vends:
@@ -1389,6 +1400,7 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                     prod_name, _sel = _stats_vend_product_fields(v)
                     if prod_name:
                         product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
+                        product_sales[prod_name] = float(product_sales.get(prod_name, 0.0)) + price
                 except Exception:
                     pass
                 try:
@@ -1404,15 +1416,36 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
             low_product = None
             top_products: List[Dict[str, Any]] = []
             low_products: List[Dict[str, Any]] = []
-            if product_counts:
-                # Sort by count desc, name asc
+            # Rank by sales revenue (KD) — primary operator focus; cups kept as secondary.
+            if product_sales:
+                ordered = sorted(
+                    product_sales.items(),
+                    key=lambda kv: (-float(kv[1]), str(kv[0]).lower()),
+                )
+                ordered_low = sorted(
+                    product_sales.items(),
+                    key=lambda kv: (float(kv[1]), str(kv[0]).lower()),
+                )
+
+                def _row(name: str, kwd: float) -> Dict[str, Any]:
+                    return {
+                        "name": name,
+                        "revenueKwd": round(float(kwd), 4),
+                        "count": int(product_counts.get(name) or 0),
+                    }
+
+                top_product = _row(ordered[0][0], ordered[0][1])
+                top_products = [_row(n, k) for n, k in ordered[:5]]
+                low_product = _row(ordered_low[0][0], ordered_low[0][1])
+                low_products = [_row(n, k) for n, k in ordered_low[:5]]
+            elif product_counts:
+                # Legacy path if prices missing.
                 ordered = sorted(product_counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
-                top_product = {"name": ordered[0][0], "count": int(ordered[0][1])}
-                top_products = [{"name": n, "count": int(c)} for n, c in ordered[:5]]
-                # Lowest non-zero (count asc, name asc)
                 ordered_low = sorted(product_counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
-                low_product = {"name": ordered_low[0][0], "count": int(ordered_low[0][1])}
-                low_products = [{"name": n, "count": int(c)} for n, c in ordered_low[:5]]
+                top_product = {"name": ordered[0][0], "count": int(ordered[0][1]), "revenueKwd": None}
+                top_products = [{"name": n, "count": int(c), "revenueKwd": None} for n, c in ordered[:5]]
+                low_product = {"name": ordered_low[0][0], "count": int(ordered_low[0][1]), "revenueKwd": None}
+                low_products = [{"name": n, "count": int(c), "revenueKwd": None} for n, c in ordered_low[:5]]
 
             peak_hour = None
             if hour_counts:
@@ -1435,8 +1468,9 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                     "lowProduct": low_product,
                     "topProducts": top_products,
                     "lowProducts": low_products,
-                    # Full mix for period rollups (Alert product popups / Performance).
+                    # Cups + KD mix for period rollups (Alert / Performance).
                     "productCounts": {str(k): int(v) for k, v in product_counts.items()},
+                    "productSales": {str(k): round(float(v), 4) for k, v in product_sales.items()},
                     "peakHour": peak_hour,
                 },
                 created_at=datetime.utcnow(),

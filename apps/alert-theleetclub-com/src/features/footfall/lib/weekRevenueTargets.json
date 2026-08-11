@@ -1,0 +1,270 @@
+[
+  {
+    "name": "Adan Hallway",
+    "weekTargetKd": 942.5057
+  },
+  {
+    "name": "Adan Hospital - Casualty",
+    "weekTargetKd": 1634.9025
+  },
+  {
+    "name": "Adan Hospital - OPD",
+    "weekTargetKd": 1052.7055
+  },
+  {
+    "name": "Al Dahman Hospital",
+    "weekTargetKd": 50.9833
+  },
+  {
+    "name": "Amiri New",
+    "weekTargetKd": 872.5568
+  },
+  {
+    "name": "Amiri old 2",
+    "weekTargetKd": 477.3718
+  },
+  {
+    "name": "AUK",
+    "weekTargetKd": 373.2491
+  },
+  {
+    "name": "Farwaniya Hall",
+    "weekTargetKd": 1468.46
+  },
+  {
+    "name": "Farwaniya Hospital - Fl. 3",
+    "weekTargetKd": 560.0
+  },
+  {
+    "name": "Farwaniya Main gate",
+    "weekTargetKd": 1378.4759
+  },
+  {
+    "name": "Gulf University",
+    "weekTargetKd": 108.0176
+  },
+  {
+    "name": "Jaber Hospital - Gate 2",
+    "weekTargetKd": 2068.743
+  },
+  {
+    "name": "Jaber Hospital - Gate 6",
+    "weekTargetKd": 1464.7609
+  },
+  {
+    "name": "Jahra Hospital - Main Gate",
+    "weekTargetKd": 770.8863
+  },
+  {
+    "name": "Jahra Hospital - Parking",
+    "weekTargetKd": 851.0031
+  },
+  {
+    "name": "Jahra Women center",
+    "weekTargetKd": 695.4271
+  },
+  {
+    "name": "Khaldeya",
+    "weekTargetKd": 215.0
+  },
+  {
+    "name": "KU Admin",
+    "weekTargetKd": 781.9607
+  },
+  {
+    "name": "KU Arts",
+    "weekTargetKd": 1003.7053
+  },
+  {
+    "name": "KU CBA",
+    "weekTargetKd": 516.5565
+  },
+  {
+    "name": "KU Education",
+    "weekTargetKd": 1363.0087
+  },
+  {
+    "name": "KU Enginnering",
+    "weekTargetKd": 540.6757
+  },
+  {
+    "name": "KU Law",
+    "weekTargetKd": 822.8579
+  },
+  {
+    "name": "KU Medical Jabriya",
+    "weekTargetKd": 157.6036
+  },
+  {
+    "name": "KU Science",
+    "weekTargetKd": 562.2492
+  },
+  {
+    "name": "KU Sharia G",
+    "weekTargetKd": 831.4219
+  },
+  {
+    "name": "KU Shuwaikh",
+    "weekTargetKd": 579.645
+  },
+  {
+    "name": "Kuna",
+    "weekTargetKd": 84.7398
+  },
+  {
+    "name": "Kuwait Fund",
+    "weekTargetKd": 0.0
+  },
+  {
+    "name": "Liberation Tower Elevator",
+    "weekTargetKd": 293.7917
+  },
+  {
+    "name": "Liberation Tower Reception",
+    "weekTargetKd": 479.2394
+  },
+  {
+    "name": "Maternity Hospital OPD",
+    "weekTargetKd": 348.6175
+  },
+  {
+    "name": "MOH main",
+    "weekTargetKd": 296.5655
+  },
+  {
+    "name": "Mubarak Al Kabir hospital",
+    "weekTargetKd": 739.5208
+  },
+  {
+    "name": "O2 Adailiya",
+    "weekTargetKd": 207.0273
+  },
+  {
+    "name": "O2 Jabriya",
+    "weekTargetKd": 105.8622
+  },
+  {
+    "name": "O2 Jahra",
+    "weekTargetKd": 388.2725
+  },
+  {
+    "name": "O2 Mahbulla",
+    "weekTargetKd": 411.6163
+  },
+  {
+    "name": "O2 Riggai",
+    "weekTargetKd": 453.992
+  },
+  {
+    "name": "O2 Sabah Salem",
+    "weekTargetKd": 327.096
+  },
+  {
+    "name": "Razi Hospital - Old",
+    "weekTargetKd": 375.5547
+  },
+  {
+    "name": "Razi Hospital - OPD",
+    "weekTargetKd": 603.2747
+  },
+  {
+    "name": "Sultan Hamra",
+    "weekTargetKd": 102.5255
+  },
+  {
+    "name": "Maternity Hospital Main",
+    "weekTargetKd": 743.7797
+  },
+  {
+    "name": "Adan maternity",
+    "weekTargetKd": 350.0
+  },
+  {
+    "name": "Tourism",
+    "weekTargetKd": 63.903
+  },
+  {
+    "name": "Al Salam Hospital",
+    "weekTargetKd": 70.0
+  },
+  {
+    "name": "AU",
+    "weekTargetKd": 32.994
+  },
+  {
+    "name": "Farwaniya H - OPD-Fl.1",
+    "weekTargetKd": 208.3333
+  },
+  {
+    "name": "KCST",
+    "weekTargetKd": 490.0
+  },
+  {
+    "name": "AOU",
+    "weekTargetKd": 210.0
+  },
+  {
+    "name": "AIU",
+    "weekTargetKd": 350.0
+  },
+  {
+    "name": "Dahia Bl 3",
+    "weekTargetKd": 35.0
+  },
+  {
+    "name": "Medical warehouse",
+    "weekTargetKd": 195.0
+  },
+  {
+    "name": "Al Salam Casualty",
+    "weekTargetKd": 163.2923
+  },
+  {
+    "name": "Adan Main Gate",
+    "weekTargetKd": 296.7589
+  },
+  {
+    "name": "Military Base",
+    "weekTargetKd": 105.3
+  },
+  {
+    "name": "MEW Left",
+    "weekTargetKd": 491.5381
+  },
+  {
+    "name": "Mew Right",
+    "weekTargetKd": 495.1975
+  },
+  {
+    "name": "Farwaniya Hospital - Dental",
+    "weekTargetKd": 609.18
+  },
+  {
+    "name": "Military Hospital Jahra",
+    "weekTargetKd": 50.0
+  },
+  {
+    "name": "Al Bahar Hospital",
+    "weekTargetKd": 245.0
+  },
+  {
+    "name": "Zain Hospital",
+    "weekTargetKd": 90.0
+  },
+  {
+    "name": "NBK Hospital",
+    "weekTargetKd": 60.0
+  },
+  {
+    "name": "Hamad Hospital",
+    "weekTargetKd": 75.0
+  },
+  {
+    "name": "Farwaniya Emergency",
+    "weekTargetKd": 75.0
+  },
+  {
+    "name": "Farwaniya physiotherapy",
+    "weekTargetKd": 75.0
+  }
+]

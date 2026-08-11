@@ -41,6 +41,12 @@ const ICONS: Record<string, JSX.Element> = {
       <path d="M3 10v4h3l5 4V6L6 10H3zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
     </svg>
   ),
+  /** Footfall — people / entrance */
+  footfall: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M12 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm-7 16v-1.5C5 15.57 8.13 14 12 14s7 1.57 7 4.5V20H5zm14.5-9.5 1.4-1.4L19.5 7.7l-1.4 1.4 1.4 1.4zM4.5 10.5l1.4-1.4L4.5 7.7 3.1 9.1l1.4 1.4zM11 2h2v2.5h-2V2z" />
+    </svg>
+  ),
   /** Admin — shield with check */
   admin: (
     <svg viewBox="0 0 24 24" aria-hidden>

@@ -1,0 +1,60 @@
+/* Alert-only chrome around the ported Targets footfall UI */
+.ffAlertToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #3a414d);
+  border-radius: 10px;
+  background: var(--panel, #1a1f28);
+}
+
+.ffAlertSubTabs,
+.ffAlertMode {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ffAlertSubTab,
+.ffAlertModeBtn {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #3a414d);
+  background: transparent;
+  color: var(--text, #dee2ec);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ffAlertSubTab.active,
+.ffAlertModeBtn.active {
+  border-color: #c45c4a;
+  background: rgba(196, 92, 74, 0.18);
+  color: #ffd4c2;
+}
+
+.ffAlertModeLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8a9aab);
+  margin-right: 4px;
+}
+
+.ffAlertModeHint {
+  margin: 0 0 14px;
+  font-size: 0.8rem;
+  color: var(--muted, #8a9aab);
+}
+
+.alertFootfallRoot .ffTopBar h1 {
+  font-size: 1.15rem;
+}

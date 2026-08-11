@@ -855,16 +855,16 @@ def _sum_people_in_by_uidd_day(
     return out
 
 
-def _classic_remote_credits_by_machine(day_iso: str) -> Dict[str, Dict[str, int]]:
-    """Fleet-wide credits + drink tests for a Kuwait day (cached — expensive Vendon scan)."""
-    key = f"rc-classic:{day_iso}"
+def _classic_remote_credits_by_machine(day_iso: str) -> Dict[str, Dict[str, Any]]:
+    """Fleet-wide WEB cashless credits summary for a Kuwait day (cached — expensive Vendon scan)."""
+    key = f"rc-classic-v2:{day_iso}"
     hit = _alert_cache_get(key, max(_ALERT_REMOTE_CREDITS_CACHE_SEC, 120))
     if isinstance(hit, dict):
         return hit
     out = compute_remote_credits_logs_classic(day_iso, day_iso, "")
     totals = out.get("totals") if isinstance(out, dict) else None
     totals = totals if isinstance(totals, list) else []
-    by_machine: Dict[str, Dict[str, int]] = {}
+    by_machine: Dict[str, Dict[str, Any]] = {}
     for t in totals:
         if not isinstance(t, dict):
             continue
@@ -874,7 +874,22 @@ def _classic_remote_credits_by_machine(day_iso: str) -> Dict[str, Dict[str, int]
         by_machine[mid] = {
             "credits_sent": int(t.get("count") or 0),
             "dispense_tests": int(t.get("drink_tests_count") or 0),
+            "total_kd": round(float(t.get("total_amount") or 0), 3),
+            "custom_refunds_count": int(t.get("custom_refunds_count") or 0),
+            "custom_refunds_kd": round(float(t.get("custom_refunds_amount") or 0), 3),
+            "drink_tests_count": int(t.get("drink_tests_count") or 0),
+            "drink_tests_kd": round(float(t.get("drink_tests_amount") or 0), 3),
+            "reason_unidentified_count": int(t.get("reason_unidentified_count") or 0),
+            "reason_unidentified_kd": round(float(t.get("reason_unidentified_amount") or 0), 3),
+            "machine_name": t.get("machine_name"),
         }
+        # Loss = non-customer WEB cashless KD (tests + refunds + unidentified)
+        by_machine[mid]["loss_kd"] = round(
+            float(by_machine[mid]["custom_refunds_kd"])
+            + float(by_machine[mid]["drink_tests_kd"])
+            + float(by_machine[mid]["reason_unidentified_kd"]),
+            3,
+        )
     _alert_cache_set(key, by_machine)
     return by_machine
 
@@ -1749,10 +1764,18 @@ def register_alert_routes(app) -> None:
             scope_ids = requested_machines if requested_machines else list(classic.keys())
             by_machine: Dict[str, Any] = {}
             for mid in scope_ids:
-                base = classic.get(mid)
+                base = classic.get(mid) or {}
                 by_machine[mid] = {
-                    "credits_sent": int(base.get("credits_sent") or 0) if base else 0,
-                    "dispense_tests": int(base.get("dispense_tests") or 0) if base else 0,
+                    "credits_sent": int(base.get("credits_sent") or 0),
+                    "dispense_tests": int(base.get("dispense_tests") or 0),
+                    "total_kd": float(base.get("total_kd") or 0),
+                    "loss_kd": float(base.get("loss_kd") or 0),
+                    "custom_refunds_count": int(base.get("custom_refunds_count") or 0),
+                    "custom_refunds_kd": float(base.get("custom_refunds_kd") or 0),
+                    "drink_tests_count": int(base.get("drink_tests_count") or 0),
+                    "drink_tests_kd": float(base.get("drink_tests_kd") or 0),
+                    "reason_unidentified_count": int(base.get("reason_unidentified_count") or 0),
+                    "reason_unidentified_kd": float(base.get("reason_unidentified_kd") or 0),
                 }
 
             resolve_ids = list(dict.fromkeys(requested_machines if requested_machines else list(classic.keys())))
@@ -1797,6 +1820,78 @@ def register_alert_routes(app) -> None:
         except Exception as ex:
             logger.exception("alert_remote_credits_today_totals")
             return jsonify({"date": None, "byMachineId": {}, "error": str(ex)}), 200
+
+    @app.route("/api/alert/remote-credits/machine-detail", methods=["GET", "OPTIONS"])
+    def alert_remote_credits_machine_detail():
+        """
+        Credits insights for one machine (Kuwait today):
+        WEB cashless vends classified as Custom Refunds / Drink Tests / Reason Unidentified.
+        loss_kd = sum of those categories (operator tests/refunds/promos — not customer revenue).
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        mid = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        if not mid:
+            return jsonify({"error": "machine_id required"}), 400
+        try:
+            kuwait_today = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Kuwait")).date().isoformat()
+            cache_key = f"rc-detail:{kuwait_today}:{mid}"
+            cached = _alert_cache_get(cache_key, _ALERT_REMOTE_CREDITS_CACHE_SEC)
+            if cached is not None:
+                return jsonify(cached)
+
+            classic_row = (_classic_remote_credits_by_machine(kuwait_today) or {}).get(mid) or {}
+            detail = compute_remote_credits_logs_classic(kuwait_today, kuwait_today, mid)
+            logs = detail.get("logs") if isinstance(detail, dict) else []
+            logs = logs if isinstance(logs, list) else []
+            # Cap payload size for the modal
+            logs_out = []
+            for row in logs[:80]:
+                if not isinstance(row, dict):
+                    continue
+                logs_out.append(
+                    {
+                        "timestamp": row.get("timestamp"),
+                        "datetime": row.get("datetime"),
+                        "category": row.get("category"),
+                        "credit_amount": row.get("credit_amount"),
+                        "product_name": row.get("product_name"),
+                        "user_name": row.get("user_name") or row.get("user_email"),
+                        "matched_remote_credit": bool(row.get("matched_remote_credit")),
+                        "matched_failed_dispense": bool(row.get("matched_failed_dispense")),
+                        "category_note": row.get("category_note"),
+                    }
+                )
+            payload = {
+                "date": kuwait_today,
+                "machineId": mid,
+                "machineName": classic_row.get("machine_name"),
+                "summary": {
+                    "credits_sent": int(classic_row.get("credits_sent") or 0),
+                    "total_kd": float(classic_row.get("total_kd") or 0),
+                    "loss_kd": float(classic_row.get("loss_kd") or 0),
+                    "custom_refunds_count": int(classic_row.get("custom_refunds_count") or 0),
+                    "custom_refunds_kd": float(classic_row.get("custom_refunds_kd") or 0),
+                    "drink_tests_count": int(classic_row.get("drink_tests_count") or 0),
+                    "drink_tests_kd": float(classic_row.get("drink_tests_kd") or 0),
+                    "reason_unidentified_count": int(classic_row.get("reason_unidentified_count") or 0),
+                    "reason_unidentified_kd": float(classic_row.get("reason_unidentified_kd") or 0),
+                },
+                "note": (
+                    "WEB cashless vends include customer sales and operator activity. "
+                    "Loss KD sums Drink Tests + Custom Refunds + Reason Unidentified. "
+                    "Remote credit sent is the operator action that often precedes these vends."
+                ),
+                "logs": logs_out,
+            }
+            _alert_cache_set(cache_key, payload)
+            return jsonify(payload)
+        except Exception as ex:
+            logger.exception("alert_remote_credits_machine_detail")
+            return jsonify({"error": str(ex), "machineId": mid, "logs": []}), 500
 
     @app.route("/api/alert/admin/cleaning-schedules", methods=["GET", "POST", "OPTIONS"])
     def alert_admin_cleaning_schedules():
