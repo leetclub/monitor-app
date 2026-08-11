@@ -116,30 +116,45 @@ function CreditsDetailModal({
                 <h3 className="salesHistoryCompareTitle">Breakdown</h3>
                 <ul className="salesHistoryList">
                   <li className="salesHistoryRow">
-                    <span>WEB cashless events</span>
-                    <strong>{s.credits_sent ?? 0}</strong>
+                    <span className="remoteCreditsRowLabel">WEB cashless events</span>
+                    <div className="remoteCreditsRowVal">
+                      <span className="remoteCreditsRowValKd">{s.credits_sent ?? 0}</span>
+                    </div>
                   </li>
                   <li className="salesHistoryRow">
-                    <span>WEB cashless KD (all)</span>
-                    <strong>{fmtKd(s.total_kd)}</strong>
+                    <span className="remoteCreditsRowLabel">WEB cashless KD (all)</span>
+                    <div className="remoteCreditsRowVal">
+                      <span className="remoteCreditsRowValKd">{fmtKd(s.total_kd)}</span>
+                    </div>
                   </li>
                   <li className="salesHistoryRow">
-                    <span>Drink tests</span>
-                    <strong>
-                      {s.drink_tests_count ?? 0} · {fmtKd(s.drink_tests_kd)}
-                    </strong>
+                    <span className="remoteCreditsRowLabel">Drink tests</span>
+                    <div className="remoteCreditsRowVal">
+                      <span className="remoteCreditsRowValKd">{fmtKd(s.drink_tests_kd)}</span>
+                      <span className="remoteCreditsRowValCount">
+                        {s.drink_tests_count ?? 0} event{(s.drink_tests_count ?? 0) === 1 ? '' : 's'}
+                      </span>
+                    </div>
                   </li>
                   <li className="salesHistoryRow">
-                    <span>Custom refunds</span>
-                    <strong>
-                      {s.custom_refunds_count ?? 0} · {fmtKd(s.custom_refunds_kd)}
-                    </strong>
+                    <span className="remoteCreditsRowLabel">Custom refunds</span>
+                    <div className="remoteCreditsRowVal">
+                      <span className="remoteCreditsRowValKd">{fmtKd(s.custom_refunds_kd)}</span>
+                      <span className="remoteCreditsRowValCount">
+                        {s.custom_refunds_count ?? 0} event
+                        {(s.custom_refunds_count ?? 0) === 1 ? '' : 's'}
+                      </span>
+                    </div>
                   </li>
                   <li className="salesHistoryRow">
-                    <span>Reason unidentified</span>
-                    <strong>
-                      {s.reason_unidentified_count ?? 0} · {fmtKd(s.reason_unidentified_kd)}
-                    </strong>
+                    <span className="remoteCreditsRowLabel">Reason unidentified</span>
+                    <div className="remoteCreditsRowVal">
+                      <span className="remoteCreditsRowValKd">{fmtKd(s.reason_unidentified_kd)}</span>
+                      <span className="remoteCreditsRowValCount">
+                        {s.reason_unidentified_count ?? 0} event
+                        {(s.reason_unidentified_count ?? 0) === 1 ? '' : 's'}
+                      </span>
+                    </div>
                   </li>
                 </ul>
                 {detailQ.data?.note ? <p className="salesHistoryNote">{detailQ.data.note}</p> : null}
