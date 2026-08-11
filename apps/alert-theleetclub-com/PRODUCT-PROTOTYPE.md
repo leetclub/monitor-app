@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-11 | **Footfall dark = no white panels:** Replaced Targets light `#fff` / pale surfaces with Alert `--panel` tokens; charts use night chrome (`#0a0e14`) in dark mode. |
 | 2026-08-11 | **Credits popup scroll + lost revenue hero; Footfall dark mode:** Credits sent modal uses scrollable `salesHistoryModal` and leads with **Est. lost revenue**. Footfall dark mode remaps light Targets surfaces and uses night chart palette. |
 | 2026-08-11 | **Footfall tab + Credits insights:** New `/footfall` (and `/v2/footfall`) ports Leet Target Targets + Full report into Alert theme with **Adjusted / Raw camera** toggle. Red Flags **Credits sent** opens popup: WEB cashless categories, KD, est. non-revenue loss; API `GET /api/alert/remote-credits/machine-detail`. Ingress timeouts raised for long footfall builds. |
 | 2026-08-10 | **Machine lookup everywhere:** Shared searchable machine pickers (`MachineIdSearchSelect` / `MachineMultiSearchSelect`) on Admin Machines (Vending machine), Targets (single + bulk), Promo (single + day targets), QA visit admin. Fleet toolbar search on Red Flags/Overall and QA/Performance location filters unchanged. |

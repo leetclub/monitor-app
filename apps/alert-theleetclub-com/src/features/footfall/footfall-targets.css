@@ -1,10 +1,11 @@
 /* Alert Footfall tab — Targets UI themed for Alert shell */
 .alertFootfallRoot {
-  --bg: var(--panel, #1a1f28);
-  --card: var(--panel-elevated, #222833);
-  --border: var(--border, #3a414d);
-  --text: var(--text, #dee2ec);
-  --muted: var(--muted, #8a9aab);
+  --ff-page: var(--bg, #111318);
+  --card: var(--panel, #1e1f25);
+  --card-soft: var(--surface-container-high, #282a2f);
+  --border: var(--border, #30363d);
+  --text: var(--text, #e2e2e9);
+  --muted: var(--muted, #ad8883);
   --accent: #c45c4a;
   --accent2: #2e9e5a;
   --warn: #c0392b;
@@ -145,7 +146,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.88rem;
-  background: #fff;
+  background: var(--card);
 }
 
 .periodBadge {
@@ -174,12 +175,12 @@
 }
 
 .dayTable .avgRow {
-  background: #f0f7fc;
+  background: var(--card-soft, var(--card));
   font-weight: 600;
 }
 
 .dayTable .cmpRow {
-  background: #fff8f0;
+  background: var(--card-soft, var(--card));
 }
 
 .topActions {
@@ -204,7 +205,7 @@
 }
 
 .btnSecondary {
-  background: #fff;
+  background: var(--card);
   color: var(--accent);
 }
 
@@ -325,7 +326,7 @@
 }
 
 .locBtn:hover {
-  background: #e8f4fc;
+  background: var(--card-soft, var(--card));
 }
 
 .locBtn.active {
@@ -364,14 +365,14 @@
 .kpi {
   position: relative;
   padding: 0.65rem 0.75rem;
-  background-color: #f8fbfe;
+  background-color: var(--card-soft, var(--card));
   background-image: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0) 0%,
     rgba(255, 255, 255, 0) 100%
   );
   border-radius: 8px;
-  border: 1px solid #e2eef8;
+  border: 1px solid var(--border);
   cursor: default;
   transition:
     transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -390,7 +391,7 @@
 .kpi:hover {
   transform: translateY(-2px);
   border-color: #b9d8f0;
-  background-color: #ffffff;
+  background-color: var(--card);
   background-image: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.85) 0%,
@@ -408,12 +409,12 @@
 
 .kpiAccent {
   border-color: #f5c6a0;
-  background-color: #fff8f2;
+  background-color: var(--card-soft, var(--card));
 }
 
 .kpiAccent:hover {
   border-color: #f0a86e;
-  background-color: #fff3e8;
+  background-color: var(--card-soft, var(--card));
   background-image: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.8) 0%,
@@ -492,7 +493,7 @@
 
 .tag {
   padding: 0.35rem 0.65rem;
-  background: #eef6fc;
+  background: var(--card-soft, var(--card));
   border-radius: 6px;
   font-size: 0.78rem;
 }
@@ -515,7 +516,7 @@
   padding: 0.65rem 0.85rem;
   border-radius: 10px;
   border: 1px solid #e8b4b0;
-  background: linear-gradient(135deg, #fff5f4 0%, #fff 55%);
+  background: linear-gradient(135deg, var(--card) 0%, var(--card) 55%);
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -523,7 +524,7 @@
 
 .hourlyGapBannerOk {
   border-color: #b8dfc9;
-  background: linear-gradient(135deg, #f0faf4 0%, #fff 55%);
+  background: linear-gradient(135deg, var(--card) 0%, var(--card) 55%);
 }
 
 .hourlyGapBannerLead {
@@ -584,7 +585,7 @@
 
 .hourlyCaptureCardWarn {
   border-color: #e8b4b0;
-  background: linear-gradient(135deg, #fff8f7 0%, #fff 100%);
+  background: linear-gradient(135deg, var(--card) 0%, var(--card) 100%);
 }
 
 .hourlyCaptureLabel {
@@ -640,12 +641,12 @@
 .metricsTable th,
 .metricsTable td {
   padding: 0.45rem 0.55rem;
-  border-bottom: 1px solid #e8f0f6;
+  border-bottom: 1px solid var(--border);
   text-align: left;
 }
 
 .metricsTable th {
-  background: #f4f9fd;
+  background: var(--card-soft, var(--card));
   font-weight: 600;
   position: sticky;
   top: 0;
@@ -675,7 +676,7 @@
   padding: 0.5rem 0.65rem;
   border: 1px dashed #c5dff0;
   border-radius: 8px;
-  background: #f8fcff;
+  background: var(--card-soft, var(--card));
 }
 
 .daySplitDetails summary {
@@ -744,7 +745,7 @@
 
 .rankBlock button:hover,
 .rankBlock button.active {
-  background: #e8f4fc;
+  background: var(--card-soft, var(--card));
 }
 
 .rankNum {
@@ -811,7 +812,7 @@
 .insightsPanel {
   margin: 1rem 0;
   padding: 1rem 1.15rem;
-  background: linear-gradient(135deg, #f8fbff 0%, #eef6fc 100%);
+  background: linear-gradient(135deg, var(--card) 0%, var(--card) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -1255,7 +1256,7 @@
   max-width: 9.75rem;
   padding: 0.5rem;
   pointer-events: auto;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 6px 28px rgba(15, 41, 66, 0.14);
@@ -1273,15 +1274,15 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border: 1px solid #dceaf8;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   color: var(--accent);
   cursor: pointer;
 }
 
 .sectionFlyBarToggle:hover {
-  background: #dceaf8;
+  background: var(--card-soft, var(--card));
 }
 
 .sectionFlyBarList {
@@ -1301,19 +1302,19 @@
   font-weight: 600;
   border: none;
   border-radius: 8px;
-  background: #f8fbfe;
+  background: var(--card-soft, var(--card));
   color: var(--text);
   cursor: pointer;
   border-left: 3px solid transparent;
 }
 
 .sectionFlyLink:hover {
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   color: var(--accent);
 }
 
 .sectionFlyLink.active {
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   color: var(--accent);
   border-left-color: var(--accent);
   font-weight: 700;
@@ -1334,7 +1335,7 @@
     flex-direction: row;
     align-items: center;
     padding: 0.45rem 0.6rem;
-    background: #ffffff;
+    background: var(--card);
     box-shadow: 0 -4px 20px rgba(15, 41, 66, 0.12);
   }
 
@@ -1368,11 +1369,11 @@
 .periodCompareSection {
   margin: 1.25rem 0;
   padding-top: 0.5rem;
-  border-top: 1px solid #e2eef8;
+  border-top: 1px solid var(--border);
 }
 
 .periodCompareSectionOff {
-  background: #fafcfe;
+  background: var(--card-soft, var(--card));
   padding: 0.75rem 1rem;
   border-radius: var(--radius);
   border: 1px dashed var(--border);
@@ -1394,7 +1395,7 @@
 
 .chartHintWarn {
   color: #9a5b00;
-  background: #fff8e6;
+  background: var(--card-soft, var(--card));
   padding: 0.45rem 0.65rem;
   border-radius: 6px;
   border: 1px solid #f0d78c;
@@ -1404,7 +1405,7 @@
 .comparisonCharts {
   margin: 1rem 0 1.5rem;
   padding: 1rem 0;
-  border-top: 2px solid #e2eef8;
+  border-top: 2px solid var(--border);
 }
 
 .chartSection {
@@ -1449,7 +1450,7 @@
 }
 
 .chartExportBtn:hover:not(:disabled) {
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   border-color: var(--accent);
 }
 
@@ -1516,13 +1517,13 @@
 }
 
 .fleetHeatmapMetric.active {
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   border-color: var(--accent);
   color: var(--accent);
 }
 
 .fleetHeatmapMetricHeat.active {
-  background: #fdecea;
+  background: var(--card-soft, var(--card));
   border-color: #c0392b;
   color: #922b21;
 }
@@ -1566,19 +1567,19 @@
   gap: 0.25rem;
   padding: 0.65rem 0.85rem;
   margin-bottom: 1rem;
-  background: #eef8ee;
+  background: var(--card);
   border: 1px solid #c8e6c9;
   border-radius: 8px;
   font-size: 0.82rem;
 }
 
 .dataBannerWarn {
-  background: #fff8e6;
+  background: var(--card-soft, var(--card));
   border-color: #f0d9a8;
 }
 
 .dataBannerProxy {
-  background: #fffaf3;
+  background: var(--card-soft, var(--card));
   border-color: #f0d4a8;
 }
 
@@ -1602,7 +1603,7 @@
 }
 
 .dataBannerProjected {
-  background: #f0fdfa;
+  background: var(--card-soft, var(--card));
   border-color: #99f6e4;
 }
 
@@ -1655,7 +1656,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.88rem;
-  background: #fff;
+  background: var(--card);
   color: var(--text);
 }
 
@@ -1711,7 +1712,7 @@
 .dateCompareBlock {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #e8f0f6;
+  border-top: 1px solid var(--border);
 }
 
 .dateCompareToggle {
@@ -1839,7 +1840,7 @@
 .netTrafficUseFor {
   margin: 0 0 0.65rem;
   padding: 0.65rem 0.85rem;
-  background: #f4f9fd;
+  background: var(--card-soft, var(--card));
   border: 1px solid #dceaf5;
   border-radius: 10px;
   max-width: 52rem;
@@ -1885,7 +1886,7 @@
   right: 0;
   bottom: 0;
   z-index: 44;
-  background: #ffffff;
+  background: var(--card);
   border-top: 1px solid var(--border);
   box-shadow: 0 -6px 28px rgba(15, 41, 66, 0.12);
 }
@@ -1952,7 +1953,7 @@
   outline: 2px dashed var(--accent);
   outline-offset: 2px;
   border-radius: 8px;
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
 }
 
 .compareQuickChips {
@@ -1968,7 +1969,7 @@
   font-size: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: #f8fbff;
+  background: var(--card-soft, var(--card));
   color: var(--text);
   cursor: grab;
 }
@@ -1980,7 +1981,7 @@
 
 .compareWeekChip:not(:disabled):hover {
   border-color: var(--accent);
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
 }
 
 .btnCompact {
@@ -2005,7 +2006,7 @@
 }
 
 .segmentTab {
-  background: var(--card, #fff);
+  background: var(--card, var(--card));
   border: 1px solid var(--border, #c5dff0);
   border-radius: var(--radius, 12px);
   padding: 0.7rem 0.9rem;
@@ -2024,7 +2025,7 @@
 }
 .segmentTabActive {
   border-color: var(--accent, #1e6fd6);
-  background: #e0edff;
+  background: var(--card);
   box-shadow: 0 0 0 2px var(--accent, #1e6fd6) inset;
 }
 .segmentTabLabel {
@@ -2057,7 +2058,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  background: var(--card, #fff);
+  background: var(--card, var(--card));
   border: 1px solid var(--border, #c5dff0);
   border-radius: var(--radius, 12px);
   padding: 0.5rem 0.85rem;
@@ -2122,7 +2123,7 @@
 .targetsPeriodAlt { color: #c2d6ea; }
 
 .explainer {
-  background: #fef3c7;
+  background: var(--card-soft, var(--card));
   border: 1px solid #fbbf24;
   border-radius: var(--radius, 12px);
   padding: 0.45rem 0.85rem;
@@ -2150,7 +2151,7 @@
   margin: 0.75rem 0 0.25rem;
   font-size: 0.92rem;
   font-weight: 600;
-  color: #1e3a5f;
+  color: var(--text);
 }
 .explainerBody em { font-style: italic; color: #b45309; }
 .explainerSteps { margin: 0.45rem 0 0.6rem 1.25rem; padding: 0; }
@@ -2206,10 +2207,10 @@
   text-transform: uppercase;
   vertical-align: middle;
 }
-.locSegPill-KU  { background: #dbeafe; color: #1e40af; }
-.locSegPill-MOH { background: #fed7aa; color: #9a3412; }
+.locSegPill-KU  { background: var(--card-soft, var(--card)); color: #1e40af; }
+.locSegPill-MOH { background: var(--card-soft, var(--card)); color: #9a3412; }
 .locSegPill-O2  { background: #ddd6fe; color: #5b21b6; }
-.locSegPill-OTHER { background: #e4e4e7; color: #3f3f46; }
+.locSegPill-OTHER { background: var(--card); color: #3f3f46; }
 
 .locRaw {
   display: block;
@@ -2243,7 +2244,7 @@
 
 .appMainTab {
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--card);
   border-radius: 999px;
   padding: 0.45rem 1rem;
   font-size: 0.88rem;
@@ -2346,7 +2347,7 @@
 .targetsZeroFootfallNote {
   margin: 0 0 0.75rem;
   padding: 0.65rem 0.85rem;
-  background: #fff8e6;
+  background: var(--card-soft, var(--card));
   border: 1px solid #f0d78c;
   border-radius: 8px;
   font-size: 0.88rem;
@@ -2373,7 +2374,7 @@
 
 .heatmapMetricTab {
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--card);
   border-radius: 8px;
   padding: 0.35rem 0.75rem;
   font-size: 0.8rem;
@@ -2395,7 +2396,7 @@
   position: relative;
   margin-top: 0.75rem;
   padding: 1rem 1.1rem;
-  background: #fff;
+  background: var(--card);
   border: 1px solid #b9d8f0;
   border-radius: 10px;
   box-shadow: 0 14px 28px -16px rgba(15, 23, 42, 0.25);
@@ -2479,7 +2480,7 @@
 .targetsTrajectorySection {
   margin: 0.5rem 0 1.25rem;
   padding-top: 0.5rem;
-  border-top: 2px solid #e2e8f0;
+  border-top: 2px solid var(--border);
 }
 
 .targetsTrajectoryTitle {
@@ -2496,7 +2497,7 @@
   font-weight: 600;
   letter-spacing: 0.01em;
   text-transform: none;
-  color: #64748b;
+  color: var(--muted);
 }
 
 .targetsTrajectoryHead {
@@ -2524,20 +2525,20 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: #1d4ed8;
-  background: #eff6ff;
+  background: var(--card);
   border: 1px solid #bfdbfe;
   border-radius: 8px;
   cursor: pointer;
 }
 
 .targetsTrajectoryTodayBtn:hover {
-  background: #dbeafe;
+  background: var(--card-soft, var(--card));
 }
 
 .targetsTrajectoryHint {
   margin: 0 0 0.85rem;
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--muted);
   line-height: 1.45;
 }
 
@@ -2568,8 +2569,8 @@
   min-height: 5.5rem;
   padding: 0.85rem 0.65rem;
   text-align: center;
-  background: #fafbfc;
-  border: 2px solid #cbd5e1;
+  background: var(--card-soft, var(--card));
+  border: 2px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
   transition:
@@ -2586,7 +2587,7 @@
 
 .targetsTrajectoryCardAccent {
   border-color: #f59e0b;
-  background: #fffbeb;
+  background: var(--card-soft, var(--card));
 }
 
 .targetsTrajectoryLabel {
@@ -2594,14 +2595,14 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #475569;
+  color: var(--muted);
   line-height: 1.25;
 }
 
 .targetsTrajectoryValue {
   font-size: 1.45rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text);
   line-height: 1.1;
 }
 
@@ -2647,8 +2648,8 @@
   min-height: 6.25rem;
   padding: 1rem 0.75rem;
   text-align: center;
-  background: #f8fbfe;
-  border: 1px solid #e2eef8;
+  background: var(--card-soft, var(--card));
+  border: 1px solid var(--border);
   border-radius: 10px;
   cursor: pointer;
   transition:
@@ -2665,7 +2666,7 @@
 
 .targetsKpiCardAccent {
   border-color: #f5c6a0;
-  background: #fff8f2;
+  background: var(--card-soft, var(--card));
 }
 
 .targetsKpiCardLabel {
@@ -2673,7 +2674,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--muted);
   line-height: 1.2;
 }
 
@@ -2681,7 +2682,7 @@
   font-size: 2rem;
   font-weight: 800;
   line-height: 1.05;
-  color: #0f172a;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2702,7 +2703,7 @@
   max-height: 85vh;
   overflow: auto;
   padding: 1.25rem 1.35rem;
-  background: #fff;
+  background: var(--card);
   border-radius: 12px;
   box-shadow: 0 24px 48px -20px rgba(15, 23, 42, 0.35);
 }
@@ -2716,14 +2717,14 @@
 .targetsKpiModalLoc {
   margin: 0 0 0.65rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--muted);
 }
 
 .targetsKpiModalMeta {
   margin: 0 0 0.75rem;
   padding-left: 1.1rem;
   font-size: 0.85rem;
-  color: #475569;
+  color: var(--muted);
 }
 
 .targetsKpiModalBody {
@@ -2731,7 +2732,7 @@
   padding-left: 1.1rem;
   font-size: 0.88rem;
   line-height: 1.45;
-  color: #334155;
+  color: var(--muted);
 }
 
 .targetsKpiModalBody li + li {
@@ -2762,8 +2763,8 @@
 }
 
 .ownersPanel {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--card-soft, var(--card));
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem;
 }
@@ -2784,7 +2785,7 @@
 .ownersField select,
 .ownersField input {
   padding: 0.45rem 0.55rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.9rem;
 }
@@ -2792,15 +2793,15 @@
 .ownersMachineCount {
   margin: 0 0 0.5rem;
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--muted);
 }
 
 .ownersMachineList {
   max-height: 22rem;
   overflow: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--card);
   margin-bottom: 0.75rem;
 }
 
@@ -2810,7 +2811,7 @@
   gap: 0.5rem;
   align-items: center;
   padding: 0.45rem 0.65rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
   cursor: pointer;
 }
@@ -2849,27 +2850,27 @@
   align-items: center;
   padding: 0.65rem 0.75rem;
   margin-bottom: 0.35rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--card);
   cursor: pointer;
   text-align: left;
 }
 
 .ownersAreaBtn:hover {
   border-color: #93c5fd;
-  background: #f8fbff;
+  background: var(--card-soft, var(--card));
 }
 
 .ownersEmpty {
-  color: #64748b;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
 .ownersLoginBlock {
   margin: 0.5rem 0 0.85rem;
   padding: 0.75rem;
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   border: 1px solid #bfdbfe;
   border-radius: 8px;
 }
@@ -2888,8 +2889,8 @@
 }
 
 .ownersEmailReadonly {
-  background: #f1f5f9;
-  color: #334155;
+  background: var(--card-soft, var(--card));
+  color: var(--muted);
   cursor: default;
 }
 
@@ -2899,7 +2900,7 @@
   font-size: 0.85rem;
   line-height: 1.45;
   color: #92400e;
-  background: #fffbeb;
+  background: var(--card-soft, var(--card));
   border: 1px solid #fde68a;
   border-radius: 8px;
 }
@@ -2920,7 +2921,7 @@
 
 .ownersAreaLogin {
   font-size: 0.72rem;
-  color: #64748b;
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -2968,14 +2969,14 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: #1d4ed8;
-  background: #eff6ff;
+  background: var(--card);
   border: 1px solid #bfdbfe;
   border-radius: 8px;
   cursor: pointer;
 }
 
 .areasTodayBtn:hover {
-  background: #dbeafe;
+  background: var(--card-soft, var(--card));
 }
 
 .areasContextBar {
@@ -3054,7 +3055,7 @@
   gap: 1rem;
   margin-bottom: 1rem;
   padding-bottom: 0.85rem;
-  border-bottom: 1px solid #e8f0f8;
+  border-bottom: 1px solid var(--border);
 }
 
 .areasKpiStripTitle {
@@ -3111,8 +3112,8 @@
 
 .areasKpiCard {
   padding: 0.75rem 0.85rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--card-soft, var(--card));
+  border: 1px solid var(--border);
   border-radius: 10px;
   border-left: 3px solid var(--accent);
 }
@@ -3123,7 +3124,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--muted);
 }
 
 .areasKpiCardValue {
@@ -3205,9 +3206,9 @@
   align-items: center;
   width: 100%;
   padding: 0.7rem 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fafbfc;
+  background: var(--card-soft, var(--card));
   cursor: pointer;
   text-align: left;
   transition:
@@ -3218,12 +3219,12 @@
 
 .areasLeaderRow:hover {
   border-color: #93c5fd;
-  background: #f8fbff;
+  background: var(--card-soft, var(--card));
 }
 
 .areasLeaderRowSelected {
   border-color: var(--accent);
-  background: #eef6ff;
+  background: var(--card-soft, var(--card));
   box-shadow: 0 0 0 2px rgba(30, 111, 214, 0.12);
 }
 
@@ -3234,24 +3235,24 @@
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: var(--card-soft, var(--card));
   font-size: 0.8rem;
   font-weight: 800;
-  color: #475569;
+  color: var(--muted);
 }
 
 .areasLeaderRow:nth-child(1) .areasLeaderRank {
-  background: #fef3c7;
+  background: var(--card-soft, var(--card));
   color: #92400e;
 }
 
 .areasLeaderRow:nth-child(2) .areasLeaderRank {
-  background: #e2e8f0;
-  color: #334155;
+  background: var(--card-soft, var(--card));
+  color: var(--muted);
 }
 
 .areasLeaderRow:nth-child(3) .areasLeaderRank {
-  background: #ffedd5;
+  background: var(--card-soft, var(--card));
   color: #9a3412;
 }
 
@@ -3278,7 +3279,7 @@
   align-items: center;
   gap: 0.25rem 0.35rem;
   font-size: 0.78rem;
-  color: #64748b;
+  color: var(--muted);
   margin-bottom: 0.45rem;
 }
 
@@ -3293,7 +3294,7 @@
 .areasLeaderTrack {
   position: relative;
   height: 0.5rem;
-  background: #e2e8f0;
+  background: var(--card-soft, var(--card));
   border-radius: 999px;
   overflow: hidden;
 }
@@ -3340,23 +3341,23 @@
 }
 
 .areasStatusBadge-on-track {
-  background: #dbeafe;
+  background: var(--card-soft, var(--card));
   color: #1e40af;
 }
 
 .areasStatusBadge-at-risk {
-  background: #ffedd5;
+  background: var(--card-soft, var(--card));
   color: #9a3412;
 }
 
 .areasStatusBadge-behind {
-  background: #fee2e2;
+  background: var(--card-soft, var(--card));
   color: #991b1b;
 }
 
 .areasStatusBadge-none {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--card-soft, var(--card));
+  color: var(--muted);
 }
 
 .areasChart {
@@ -3441,8 +3442,8 @@
   justify-content: center;
   color: var(--muted);
   font-size: 0.88rem;
-  background: #f8fafc;
-  border: 1px dashed #e2e8f0;
+  background: var(--card-soft, var(--card));
+  border: 1px dashed var(--border);
   border-radius: 10px;
 }
 
@@ -3455,7 +3456,7 @@
 
 .areasTableSearch {
   padding: 0.4rem 0.6rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 0.85rem;
   min-width: 12rem;
@@ -3471,10 +3472,10 @@
   padding: 0.3rem 0.55rem;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: #fff;
-  color: #475569;
+  background: var(--card);
+  color: var(--muted);
   cursor: pointer;
 }
 
@@ -3490,7 +3491,7 @@
 
 .areasTableWrap {
   overflow: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 10px;
   max-height: 28rem;
 }
@@ -3504,7 +3505,7 @@
 .areasTable th,
 .areasTable td {
   padding: 0.55rem 0.7rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
 }
@@ -3513,11 +3514,11 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f1f5f9;
+  background: var(--card-soft, var(--card));
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -3548,7 +3549,7 @@
 
 .areasTdOwner {
   font-weight: 600;
-  color: #334155;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -3563,7 +3564,7 @@
 }
 
 .areasTable tbody tr:hover {
-  background: #f8fbff;
+  background: var(--card-soft, var(--card));
 }
 
 .areasSegPill {
@@ -3576,7 +3577,7 @@
 }
 
 .areasSegPill-KU {
-  background: #dbeafe;
+  background: var(--card-soft, var(--card));
   color: #1e40af;
 }
 
@@ -3586,18 +3587,18 @@
 }
 
 .areasSegPill-O2 {
-  background: #f3e8ff;
+  background: var(--card-soft, var(--card));
   color: #6b21a8;
 }
 
 .areasSegPill-OTHER {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--card-soft, var(--card));
+  color: var(--muted);
 }
 
 .stateBoxError {
   border-color: #fecaca;
-  background: #fef2f2;
+  background: var(--card-soft, var(--card));
   color: #991b1b;
 }
 
@@ -3638,9 +3639,9 @@
 .areasMachineList {
   max-height: 14rem;
   overflow: auto;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--card);
 }
 
 .areasMachineRow {
@@ -3649,7 +3650,7 @@
   gap: 0.5rem;
   align-items: center;
   padding: 0.45rem 0.65rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
   cursor: pointer;
 }
@@ -3724,10 +3725,10 @@
 }
 
 .promoLocCard {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.85rem 1rem;
-  background: #fff;
+  background: var(--card);
 }
 
 .promoLocHead h3 {
@@ -3754,8 +3755,8 @@
   height: 48px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--card-soft, var(--card));
 }
 
 .promoDayBarFill {
@@ -3767,10 +3768,10 @@
   height: 100%;
   background: repeating-linear-gradient(
     -45deg,
-    #f1f5f9,
-    #f1f5f9 4px,
-    #e2e8f0 4px,
-    #e2e8f0 8px
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.06) 4px,
+    rgba(255, 255, 255, 0.02) 4px,
+    rgba(255, 255, 255, 0.02) 8px
   );
 }
 
@@ -3792,8 +3793,8 @@
   font-size: 0.75rem;
   padding: 0.2rem 0.45rem;
   border-radius: 999px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--card-soft, var(--card));
 }
 
 .promoSwipeCard {
@@ -3809,7 +3810,7 @@
   height: 2.5rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--card);
   font-size: 1.25rem;
   cursor: pointer;
 }

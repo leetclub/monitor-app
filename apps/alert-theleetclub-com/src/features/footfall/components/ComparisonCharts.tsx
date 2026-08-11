@@ -6,6 +6,8 @@ import type { LocationReport } from '@/features/footfall/lib/types';
 import { ChartExportWrap } from '@/features/footfall/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/features/footfall/lib/chartExport';
 import { TrendCharts } from '@/features/footfall/components/TrendCharts';
+import { useNightChart } from '@/features/footfall/NightChartContext';
+import { footfallChartChrome } from '@/features/footfall/lib/footfallChartChrome';
 
 type Props = {
   location: LocationReport;
@@ -17,6 +19,7 @@ type Props = {
 export function DivergenceChart({ location, benchmarkPct }: { location: LocationReport; benchmarkPct: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const hours = location.hours;
 
   const exportChart = useCallback(() => {
@@ -25,7 +28,7 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
       chartInst.current,
       chartFilename([location.locationName, 'divergence']),
     );
-  }, [location.locationName]);
+  }, [location.locationName, nightMode]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -36,16 +39,22 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
       .filter((h) => h.isWeakConversion)
       .map((h) => [{ xAxis: h.label }, { xAxis: h.label }]);
 
+    const chrome = footfallChartChrome(nightMode);
     chart.setOption({
+      backgroundColor: chrome.backgroundColor,
       title: {
         text: 'Footfall vs conversion — divergence analysis',
         subtext: 'Shaded hours: high traffic but conversion below benchmark (unrealized potential)',
         left: 'center',
-        textStyle: { fontSize: 14, fontWeight: 600 },
-        subtextStyle: { fontSize: 11, color: '#64748b' },
+        textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
+        subtextStyle: { fontSize: 11, color: chrome.muted },
       },
       tooltip: { trigger: 'axis' },
-      legend: { bottom: 0, data: ['Avg footfall', 'Conversion %', `Benchmark ${benchmarkPct}%`] },
+      legend: {
+        bottom: 0,
+        data: ['Avg footfall', 'Conversion %', `Benchmark ${benchmarkPct}%`],
+        textStyle: { color: chrome.legend },
+      },
       grid: { left: 58, right: 58, top: 64, bottom: 56 },
       xAxis: { type: 'category', data: labels, boundaryGap: false },
       yAxis: [
@@ -118,7 +127,7 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
       chart.dispose();
       chartInst.current = null;
     };
-  }, [location, benchmarkPct, hours]);
+  }, [location, benchmarkPct, hours, nightMode]);
 
   return (
     <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
@@ -131,6 +140,7 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
 export function PeriodCompareChart({ location }: { location: LocationReport }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const cmp = location.compareHours;
   const hasCompare = Boolean(cmp?.length && location.comparePeriodDates?.length);
 
@@ -140,7 +150,7 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
       chartInst.current,
       chartFilename([location.locationName, 'period-compare-hourly']),
     );
-  }, [location.locationName]);
+  }, [location.locationName, nightMode]);
 
   useEffect(() => {
     if (!ref.current || !hasCompare || !cmp) return;
@@ -148,16 +158,18 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
     chartInst.current = chart;
     const labels = location.hours.map((h) => h.label);
     const cmpDates = location.comparePeriodDates ?? [];
+    const chrome = footfallChartChrome(nightMode);
     chart.setOption({
+      backgroundColor: chrome.backgroundColor,
       title: {
         text: 'Period comparison — footfall & cups',
         subtext: `Primary ${location.periodDates[0]}–${location.periodDates.at(-1)} vs Compare ${cmpDates[0]}–${cmpDates.at(-1)}`,
         left: 'center',
-        textStyle: { fontSize: 14, fontWeight: 600 },
-        subtextStyle: { fontSize: 10, color: '#64748b' },
+        textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
+        subtextStyle: { fontSize: 10, color: chrome.muted },
       },
       tooltip: { trigger: 'axis' },
-      legend: { bottom: 0 },
+      legend: { bottom: 0, textStyle: { color: chrome.legend } },
       grid: { left: 56, right: 56, top: 72, bottom: 56 },
       xAxis: { type: 'category', data: labels },
       yAxis: [
@@ -202,7 +214,7 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
       chart.dispose();
       chartInst.current = null;
     };
-  }, [location, cmp, hasCompare]);
+  }, [location, cmp, hasCompare, nightMode]);
 
   if (!hasCompare) return null;
 
@@ -219,6 +231,7 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
 export function DailyBreakdownChart({ location }: { location: LocationReport }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const bd = normalizeDaysBreakdown(location.daysBreakdown);
   const days = alignedDayRows(location.daysBreakdown);
 
@@ -228,22 +241,24 @@ export function DailyBreakdownChart({ location }: { location: LocationReport }) 
       chartInst.current,
       chartFilename([location.locationName, 'daily-breakdown']),
     );
-  }, [location.locationName]);
+  }, [location.locationName, nightMode]);
 
   useEffect(() => {
     if (!ref.current || !days.length) return;
     const chart = echarts.init(ref.current);
     chartInst.current = chart;
+    const chrome = footfallChartChrome(nightMode);
     chart.setOption({
+      backgroundColor: chrome.backgroundColor,
       title: {
         text: 'Day-by-day comparison (within period)',
         subtext: 'Compare individual business days to spot outliers vs the period average',
         left: 'center',
-        textStyle: { fontSize: 14, fontWeight: 600 },
-        subtextStyle: { fontSize: 11, color: '#64748b' },
+        textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
+        subtextStyle: { fontSize: 11, color: chrome.muted },
       },
       tooltip: { trigger: 'axis' },
-      legend: { bottom: 0 },
+      legend: { bottom: 0, textStyle: { color: chrome.legend } },
       grid: { left: 56, right: 48, top: 64, bottom: 56 },
       xAxis: { type: 'category', data: days.map((d) => d.date) },
       yAxis: [
@@ -289,7 +304,7 @@ export function DailyBreakdownChart({ location }: { location: LocationReport }) 
       chart.dispose();
       chartInst.current = null;
     };
-  }, [location, days]);
+  }, [location, days, nightMode]);
 
   if (!days.length && bd.mode === 'split') {
     const sl = bd.salesRows ?? [];
@@ -321,6 +336,7 @@ export function DailyBreakdownChart({ location }: { location: LocationReport }) 
 export function DailyPeriodCompareChart({ location }: { location: LocationReport }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const slots = periodCompareDaySlots(location);
   const hasCompare = hasDailyPeriodCompare(location);
 
@@ -330,7 +346,7 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
       chartInst.current,
       chartFilename([location.locationName, 'period-compare-daily']),
     );
-  }, [location.locationName]);
+  }, [location.locationName, nightMode]);
 
   useEffect(() => {
     if (!ref.current || !hasCompare) return;
@@ -338,13 +354,15 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
     chartInst.current = chart;
     const primaryDates = location.periodDates;
     const cmpDates = location.comparePeriodDates ?? [];
+    const chrome = footfallChartChrome(nightMode);
     chart.setOption({
+      backgroundColor: chrome.backgroundColor,
       title: {
         text: 'Period comparison — day by day',
         subtext: `Primary ${primaryDates[0]}–${primaryDates.at(-1)} vs Compare ${cmpDates[0]}–${cmpDates.at(-1)} (aligned Sun–Thu)`,
         left: 'center',
-        textStyle: { fontSize: 14, fontWeight: 600 },
-        subtextStyle: { fontSize: 10, color: '#64748b' },
+        textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
+        subtextStyle: { fontSize: 10, color: chrome.muted },
       },
       tooltip: {
         trigger: 'axis',
@@ -363,7 +381,7 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
             .join('<br/>');
         },
       },
-      legend: { bottom: 0 },
+      legend: { bottom: 0, textStyle: { color: chrome.legend } },
       grid: { left: 56, right: 48, top: 72, bottom: 56 },
       xAxis: {
         type: 'category',
@@ -425,7 +443,7 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
       chart.dispose();
       chartInst.current = null;
     };
-  }, [location, slots, hasCompare]);
+  }, [location, slots, hasCompare, nightMode]);
 
   if (!hasCompare) return null;
 

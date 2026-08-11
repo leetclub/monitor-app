@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
+import { useNightChart } from '@/features/footfall/NightChartContext';
+import { footfallChartChrome } from '@/features/footfall/lib/footfallChartChrome';
 import type { LocationReport } from '@/features/footfall/lib/types';
 import { inferOwnerSegment } from '@/features/footfall/lib/ownerSegment';
 import { ChartExportWrap } from '@/features/footfall/components/ChartExportWrap';
@@ -19,6 +21,7 @@ type Props = {
 export function TargetsGraphSection({ location }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const hours = location.hours;
   const bench = targetsBenchmarkForLocation(location);
   const pricePerCup =
@@ -32,7 +35,7 @@ export function TargetsGraphSection({ location }: Props) {
       chartInst.current,
       chartFilename([location.locationName, 'targets-overview']),
     );
-  }, [location.locationName]);
+  }, [location.locationName, nightMode]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -68,17 +71,21 @@ export function TargetsGraphSection({ location }: Props) {
     const ffLabel = footfallSeriesLabel(location);
     const estNote = isMirroredFootfall(location) ? ` · ${ffLabel.toLowerCase()}` : '';
 
+    const chrome = footfallChartChrome(nightMode);
     chart.setOption({
+      backgroundColor: chrome.backgroundColor,
       title: {
         text: `${ffLabel}, conversion, revenue & gap to target`,
         subtext: `${bench}% benchmark (${inferOwnerSegment(location)}) · one view${estNote}`,
         left: 'center',
-        textStyle: { fontSize: 14, fontWeight: 600 },
-        subtextStyle: { fontSize: 11, color: '#64748b' },
+        textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
+        subtextStyle: { fontSize: 11, color: chrome.muted },
       },
       tooltip: {
         trigger: 'axis',
         confine: true,
+        backgroundColor: chrome.tooltipBg,
+        textStyle: { color: chrome.tooltipText },
         formatter: (params: unknown) => {
           const arr = params as { dataIndex: number }[];
           const idx = arr[0]?.dataIndex ?? 0;
@@ -100,6 +107,7 @@ export function TargetsGraphSection({ location }: Props) {
       legend: {
         type: 'scroll',
         bottom: 0,
+        textStyle: { color: chrome.legend },
         data: [
           ffLabel,
           'Conversion %',
@@ -109,7 +117,12 @@ export function TargetsGraphSection({ location }: Props) {
         ],
       },
       grid: { left: 58, right: 108, top: 72, bottom: 56 },
-      xAxis: { type: 'category', data: labels, boundaryGap: true },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        boundaryGap: true,
+        axisLabel: { color: chrome.axis },
+      },
       yAxis: [
         {
           type: 'value',
@@ -218,13 +231,13 @@ export function TargetsGraphSection({ location }: Props) {
       chart.dispose();
       chartInst.current = null;
     };
-  }, [location, hours, bench, pricePerCup]);
+  }, [location, hours, bench, pricePerCup, nightMode]);
 
   return (
     <div className="targetsGraphSection">
       <h3 className="sectionTitle">Hourly overview · {location.locationName}</h3>
       <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
-        <div ref={ref} className="chartPanel" />
+        <div ref={ref} className={`chartPanel${nightMode ? " chartPanelNight" : ""}`} />
       </ChartExportWrap>
     </div>
   );

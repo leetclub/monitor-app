@@ -9,6 +9,8 @@ import {
   NET_TRAFFIC_LEAD,
   NET_TRAFFIC_SECTION_TITLE,
 } from '@/features/footfall/lib/netTrafficCopy';
+import { useNightChart } from '@/features/footfall/NightChartContext';
+import { footfallChartChrome } from '@/features/footfall/lib/footfallChartChrome';
 
 type Props = { location: LocationReport };
 
@@ -26,6 +28,7 @@ export function hasPeriodNetTraffic(location: LocationReport): boolean {
 export function NetTrafficChart({ location }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
+  const nightMode = useNightChart();
   const hours = location.hours ?? [];
   const hasHourly = hasHourlyNetTraffic(location);
   const d = location.daily;
@@ -45,19 +48,21 @@ export function NetTrafficChart({ location }: Props) {
       hasPeriod && d.totalIn != null && d.totalOut != null && d.totalNet != null
         ? formatNetPeriodLine(d.totalIn, d.totalOut, d.totalNet)
         : 'Avg per business hour';
+    const chrome = footfallChartChrome(nightMode);
     chart.setOption({
+      backgroundColor: chrome.backgroundColor,
       title: {
         text: 'Net traffic by hour',
         subtext: periodLine,
         left: 'center',
-        textStyle: { fontSize: 14, fontWeight: 600 },
-        subtextStyle: { fontSize: 11, color: '#64748b' },
+        textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
+        subtextStyle: { fontSize: 11, color: chrome.muted },
       },
       tooltip: { trigger: 'axis' },
-      legend: { bottom: 0, data: ['In', 'Out', NET_TRAFFIC_LABEL] },
+      legend: { bottom: 0, data: ['In', 'Out', NET_TRAFFIC_LABEL], textStyle: { color: chrome.legend } },
       grid: { left: 56, right: 24, top: 72, bottom: 56 },
-      xAxis: { type: 'category', data: labels },
-      yAxis: { type: 'value', name: 'Count' },
+      xAxis: { type: 'category', data: labels, axisLabel: { color: chrome.axis } },
+      yAxis: { type: 'value', name: 'Count', nameTextStyle: { color: chrome.muted }, axisLabel: { color: chrome.axis }, splitLine: { lineStyle: { color: nightMode ? 'rgba(136,153,170,0.15)' : '#eee' } } },
       series: [
         {
           name: 'In',
@@ -92,7 +97,7 @@ export function NetTrafficChart({ location }: Props) {
       chart.dispose();
       chartInst.current = null;
     };
-  }, [location, hours, hasHourly, hasPeriod, d]);
+  }, [location, hours, hasHourly, hasPeriod, d, nightMode]);
 
   if (!hasHourly && !hasPeriod) {
     return (
@@ -117,7 +122,7 @@ export function NetTrafficChart({ location }: Props) {
       ) : null}
       {hasHourly ? (
         <ChartExportWrap onExport={exportChart}>
-          <div ref={ref} className="chartPanel chartPanelShort" />
+          <div ref={ref} className={`chartPanel chartPanelShort${nightMode ? ' chartPanelNight' : ''}`} />
         </ChartExportWrap>
       ) : null}
     </section>
