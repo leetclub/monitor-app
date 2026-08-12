@@ -8,6 +8,7 @@ export function ProductExtremesModal({
   topProducts,
   lowProducts,
   periodLabel,
+  distinctDrinksSold,
   onClose,
 }: {
   machineName: string;
@@ -15,6 +16,8 @@ export function ProductExtremesModal({
   topProducts?: ProductNameCount[] | null;
   lowProducts?: ProductNameCount[] | null;
   periodLabel?: string | null;
+  /** Distinct product names with sales in the compare period. */
+  distinctDrinksSold?: number | null;
   onClose: () => void;
 }) {
   useAlertModal(onClose);
@@ -22,7 +25,13 @@ export function ProductExtremesModal({
   const panel = modalPanelHandlers();
   const highs = namesOnlyList(topProducts, 5);
   const lows = namesOnlyList(lowProducts, 5);
-  const fewSkus = highs.length > 0 && lows.length === 0;
+  const distinct =
+    distinctDrinksSold != null && Number.isFinite(Number(distinctDrinksSold))
+      ? Math.max(0, Math.round(Number(distinctDrinksSold)))
+      : Math.max(highs.length, highs.length + lows.length);
+  const fewSkus = distinct > 0 && distinct <= 5;
+  const topTitle = distinct > 0 && distinct < 5 ? `Top ${distinct}` : 'Top 5';
+  const lowTitle = fewSkus ? 'Lowest' : 'Lowest 5';
 
   return createPortal(
     <div
@@ -48,6 +57,14 @@ export function ProductExtremesModal({
           </button>
         </div>
         <div className="salesHistoryBody">
+          {distinct > 0 ? (
+            <p className="productExtremesDistinct" role="status">
+              <strong>{distinct}</strong> distinct drink{distinct === 1 ? '' : 's'} sold in this
+              period
+              {distinct < 5 ? ' — that is why Top is shorter than 5' : ''}.
+            </p>
+          ) : null}
+
           <p className="salesHistoryNote">
             Names only — highest and lowest by <strong>sales revenue (KD)</strong> in the compare
             period. Lowest never repeats a Top drink.
@@ -55,7 +72,7 @@ export function ProductExtremesModal({
 
           <div className="productExtremesGrid">
             <section className="productExtremesCol productExtremesHigh">
-              <h3 className="salesHistoryCompareTitle">Top 5</h3>
+              <h3 className="salesHistoryCompareTitle">{topTitle}</h3>
               {highs.length ? (
                 <ol className="productExtremesList">
                   {highs.map((name) => (
@@ -69,7 +86,7 @@ export function ProductExtremesModal({
               )}
             </section>
             <section className="productExtremesCol productExtremesLow">
-              <h3 className="salesHistoryCompareTitle">Lowest 5</h3>
+              <h3 className="salesHistoryCompareTitle">{lowTitle}</h3>
               {lows.length ? (
                 <ol className="productExtremesList">
                   {lows.map((name) => (
@@ -78,8 +95,8 @@ export function ProductExtremesModal({
                 </ol>
               ) : (
                 <p className="salesHistoryNote">
-                  {fewSkus
-                    ? `Only ${highs.length} product${highs.length === 1 ? '' : 's'} sold in this period — not enough for a separate lowest list.`
+                  {fewSkus && highs.length
+                    ? `Only ${distinct} drink${distinct === 1 ? '' : 's'} sold — not enough for a separate lowest list.`
                     : 'No product mix for this period yet.'}
                 </p>
               )}

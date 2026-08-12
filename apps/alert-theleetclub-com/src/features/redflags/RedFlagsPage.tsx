@@ -652,6 +652,7 @@ export function RedFlagsPage({
             lowProduct?: { name?: string | null; count?: number | null } | null;
             topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
             lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+            distinctDrinksSold?: number | null;
           }
         >;
       }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compare.preset, compare)}`),
@@ -1380,6 +1381,9 @@ export function RedFlagsPage({
                   ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProduct!]
                   : []
             }
+            distinctDrinksSold={
+              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.distinctDrinksSold
+            }
             periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
             onClose={() => setDrinksDetail(null)}
           />
@@ -1915,6 +1919,9 @@ export function RedFlagsPage({
               : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProduct
                 ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProduct!]
                 : []
+          }
+          distinctDrinksSold={
+            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.distinctDrinksSold
           }
           periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
           onClose={() => setDrinksDetail(null)}

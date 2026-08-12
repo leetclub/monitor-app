@@ -31,6 +31,7 @@ export function V2RedFlagsPage() {
     machineName: string;
     topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
     lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+    distinctDrinksSold?: number | null;
   } | null>(null);
 
   const filtered = useMemo(() => {
@@ -71,6 +72,7 @@ export function V2RedFlagsPage() {
                 machineName: e.machineName,
                 topProducts: e.topProducts,
                 lowProducts: e.lowProducts,
+                distinctDrinksSold: e.distinctDrinksSold,
               });
             }}
           >
@@ -189,6 +191,7 @@ export function V2RedFlagsPage() {
           machineName={drinksDetail.machineName}
           topProducts={drinksDetail.topProducts}
           lowProducts={drinksDetail.lowProducts}
+          distinctDrinksSold={drinksDetail.distinctDrinksSold}
           onClose={() => setDrinksDetail(null)}
         />
       ) : null}

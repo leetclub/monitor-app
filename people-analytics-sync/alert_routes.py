@@ -3150,8 +3150,10 @@ def register_alert_routes(app) -> None:
                     top_products, low_products = _product_extremes_from_sales(
                         a_sales_by_product, a_counts, n=5
                     )
+                    distinct_drinks = len(a_sales_by_product)
                 else:
                     top_products, low_products = _product_extremes_from_counts(a_counts, n=5)
+                    distinct_drinks = len(a_counts)
                 if not top_products:
                     # Prefer lists from latest day payload; else single top/low.
                     raw_top = payload.get("topProducts") if isinstance(payload.get("topProducts"), list) else None
@@ -3182,6 +3184,14 @@ def register_alert_routes(app) -> None:
                                 "count": int(payload["lowProduct"].get("count") or 0),
                             }
                         ]
+                    # Legacy payload only carries extremes — estimate distinct as union of names.
+                    if distinct_drinks <= 0:
+                        names = {
+                            str(x.get("name") or "").strip()
+                            for x in (top_products or []) + (low_products or [])
+                            if isinstance(x, dict) and str(x.get("name") or "").strip()
+                        }
+                        distinct_drinks = len(names)
 
                 out["byMachineId"][mid] = {
                     "aSalesKwd": round(a_sales, 4),
@@ -3197,6 +3207,7 @@ def register_alert_routes(app) -> None:
                     or (low_products[0] if low_products else None),
                     "topProducts": top_products,
                     "lowProducts": low_products,
+                    "distinctDrinksSold": int(distinct_drinks),
                 }
 
             return jsonify(out)
