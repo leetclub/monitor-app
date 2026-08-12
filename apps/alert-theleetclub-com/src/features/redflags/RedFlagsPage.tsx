@@ -667,6 +667,8 @@ export function RedFlagsPage({
       apiGet<{
         labelA?: string | null;
         labelB?: string | null;
+        dateAStart?: string | null;
+        dateAEnd?: string | null;
         byMachineId?: Record<
           string,
           {
@@ -1396,6 +1398,8 @@ export function RedFlagsPage({
               vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId],
             )}
             periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
+            periodStart={vendonSummaryQ.data?.dateAStart}
+            periodEndExclusive={vendonSummaryQ.data?.dateAEnd}
             onClose={() => setDrinksDetail(null)}
           />
         ) : null}
@@ -1921,6 +1925,8 @@ export function RedFlagsPage({
             vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId],
           )}
           periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
+          periodStart={vendonSummaryQ.data?.dateAStart}
+          periodEndExclusive={vendonSummaryQ.data?.dateAEnd}
           onClose={() => setDrinksDetail(null)}
         />
       ) : null}

@@ -180,6 +180,8 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
       apiGet<{
         labelA?: string | null;
         labelB?: string | null;
+        dateAStart?: string | null;
+        dateAEnd?: string | null;
         byMachineId?: Record<
           string,
           {
@@ -838,6 +840,9 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
     clear,
     clearPct,
     compareMode,
+    periodLabel: vendonLabels.primary || vendonSummaryQ.data?.labelA || null,
+    periodStart: vendonSummaryQ.data?.dateAStart || null,
+    periodEndExclusive: vendonSummaryQ.data?.dateAEnd || null,
   };
 }
 

@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-12 | **Top/low period + dates:** Popup shows Alert data window (preset label + Kuwait calendar range) and notes Vendon’s wider default range can differ. |
 | 2026-08-12 | **Top/low no stale Lowest:** Empty `lowProducts` is respected (no singular `lowProduct` fallback); with ≤5 distinct drinks Lowest stays empty. |
 | 2026-08-12 | **Top/low distinct drink count:** Popup shows how many distinct drinks sold in the period (explains short Top lists). |
 | 2026-08-12 | **Top/low drinks disjoint:** Lowest list excludes Top SKUs; with ≤5 products sold, Lowest is empty (was mirroring Top). Blank cells = product-mix cache not warm yet. |

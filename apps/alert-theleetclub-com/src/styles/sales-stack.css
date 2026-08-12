@@ -999,6 +999,18 @@
   }
 }
 
+.productExtremesWindow {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted, #a0a4b0);
+}
+
+.productExtremesWindow strong {
+  color: var(--text, #e2e2e9);
+  font-weight: 600;
+}
+
 .productExtremesDistinct {
   margin: 0 0 10px;
   padding: 10px 12px;

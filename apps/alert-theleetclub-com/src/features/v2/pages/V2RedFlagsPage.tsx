@@ -192,6 +192,9 @@ export function V2RedFlagsPage() {
           topProducts={drinksDetail.topProducts}
           lowProducts={drinksDetail.lowProducts}
           distinctDrinksSold={drinksDetail.distinctDrinksSold}
+          periodLabel={data.periodLabel}
+          periodStart={data.periodStart}
+          periodEndExclusive={data.periodEndExclusive}
           onClose={() => setDrinksDetail(null)}
         />
       ) : null}
