@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-12 | **Top/low no stale Lowest:** Empty `lowProducts` is respected (no singular `lowProduct` fallback); with ≤5 distinct drinks Lowest stays empty. |
 | 2026-08-12 | **Top/low distinct drink count:** Popup shows how many distinct drinks sold in the period (explains short Top lists). |
 | 2026-08-12 | **Top/low drinks disjoint:** Lowest list excludes Top SKUs; with ≤5 products sold, Lowest is empty (was mirroring Top). Blank cells = product-mix cache not warm yet. |
 | 2026-08-11 | **Footfall CSS isolation:** Targets styles scoped under \.alertFootfallRoot\ + lazy Footfall route so Red Flags/Overall ◀▶ scroll and chrome are not overridden. |

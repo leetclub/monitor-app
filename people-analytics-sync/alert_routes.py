@@ -3193,6 +3193,24 @@ def register_alert_routes(app) -> None:
                         }
                         distinct_drinks = len(names)
 
+                # Never reintroduce stale day-payload lowProduct when computed list is empty
+                # (few SKUs → lowest intentionally blank) or when it overlaps Top.
+                top_name_set = {
+                    str(x.get("name") or "").strip().lower()
+                    for x in (top_products or [])
+                    if isinstance(x, dict) and str(x.get("name") or "").strip()
+                }
+                if distinct_drinks <= 5:
+                    low_products = []
+                elif low_products:
+                    low_products = [
+                        x
+                        for x in low_products
+                        if isinstance(x, dict)
+                        and str(x.get("name") or "").strip()
+                        and str(x.get("name") or "").strip().lower() not in top_name_set
+                    ]
+
                 out["byMachineId"][mid] = {
                     "aSalesKwd": round(a_sales, 4),
                     "bSalesKwd": round(b_sales, 4),
@@ -3201,10 +3219,10 @@ def register_alert_routes(app) -> None:
                     "trendPct": round(trend_pct, 2) if trend_pct is not None else None,
                     "peakHour": peak_hour,
                     "peakHourFromYesterday": peak_hour_from_yesterday,
-                    "topProduct": payload.get("topProduct")
-                    or (top_products[0] if top_products else None),
-                    "lowProduct": payload.get("lowProduct")
-                    or (low_products[0] if low_products else None),
+                    # Prefer period-aggregated extremes; do not fall back to stale day payload for low.
+                    "topProduct": (top_products[0] if top_products else None)
+                    or payload.get("topProduct"),
+                    "lowProduct": low_products[0] if low_products else None,
                     "topProducts": top_products,
                     "lowProducts": low_products,
                     "distinctDrinksSold": int(distinct_drinks),

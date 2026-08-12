@@ -179,6 +179,31 @@ function vendonTxIsoFromEntry(entry?: { timestamp: number } | null): string {
   return '';
 }
 
+/** Prefer list fields (including empty []) so a stale singular lowProduct is not revived. */
+function vendonExtremesLists(entry?: {
+  topProduct?: { name?: string | null; count?: number | null } | null;
+  lowProduct?: { name?: string | null; count?: number | null } | null;
+  topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+  lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
+  distinctDrinksSold?: number | null;
+} | null) {
+  const topProducts = Array.isArray(entry?.topProducts)
+    ? entry!.topProducts!
+    : entry?.topProduct
+      ? [entry.topProduct]
+      : [];
+  const lowProducts = Array.isArray(entry?.lowProducts)
+    ? entry!.lowProducts!
+    : entry?.lowProduct
+      ? [entry.lowProduct]
+      : [];
+  return {
+    topProducts,
+    lowProducts,
+    distinctDrinksSold: entry?.distinctDrinksSold,
+  };
+}
+
 type DetailView = {
   payload: RedAlertDetailPayload;
   alertSummary: string;
@@ -1367,23 +1392,9 @@ export function RedFlagsPage({
           <ProductExtremesModal
             machineName={drinksDetail.machineName}
             machineId={drinksDetail.machineId}
-            topProducts={
-              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProducts?.length
-                ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProducts
-                : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProduct
-                  ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProduct!]
-                  : []
-            }
-            lowProducts={
-              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProducts?.length
-                ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProducts
-                : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProduct
-                  ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProduct!]
-                  : []
-            }
-            distinctDrinksSold={
-              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.distinctDrinksSold
-            }
+            {...vendonExtremesLists(
+              vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId],
+            )}
             periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
             onClose={() => setDrinksDetail(null)}
           />
@@ -1906,23 +1917,9 @@ export function RedFlagsPage({
         <ProductExtremesModal
           machineName={drinksDetail.machineName}
           machineId={drinksDetail.machineId}
-          topProducts={
-            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProducts?.length
-              ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProducts
-              : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.topProduct
-                ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].topProduct!]
-                : []
-          }
-          lowProducts={
-            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProducts?.length
-              ? vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProducts
-              : vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.lowProduct
-                ? [vendonSummaryQ.data.byMachineId[drinksDetail.machineId].lowProduct!]
-                : []
-          }
-          distinctDrinksSold={
-            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId]?.distinctDrinksSold
-          }
+          {...vendonExtremesLists(
+            vendonSummaryQ.data?.byMachineId?.[drinksDetail.machineId],
+          )}
           periodLabel={vendonSalesLabels.primary || vendonSummaryQ.data?.labelA}
           onClose={() => setDrinksDetail(null)}
         />

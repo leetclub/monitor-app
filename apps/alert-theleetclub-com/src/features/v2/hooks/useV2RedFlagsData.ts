@@ -767,8 +767,16 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
         fields,
         stacks,
         reasons,
-        topProducts: vendonSales?.topProducts || (vendonSales?.topProduct ? [vendonSales.topProduct] : null),
-        lowProducts: vendonSales?.lowProducts || (vendonSales?.lowProduct ? [vendonSales.lowProduct] : null),
+        topProducts: Array.isArray(vendonSales?.topProducts)
+          ? vendonSales.topProducts
+          : vendonSales?.topProduct
+            ? [vendonSales.topProduct]
+            : null,
+        lowProducts: Array.isArray(vendonSales?.lowProducts)
+          ? vendonSales.lowProducts
+          : vendonSales?.lowProduct
+            ? [vendonSales.lowProduct]
+            : null,
         distinctDrinksSold: vendonSales?.distinctDrinksSold ?? null,
       });
     }

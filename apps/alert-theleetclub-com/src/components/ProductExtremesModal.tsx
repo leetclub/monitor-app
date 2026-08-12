@@ -24,12 +24,17 @@ export function ProductExtremesModal({
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
   const highs = namesOnlyList(topProducts, 5);
-  const lows = namesOnlyList(lowProducts, 5);
+  const highSet = new Set(highs.map((n) => n.toLowerCase()));
   const distinct =
     distinctDrinksSold != null && Number.isFinite(Number(distinctDrinksSold))
       ? Math.max(0, Math.round(Number(distinctDrinksSold)))
-      : Math.max(highs.length, highs.length + lows.length);
+      : Math.max(highs.length, highs.length + namesOnlyList(lowProducts, 5).length);
   const fewSkus = distinct > 0 && distinct <= 5;
+  // ≤5 distinct sellers → every drink is already in Top; never show a Lowest list.
+  // Also drop any overlap if a stale singular lowProduct slipped through.
+  const lows = fewSkus
+    ? []
+    : namesOnlyList(lowProducts, 5).filter((n) => !highSet.has(n.toLowerCase()));
   const topTitle = distinct > 0 && distinct < 5 ? `Top ${distinct}` : 'Top 5';
   const lowTitle = fewSkus ? 'Lowest' : 'Lowest 5';
 
