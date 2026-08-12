@@ -32,6 +32,7 @@ export function V2RedFlagsPage() {
     topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
     lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
     distinctDrinksSold?: number | null;
+    productMixCachedAt?: string | null;
   } | null>(null);
 
   const filtered = useMemo(() => {
@@ -73,6 +74,7 @@ export function V2RedFlagsPage() {
                 topProducts: e.topProducts,
                 lowProducts: e.lowProducts,
                 distinctDrinksSold: e.distinctDrinksSold,
+                productMixCachedAt: e.productMixCachedAt,
               });
             }}
           >
@@ -192,6 +194,7 @@ export function V2RedFlagsPage() {
           topProducts={drinksDetail.topProducts}
           lowProducts={drinksDetail.lowProducts}
           distinctDrinksSold={drinksDetail.distinctDrinksSold}
+          productMixCachedAt={drinksDetail.productMixCachedAt}
           periodLabel={data.periodLabel}
           periodStart={data.periodStart}
           periodEndExclusive={data.periodEndExclusive}

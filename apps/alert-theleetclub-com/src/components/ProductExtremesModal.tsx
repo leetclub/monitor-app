@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import { namesOnlyList, type ProductNameCount } from '@/lib/productMixDisplay';
+import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 
 /** Parse YYYY-MM-DD as a calendar day (no TZ shift). */
@@ -65,6 +66,7 @@ export function ProductExtremesModal({
   periodStart,
   periodEndExclusive,
   distinctDrinksSold,
+  productMixCachedAt,
   onClose,
 }: {
   machineName: string;
@@ -78,6 +80,8 @@ export function ProductExtremesModal({
   periodEndExclusive?: string | null;
   /** Distinct product names with sales in the compare period. */
   distinctDrinksSold?: number | null;
+  /** When the revenue/product-mix cache row was last written (ISO). */
+  productMixCachedAt?: string | null;
   onClose: () => void;
 }) {
   useAlertModal(onClose);
@@ -100,6 +104,7 @@ export function ProductExtremesModal({
   const periodName = (periodLabel || '').trim() || null;
   const dateRange = formatAlertPeriodDateRange(periodStart, periodEndExclusive);
   const windowLabel = [periodName, dateRange].filter(Boolean).join(' · ');
+  const mixAsOf = productMixCachedAt ? formatKuwaitDateTime(productMixCachedAt) : null;
 
   return createPortal(
     <div
@@ -123,6 +128,13 @@ export function ProductExtremesModal({
               <p className="productExtremesWindow" role="status">
                 Alert data window: <strong>{windowLabel}</strong>
                 {dateRange ? ' (Kuwait calendar)' : ''}
+                {mixAsOf ? (
+                  <>
+                    <br />
+                    Mix snapshot: <strong>{mixAsOf}</strong>
+                    {periodName === 'Today' ? ' — Today refreshes about every 10 min' : ''}
+                  </>
+                ) : null}
               </p>
             ) : null}
           </div>
@@ -141,8 +153,7 @@ export function ProductExtremesModal({
 
           <p className="salesHistoryNote">
             Names only — highest and lowest by <strong>sales revenue (KD)</strong> in this Alert
-            compare window. Lowest never repeats a Top drink. Vendon’s default report range is often
-            wider, so drink counts can differ.
+            compare window. Lowest never repeats a Top drink.
           </p>
 
           <div className="productExtremesGrid">

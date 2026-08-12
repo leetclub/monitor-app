@@ -186,6 +186,7 @@ function vendonExtremesLists(entry?: {
   topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
   lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
   distinctDrinksSold?: number | null;
+  productMixCachedAt?: string | null;
 } | null) {
   const topProducts = Array.isArray(entry?.topProducts)
     ? entry!.topProducts!
@@ -201,6 +202,7 @@ function vendonExtremesLists(entry?: {
     topProducts,
     lowProducts,
     distinctDrinksSold: entry?.distinctDrinksSold,
+    productMixCachedAt: entry?.productMixCachedAt,
   };
 }
 
@@ -680,6 +682,7 @@ export function RedFlagsPage({
             topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
             lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
             distinctDrinksSold?: number | null;
+            productMixCachedAt?: string | null;
           }
         >;
       }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compare.preset, compare)}`),

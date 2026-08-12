@@ -150,6 +150,8 @@ _DAILY_SALES_DB_STALE_SEC = int(os.environ.get("ALERT_DAILY_SALES_DB_STALE_SEC",
 _DAILY_SALES_ELAPSED_HISTORY_DAYS = int(os.environ.get("ALERT_DAILY_SALES_ELAPSED_HISTORY_DAYS", "8"))
 _DAILY_INCIDENTS_ELAPSED_CACHE_SEC = int(os.environ.get("ALERT_DAILY_INCIDENTS_ELAPSED_CACHE_SEC", "120"))
 _ALERT_REVENUE_CACHE_SEED_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_SEED_TTL_SEC", "900"))
+# Today’s mix keeps growing — re-pull Vendon more often than closed days.
+_ALERT_REVENUE_CACHE_TODAY_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_TODAY_TTL_SEC", "600"))
 _ALERT_DOWNTIME_CACHE_SEC = int(os.environ.get("ALERT_DOWNTIME_CACHE_SEC", "120"))
 
 
@@ -192,16 +194,25 @@ def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
 
 
 def _maybe_seed_vendon_revenue_cache(day: date, *, force_product_mix: bool = False) -> None:
-    """Queue background warm of vendon_daily_machine_revenue_cache (never blocks the HTTP request)."""
+    """Queue background warm of vendon_daily_machine_revenue_cache (never blocks the HTTP request).
+
+    Closed days: seed once when missing / lacking productSales.
+    Kuwait "today": re-seed on throttle even when a mix already exists — otherwise an early
+    morning snapshot (e.g. 3 drinks) sticks all day while Vendon live keeps growing.
+    """
+    tz = ZoneInfo("Asia/Kuwait")
+    today_kw = datetime.now(tz).date()
+    is_today = day == today_kw
+    ttl = _ALERT_REVENUE_CACHE_TODAY_TTL_SEC if is_today else _ALERT_REVENUE_CACHE_SEED_TTL_SEC
     throttle_key = f"revenue_seed:{day.isoformat()}"
-    cached = _alert_cache_get(throttle_key, _ALERT_REVENUE_CACHE_SEED_TTL_SEC)
+    cached = _alert_cache_get(throttle_key, ttl)
     if cached is not None:
         return
     db = _pa_session()
     try:
         exists = _vendon_revenue_cache_has_day(db, day)
         needs_mix = force_product_mix or _vendon_revenue_cache_day_needs_product_mix(db, day)
-        if exists and not needs_mix:
+        if exists and not needs_mix and not is_today:
             _alert_cache_set(throttle_key, {"ok": True, "skipped": "exists"})
             return
     finally:
@@ -3211,6 +3222,16 @@ def register_alert_routes(app) -> None:
                         and str(x.get("name") or "").strip().lower() not in top_name_set
                     ]
 
+                mix_cached_at = None
+                for r in rows:
+                    cd = r.cache_date
+                    if cd is None or cd < a_lo or cd >= a_hi:
+                        continue
+                    if r.created_at is None:
+                        continue
+                    if mix_cached_at is None or r.created_at > mix_cached_at:
+                        mix_cached_at = r.created_at
+
                 out["byMachineId"][mid] = {
                     "aSalesKwd": round(a_sales, 4),
                     "bSalesKwd": round(b_sales, 4),
@@ -3226,6 +3247,7 @@ def register_alert_routes(app) -> None:
                     "topProducts": top_products,
                     "lowProducts": low_products,
                     "distinctDrinksSold": int(distinct_drinks),
+                    "productMixCachedAt": mix_cached_at.isoformat() if mix_cached_at else None,
                 }
 
             return jsonify(out)

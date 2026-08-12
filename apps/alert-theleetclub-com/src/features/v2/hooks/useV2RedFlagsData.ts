@@ -92,6 +92,7 @@ export type V2ExceptionRow = {
   topProducts?: Array<{ name?: string | null; count?: number | null }> | null;
   lowProducts?: Array<{ name?: string | null; count?: number | null }> | null;
   distinctDrinksSold?: number | null;
+  productMixCachedAt?: string | null;
 };
 
 /** Classic priority: tier 1 = immediate (Critical), tier 2 = cleaning-window Watch. */
@@ -193,6 +194,7 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
             topProducts?: Array<{ name?: string | null }> | null;
             lowProducts?: Array<{ name?: string | null }> | null;
             distinctDrinksSold?: number | null;
+            productMixCachedAt?: string | null;
           }
         >;
       }>(`/api/alert/overall/vendon-sales-summary?${presetApiQueryString(compareSel.preset, compareSel)}`),
@@ -780,6 +782,7 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
             ? [vendonSales.lowProduct]
             : null,
         distinctDrinksSold: vendonSales?.distinctDrinksSold ?? null,
+        productMixCachedAt: vendonSales?.productMixCachedAt ?? null,
       });
     }
     return out;
