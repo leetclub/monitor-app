@@ -2991,7 +2991,11 @@ def register_alert_routes(app) -> None:
         *,
         n: int = 5,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Top / lowest by KD revenue (names + revenueKwd; cups optional)."""
+        """Top / lowest by KD revenue (names + revenueKwd; cups optional).
+
+        Lowest is disjoint from top. With few SKUs sold (≤ n), lowest is empty —
+        every product is already in the top list, so mirroring them as "lowest" is misleading.
+        """
         if not sales:
             return [], []
         counts = counts or {}
@@ -3006,7 +3010,16 @@ def register_alert_routes(app) -> None:
             }
 
         top = [_row(name, kwd) for name, kwd in ordered[:n] if float(kwd) > 0]
-        low = [_row(name, kwd) for name, kwd in ordered_low[:n] if float(kwd) > 0]
+        top_names = {str(r.get("name") or "") for r in top}
+        # Need more than n distinct sellers before a separate "lowest" list is meaningful.
+        if len(ordered) <= n:
+            low: List[Dict[str, Any]] = []
+        else:
+            low = [
+                _row(name, kwd)
+                for name, kwd in ordered_low
+                if float(kwd) > 0 and name not in top_names
+            ][:n]
         return top, low
 
     def _product_extremes_from_counts(counts: Dict[str, int], *, n: int = 5) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -3016,7 +3029,15 @@ def register_alert_routes(app) -> None:
         ordered = sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
         ordered_low = sorted(counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
         top = [{"name": name, "count": int(c), "revenueKwd": None} for name, c in ordered[:n]]
-        low = [{"name": name, "count": int(c), "revenueKwd": None} for name, c in ordered_low[:n]]
+        top_names = {str(r.get("name") or "") for r in top}
+        if len(ordered) <= n:
+            low: List[Dict[str, Any]] = []
+        else:
+            low = [
+                {"name": name, "count": int(c), "revenueKwd": None}
+                for name, c in ordered_low
+                if name not in top_names
+            ][:n]
         return top, low
 
     @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
@@ -3707,12 +3728,18 @@ def register_alert_routes(app) -> None:
                 for p in products[:5]
                 if float(p["revenueKwd"]) > 0
             ]
-            lowest_src = [p for p in products if float(p["revenueKwd"]) > 0]
-            lowest_src.sort(key=lambda p: (float(p["revenueKwd"]), str(p["name"]).lower()))
-            lowest5 = [
-                {"name": p["name"], "revenueKwd": p["revenueKwd"], "count": p["cups"]}
-                for p in lowest_src[:5]
-            ]
+            top_names = {str(p.get("name") or "") for p in top5}
+            # Disjoint lowest — skip when ≤5 SKUs (everything is already in top).
+            sold = [p for p in products if float(p["revenueKwd"]) > 0]
+            if len(sold) <= 5:
+                lowest5: List[Dict[str, Any]] = []
+            else:
+                lowest_src = [p for p in sold if str(p.get("name") or "") not in top_names]
+                lowest_src.sort(key=lambda p: (float(p["revenueKwd"]), str(p["name"]).lower()))
+                lowest5 = [
+                    {"name": p["name"], "revenueKwd": p["revenueKwd"], "count": p["cups"]}
+                    for p in lowest_src[:5]
+                ]
             yoy_ranked = sorted(
                 [{"name": n, "revenueKwd": round(float(c), 4)} for n, c in yoy.items() if float(c) > 0],
                 key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()),

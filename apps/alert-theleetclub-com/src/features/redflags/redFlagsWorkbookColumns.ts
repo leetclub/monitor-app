@@ -102,7 +102,7 @@ export const RED_FLAGS_COLUMNS: Record<
     title: 'Top / low drink',
     sub: 'Highest · lowest by KD',
     placeholderNote:
-      'Highest and lowest by sales revenue (KD) in the sales compare period. Tap for top 5 and lowest 5 names.',
+      'Highest and lowest by sales revenue (KD) in the sales compare period. Tap for top 5 and lowest 5 names (lowest never repeats top; blank until product-mix cache is warm).',
   },
   mtdSales: {
     title: 'MTD sales',
