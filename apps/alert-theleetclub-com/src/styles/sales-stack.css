@@ -1035,6 +1035,10 @@
   margin-top: 8px;
 }
 
+.productExtremesGrid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 560px) {
   .productExtremesGrid,
   .productMixPanels {

@@ -3001,11 +3001,12 @@ def register_alert_routes(app) -> None:
         counts: Optional[Dict[str, int]] = None,
         *,
         n: int = 5,
+        full_list_below: int = 10,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Top / lowest by KD revenue (names + revenueKwd; cups optional).
 
-        Lowest is disjoint from top. With few SKUs sold (≤ n), lowest is empty —
-        every product is already in the top list, so mirroring them as "lowest" is misleading.
+        < full_list_below distinct SKUs → return the full ranked list as top, lowest empty
+        (do not fake Top 5 / Lowest 5). Otherwise Top n + Lowest n, disjoint.
         """
         if not sales:
             return [], []
@@ -3020,35 +3021,35 @@ def register_alert_routes(app) -> None:
                 "count": int(counts.get(name) or 0),
             }
 
+        if len(ordered) < full_list_below:
+            return [_row(name, kwd) for name, kwd in ordered if float(kwd) > 0], []
+
         top = [_row(name, kwd) for name, kwd in ordered[:n] if float(kwd) > 0]
         top_names = {str(r.get("name") or "") for r in top}
-        # Need more than n distinct sellers before a separate "lowest" list is meaningful.
-        if len(ordered) <= n:
-            low: List[Dict[str, Any]] = []
-        else:
-            low = [
-                _row(name, kwd)
-                for name, kwd in ordered_low
-                if float(kwd) > 0 and name not in top_names
-            ][:n]
+        low = [
+            _row(name, kwd)
+            for name, kwd in ordered_low
+            if float(kwd) > 0 and name not in top_names
+        ][:n]
         return top, low
 
-    def _product_extremes_from_counts(counts: Dict[str, int], *, n: int = 5) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def _product_extremes_from_counts(
+        counts: Dict[str, int], *, n: int = 5, full_list_below: int = 10
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Legacy cups ranking — prefer _product_extremes_from_sales when KD available."""
         if not counts:
             return [], []
         ordered = sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
         ordered_low = sorted(counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
+        if len(ordered) < full_list_below:
+            return [{"name": name, "count": int(c), "revenueKwd": None} for name, c in ordered], []
         top = [{"name": name, "count": int(c), "revenueKwd": None} for name, c in ordered[:n]]
         top_names = {str(r.get("name") or "") for r in top}
-        if len(ordered) <= n:
-            low: List[Dict[str, Any]] = []
-        else:
-            low = [
-                {"name": name, "count": int(c), "revenueKwd": None}
-                for name, c in ordered_low
-                if name not in top_names
-            ][:n]
+        low = [
+            {"name": name, "count": int(c), "revenueKwd": None}
+            for name, c in ordered_low
+            if name not in top_names
+        ][:n]
         return top, low
 
     @app.route("/api/alert/overall/vendon-sales-summary", methods=["GET", "OPTIONS"])
@@ -3211,7 +3212,7 @@ def register_alert_routes(app) -> None:
                     for x in (top_products or [])
                     if isinstance(x, dict) and str(x.get("name") or "").strip()
                 }
-                if distinct_drinks <= 5:
+                if distinct_drinks < 10:
                     low_products = []
                 elif low_products:
                     low_products = [

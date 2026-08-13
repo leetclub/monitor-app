@@ -87,19 +87,19 @@ export function ProductExtremesModal({
   useAlertModal(onClose);
   const backdrop = modalBackdropHandlers(onClose);
   const panel = modalPanelHandlers();
-  const highs = namesOnlyList(topProducts, 5);
-  const highSet = new Set(highs.map((n) => n.toLowerCase()));
+  const distinctGuess = namesOnlyList(topProducts, 20).length + namesOnlyList(lowProducts, 5).length;
   const distinct =
     distinctDrinksSold != null && Number.isFinite(Number(distinctDrinksSold))
       ? Math.max(0, Math.round(Number(distinctDrinksSold)))
-      : Math.max(highs.length, highs.length + namesOnlyList(lowProducts, 5).length);
-  const fewSkus = distinct > 0 && distinct <= 5;
-  // ≤5 distinct sellers → every drink is already in Top; never show a Lowest list.
+      : distinctGuess;
+  // <10 distinct → full ranked list only (do not fake Top 5 / Lowest 5).
+  const fewSkus = distinct > 0 && distinct < 10;
+  const highs = namesOnlyList(topProducts, fewSkus ? Math.max(distinct, 9) : 5);
+  const highSet = new Set(highs.map((n) => n.toLowerCase()));
   const lows = fewSkus
     ? []
     : namesOnlyList(lowProducts, 5).filter((n) => !highSet.has(n.toLowerCase()));
-  const topTitle = distinct > 0 && distinct < 5 ? `Top ${distinct}` : 'Top 5';
-  const lowTitle = fewSkus ? 'Lowest' : 'Lowest 5';
+  const topTitle = fewSkus ? `All drinks sold (${distinct})` : 'Top 5';
 
   const periodName = (periodLabel || '').trim() || null;
   const dateRange = formatAlertPeriodDateRange(periodStart, periodEndExclusive);
@@ -147,16 +147,25 @@ export function ProductExtremesModal({
             <p className="productExtremesDistinct" role="status">
               <strong>{distinct}</strong> distinct drink{distinct === 1 ? '' : 's'} sold in{' '}
               {windowLabel ? <strong>{windowLabel}</strong> : 'this period'}
-              {distinct < 5 ? ' — that is why Top is shorter than 5' : ''}.
+              {fewSkus
+                ? ' — fewer than 10, so this is the full ranked list (not Top 5 / Lowest 5)'
+                : ''}
+              .
             </p>
           ) : null}
 
           <p className="salesHistoryNote">
-            Names only — highest and lowest by <strong>sales revenue (KD)</strong> in this Alert
-            compare window. Lowest never repeats a Top drink.
+            Names only — ranked by <strong>sales revenue (KD)</strong> in this Alert compare window.
+            {fewSkus
+              ? ' Top 5 / Lowest 5 starts once 10+ distinct drinks sold.'
+              : ' Lowest never repeats a Top drink.'}
           </p>
 
-          <div className="productExtremesGrid">
+          <div
+            className={
+              fewSkus ? 'productExtremesGrid productExtremesGrid--single' : 'productExtremesGrid'
+            }
+          >
             <section className="productExtremesCol productExtremesHigh">
               <h3 className="salesHistoryCompareTitle">{topTitle}</h3>
               {highs.length ? (
@@ -171,22 +180,20 @@ export function ProductExtremesModal({
                 </p>
               )}
             </section>
-            <section className="productExtremesCol productExtremesLow">
-              <h3 className="salesHistoryCompareTitle">{lowTitle}</h3>
-              {lows.length ? (
-                <ol className="productExtremesList">
-                  {lows.map((name) => (
-                    <li key={`l-${name}`}>{name}</li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="salesHistoryNote">
-                  {fewSkus && highs.length
-                    ? `Only ${distinct} drink${distinct === 1 ? '' : 's'} in this window — not enough for a separate lowest list.`
-                    : 'No product mix for this window yet.'}
-                </p>
-              )}
-            </section>
+            {fewSkus ? null : (
+              <section className="productExtremesCol productExtremesLow">
+                <h3 className="salesHistoryCompareTitle">Lowest 5</h3>
+                {lows.length ? (
+                  <ol className="productExtremesList">
+                    {lows.map((name) => (
+                      <li key={`l-${name}`}>{name}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="salesHistoryNote">No product mix for this window yet.</p>
+                )}
+              </section>
+            )}
           </div>
         </div>
       </div>

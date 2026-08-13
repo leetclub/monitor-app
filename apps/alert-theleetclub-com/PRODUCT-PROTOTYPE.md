@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-13 | **Few-SKU Top/low:** If fewer than 10 distinct drinks sold in the window, popup shows one full ranked list (no fake Top 5 / Lowest 5). Split starts at 10+. |
 | 2026-08-12 | **Top/low Today cache refresh:** Kuwait “today” product mix re-seeds ~every 10 min (was frozen after first early-morning pull). Popup shows mix snapshot time. |
 | 2026-08-12 | **Top/low period + dates:** Popup shows Alert data window (preset label + Kuwait calendar range) and notes Vendon’s wider default range can differ. |
 | 2026-08-12 | **Top/low no stale Lowest:** Empty `lowProducts` is respected (no singular `lowProduct` fallback); with ≤5 distinct drinks Lowest stays empty. |
