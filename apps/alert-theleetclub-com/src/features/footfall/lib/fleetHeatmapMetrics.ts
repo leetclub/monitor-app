@@ -7,6 +7,9 @@ import { footfallCupsColonRatio } from '@/features/footfall/lib/ratioLabel';
 const HEAT_RED = ['#fff5f0', '#fcbba1', '#fc9272', '#ef6548', '#d7301f', '#990000'];
 const HEAT_GAP = ['#fff8f6', '#fdd0c7', '#f4a099', '#e74c3c', '#c0392b', '#922b21'];
 const SCALE_GOOD = ['#fff9e6', '#fde68a', '#a3e635', '#4d7c0f'];
+const HEAT_RED_NIGHT = ['#3a1510', '#7f2318', '#c0392b', '#ef6548', '#fc9272', '#fecaca'];
+const HEAT_GAP_NIGHT = ['#2a1210', '#7f1d1d', '#c0392b', '#e74c3c', '#f87171', '#fca5a5'];
+const SCALE_GOOD_NIGHT = ['#1a2e14', '#3f6212', '#84cc16', '#d9f99d'];
 
 export type FleetHeatmapMetric = 'shortfall' | 'footfall' | 'cups' | 'ratio' | 'net' | 'conversion';
 
@@ -102,12 +105,12 @@ export function heatmapTooltipHtml(
 
   const lines = [
     `<strong>${loc.locationName}</strong>`,
-    `<span style="color:#64748b">${hourLabel}</span>`,
+    `<span style="color:#94a3b8">${hourLabel}</span>`,
     `Cups: <b>${h.cups}</b> · Target: <b>${Math.round(h.aspiredCups)}</b>`,
     missed > 0
       ? `<span style="color:#c0392b">Missed @ benchmark: <b>+${missed} cups</b> (+${h.upliftKd.toFixed(2)} KD)</span>`
       : `<span style="color:#2e9e5a">At/above benchmark capture</span>`,
-    `${footfallSeriesLabel(loc)}: <b>${Math.round(h.footfall).toLocaleString()}</b> <span style="color:#64748b">(${ff})</span>`,
+    `${footfallSeriesLabel(loc)}: <b>${Math.round(h.footfall).toLocaleString()}</b> <span style="color:#94a3b8">(${ff})</span>`,
   ];
   if (hasNet) {
     lines.push(
@@ -168,6 +171,7 @@ export function visualMapForMetric(
   metric: FleetHeatmapMetric,
   data: [number, number, number][],
   benchmarkPct: number,
+  nightMode = false,
 ): VisualMapComponentOption {
   const values = data.map((d) => d[2]);
   const maxVal = Math.max(1, ...values.map((v) => Math.abs(v)));
@@ -180,7 +184,7 @@ export function visualMapForMetric(
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
-      inRange: { color: HEAT_GAP },
+      inRange: { color: nightMode ? HEAT_GAP_NIGHT : HEAT_GAP },
     };
   }
 
@@ -193,7 +197,7 @@ export function visualMapForMetric(
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
-      inRange: { color: ['#c0392b', '#f5f5f5', '#2e9e5a'] },
+      inRange: { color: nightMode ? ['#c0392b', '#334155', '#22c55e'] : ['#c0392b', '#f5f5f5', '#2e9e5a'] },
     };
   }
 
@@ -205,7 +209,7 @@ export function visualMapForMetric(
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
-      inRange: { color: SCALE_GOOD },
+      inRange: { color: nightMode ? SCALE_GOOD_NIGHT : SCALE_GOOD },
     };
   }
 
@@ -217,7 +221,7 @@ export function visualMapForMetric(
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
-      inRange: { color: HEAT_RED },
+      inRange: { color: nightMode ? HEAT_RED_NIGHT : HEAT_RED },
     };
   }
 
@@ -228,6 +232,10 @@ export function visualMapForMetric(
     orient: 'horizontal',
     left: 'center',
     bottom: 0,
-    inRange: { color: ['#c0392b', '#e67e22', '#f9e79f', '#aed581', '#2e9e5a'] },
+    inRange: {
+      color: nightMode
+        ? ['#7f1d1d', '#c2410c', '#ca8a04', '#4d7c0f', '#22c55e']
+        : ['#c0392b', '#e67e22', '#f9e79f', '#aed581', '#2e9e5a'],
+    },
   };
 }

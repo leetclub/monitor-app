@@ -1,5 +1,6 @@
 import type { LocationReport } from '@/features/footfall/lib/types';
 import { alignedDayRows } from '@/features/footfall/lib/daysBreakdown';
+import { ffMetricColors } from '@/features/footfall/lib/ffMetricColors';
 import {
   footfallPerDayLabel,
   footfallPeriodLabel,
@@ -41,11 +42,8 @@ export type FootfallKpiCopy = {
   kuEstimated?: boolean;
 };
 
-const MIRROR_COLOR = '#5eb8e8';
-const UNIQUE_COLOR = '#b45309';
-const NONE_COLOR = '#94a3b8';
-
 export function footfallKpiCopy(loc: LocationReport): FootfallKpiCopy {
+  const c = ffMetricColors();
   const src = footfallSourceKind(loc);
   const peer = mirroredPeerName(loc);
 
@@ -53,7 +51,7 @@ export function footfallKpiCopy(loc: LocationReport): FootfallKpiCopy {
     return {
       periodLabel: footfallPeriodLabel(loc),
       periodHint: 'No camera and no peer in segment',
-      periodValueColor: NONE_COLOR,
+      periodValueColor: c.none,
       isNone: true,
       isMirroredOrProjected: false,
     };
@@ -65,9 +63,9 @@ export function footfallKpiCopy(loc: LocationReport): FootfallKpiCopy {
       periodHint: peer
         ? `No camera · mirrored from ${peer}`
         : 'No camera · cups ÷ segment benchmark',
-      periodValueColor: loc.mirrorDisplay?.color ?? loc.footfallDisplay?.color ?? MIRROR_COLOR,
+      periodValueColor: loc.mirrorDisplay?.color ?? loc.footfallDisplay?.color ?? c.mirror,
       perDayLabel: footfallPerDayLabel(loc),
-      perDayValueColor: loc.mirrorDisplay?.color ?? loc.footfallDisplay?.color ?? MIRROR_COLOR,
+      perDayValueColor: loc.mirrorDisplay?.color ?? loc.footfallDisplay?.color ?? c.mirror,
       isNone: false,
       isMirroredOrProjected: true,
       kuEstimated: Boolean(loc.kuFootfallEstimate),
@@ -79,9 +77,9 @@ export function footfallKpiCopy(loc: LocationReport): FootfallKpiCopy {
     periodHint: loc.uniqueAdjusted
       ? 'Camera adjusted for repeat visitors vs segment benchmark'
       : 'Camera detections (unique visitors)',
-    periodValueColor: UNIQUE_COLOR,
+    periodValueColor: c.unique,
     perDayLabel: footfallPerDayLabel(loc),
-    perDayValueColor: UNIQUE_COLOR,
+    perDayValueColor: c.unique,
     isNone: false,
     isMirroredOrProjected: false,
   };

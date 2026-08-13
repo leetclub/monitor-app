@@ -5,6 +5,7 @@ import { inferOwnerSegment } from '@/features/footfall/lib/ownerSegment';
 import { footfallPerDayLabel } from '@/features/footfall/lib/footfallLabel';
 import { isEstimatedFootfall } from '@/features/footfall/lib/footfallMetrics';
 import { formatCups } from '@/features/footfall/lib/formatCups';
+import { ffMetricColors } from '@/features/footfall/lib/ffMetricColors';
 import {
   footfallForTargets,
   footfallKpiCopy,
@@ -158,7 +159,7 @@ export function TargetKpiSection({
         value: copy.isNone
           ? '—'
           : Math.round(footfallPeriodTotal(location)).toLocaleString(),
-        valueColor: copy.periodValueColor ?? (ff > 0 ? '#b45309' : '#94a3b8'),
+        valueColor: copy.periodValueColor ?? (ff > 0 ? ffMetricColors().unique : ffMetricColors().none),
         detailTitle: copy.periodLabel,
         detailBody: footfallModalDetails(location, copy, hideDateLabels),
       },
@@ -169,7 +170,7 @@ export function TargetKpiSection({
         id: 'footfall-day',
         label: copy.perDayLabel ?? footfallPerDayLabel(location),
         value: Math.round(ffPerDay).toLocaleString(),
-        valueColor: copy.perDayValueColor ?? copy.periodValueColor ?? '#b45309',
+        valueColor: copy.perDayValueColor ?? copy.periodValueColor ?? ffMetricColors().unique,
         detailTitle: copy.perDayLabel ?? footfallPerDayLabel(location),
         detailBody: footfallModalDetails(location, copy, hideDateLabels),
       });
@@ -192,7 +193,9 @@ export function TargetKpiSection({
         label: 'Conversion',
         value: periodConv != null ? `${periodConv}%` : '—',
         valueColor:
-          periodConv != null && periodConv >= bench ? '#15803d' : '#b45309',
+          periodConv != null && periodConv >= bench
+            ? ffMetricColors().pctHigh
+            : ffMetricColors().pctLow,
         detailTitle: 'Conversion · 5 days',
         detailBody: [
           `Conversion % = cashless cups ÷ footfall × 100 (5-day period).`,

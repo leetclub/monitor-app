@@ -60,17 +60,18 @@
 }
 
 /*
- * Dark mode — no white panels. Targets CSS now uses var(--card); reinforce
- * chart shells and any leftover light borders under Alert dark.
+ * Dark mode — Alert tokens only. Kill leftover Targets light surfaces and
+ * dark-on-dark text (navy / forest / brown on charcoal panels).
  */
 html[data-mode='dark'] .alertFootfallRoot,
 .alertFootfallDark {
   color-scheme: dark;
-  --card: var(--panel, #1e1f25);
-  --card-soft: var(--surface-container-high, #282a2f);
-  --border: var(--border, #30363d);
-  --text: var(--text, #e2e2e9);
-  --muted: var(--muted, #ad8883);
+  --card: #1e1f25;
+  --card-soft: #282a2f;
+  --border: #30363d;
+  --text: #e2e2e9;
+  --muted: #c4b4b0;
+  --accent: #c45c4a;
   color: var(--text);
   background: transparent;
 }
@@ -193,4 +194,268 @@ html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner,
   background: rgba(251, 191, 36, 0.12) !important;
   border-color: rgba(251, 191, 36, 0.35) !important;
   color: #fde68a !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .kpi:hover,
+html[data-mode='dark'] .alertFootfallRoot .kpiAccent:hover,
+.alertFootfallDark .kpi:hover,
+.alertFootfallDark .kpiAccent:hover {
+  background: var(--card-soft) !important;
+  background-image: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locBtn.active,
+.alertFootfallDark .locBtn.active {
+  background: rgba(196, 92, 74, 0.22) !important;
+  color: var(--text) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locBtn.active .locName,
+.alertFootfallDark .locBtn.active .locName {
+  color: #ffd4c2 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .chartExportBtn,
+.alertFootfallDark .chartExportBtn {
+  background: rgba(18, 24, 32, 0.92) !important;
+  color: #ffd4c2 !important;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .explainerTable,
+html[data-mode='dark'] .alertFootfallRoot .explainerExample,
+.alertFootfallDark .explainerTable,
+.alertFootfallDark .explainerExample {
+  background: rgba(18, 24, 32, 0.85) !important;
+  color: var(--text) !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .explainerTable th,
+html[data-mode='dark'] .alertFootfallRoot .explainerTable td,
+.alertFootfallDark .explainerTable th,
+.alertFootfallDark .explainerTable td {
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .explainerToggle strong,
+html[data-mode='dark'] .alertFootfallRoot .explainerBody em,
+html[data-mode='dark'] .alertFootfallRoot .explainerWarn,
+html[data-mode='dark'] .alertFootfallRoot .sectionTitleNote,
+.alertFootfallDark .explainerToggle strong,
+.alertFootfallDark .explainerBody em,
+.alertFootfallDark .explainerWarn,
+.alertFootfallDark .sectionTitleNote {
+  color: #fdba74 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locSegPill-KU,
+html[data-mode='dark'] .alertFootfallRoot .areasSegPill-KU,
+.alertFootfallDark .locSegPill-KU,
+.alertFootfallDark .areasSegPill-KU {
+  background: rgba(96, 165, 250, 0.18) !important;
+  color: #93c5fd !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locSegPill-MOH,
+html[data-mode='dark'] .alertFootfallRoot .areasSegPill-MOH,
+.alertFootfallDark .locSegPill-MOH,
+.alertFootfallDark .areasSegPill-MOH {
+  background: rgba(74, 222, 128, 0.14) !important;
+  color: #86efac !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locSegPill-O2,
+html[data-mode='dark'] .alertFootfallRoot .areasSegPill-O2,
+.alertFootfallDark .locSegPill-O2,
+.alertFootfallDark .areasSegPill-O2 {
+  background: rgba(167, 139, 250, 0.18) !important;
+  color: #c4b5fd !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locSegPill-OTHER,
+html[data-mode='dark'] .alertFootfallRoot .areasSegPill-OTHER,
+.alertFootfallDark .locSegPill-OTHER,
+.alertFootfallDark .areasSegPill-OTHER {
+  background: var(--card-soft) !important;
+  color: #d4d4d8 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-achieved,
+.alertFootfallDark .areasStatusBadge-achieved {
+  background: rgba(74, 222, 128, 0.16) !important;
+  color: #86efac !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-on-track,
+.alertFootfallDark .areasStatusBadge-on-track {
+  background: rgba(96, 165, 250, 0.16) !important;
+  color: #93c5fd !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-at-risk,
+.alertFootfallDark .areasStatusBadge-at-risk {
+  background: rgba(251, 191, 36, 0.14) !important;
+  color: #fde68a !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-behind,
+.alertFootfallDark .areasStatusBadge-behind {
+  background: rgba(248, 113, 113, 0.16) !important;
+  color: #fca5a5 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .periodContextBar,
+html[data-mode='dark'] .alertFootfallRoot .targetsPeriodBar,
+.alertFootfallDark .periodContextBar,
+.alertFootfallDark .targetsPeriodBar {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .targetsPeriodBar strong,
+html[data-mode='dark'] .alertFootfallRoot .periodContextLocation,
+.alertFootfallDark .targetsPeriodBar strong,
+.alertFootfallDark .periodContextLocation {
+  color: #ffd4c2 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .periodContextTag,
+html[data-mode='dark'] .alertFootfallRoot .targetsPeriodTag,
+html[data-mode='dark'] .alertFootfallRoot .periodContextSub,
+html[data-mode='dark'] .alertFootfallRoot .targetsPeriodAlt,
+.alertFootfallDark .periodContextTag,
+.alertFootfallDark .targetsPeriodTag,
+.alertFootfallDark .periodContextSub,
+.alertFootfallDark .targetsPeriodAlt {
+  color: var(--muted) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardWarn,
+html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner:not(.hourlyGapBannerOk),
+.alertFootfallDark .hourlyCaptureCardWarn {
+  background: rgba(196, 92, 74, 0.14) !important;
+  border-color: rgba(196, 92, 74, 0.4) !important;
+  color: #ffd4c2 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureValue,
+.alertFootfallDark .hourlyCaptureValue {
+  color: inherit;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardWarn .hourlyCaptureValue,
+.alertFootfallDark .hourlyCaptureCardWarn .hourlyCaptureValue {
+  color: #fca5a5 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardFootfall .hourlyCaptureValue,
+.alertFootfallDark .hourlyCaptureCardFootfall .hourlyCaptureValue {
+  color: #7dd3fc !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardSold .hourlyCaptureValue,
+.alertFootfallDark .hourlyCaptureCardSold .hourlyCaptureValue {
+  color: #86efac !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardTarget .hourlyCaptureValue,
+.alertFootfallDark .hourlyCaptureCardTarget .hourlyCaptureValue {
+  color: #fdba74 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardRevenue .hourlyCaptureValue,
+.alertFootfallDark .hourlyCaptureCardRevenue .hourlyCaptureValue {
+  color: #fbbf24 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .weekTabActive,
+.alertFootfallDark .weekTabActive {
+  background: rgba(196, 92, 74, 0.28) !important;
+  border-color: #c45c4a !important;
+  color: #ffd4c2 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .segmentTabCount,
+.alertFootfallDark .segmentTabCount {
+  background: rgba(196, 92, 74, 0.35) !important;
+  color: #ffd4c2 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .segmentTabActive .segmentTabCount,
+.alertFootfallDark .segmentTabActive .segmentTabCount {
+  background: #c45c4a !important;
+  color: #fff5f0 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .muted,
+html[data-mode='dark'] .alertFootfallRoot .filterMeta,
+html[data-mode='dark'] .alertFootfallRoot .filterBarHint,
+html[data-mode='dark'] .alertFootfallRoot .kpiHint,
+html[data-mode='dark'] .alertFootfallRoot .kpiLabel,
+html[data-mode='dark'] .alertFootfallRoot .subtitle,
+.alertFootfallDark .muted,
+.alertFootfallDark .filterMeta,
+.alertFootfallDark .filterBarHint,
+.alertFootfallDark .kpiHint,
+.alertFootfallDark .kpiLabel,
+.alertFootfallDark .subtitle {
+  color: var(--muted) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .locName,
+html[data-mode='dark'] .alertFootfallRoot .kpiValue,
+html[data-mode='dark'] .alertFootfallRoot .metricValue,
+html[data-mode='dark'] .alertFootfallRoot .termKey,
+html[data-mode='dark'] .alertFootfallRoot .locTitle,
+.alertFootfallDark .locName,
+.alertFootfallDark .kpiValue,
+.alertFootfallDark .metricValue,
+.alertFootfallDark .termKey,
+.alertFootfallDark .locTitle {
+  color: var(--text);
+}
+
+html[data-mode='dark'] .alertFootfallRoot .salesLegendActual,
+html[data-mode='dark'] .alertFootfallRoot .targetsTrajectoryTodayBtn,
+.alertFootfallDark .salesLegendActual,
+.alertFootfallDark .targetsTrajectoryTodayBtn {
+  color: #93c5fd !important;
+  border-color: rgba(147, 197, 253, 0.35) !important;
+  background: var(--card) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .salesLegendProxyBench,
+html[data-mode='dark'] .alertFootfallRoot .salesLegendProxyNear,
+html[data-mode='dark'] .alertFootfallRoot .ownersLoginMissing,
+.alertFootfallDark .salesLegendProxyBench,
+.alertFootfallDark .salesLegendProxyNear,
+.alertFootfallDark .ownersLoginMissing {
+  color: #fdba74 !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .ownersLoginStatus,
+html[data-mode='dark'] .alertFootfallRoot .promoSwipeDelta,
+.alertFootfallDark .ownersLoginStatus,
+.alertFootfallDark .promoSwipeDelta {
+  color: #86efac !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .areasAdminLoginNote,
+.alertFootfallDark .areasAdminLoginNote {
+  color: #fde68a !important;
+  background: rgba(251, 191, 36, 0.1) !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+html[data-mode='dark'] .alertFootfallRoot .ownersLoginBlock,
+.alertFootfallDark .ownersLoginBlock {
+  background: var(--card-soft) !important;
+  border-color: var(--border) !important;
 }

@@ -129,7 +129,7 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
           axisLabel: { width: 130, overflow: 'truncate', fontSize: 10, color: axisMuted },
         },
         visualMap: {
-          ...visualMapForMetric(metric, data, report.benchmarkConversionPct),
+          ...visualMapForMetric(metric, data, report.benchmarkConversionPct, nightMode),
           textStyle: { color: axisMuted },
         },
         series: [

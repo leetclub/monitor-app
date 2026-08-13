@@ -1,4 +1,5 @@
 import type { OwnerSegment } from '@/features/footfall/lib/types';
+import { ffMetricColors } from '@/features/footfall/lib/ffMetricColors';
 
 export type AchievementStatus = 'achieved' | 'on-track' | 'at-risk' | 'behind' | 'none';
 
@@ -8,11 +9,12 @@ export function fmtKd(n: number, decimals = 0): string {
 }
 
 export function pctColor(pct: number | null): string {
-  if (pct == null) return '#94a3b8';
-  if (pct >= 100) return '#15803d';
-  if (pct >= 75) return '#1d4ed8';
-  if (pct >= 50) return '#b45309';
-  return '#dc2626';
+  const c = ffMetricColors();
+  if (pct == null) return c.none;
+  if (pct >= 100) return c.pctHigh;
+  if (pct >= 75) return c.pctMid;
+  if (pct >= 50) return c.pctLow;
+  return c.pctBad;
 }
 
 export function achievementStatus(pct: number | null): AchievementStatus {

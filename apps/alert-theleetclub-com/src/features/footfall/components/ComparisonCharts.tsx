@@ -62,8 +62,8 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
           type: 'value',
           name: 'Footfall',
           position: 'left',
-          axisLine: { lineStyle: { color: '#5eb8e8' } },
-          axisLabel: { color: '#5eb8e8' },
+          axisLine: { lineStyle: { color: nightMode ? '#7dd3fc' : '#5eb8e8' } },
+          axisLabel: { color: nightMode ? '#7dd3fc' : '#5eb8e8' },
         },
         {
           type: 'value',
@@ -71,8 +71,8 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
           position: 'right',
           min: 0,
           max: Math.max(15, benchmarkPct * 2, ...hours.map((h) => h.conversionPct)),
-          axisLabel: { formatter: '{value}%', color: '#1e4fd6' },
-          axisLine: { lineStyle: { color: '#1e4fd6' } },
+          axisLabel: { formatter: '{value}%', color: nightMode ? '#93c5fd' : '#1e4fd6' },
+          axisLine: { lineStyle: { color: nightMode ? '#93c5fd' : '#1e4fd6' } },
         },
       ],
       series: [

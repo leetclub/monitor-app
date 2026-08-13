@@ -21,7 +21,7 @@ export function MetricsTable({ location, mirrorNote, salesColor }: Props) {
     >
     <div className="tableWrap">
       {mirrorNote ? (
-        <p className="mirrorNote" style={{ color: '#5eb8e8' }}>
+        <p className="mirrorNote" style={{ color: '#7dd3fc' }}>
           {mirrorNote}
         </p>
       ) : null}
