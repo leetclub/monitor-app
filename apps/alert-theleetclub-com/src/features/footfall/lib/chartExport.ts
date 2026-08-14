@@ -1,4 +1,5 @@
 import type { ECharts } from 'echarts';
+import { footfallSurfaceIsDark } from '@/features/footfall/lib/footfallDarkSurface';
 
 export function chartFilename(parts: (string | undefined)[]): string {
   return parts
@@ -20,7 +21,7 @@ export function downloadChartPng(chart: ECharts, filename: string): void {
   const url = chart.getDataURL({
     type: 'png',
     pixelRatio: 2,
-    backgroundColor: '#ffffff',
+    backgroundColor: footfallSurfaceIsDark() ? '#0a0e14' : '#ffffff',
   });
   const link = document.createElement('a');
   link.href = url;

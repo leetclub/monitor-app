@@ -1,17 +1,13 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { TargetsPage } from '@/features/footfall/TargetsPage';
 import { AnalyticsPage } from '@/features/footfall/AnalyticsPage';
 import {
   FootfallViewModeProvider,
   type FootfallViewMode,
 } from '@/features/footfall/FootfallViewMode';
-import { documentIsDarkMode, subscribeColorMode } from '@/lib/colorMode';
+import { useFootfallDarkSurface } from '@/features/footfall/NightChartContext';
 import '@/features/footfall/footfall-targets.css';
 import '@/features/footfall/footfall-alert.css';
-
-function useAlertDarkMode(): boolean {
-  return useSyncExternalStore(subscribeColorMode, documentIsDarkMode, () => true);
-}
 
 /**
  * Alert Footfall tab — full Leet Target experience (weekday Targets + Analytics report)
@@ -20,7 +16,7 @@ function useAlertDarkMode(): boolean {
 export function FootfallPage() {
   const [sub, setSub] = useState<'targets' | 'analytics'>('targets');
   const [mode, setMode] = useState<FootfallViewMode>('adjusted');
-  const darkMode = useAlertDarkMode();
+  const darkMode = useFootfallDarkSurface();
 
   return (
     <div className={darkMode ? 'alertFootfallRoot alertFootfallDark' : 'alertFootfallRoot'}>

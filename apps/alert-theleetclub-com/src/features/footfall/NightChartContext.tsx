@@ -1,16 +1,19 @@
 import { createContext, useContext, useSyncExternalStore } from 'react';
-import { documentIsDarkMode, subscribeColorMode } from '@/lib/colorMode';
+import { subscribeColorMode } from '@/lib/colorMode';
+import { footfallSurfaceIsDark } from '@/features/footfall/lib/footfallDarkSurface';
+
+export { footfallSurfaceIsDark };
 
 /** True when presenter night mode is on and this section is the focused panel. */
 export const NightChartContext = createContext(false);
 
-function useAlertDarkMode(): boolean {
-  return useSyncExternalStore(subscribeColorMode, documentIsDarkMode, () => true);
+export function useFootfallDarkSurface(): boolean {
+  return useSyncExternalStore(subscribeColorMode, footfallSurfaceIsDark, () => true);
 }
 
-/** Night chart palette when Alert is dark, or when night-focus highlights this section. */
+/** Night chart palette when Footfall sits on a dark surface, or night-focus is on. */
 export function useNightChart(): boolean {
   const focusNight = useContext(NightChartContext);
-  const darkMode = useAlertDarkMode();
+  const darkMode = useFootfallDarkSurface();
   return darkMode || focusNight;
 }

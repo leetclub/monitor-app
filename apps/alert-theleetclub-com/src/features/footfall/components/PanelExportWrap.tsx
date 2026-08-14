@@ -2,6 +2,7 @@ import { useCallback, useRef, type ReactNode } from 'react';
 import { ChartExportButton } from '@/features/footfall/components/ChartExportWrap';
 import { chartFilename } from '@/features/footfall/lib/chartExport';
 import { downloadElementPng } from '@/features/footfall/lib/domExport';
+import { footfallSurfaceIsDark } from '@/features/footfall/lib/footfallDarkSurface';
 
 type Props = {
   filename: string | (string | undefined)[];
@@ -19,7 +20,7 @@ export function PanelExportWrap({ filename, label, children, className, darkBg }
     const name = Array.isArray(filename) ? chartFilename(filename) : filename;
     try {
       await downloadElementPng(ref.current, name, {
-        backgroundColor: darkBg ? '#0f1a28' : '#ffffff',
+        backgroundColor: (darkBg ?? footfallSurfaceIsDark()) ? '#0a0e14' : '#ffffff',
       });
     } catch (e) {
       console.error('PNG export failed', e);

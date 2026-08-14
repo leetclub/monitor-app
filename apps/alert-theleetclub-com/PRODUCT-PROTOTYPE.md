@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-13 | **Footfall no white charts:** Heatmaps use dark split-areas; ECharts canvas stays `#0a0e14` in dark / v2; v2 Footfall no longer inherits Pro light `--panel`. |
 | 2026-08-13 | **Footfall dark contrast:** Removed leftover white panels / dark-on-dark KPI text; location pills, explainer, export buttons, heatmaps, and metric colors follow Alert dark tokens. |
 | 2026-08-13 | **Few-SKU Top/low:** If fewer than 10 distinct drinks sold in the window, popup shows one full ranked list (no fake Top 5 / Lowest 5). Split starts at 10+. |
 | 2026-08-12 | **Top/low Today cache refresh:** Kuwait “today” product mix re-seeds ~every 10 min (was frozen after first early-morning pull). Popup shows mix snapshot time. |

@@ -120,12 +120,27 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
         xAxis: {
           type: 'category',
           data: hours,
-          splitArea: { show: true },
+          splitArea: {
+            show: true,
+            areaStyle: {
+              color: nightMode
+                ? ['rgba(10, 14, 20, 0.98)', 'rgba(16, 22, 32, 0.98)']
+                : ['rgba(250,250,250,0.3)', 'rgba(200,200,200,0.3)'],
+            },
+          },
           axisLabel: { color: axisMuted },
         },
         yAxis: {
           type: 'category',
           data: top.map((l) => l.locationName),
+          splitArea: {
+            show: true,
+            areaStyle: {
+              color: nightMode
+                ? ['rgba(10, 14, 20, 0.98)', 'rgba(16, 22, 32, 0.98)']
+                : ['rgba(250,250,250,0.3)', 'rgba(200,200,200,0.3)'],
+            },
+          },
           axisLabel: { width: 130, overflow: 'truncate', fontSize: 10, color: axisMuted },
         },
         visualMap: {
@@ -212,7 +227,7 @@ export function FleetHeatmap({ report, locations, onSelect }: Props) {
         </div>
       </div>
       <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
-        <div ref={ref} className="chartPanel chartPanelHeatmap chartPanelHeatmapTall" />
+        <div ref={ref} className={`chartPanel chartPanelHeatmap chartPanelHeatmapTall${nightMode ? ' chartPanelNight' : ''}`} />
       </ChartExportWrap>
     </section>
   );

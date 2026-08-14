@@ -63,6 +63,7 @@
  * Dark mode — Alert tokens only. Kill leftover Targets light surfaces and
  * dark-on-dark text (navy / forest / brown on charcoal panels).
  */
+.v2AppRoot .alertFootfallRoot,
 html[data-mode='dark'] .alertFootfallRoot,
 .alertFootfallDark {
   color-scheme: dark;
@@ -76,22 +77,55 @@ html[data-mode='dark'] .alertFootfallRoot,
   background: transparent;
 }
 
+.v2AppRoot .alertFootfallRoot .chartPanel,
+.v2AppRoot .alertFootfallRoot .chartBox,
+.v2AppRoot .alertFootfallRoot .targetsHeatmapChart,
+.v2AppRoot .alertFootfallRoot .hourlyChart,
+.v2AppRoot .alertFootfallRoot .hourlyChartBlock,
+.v2AppRoot .alertFootfallRoot .targetsHeatmapBlock,
+.v2AppRoot .alertFootfallRoot .fleetHeatmapSection,
+.v2AppRoot .alertFootfallRoot .trendChartPanel,
+.v2AppRoot .alertFootfallRoot .chartPanelNight,
 html[data-mode='dark'] .alertFootfallRoot .chartPanel,
+html[data-mode='dark'] .alertFootfallRoot .chartBox,
+html[data-mode='dark'] .alertFootfallRoot .targetsHeatmapChart,
 html[data-mode='dark'] .alertFootfallRoot .hourlyChart,
 html[data-mode='dark'] .alertFootfallRoot .hourlyChartBlock,
 html[data-mode='dark'] .alertFootfallRoot .targetsHeatmapBlock,
 html[data-mode='dark'] .alertFootfallRoot .fleetHeatmapSection,
 html[data-mode='dark'] .alertFootfallRoot .trendChartPanel,
-html[data-mode='dark'] .alertFootfallRoot .echarts-for-react,
+html[data-mode='dark'] .alertFootfallRoot .chartPanelNight,
 .alertFootfallDark .chartPanel,
+.alertFootfallDark .chartBox,
+.alertFootfallDark .targetsHeatmapChart,
 .alertFootfallDark .hourlyChart,
 .alertFootfallDark .hourlyChartBlock,
 .alertFootfallDark .targetsHeatmapBlock,
 .alertFootfallDark .fleetHeatmapSection,
-.alertFootfallDark .trendChartPanel {
+.alertFootfallDark .trendChartPanel,
+.alertFootfallDark .chartPanelNight {
   background: #0a0e14 !important;
   background-color: #0a0e14 !important;
   border-color: var(--border) !important;
+}
+
+.v2AppRoot .alertFootfallRoot canvas,
+html[data-mode='dark'] .alertFootfallRoot canvas,
+.alertFootfallDark canvas,
+.v2AppRoot .alertFootfallRoot div[_echarts_instance_],
+html[data-mode='dark'] .alertFootfallRoot div[_echarts_instance_],
+.alertFootfallDark div[_echarts_instance_],
+.v2AppRoot .alertFootfallRoot .chartPanel > div,
+.v2AppRoot .alertFootfallRoot .chartBox > div,
+.v2AppRoot .alertFootfallRoot .hourlyChart > div,
+html[data-mode='dark'] .alertFootfallRoot .chartPanel > div,
+html[data-mode='dark'] .alertFootfallRoot .chartBox > div,
+html[data-mode='dark'] .alertFootfallRoot .hourlyChart > div,
+.alertFootfallDark .chartPanel > div,
+.alertFootfallDark .chartBox > div,
+.alertFootfallDark .hourlyChart > div {
+  background: #0a0e14 !important;
+  background-color: #0a0e14 !important;
 }
 
 html[data-mode='dark'] .alertFootfallRoot .btnSecondary,

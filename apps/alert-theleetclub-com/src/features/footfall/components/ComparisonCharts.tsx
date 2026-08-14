@@ -131,7 +131,7 @@ export function DivergenceChart({ location, benchmarkPct }: { location: Location
 
   return (
     <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
-      <div ref={ref} className="chartPanel" />
+      <div ref={ref} className={`chartPanel${nightMode ? ' chartPanelNight' : ''}`} />
     </ChartExportWrap>
   );
 }
@@ -221,7 +221,7 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
   return (
     <div className="chartSection">
       <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
-        <div ref={ref} className="chartPanel" />
+        <div ref={ref} className={`chartPanel${nightMode ? ' chartPanelNight' : ''}`} />
       </ChartExportWrap>
     </div>
   );
@@ -326,7 +326,7 @@ export function DailyBreakdownChart({ location }: { location: LocationReport }) 
     <div className="chartSection">
       {bd.mode === 'aligned' && bd.note ? <p className="hint chartHint">{bd.note}</p> : null}
       <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
-        <div ref={ref} className="chartPanel chartPanelShort" />
+        <div ref={ref} className={`chartPanel chartPanelShort${nightMode ? ' chartPanelNight' : ''}`} />
       </ChartExportWrap>
     </div>
   );
@@ -450,7 +450,7 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
   return (
     <div className="chartSection">
       <ChartExportWrap onExport={exportChart} className="chartExportWrapBlock">
-        <div ref={ref} className="chartPanel chartPanelShort" />
+        <div ref={ref} className={`chartPanel chartPanelShort${nightMode ? ' chartPanelNight' : ''}`} />
       </ChartExportWrap>
     </div>
   );
