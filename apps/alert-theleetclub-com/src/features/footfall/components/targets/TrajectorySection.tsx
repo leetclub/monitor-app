@@ -6,10 +6,12 @@ import { resolveTodaySales } from '@/features/footfall/lib/todaySales';
 import { cupsInt, formatCups } from '@/features/footfall/lib/formatCups';
 import {
   TRAJECTORY_CUP_PRICE_KD,
-  targetCupsPerDayFromRevenue,
-  targetRevenuePerDay,
-  weekRevenueTargetKdRounded,
+  targetBusinessDaysForSegment,
 } from '@/features/footfall/lib/weekRevenueTarget';
+import {
+  resolveDailyLocationTarget,
+  type LocationAdminTarget,
+} from '@/features/footfall/lib/locationAdminTargets';
 import {
   formatAccessDayBanner,
   kuwaitSundayWeekStartForYmd,
@@ -18,7 +20,6 @@ import {
 } from '@/features/footfall/lib/kuwaitBusinessDay';
 import { inferOwnerSegment } from '@/features/footfall/lib/ownerSegment';
 import type { LocationReport } from '@/features/footfall/lib/types';
-import { targetBusinessDaysForSegment } from '@/features/footfall/lib/weekRevenueTarget';
 
 const LIVE_REFRESH_MS = 90_000;
 
@@ -28,6 +29,7 @@ type Props = {
   defaultSalesYmd: string;
   /** target.theleetclub.com — hide date picker, always use live business day. */
   hideDateLabels?: boolean;
+  adminTarget?: LocationAdminTarget | null;
 };
 
 type DailyTargetCard = {
@@ -98,6 +100,7 @@ export function TrajectorySection({
   location,
   defaultSalesYmd,
   hideDateLabels,
+  adminTarget,
 }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selectedYmd, setSelectedYmd] = useState(defaultSalesYmd);
@@ -153,10 +156,16 @@ export function TrajectorySection({
 
   const segment = inferOwnerSegment(location);
   const businessDays = targetBusinessDaysForSegment(segment);
-  const weekTarget = weekRevenueTargetKdRounded(location.locationName);
-  const targetRevDay = weekTarget != null ? targetRevenuePerDay(weekTarget, segment) : null;
-  const targetCupsDay =
-    targetRevDay != null ? targetCupsPerDayFromRevenue(targetRevDay) : null;
+  const resolved = resolveDailyLocationTarget({
+    machineId: location.machineId,
+    locationName: location.locationName,
+    segment,
+    admin: adminTarget,
+    unitKd: TRAJECTORY_CUP_PRICE_KD,
+  });
+  const weekTarget = resolved.weekRevenueKd;
+  const targetRevDay = resolved.revenueKdPerDay;
+  const targetCupsDay = resolved.cupsPerDay;
 
   const daySalesKnown = !daySalesLoading && daySales.source !== 'none';
   const dayCups = daySalesKnown ? cupsSoldToday(daySales) : null;
@@ -183,19 +192,24 @@ export function TrajectorySection({
         label: 'Target cups / day',
         value:
           targetCupsDay != null ? formatCups(Math.round(targetCupsDay)) : '—',
-        hint: weekTarget != null ? 'From weekly revenue target' : 'No target set',
+        hint:
+          resolved.source === 'admin'
+            ? 'From Admin → Targets'
+            : resolved.source === 'weekJson'
+              ? 'From weekly revenue target'
+              : 'No target set',
         detailTitle: 'Target cups / day',
         detailBody:
-          weekTarget != null && targetRevDay != null && targetCupsDay != null
+          targetCupsDay != null && targetRevDay != null
             ? [
-                `Weekly revenue target: ${fmtTargetKd(weekTarget)}`,
-                `Daily revenue target = ${fmtTargetKd(weekTarget)} ÷ ${businessDays} = ${fmtTargetKd(targetRevDay)}`,
-                `Planning cup price: ${TRAJECTORY_CUP_PRICE_KD} KD (targets only)`,
-                `Target cups / day = ${fmtTargetKd(targetRevDay)} ÷ ${TRAJECTORY_CUP_PRICE_KD} = ${formatCups(Math.round(targetCupsDay))}`,
+                ...resolved.detail,
+                `Daily revenue target: ${fmtTargetKd(targetRevDay)}`,
+                `Planning cup price: ${TRAJECTORY_CUP_PRICE_KD} KD (when Admin metric is revenue)`,
+                `Target cups / day: ${formatCups(Math.round(targetCupsDay))}`,
               ]
             : [
-                `No weekly revenue target matched for “${location.locationName}”.`,
-                'Targets are set per location in the weekly revenue target list.',
+                `No Admin → Targets value for “${location.locationName}”.`,
+                'Set a location KD or cups target under Admin → Targets.',
               ],
       },
       {

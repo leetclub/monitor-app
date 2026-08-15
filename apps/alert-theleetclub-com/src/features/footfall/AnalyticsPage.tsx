@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CompareSelection } from '@/components/ComparePresetPicker';
 import {
   csvExportUrl,
   fetchReport,
@@ -7,20 +8,18 @@ import {
   reloadAllCaches,
   writeSessionReport,
 } from '@/features/footfall/lib/api';
-import type { LocationReport, OwnerSegment, ReportPayload, ReportQuery } from '@/features/footfall/lib/types';
+import type { LocationReport, OwnerSegment, ReportPayload } from '@/features/footfall/lib/types';
 import { cameraFootfallTotal, displayFootfallTotal, isEstimatedFootfall } from '@/features/footfall/lib/footfallMetrics';
 import { formatCups } from '@/features/footfall/lib/formatCups';
 import { inferOwnerSegment } from '@/features/footfall/lib/ownerSegment';
-import {
-  WINDOW_KU_JUL,
-  WINDOW_MOH_O2_MAY,
-  defaultWindowForSegment,
-  type ReportWindow,
-  type SegmentId,
-} from '@/features/footfall/lib/segments';
-import { applyUniqueFootfallToLocation, stripCompare } from '@/features/footfall/lib/uniqueFootfall';
+import type { SegmentId } from '@/features/footfall/lib/segments';
+import { applyUniqueFootfallToLocation } from '@/features/footfall/lib/uniqueFootfall';
 import { applyRawCameraFootfall } from '@/features/footfall/lib/rawCameraFootfall';
 import { useFootfallViewMode } from '@/features/footfall/FootfallViewMode';
+import {
+  comparePeriodShortLabel,
+  compareSelectionToReportQuery,
+} from '@/features/footfall/lib/footfallCompareQuery';
 import {
   footfallKpiCopy,
   footfallPerDayAverage,
@@ -53,110 +52,77 @@ import {
 import { SegmentTabs } from '@/features/footfall/components/SegmentTabs';
 import { UniqueFootfallExplainer } from '@/features/footfall/components/UniqueFootfallExplainer';
 
-function toQuery(w: ReportWindow): ReportQuery {
-  return {
-    startDate: w.startDate,
-    endDate: w.endDate,
-    enableCompare: false,
-  };
-}
-
-export function AnalyticsPage() {
+export function AnalyticsPage({ compare }: { compare: CompareSelection }) {
   const qc = useQueryClient();
   const viewMode = useFootfallViewMode();
   const [segmentId, setSegmentId] = useState<SegmentId>('ALL');
-  const [kuWindowId] = useState<string>(WINDOW_KU_JUL.id);
   const [filter, setFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState('');
   const refreshNext = useRef(false);
 
-  const kuWindow = WINDOW_KU_JUL;
+  const reportQ = useMemo(() => compareSelectionToReportQuery(compare), [compare]);
+  const periodLabel = useMemo(() => comparePeriodShortLabel(compare), [compare]);
 
-  const windowsNeeded = useMemo<ReportWindow[]>(() => {
-    if (segmentId === 'KU') return [kuWindow];
-    if (segmentId === 'MOH' || segmentId === 'O2') return [WINDOW_MOH_O2_MAY];
-    return [kuWindow, WINDOW_MOH_O2_MAY];
-  }, [segmentId, kuWindow]);
-
-  const reportQueries = useQueries({
-    queries: windowsNeeded.map((w) => {
-      const q = toQuery(w);
-      return {
-        queryKey: ['targets-report', w.id],
-        queryFn: async () => {
-          const data = await fetchReport(q, refreshNext.current, setLoadStatus);
-          writeSessionReport(q, data);
-          setLoadStatus('');
-          return data;
-        },
-        initialData: () => readSessionReport(q),
-        staleTime: 30 * 60 * 1000,
-        gcTime: 6 * 3600 * 1000,
-        retry: false,
-      };
-    }),
+  const reportQuery = useQuery({
+    queryKey: [
+      'targets-report',
+      reportQ.startDate,
+      reportQ.endDate,
+      reportQ.compareStartDate,
+      reportQ.compareEndDate,
+      reportQ.calendarDays ? 'cal' : 'biz',
+    ],
+    queryFn: async () => {
+      const data = await fetchReport(reportQ, refreshNext.current, setLoadStatus);
+      writeSessionReport(reportQ, data);
+      setLoadStatus('');
+      return data;
+    },
+    initialData: () => readSessionReport(reportQ),
+    staleTime: 30 * 60 * 1000,
+    gcTime: 6 * 3600 * 1000,
+    retry: false,
   });
 
-  const loading = reportQueries.some((q) => q.isLoading && !q.data);
-  const fetching = reportQueries.some((q) => q.isFetching);
-  const error = reportQueries.find((q) => q.error)?.error as Error | undefined;
-  const refreshNeeded = refreshNext.current;
+  const loading = reportQuery.isLoading && !reportQuery.data;
+  const fetching = reportQuery.isFetching;
+  const error = reportQuery.error as Error | undefined;
   useEffect(() => {
     if (!fetching) refreshNext.current = false;
   }, [fetching]);
 
   /** Merge reports + apply unique-footfall transform to every location. */
   const merged = useMemo<{
-    primaryWindow: ReportWindow;
+    primaryWindow: { id: string; label: string; shortLabel: string; startDate: string; endDate: string };
     benchmark: number;
     generatedAt: string;
     locations: LocationReport[];
     rawByMachineId: Record<string, LocationReport>;
   } | null>(() => {
-    if (loading) return null;
-    const payloads: { window: ReportWindow; payload: ReportPayload }[] = [];
-    reportQueries.forEach((q, idx) => {
-      if (q.data) payloads.push({ window: windowsNeeded[idx], payload: q.data });
-    });
-    if (payloads.length === 0) return null;
+    const payload = reportQuery.data;
+    if (!payload) return null;
 
-    const benchmark =
-      payloads.find((p) => p.payload.benchmarkConversionPct != null)?.payload.benchmarkConversionPct ?? 6.2;
-    const generatedAt = payloads
-      .map((p) => p.payload.generatedAt)
-      .sort()
-      .at(-1)!;
-
-    const seen = new Set<string>();
+    const benchmark = payload.benchmarkConversionPct ?? 6.2;
+    const generatedAt = payload.generatedAt;
     const out: LocationReport[] = [];
     const raw: Record<string, LocationReport> = {};
 
-    for (const item of payloads) {
-      const win = item.window;
-      const owners: OwnerSegment[] =
-        win.id === WINDOW_MOH_O2_MAY.id ? ['MOH', 'O2'] : ['KU'];
-      for (const loc of item.payload.locations) {
-        const owner = inferOwnerSegment(loc);
-        if (!owners.includes(owner)) continue;
-        if (segmentId === 'KU' && owner !== 'KU') continue;
-        if (segmentId === 'MOH' && owner !== 'MOH') continue;
-        if (segmentId === 'O2' && owner !== 'O2') continue;
-        if (seen.has(loc.machineId)) continue;
-        seen.add(loc.machineId);
+    for (const loc of payload.locations) {
+      const owner = inferOwnerSegment(loc);
+      if (segmentId === 'KU' && owner !== 'KU') continue;
+      if (segmentId === 'MOH' && owner !== 'MOH') continue;
+      if (segmentId === 'O2' && owner !== 'O2') continue;
 
-        const noCompare = stripCompare(loc);
-        const transformed =
-          viewMode === 'raw'
-            ? applyRawCameraFootfall(noCompare)
-            : applyUniqueFootfallToLocation(noCompare, owner, benchmark);
-        transformed.reportWindowShortLabel = win.shortLabel;
-        out.push(transformed);
-        raw[loc.machineId] = loc;
-      }
+      const transformed =
+        viewMode === 'raw'
+          ? applyRawCameraFootfall(loc)
+          : applyUniqueFootfallToLocation(loc, owner, benchmark);
+      transformed.reportWindowShortLabel = periodLabel;
+      out.push(transformed);
+      raw[loc.machineId] = loc;
     }
 
-    // Sort by raw camera footfall (highest exposure first), tie-break on display footfall
     out.sort(
       (a, b) =>
         cameraFootfallTotal(b) - cameraFootfallTotal(a) ||
@@ -164,26 +130,29 @@ export function AnalyticsPage() {
     );
 
     return {
-      primaryWindow: defaultWindowForSegment(segmentId, kuWindowId),
+      primaryWindow: {
+        id: `${reportQ.startDate}_${reportQ.endDate}`,
+        label: periodLabel,
+        shortLabel: periodLabel,
+        startDate: reportQ.startDate,
+        endDate: reportQ.endDate,
+      },
       benchmark,
       generatedAt,
       locations: out,
       rawByMachineId: raw,
     };
-  }, [loading, reportQueries, windowsNeeded, segmentId, kuWindowId, viewMode]);
+  }, [reportQuery.data, segmentId, viewMode, periodLabel, reportQ.startDate, reportQ.endDate]);
 
   /** Synthetic ReportPayload that the existing components consume. */
   const reportForDetail = useMemo<ReportPayload | null>(() => {
-    if (!merged) return null;
+    if (!merged || !reportQuery.data) return null;
     return {
+      ...reportQuery.data,
       generatedAt: merged.generatedAt,
       benchmarkConversionPct: merged.benchmark,
       primaryPeriod: [merged.primaryWindow.startDate, merged.primaryWindow.endDate],
-      fallbackPeriod: [WINDOW_MOH_O2_MAY.startDate, WINDOW_MOH_O2_MAY.endDate],
-      comparePeriod: null,
-      currency: 'KD',
       locations: merged.locations,
-      // Rankings are rebuilt client-side by FleetPanel from locations.
       rankings: {
         byFootfall: [],
         byProjectedFootfall: [],
@@ -194,7 +163,7 @@ export function AnalyticsPage() {
       },
       locationCount: merged.locations.length,
     };
-  }, [merged]);
+  }, [merged, reportQuery.data]);
 
   /** Filtered list (search). */
   const filtered = useMemo(() => {
@@ -226,18 +195,13 @@ export function AnalyticsPage() {
   /** Counts per segment (for the tabs). */
   const counts = useMemo<Partial<Record<SegmentId, number>>>(() => {
     const c: Record<OwnerSegment, number> = { KU: 0, MOH: 0, O2: 0, OTHER: 0 };
-    reportQueries.forEach((q, idx) => {
-      const w = windowsNeeded[idx];
-      if (!q.data || !w) return;
-      const owners =
-        w.id === WINDOW_MOH_O2_MAY.id ? ['MOH', 'O2'] : ['KU'];
-      for (const loc of q.data.locations) {
-        const own = inferOwnerSegment(loc);
-        if (owners.includes(own)) c[own]++;
-      }
-    });
-    return { ALL: c.KU + c.MOH + c.O2, KU: c.KU, MOH: c.MOH, O2: c.O2 };
-  }, [reportQueries, windowsNeeded]);
+    const payload = reportQuery.data;
+    if (!payload) return { ALL: 0, KU: 0, MOH: 0, O2: 0 };
+    for (const loc of payload.locations) {
+      c[inferOwnerSegment(loc)]++;
+    }
+    return { ALL: c.KU + c.MOH + c.O2 + c.OTHER, KU: c.KU, MOH: c.MOH, O2: c.O2 };
+  }, [reportQuery.data]);
 
   /** Section nav (no compare section in targets app). */
   const flySections: FlySection[] = useMemo(() => {
@@ -277,14 +241,19 @@ export function AnalyticsPage() {
   const reloadCaches = async () => {
     setCacheReloading(true);
     try {
-      await Promise.all(
-        windowsNeeded.map(async (w) => {
-          const q = toQuery(w);
-          const data = await reloadAllCaches(q, setLoadStatus);
-          qc.setQueryData(['targets-report', w.id], data);
-          writeSessionReport(q, data);
-        }),
+      const data = await reloadAllCaches(reportQ, setLoadStatus);
+      qc.setQueryData(
+        [
+          'targets-report',
+          reportQ.startDate,
+          reportQ.endDate,
+          reportQ.compareStartDate,
+          reportQ.compareEndDate,
+          reportQ.calendarDays ? 'cal' : 'biz',
+        ],
+        data,
       );
+      writeSessionReport(reportQ, data);
     } finally {
       setLoadStatus('');
       setCacheReloading(false);
@@ -292,19 +261,22 @@ export function AnalyticsPage() {
   };
 
   const exportLocationCsv = () => {
-    if (!selected || !selectedSegment) return;
-    const w = selectedSegment === 'KU' ? kuWindow : WINDOW_MOH_O2_MAY;
-    window.open(csvExportUrl(toQuery(w), selected.machineId), '_blank', 'noopener');
+    if (!selected) return;
+    window.open(csvExportUrl(reportQ, selected.machineId), '_blank', 'noopener');
   };
 
   const exportAllCsv = () => {
     if (!merged) return;
-    windowsNeeded.forEach((w) => {
-      window.open(csvExportUrl(toQuery(w)), '_blank', 'noopener');
-    });
+    window.open(csvExportUrl(reportQ), '_blank', 'noopener');
   };
 
-  const primaryWindow = merged?.primaryWindow ?? defaultWindowForSegment(segmentId, kuWindowId);
+  const primaryWindow = merged?.primaryWindow ?? {
+    id: `${reportQ.startDate}_${reportQ.endDate}`,
+    label: periodLabel,
+    shortLabel: periodLabel,
+    startDate: reportQ.startDate,
+    endDate: reportQ.endDate,
+  };
 
   return (
     <div
@@ -321,10 +293,9 @@ export function AnalyticsPage() {
         <div className="ffTopBarMain">
           <h1>Analytics</h1>
           <p className="subtitle">
-            One fixed 5-day week per segment. Footfall is either{' '}
-            <strong>Mirrored footfall</strong> (no camera) or{' '}
-            <strong>Unique footfall</strong> (camera, adjusted for repeat visitors). Raw
-            detections stay as a small reference on camera sites.
+            Uses the same Alert date preset as Targets. Default footfall is{' '}
+            <strong>as measured</strong> (raw camera). Turn on <strong>Mirror &amp; adjust</strong>{' '}
+            for mirrored / unique-ratio footfall. Sales unchanged.
           </p>
         </div>
         <div className="topActions">
@@ -333,7 +304,7 @@ export function AnalyticsPage() {
             className="btnSecondary"
             onClick={reloadCaches}
             disabled={loading || cacheReloading || fetching}
-            title="Rebuild the report on the server for this segment's windows"
+            title="Rebuild the report on the server for the selected dates"
           >
             {cacheReloading ? 'Rebuilding…' : 'Rebuild report'}
           </button>
@@ -349,17 +320,14 @@ export function AnalyticsPage() {
       <SegmentTabs value={segmentId} onChange={setSegmentId} counts={counts} />
 
       <div className="targetsPeriodBar" role="status">
-        <span className="targetsPeriodTag">Reference window</span>
-        <strong>
-          {primaryWindow.label}
-        </strong>
+        <span className="targetsPeriodTag">Selected period</span>
+        <strong>{primaryWindow.label}</strong>
         <span className="targetsPeriodSeparator">·</span>
-        <span>5 business days · Sun–Thu</span>
-        {segmentId === 'ALL' ? (
-          <span className="targetsPeriodSeparator targetsPeriodAlt">
-            MOH/O2 use <strong>{WINDOW_MOH_O2_MAY.shortLabel}</strong>
-          </span>
-        ) : null}
+        <span>
+          {primaryWindow.startDate === primaryWindow.endDate
+            ? primaryWindow.startDate
+            : `${primaryWindow.startDate} → ${primaryWindow.endDate}`}
+        </span>
       </div>
 
       <UniqueFootfallExplainer
@@ -388,7 +356,7 @@ export function AnalyticsPage() {
         </div>
       ) : null}
 
-      {refreshNeeded || cacheReloading ? (
+      {cacheReloading ? (
         <div className="stateBox stateBoxInline">
           <p>Rebuilding report on server…</p>
         </div>
@@ -410,7 +378,7 @@ export function AnalyticsPage() {
             className="btnPrimary"
             onClick={() => {
               refreshNext.current = false;
-              reportQueries.forEach((q) => q.refetch());
+              void reportQuery.refetch();
             }}
           >
             Retry
@@ -434,12 +402,7 @@ export function AnalyticsPage() {
       {merged && reportForDetail && selected ? (
         <div className="mainGrid">
           <section className="sidebar">
-            <p className="periodBadge">
-              {primaryWindow.shortLabel}
-              {segmentId === 'ALL'
-                ? ` · MOH/O2 ${WINDOW_MOH_O2_MAY.shortLabel}`
-                : ''}
-            </p>
+            <p className="periodBadge">{primaryWindow.shortLabel}</p>
             <ul className="locList">
               {filtered.map((l) => {
                 const seg = inferOwnerSegment(l);

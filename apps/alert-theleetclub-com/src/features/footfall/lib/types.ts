@@ -197,6 +197,8 @@ export type ReportQuery = {
   compareStartDate?: string;
   compareEndDate?: string;
   enableCompare: boolean;
+  /** Include Fri/Sat in commercial-footfall day list (Alert presets). */
+  calendarDays?: boolean;
 };
 
 export type ReportPayload = {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CompareSelection } from '@/components/ComparePresetPicker';
 import { SegmentTabs } from '@/features/footfall/components/SegmentTabs';
 import { LocationSidebar } from '@/features/footfall/components/LocationSidebar';
 import { TargetsHeatmap } from '@/features/footfall/components/targets/TargetsHeatmap';
@@ -8,18 +9,16 @@ import { TrajectorySection } from '@/features/footfall/components/targets/Trajec
 import { DataQualityBanner } from '@/features/footfall/components/DataQualityBanner';
 import { isTargetOnlySite } from '@/features/footfall/lib/appSite';
 import { useTargetsData } from '@/features/footfall/lib/useTargetsData';
-import {
-  WINDOW_KU_JUL,
-  WINDOW_MOH_O2_MAY,
-  windowForLocation,
-  type SegmentId,
-} from '@/features/footfall/lib/segments';
+import type { SegmentId } from '@/features/footfall/lib/segments';
 import { inferOwnerSegment } from '@/features/footfall/lib/ownerSegment';
 
-export function TargetsPage() {
+type Props = {
+  compare: CompareSelection;
+};
+
+export function TargetsPage({ compare }: Props) {
   const hideDateLabels = isTargetOnlySite();
   const [segmentId, setSegmentId] = useState<SegmentId>('ALL');
-  const [kuWindowId] = useState(WINDOW_KU_JUL.id);
 
   const {
     loading,
@@ -35,7 +34,9 @@ export function TargetsPage() {
     business,
     todayByMachine,
     todaySalesLoading,
-  } = useTargetsData(segmentId, kuWindowId);
+    adminTargetsByMachine,
+    periodLabel,
+  } = useTargetsData(segmentId, compare);
 
   const todaySales = selected
     ? todayByMachine.get(selected.machineId) ?? {
@@ -46,10 +47,9 @@ export function TargetsPage() {
       }
     : null;
 
-  const periodBadge = hideDateLabels
-    ? undefined
-    : merged?.primaryWindow.shortLabel +
-      (segmentId === 'ALL' ? ` · MOH/O2 ${WINDOW_MOH_O2_MAY.shortLabel}` : '');
+  const adminTarget = selected
+    ? adminTargetsByMachine[selected.machineId] ?? null
+    : null;
 
   return (
     <div className="targetsPage">
@@ -95,7 +95,7 @@ export function TargetsPage() {
             locations={filtered}
             selectedId={selected?.machineId ?? null}
             onSelect={setSelectedId}
-            periodBadge={periodBadge}
+            periodBadge={hideDateLabels ? undefined : periodLabel}
           />
 
           <section className="detail targetsDetailColumn">
@@ -122,14 +122,16 @@ export function TargetsPage() {
                   }
                   todaySalesLoading={todaySalesLoading}
                   salesYmd={business.salesYmd}
-                  periodTitle={windowForLocation(selected, kuWindowId).shortLabel}
+                  periodTitle={periodLabel}
                   hideDateLabels={hideDateLabels}
+                  adminTarget={adminTarget}
                 />
                 <TargetsGraphSection location={selected} />
                 <TrajectorySection
                   location={selected}
                   defaultSalesYmd={business.salesYmd}
                   hideDateLabels={hideDateLabels}
+                  adminTarget={adminTarget}
                 />
               </div>
             ) : (

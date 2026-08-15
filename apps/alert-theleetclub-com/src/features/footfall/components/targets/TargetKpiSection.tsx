@@ -20,13 +20,11 @@ import {
   targetCupsForFootfall,
   targetsBenchmarkForLocation,
 } from '@/features/footfall/lib/targetsBenchmark';
+import { TRAJECTORY_CUP_PRICE_KD } from '@/features/footfall/lib/weekRevenueTarget';
 import {
-  TRAJECTORY_CUP_PRICE_KD,
-  targetBusinessDaysForSegment,
-  targetCupsPerDayFromRevenue,
-  targetRevenuePerDay,
-  weekRevenueTargetKdRounded,
-} from '@/features/footfall/lib/weekRevenueTarget';
+  resolveDailyLocationTarget,
+  type LocationAdminTarget,
+} from '@/features/footfall/lib/locationAdminTargets';
 
 type Props = {
   location: LocationReport;
@@ -36,6 +34,7 @@ type Props = {
   /** Reference window label shown above the KPI cards (e.g. Jul 6 → Jul 10, 2025). */
   periodTitle: string;
   hideDateLabels?: boolean;
+  adminTarget?: LocationAdminTarget | null;
 };
 
 type KpiCardDef = {
@@ -85,6 +84,7 @@ export function TargetKpiSection({
   salesYmd,
   periodTitle,
   hideDateLabels,
+  adminTarget,
 }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const copy = footfallKpiCopy(location);
@@ -108,21 +108,21 @@ export function TargetKpiSection({
   const avgCupsDay = salesDays > 0 ? (location.daily.totalCups ?? 0) / salesDays : 0;
   const avgRevDay =
     salesDays > 0 ? (location.daily.totalRevenueKd ?? 0) / salesDays : 0;
-  const unitKd = avgCupsDay > 0 ? avgRevDay / avgCupsDay : 0.5;
+  const unitKd = avgCupsDay > 0 ? avgRevDay / avgCupsDay : TRAJECTORY_CUP_PRICE_KD;
   const footfallTargetRevDay = staticTargetDay * unitKd;
   const todayRevEst = todayCupsForAchieve * unitKd;
-  const businessDays = targetBusinessDaysForSegment(segment);
-  const weekTargetKd = weekRevenueTargetKdRounded(location.locationName);
-  const weeklyRevTargetDay =
-    hideDateLabels && weekTargetKd != null
-      ? targetRevenuePerDay(weekTargetKd, segment)
-      : null;
-  const weeklyCupsTargetDay =
-    weeklyRevTargetDay != null
-      ? targetCupsPerDayFromRevenue(weeklyRevTargetDay)
-      : null;
-  const targetDayCups = weeklyCupsTargetDay ?? staticTargetDay;
-  const targetRevDay = weeklyRevTargetDay ?? footfallTargetRevDay;
+  const resolved = resolveDailyLocationTarget({
+    machineId: location.machineId,
+    locationName: location.locationName,
+    segment,
+    admin: adminTarget,
+    footfallBenchCupsPerDay: staticTargetDay,
+    footfallBenchKdPerDay: footfallTargetRevDay,
+    unitKd,
+  });
+  const targetDayCups = resolved.cupsPerDay ?? staticTargetDay;
+  const targetRevDay = resolved.revenueKdPerDay ?? footfallTargetRevDay;
+  const weekTargetKd = resolved.weekRevenueKd;
   const todayRevForAchieve =
     todaySalesKnown &&
     todaySales.revenueCashlessKd != null &&
@@ -216,18 +216,18 @@ export function TargetKpiSection({
         value: `${formatCups(Math.round(targetDayCups))}`,
         detailTitle: 'Target · sales per day',
         detailBody:
-          weeklyRevTargetDay != null && weekTargetKd != null
+          resolved.source === 'admin' || resolved.source === 'weekJson'
             ? [
-                `Weekly revenue target: ${Math.round(weekTargetKd)} KD.`,
-                `Daily revenue target = ${Math.round(weekTargetKd)} KD ÷ ${businessDays} = ${weeklyRevTargetDay} KD.`,
-                segment === 'KU'
-                  ? 'KU uses a 5-day business week (Sun–Thu).'
-                  : 'Hospital/O2 locations use a 7-day week.',
-                `Target cups / day = ${weeklyRevTargetDay} KD ÷ ${TRAJECTORY_CUP_PRICE_KD} KD = ${formatCups(Math.round(targetDayCups))}.`,
-              ]
+                ...resolved.detail,
+                targetRevDay != null
+                  ? `Daily revenue target: ${targetRevDay.toFixed(1)} KD.`
+                  : null,
+                `Target cups / day: ${formatCups(Math.round(targetDayCups))}.`,
+              ].filter(Boolean) as string[]
             : [
                 `${formatCups(Math.round(staticTargetDay))} cups at ${bench}% on ${Math.round(ffPerDay).toLocaleString()} avg daily footfall.`,
-                `${formatCups(Math.round(staticTargetWeek))} cups over 5 days @ ${bench}%.`,
+                `${formatCups(Math.round(staticTargetWeek))} cups over period @ ${bench}%.`,
+                'No Admin → Targets value for this machine — using footfall × conversion benchmark.',
                 copy.isMirroredOrProjected
                   ? 'Based on mirrored footfall (period total from cups ÷ benchmark).'
                   : 'Based on footfall for this location.',
@@ -254,9 +254,11 @@ export function TargetKpiSection({
           todaySalesKnown
             ? `Revenue: ${todayRevForAchieve.toFixed(2)} KD of ${targetRevDay.toFixed(2)} KD target (${achieveRev ?? '—'}%).`
             : 'Achievement compares today cashless cups to the daily target.',
-          weeklyRevTargetDay != null && weekTargetKd != null
-            ? `Daily revenue target from weekly sheet: ${Math.round(weekTargetKd)} KD ÷ ${businessDays} = ${weeklyRevTargetDay} KD.`
-            : `Target uses ${bench}% conversion on ${Math.round(ffPerDay).toLocaleString()} avg daily footfall.`,
+          resolved.source === 'admin'
+            ? 'Daily target from Admin → Targets (overrides sheet / footfall bench).'
+            : resolved.source === 'weekJson'
+              ? 'Daily target from weekly revenue target list.'
+              : `Target uses ${bench}% conversion on ${Math.round(ffPerDay).toLocaleString()} avg daily footfall.`,
           todaySalesKnown && todayCups > todayCupsCashless
             ? `All cups today (incl. WEB): ${formatCups(Math.round(todayCups))}.`
             : todaySalesKnown
@@ -290,8 +292,7 @@ export function TargetKpiSection({
     staticTargetWeek,
     targetDayCups,
     weekTargetKd,
-    weeklyRevTargetDay,
-    businessDays,
+    resolved,
     achieve,
     todaySales,
     todaySalesLoading,

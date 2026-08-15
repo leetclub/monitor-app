@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 
 export type FootfallViewMode = 'adjusted' | 'raw';
 
-const FootfallViewModeContext = createContext<FootfallViewMode>('adjusted');
+const FootfallViewModeContext = createContext<FootfallViewMode>('raw');
 
 export function FootfallViewModeProvider({
   mode,

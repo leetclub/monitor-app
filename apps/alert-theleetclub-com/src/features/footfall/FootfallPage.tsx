@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
 import { TargetsPage } from '@/features/footfall/TargetsPage';
 import { AnalyticsPage } from '@/features/footfall/AnalyticsPage';
 import {
@@ -6,17 +7,27 @@ import {
   type FootfallViewMode,
 } from '@/features/footfall/FootfallViewMode';
 import { useFootfallDarkSurface } from '@/features/footfall/NightChartContext';
+import {
+  initialCompareSelection,
+  persistCompareSelection,
+} from '@/lib/comparePresetBridge';
 import '@/features/footfall/footfall-targets.css';
 import '@/features/footfall/footfall-alert.css';
 
 /**
- * Alert Footfall tab — full Leet Target experience (weekday Targets + Analytics report)
- * styled for Alert, with Adjusted (mirror + unique ratio) vs Raw camera toggle.
+ * Alert Footfall tab — Targets + Full report with Alert compare presets.
+ * Default footfall = raw camera (no mirror / unique-ratio); Adjusted is opt-in.
  */
 export function FootfallPage() {
   const [sub, setSub] = useState<'targets' | 'analytics'>('targets');
-  const [mode, setMode] = useState<FootfallViewMode>('adjusted');
+  const [mode, setMode] = useState<FootfallViewMode>('raw');
+  const [compare, setCompareState] = useState<CompareSelection>(() => initialCompareSelection());
   const darkMode = useFootfallDarkSurface();
+
+  const setCompare = useCallback((next: CompareSelection) => {
+    setCompareState(next);
+    persistCompareSelection(next);
+  }, []);
 
   return (
     <div className={darkMode ? 'alertFootfallRoot alertFootfallDark' : 'alertFootfallRoot'}>
@@ -45,31 +56,38 @@ export function FootfallPage() {
           <span className="ffAlertModeLabel">Footfall</span>
           <button
             type="button"
-            className={mode === 'adjusted' ? 'ffAlertModeBtn active' : 'ffAlertModeBtn'}
-            aria-pressed={mode === 'adjusted'}
-            title="Mirrored / projected where needed + unique-visitor ratio on camera sites"
-            onClick={() => setMode('adjusted')}
+            className={mode === 'raw' ? 'ffAlertModeBtn active' : 'ffAlertModeBtn'}
+            aria-pressed={mode === 'raw'}
+            title="Camera detections as measured — no mirror fill, no unique-ratio adjustment"
+            onClick={() => setMode('raw')}
           >
-            Adjusted
+            As measured
           </button>
           <button
             type="button"
-            className={mode === 'raw' ? 'ffAlertModeBtn active' : 'ffAlertModeBtn'}
-            aria-pressed={mode === 'raw'}
-            title="Camera detections only — no mirror fill, no unique ratio"
-            onClick={() => setMode('raw')}
+            className={mode === 'adjusted' ? 'ffAlertModeBtn active' : 'ffAlertModeBtn'}
+            aria-pressed={mode === 'adjusted'}
+            title="Enable mirror / projection where needed + unique-visitor ratio on camera sites"
+            onClick={() => setMode('adjusted')}
           >
-            Raw camera
+            Mirror & adjust
           </button>
         </div>
       </div>
+      <div className="ffAlertCompareRow">
+        <ComparePresetPicker value={compare} onChange={setCompare} />
+      </div>
       <p className="ffAlertModeHint">
         {mode === 'adjusted'
-          ? 'Showing adjusted footfall (mirror / projection + unique ratio). Sales unchanged.'
-          : 'Showing raw camera detections only. Mirrored / no-camera sites show 0 camera footfall.'}
+          ? 'Mirror & adjust on: mirrored / projected footfall + unique-visitor ratio. Sales unchanged.'
+          : 'As measured (default): raw camera detections only. Mirrored / no-camera sites show 0 camera footfall. Sales unchanged.'}
       </p>
       <FootfallViewModeProvider mode={mode}>
-        {sub === 'targets' ? <TargetsPage /> : <AnalyticsPage />}
+        {sub === 'targets' ? (
+          <TargetsPage compare={compare} />
+        ) : (
+          <AnalyticsPage compare={compare} />
+        )}
       </FootfallViewModeProvider>
     </div>
   );

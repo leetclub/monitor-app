@@ -49,6 +49,20 @@
   margin-right: 4px;
 }
 
+.ffAlertCompareRow {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #3a414d);
+  border-radius: 10px;
+  background: var(--panel, #1a1f28);
+}
+
+.ffAlertCompareRow .comparePickerRow {
+  margin: 0;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
 .ffAlertModeHint {
   margin: 0 0 14px;
   font-size: 0.8rem;

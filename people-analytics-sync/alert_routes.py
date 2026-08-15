@@ -1659,6 +1659,59 @@ def register_alert_routes(app) -> None:
         finally:
             db.close()
 
+    @app.route("/api/alert/targets/location-map", methods=["GET", "OPTIONS"])
+    def alert_targets_location_map():
+        """Bulk Admin location targets for Footfall / dashboards (alert_read)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from dashboard_access_models import LiveMachineConfig
+
+        db = _dash_session()
+        try:
+            by_mid: Dict[str, Any] = {}
+            for lmc in db.query(LiveMachineConfig).all():
+                mid = str(lmc.machine_id or "").strip()
+                if not mid:
+                    continue
+                metric = (
+                    (getattr(lmc, "location_target_metric", None) or "revenue")
+                    .strip()
+                    .lower()
+                )
+                if metric not in ("revenue", "cups"):
+                    metric = "revenue"
+                period = (getattr(lmc, "sx_target_period", None) or "daily").strip().lower()
+                if period not in ("daily", "weekly", "monthly"):
+                    period = "daily"
+                kd = (
+                    float(lmc.daily_sales_target)
+                    if lmc.daily_sales_target is not None
+                    else None
+                )
+                cups = (
+                    float(lmc.daily_location_cups_target)
+                    if getattr(lmc, "daily_location_cups_target", None) is not None
+                    else None
+                )
+                if kd is None and cups is None:
+                    continue
+                by_mid[mid] = {
+                    "machineId": mid,
+                    "dailySalesTarget": kd,
+                    "dailyLocationCupsTarget": cups,
+                    "locationTargetMetric": metric,
+                    "sxTargetPeriod": period,
+                }
+            return jsonify({"byMachineId": by_mid})
+        except Exception as ex:
+            logger.exception("alert_targets_location_map")
+            return jsonify({"error": str(ex)}), 500
+        finally:
+            db.close()
+
     @app.route("/api/alert/red-flags/snapshot", methods=["GET", "OPTIONS"])
     def alert_red_flags_snapshot():
         if request.method == "OPTIONS":

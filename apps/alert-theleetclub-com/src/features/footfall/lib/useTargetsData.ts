@@ -1,125 +1,105 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import type { CompareSelection } from '@/components/ComparePresetPicker';
 import { fetchReport, fetchTodaySales, readSessionReport, writeSessionReport } from '@/features/footfall/lib/api';
-import type { LocationReport, OwnerSegment, ReportPayload, ReportQuery } from '@/features/footfall/lib/types';
+import type { LocationReport, OwnerSegment, ReportPayload } from '@/features/footfall/lib/types';
 import { cameraFootfallTotal, displayFootfallTotal } from '@/features/footfall/lib/footfallMetrics';
 import { inferOwnerSegment } from '@/features/footfall/lib/ownerSegment';
-import {
-  WINDOW_KU_JUL,
-  WINDOW_MOH_O2_MAY,
-  defaultWindowForSegment,
-  type ReportWindow,
-  type SegmentId,
-} from '@/features/footfall/lib/segments';
-import { applyUniqueFootfallToLocation, stripCompare } from '@/features/footfall/lib/uniqueFootfall';
+import type { SegmentId } from '@/features/footfall/lib/segments';
+import { applyUniqueFootfallToLocation } from '@/features/footfall/lib/uniqueFootfall';
 import { applyKuFootfallEstimateIfNeeded } from '@/features/footfall/lib/kuFootfallEstimate';
 import { applyRawCameraFootfall } from '@/features/footfall/lib/rawCameraFootfall';
 import { useFootfallViewMode } from '@/features/footfall/FootfallViewMode';
 import { kuwaitBusinessContext } from '@/features/footfall/lib/kuwaitBusinessDay';
 import { resolveTodaySales, type TodaySalesRow } from '@/features/footfall/lib/todaySales';
 import { targetsBenchmarkPctForSegment } from '@/features/footfall/lib/targetsBenchmark';
-
-function toQuery(w: ReportWindow): ReportQuery {
-  return {
-    startDate: w.startDate,
-    endDate: w.endDate,
-    enableCompare: false,
-  };
-}
+import {
+  comparePeriodShortLabel,
+  compareSelectionToReportQuery,
+} from '@/features/footfall/lib/footfallCompareQuery';
+import {
+  fetchLocationTargetsMap,
+  type LocationAdminTarget,
+} from '@/features/footfall/lib/locationAdminTargets';
 
 const REALTIME_MS = 90_000;
 
-export function useTargetsData(segmentId: SegmentId, kuWindowId: string) {
+export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) {
   const viewMode = useFootfallViewMode();
   const [filter, setFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const refreshNext = useRef(false);
   const business = useMemo(() => kuwaitBusinessContext(), []);
 
-  const kuWindow = WINDOW_KU_JUL;
+  const reportQ = useMemo(() => compareSelectionToReportQuery(compare), [compare]);
+  const periodLabel = useMemo(() => comparePeriodShortLabel(compare), [compare]);
 
-  const windowsNeeded = useMemo<ReportWindow[]>(() => {
-    if (segmentId === 'KU') return [kuWindow, WINDOW_MOH_O2_MAY];
-    if (segmentId === 'MOH' || segmentId === 'O2') return [WINDOW_MOH_O2_MAY];
-    return [kuWindow, WINDOW_MOH_O2_MAY];
-  }, [segmentId, kuWindow]);
-
-  const reportQueries = useQueries({
-    queries: windowsNeeded.map((w) => {
-      const q = toQuery(w);
-      return {
-        queryKey: ['targets-report', w.id],
-        queryFn: async () => {
-          const data = await fetchReport(q, refreshNext.current);
-          writeSessionReport(q, data);
-          return data;
-        },
-        initialData: () => readSessionReport(q),
-        staleTime: 30_000,
-        gcTime: 6 * 3600 * 1000,
-        retry: false,
-        refetchInterval: REALTIME_MS,
-      };
-    }),
+  const reportQuery = useQuery({
+    queryKey: [
+      'targets-report',
+      reportQ.startDate,
+      reportQ.endDate,
+      reportQ.compareStartDate,
+      reportQ.compareEndDate,
+      reportQ.calendarDays ? 'cal' : 'biz',
+    ],
+    queryFn: async () => {
+      const data = await fetchReport(reportQ, refreshNext.current);
+      writeSessionReport(reportQ, data);
+      return data;
+    },
+    initialData: () => readSessionReport(reportQ),
+    staleTime: 30_000,
+    gcTime: 6 * 3600 * 1000,
+    retry: false,
+    refetchInterval: REALTIME_MS,
   });
 
-  const loading = reportQueries.some((q) => q.isLoading && !q.data);
+  const targetsMapQuery = useQuery({
+    queryKey: ['alert-location-targets-map'],
+    queryFn: fetchLocationTargetsMap,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+    retry: 1,
+  });
+
+  const loading = reportQuery.isLoading && !reportQuery.data;
 
   const merged = useMemo(() => {
-    const payloads: { window: ReportWindow; payload: ReportPayload }[] = [];
-    reportQueries.forEach((q, idx) => {
-      if (q.data) payloads.push({ window: windowsNeeded[idx], payload: q.data });
-    });
-    if (payloads.length === 0) return null;
+    const payload = reportQuery.data;
+    if (!payload) return null;
 
-    const benchmark =
-      payloads.find((p) => p.payload.benchmarkConversionPct != null)?.payload
-        .benchmarkConversionPct ?? 6.2;
-    const generatedAt = payloads
-      .map((p) => p.payload.generatedAt)
-      .sort()
-      .at(-1)!;
-
-    const seen = new Set<string>();
+    const benchmark = payload.benchmarkConversionPct ?? 6.2;
+    const generatedAt = payload.generatedAt;
     const out: LocationReport[] = [];
     const referenceFleet: LocationReport[] = [];
-    const raw: Record<string, LocationReport> = {};
+    const rawByMachineId: Record<string, LocationReport> = {};
 
-    for (const item of payloads) {
-      const win = item.window;
-      const refOnlyForKu =
-        segmentId === 'KU' && win.id === WINDOW_MOH_O2_MAY.id;
-      const owners: OwnerSegment[] =
-        win.id === WINDOW_MOH_O2_MAY.id ? ['MOH', 'O2'] : ['KU'];
-      for (const loc of item.payload.locations) {
-        const owner = inferOwnerSegment(loc);
-        if (!owners.includes(owner)) continue;
-
-        const baseLoc = stripCompare(loc);
-        const transformed =
-          viewMode === 'raw'
-            ? applyRawCameraFootfall(baseLoc)
-            : applyUniqueFootfallToLocation(baseLoc, owner, benchmark);
-        const ff =
-          transformed.daily.projectedFootfall ?? transformed.daily.totalFootfall;
-        if (viewMode === 'adjusted' && ff > 0 && transformed.daily.totalCups > 0) {
-          if (!referenceFleet.some((r) => r.machineId === transformed.machineId)) {
-            referenceFleet.push(transformed);
-          }
-        }
-
-        if (refOnlyForKu) continue;
-
-        if (segmentId === 'KU' && owner !== 'KU') continue;
-        if (segmentId === 'MOH' && owner !== 'MOH') continue;
-        if (segmentId === 'O2' && owner !== 'O2') continue;
-        if (seen.has(loc.machineId)) continue;
-        seen.add(loc.machineId);
-
-        transformed.reportWindowShortLabel = win.shortLabel;
-        out.push(transformed);
-        raw[loc.machineId] = loc;
+    for (const loc of payload.locations) {
+      const owner = inferOwnerSegment(loc);
+      if (segmentId === 'KU' && owner !== 'KU') continue;
+      if (segmentId === 'MOH' && owner !== 'MOH') continue;
+      if (segmentId === 'O2' && owner !== 'O2') continue;
+      if (segmentId === 'ALL' && owner === 'OTHER') {
+        /* keep OTHER in All */
       }
+
+      const transformed =
+        viewMode === 'raw'
+          ? applyRawCameraFootfall(loc)
+          : applyUniqueFootfallToLocation(loc, owner, benchmark);
+
+      const ff =
+        transformed.daily.projectedFootfall ?? transformed.daily.totalFootfall;
+      if (viewMode === 'adjusted' && ff > 0 && transformed.daily.totalCups > 0) {
+        if (!referenceFleet.some((r) => r.machineId === transformed.machineId)) {
+          referenceFleet.push(transformed);
+        }
+      }
+
+      transformed.reportWindowShortLabel = periodLabel;
+      out.push(transformed);
+      rawByMachineId[loc.machineId] = loc;
     }
 
     if (viewMode === 'adjusted') {
@@ -139,13 +119,20 @@ export function useTargetsData(segmentId: SegmentId, kuWindowId: string) {
     );
 
     return {
-      primaryWindow: defaultWindowForSegment(segmentId, kuWindowId),
+      periodLabel,
+      primaryWindow: {
+        id: `${reportQ.startDate}_${reportQ.endDate}`,
+        label: periodLabel,
+        shortLabel: periodLabel,
+        startDate: reportQ.startDate,
+        endDate: reportQ.endDate,
+      },
       benchmark,
       generatedAt,
       locations: out,
-      rawByMachineId: raw,
+      rawByMachineId,
     };
-  }, [reportQueries, windowsNeeded, segmentId, kuWindowId, viewMode]);
+  }, [reportQuery.data, segmentId, viewMode, periodLabel, reportQ.startDate, reportQ.endDate]);
 
   const machineIdsKey = useMemo(
     () => (merged?.locations ?? []).map((l) => l.machineId).join(','),
@@ -165,8 +152,7 @@ export function useTargetsData(segmentId: SegmentId, kuWindowId: string) {
     retry: 2,
   });
 
-  const fetching =
-    reportQueries.some((q) => q.isFetching) || todayQuery.isFetching;
+  const fetching = reportQuery.isFetching || todayQuery.isFetching;
 
   const todayByMachine = useMemo(() => {
     const map = new Map<string, TodaySalesRow>();
@@ -186,6 +172,10 @@ export function useTargetsData(segmentId: SegmentId, kuWindowId: string) {
     }
     return map;
   }, [merged, todayQuery.data, todayQuery.isSuccess, business.salesYmd]);
+
+  const adminTargetsByMachine = useMemo(() => {
+    return (targetsMapQuery.data ?? {}) as Record<string, LocationAdminTarget>;
+  }, [targetsMapQuery.data]);
 
   const filtered = useMemo(() => {
     if (!merged) return [];
@@ -211,40 +201,26 @@ export function useTargetsData(segmentId: SegmentId, kuWindowId: string) {
   }, [filtered, selectedId]);
 
   const reportForDetail = useMemo<ReportPayload | null>(() => {
-    if (!merged) return null;
+    if (!merged || !reportQuery.data) return null;
     return {
+      ...reportQuery.data,
       generatedAt: merged.generatedAt,
       benchmarkConversionPct: merged.benchmark,
       primaryPeriod: [merged.primaryWindow.startDate, merged.primaryWindow.endDate],
-      fallbackPeriod: [WINDOW_MOH_O2_MAY.startDate, WINDOW_MOH_O2_MAY.endDate],
-      comparePeriod: null,
-      currency: 'KD',
       locations: merged.locations,
-      rankings: {
-        byFootfall: [],
-        byProjectedFootfall: [],
-        byRevenue: [],
-        byConversion: [],
-        byMissedPotential: [],
-        byRevenuePerVisitor: [],
-      },
       locationCount: merged.locations.length,
     };
-  }, [merged]);
+  }, [merged, reportQuery.data]);
 
   const counts = useMemo<Partial<Record<SegmentId, number>>>(() => {
     const c: Record<OwnerSegment, number> = { KU: 0, MOH: 0, O2: 0, OTHER: 0 };
-    reportQueries.forEach((q, idx) => {
-      const w = windowsNeeded[idx];
-      if (!q.data || !w) return;
-      const owners = w.id === WINDOW_MOH_O2_MAY.id ? ['MOH', 'O2'] : ['KU'];
-      for (const loc of q.data.locations) {
-        const own = inferOwnerSegment(loc);
-        if (owners.includes(own)) c[own]++;
-      }
-    });
-    return { ALL: c.KU + c.MOH + c.O2, KU: c.KU, MOH: c.MOH, O2: c.O2 };
-  }, [reportQueries, windowsNeeded]);
+    const payload = reportQuery.data;
+    if (!payload) return { ALL: 0, KU: 0, MOH: 0, O2: 0 };
+    for (const loc of payload.locations) {
+      c[inferOwnerSegment(loc)]++;
+    }
+    return { ALL: c.KU + c.MOH + c.O2 + c.OTHER, KU: c.KU, MOH: c.MOH, O2: c.O2 };
+  }, [reportQuery.data]);
 
   return {
     loading,
@@ -261,6 +237,8 @@ export function useTargetsData(segmentId: SegmentId, kuWindowId: string) {
     todayByMachine,
     todaySalesLoading: todayQuery.isLoading || todayQuery.isFetching,
     todaySalesReady: todayQuery.isSuccess,
+    adminTargetsByMachine,
+    periodLabel,
     refreshNext,
   };
 }

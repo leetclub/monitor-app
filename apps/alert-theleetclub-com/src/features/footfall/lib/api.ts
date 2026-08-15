@@ -28,6 +28,9 @@ function queryString(q: ReportQuery, extra?: Record<string, string>): string {
     p.set('compare_start_date', q.compareStartDate);
     p.set('compare_end_date', q.compareEndDate);
   }
+  if (q.calendarDays) {
+    p.set('calendar_days', '1');
+  }
   if (extra) {
     for (const [k, v] of Object.entries(extra)) {
       if (v) p.set(k, v);
