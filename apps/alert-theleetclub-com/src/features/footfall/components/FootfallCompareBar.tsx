@@ -113,9 +113,9 @@ export function FootfallCompareBar({ value, onChange }: Props) {
         </label>
       </div>
       <p className="ffCompareHint">
-        <strong>Live sales</strong> (Today / WTD / custom) = Achievement &amp; Daily Target via
-        fast Vendon. <strong>Footfall baselines</strong> stay on fixed cached weeks (KU Jul 2025,
-        MOH/O2 May 2026) — same as target.theleetclub.com.
+        <strong>Period</strong> drives footfall KPIs, heatmap, and charts for the dates you pick.
+        <strong> Compare</strong> is the prior window (same idea as Red Flags). Dates are inclusive.
+        Achievement / Daily Target use live Vendon for that Period.
       </p>
     </div>
   );

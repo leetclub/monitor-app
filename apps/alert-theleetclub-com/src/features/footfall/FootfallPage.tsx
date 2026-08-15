@@ -19,19 +19,16 @@ import { prefetchDefaultCache } from '@/features/footfall/lib/api';
 import '@/features/footfall/footfall-targets.css';
 import '@/features/footfall/footfall-alert.css';
 
-/** Prefer WTD for live sales — footfall baselines stay on fixed cached weeks. */
+/** Prefer WTD — multi-day Period with warmer cache hit rate than single Today. */
 function initialFootfallCompare(): CompareSelection {
   const stored = readStoredCompareSelection();
-  if (stored?.preset === 'wtd_vs_last_week' || stored?.preset === 'mtd_vs_mtd') {
-    return stored;
-  }
-  if (stored?.preset === 'custom_vs_custom') return stored;
+  if (stored) return stored;
   return applyComparePreset('wtd_vs_last_week', createDefaultCompareSelection());
 }
 
 /**
- * Alert Footfall — same Targets layout as target.theleetclub.com (segment facets +
- * left machine list). Fixed cached weeks for footfall; Alert presets for live sales.
+ * Alert Footfall — Targets layout with Alert date presets (user-selected Period).
+ * As-measured / mirror toggle; live Vendon for Achievement on the same Period.
  */
 export function FootfallPage() {
   const [mode, setMode] = useState<FootfallViewMode>('raw');
