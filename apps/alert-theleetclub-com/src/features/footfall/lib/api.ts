@@ -345,5 +345,13 @@ export const PRESETS = {
 } as const;
 
 export function prefetchDefaultCache(): void {
-  fetchCacheStatus({ ...PRESETS.fallbackMay2026, enableCompare: false }, true).catch(() => {});
+  // Same fixed windows as Target — warm/DB cache hits.
+  fetchCacheStatus(
+    { startDate: '2025-07-06', endDate: '2025-07-10', enableCompare: false },
+    true,
+  ).catch(() => {});
+  fetchCacheStatus(
+    { startDate: '2026-05-10', endDate: '2026-05-14', enableCompare: false },
+    true,
+  ).catch(() => {});
 }

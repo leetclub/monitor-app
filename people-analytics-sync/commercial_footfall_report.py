@@ -39,6 +39,14 @@ JUN_15_BUSINESS_DAYS = [
     "2025-06-18",
     "2025-06-19",
 ]
+# Target / Alert Footfall KU reference week (must stay in warm wait list).
+JUL_06_BUSINESS_DAYS = [
+    "2025-07-06",
+    "2025-07-07",
+    "2025-07-08",
+    "2025-07-09",
+    "2025-07-10",
+]
 FALLBACK_BUSINESS_DAYS = [
     "2026-05-10",
     "2026-05-11",

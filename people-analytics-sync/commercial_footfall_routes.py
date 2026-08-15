@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 from commercial_footfall_report import (
     FALLBACK_BUSINESS_DAYS,
+    JUL_06_BUSINESS_DAYS,
     JUN_15_BUSINESS_DAYS,
     PRIMARY_BUSINESS_DAYS,
     build_commercial_footfall_report,
@@ -107,7 +108,14 @@ def _params_from_request() -> Dict[str, Any]:
 
 
 def _cache_key(params: Dict[str, Any]) -> str:
-    raw = json.dumps(params, sort_keys=True)
+    # Only day lists affect the build. Ignore flags like calendar_days so warm
+    # cron keys match live /api/commercial-footfall/report requests.
+    normalized = {
+        "primary_days": list(params.get("primary_days") or []),
+        "fallback_days": list(params.get("fallback_days") or []),
+        "compare_days": list(params.get("compare_days") or []),
+    }
+    raw = json.dumps(normalized, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 
@@ -442,6 +450,12 @@ def _warm_presets(
             "compare_days": [],
         },
         {
+            "label": "primary_jul06_2025",
+            "primary_days": list(JUL_06_BUSINESS_DAYS),
+            "fallback_days": list(FALLBACK_BUSINESS_DAYS),
+            "compare_days": [],
+        },
+        {
             "label": "fallback_may2026",
             "primary_days": list(FALLBACK_BUSINESS_DAYS),
             "fallback_days": list(FALLBACK_BUSINESS_DAYS),
@@ -486,6 +500,7 @@ def _warm_presets(
         )
     wait_labels = {
         "primary_jun2025",
+        "primary_jul06_2025",
         "primary_jun15_2025",
         "fallback_may2026",
         "primary_jun2025_compare",

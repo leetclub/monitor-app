@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   applyComparePreset,
   createDefaultCompareSelection,
@@ -15,10 +15,11 @@ import {
   persistCompareSelection,
   readStoredCompareSelection,
 } from '@/lib/comparePresetBridge';
+import { prefetchDefaultCache } from '@/features/footfall/lib/api';
 import '@/features/footfall/footfall-targets.css';
 import '@/features/footfall/footfall-alert.css';
 
-/** Prefer WTD over Today — single-day cold builds were hanging with empty campus data. */
+/** Prefer WTD for live sales — footfall baselines stay on fixed cached weeks. */
 function initialFootfallCompare(): CompareSelection {
   const stored = readStoredCompareSelection();
   if (stored?.preset === 'wtd_vs_last_week' || stored?.preset === 'mtd_vs_mtd') {
@@ -30,12 +31,16 @@ function initialFootfallCompare(): CompareSelection {
 
 /**
  * Alert Footfall — same Targets layout as target.theleetclub.com (segment facets +
- * left machine list), with Alert date presets and as-measured / mirror toggle.
+ * left machine list). Fixed cached weeks for footfall; Alert presets for live sales.
  */
 export function FootfallPage() {
   const [mode, setMode] = useState<FootfallViewMode>('raw');
   const [compare, setCompareState] = useState<CompareSelection>(() => initialFootfallCompare());
   const darkMode = useFootfallDarkSurface();
+
+  useEffect(() => {
+    prefetchDefaultCache();
+  }, []);
 
   const setCompare = useCallback((next: CompareSelection) => {
     setCompareState(next);

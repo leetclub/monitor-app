@@ -7,6 +7,11 @@ import {
   kuwaitYmd,
   lastKuwaitBusinessYmd,
 } from '@/features/footfall/lib/kuwaitBusinessDay';
+import {
+  WINDOW_KU_JUL,
+  WINDOW_MOH_O2_MAY,
+  type ReportWindow,
+} from '@/features/footfall/lib/segments';
 
 /** Alert ranges are half-open [start, endExclusive). Commercial footfall uses inclusive end. */
 export function halfOpenToInclusive(start: string, endExclusive: string): {
@@ -21,7 +26,7 @@ export function halfOpenToInclusive(start: string, endExclusive: string): {
 }
 
 /**
- * On Kuwait Fri–Sat, "Today" presets often have no campus footfall.
+ * On Kuwait Fri–Sat, "Today" presets often have no campus sales.
  * Snap a single calendar day that is Kuwait today on a weekend → last business day.
  */
 function snapWeekendSingleDay(startDate: string, endDate: string): {
@@ -38,33 +43,58 @@ function snapWeekendSingleDay(startDate: string, endDate: string): {
   return { startDate, endDate };
 }
 
+/** Fixed Target/Alert reference windows — always served from warm cache / DB. */
+export function fixedReportWindows(): ReportWindow[] {
+  return [WINDOW_KU_JUL, WINDOW_MOH_O2_MAY];
+}
+
+export function windowToReportQuery(w: ReportWindow): ReportQuery {
+  return {
+    startDate: w.startDate,
+    endDate: w.endDate,
+    enableCompare: false,
+  };
+}
+
 /**
- * Primary period only for the heavy commercial-footfall report.
- * Compare dates stay in the UI for labels; including them (and the May
- * fallback week) was causing unique cold builds + DB pool exhaustion / hangs.
+ * Live Vendon sales window from Alert compare presets (Today / WTD / custom).
+ * Does not drive the heavy commercial-footfall report.
  */
-export function compareSelectionToReportQuery(compare: CompareSelection): ReportQuery {
-  let primary = halfOpenToInclusive(compare.a.start, compare.a.end);
+export function compareSelectionToLiveSalesRange(compare: CompareSelection): {
+  startDate: string;
+  endDate: string;
+} {
+  let range = halfOpenToInclusive(compare.a.start, compare.a.end);
   if (
     compare.preset === 'today_vs_yesterday' ||
     compare.preset === 'today_vs_same_day_last_week' ||
     compare.preset === 'yesterday_vs_day_before'
   ) {
-    primary = snapWeekendSingleDay(primary.startDate, primary.endDate);
+    range = snapWeekendSingleDay(range.startDate, range.endDate);
   }
+  return range;
+}
+
+export function liveSalesPeriodLabel(compare: CompareSelection): string {
+  const labels = presetLabels(compare.preset);
+  const q = compareSelectionToLiveSalesRange(compare);
+  if (q.startDate === q.endDate) {
+    return `${labels.primary} · ${q.startDate}`;
+  }
+  return `${labels.primary} · ${q.startDate} → ${q.endDate}`;
+}
+
+/** @deprecated Use fixed windows + liveSalesPeriodLabel; kept for Analytics leftovers. */
+export function compareSelectionToReportQuery(compare: CompareSelection): ReportQuery {
+  const live = compareSelectionToLiveSalesRange(compare);
   return {
-    startDate: primary.startDate,
-    endDate: primary.endDate,
+    startDate: live.startDate,
+    endDate: live.endDate,
     enableCompare: false,
     calendarDays: true,
   };
 }
 
 export function comparePeriodShortLabel(compare: CompareSelection): string {
-  const labels = presetLabels(compare.preset);
-  const q = compareSelectionToReportQuery(compare);
-  if (q.startDate === q.endDate) {
-    return `${labels.primary} · ${q.startDate}`;
-  }
-  return `${labels.primary} · ${q.startDate} → ${q.endDate}`;
+  return liveSalesPeriodLabel(compare);
 }

@@ -37,6 +37,8 @@ export function TargetsPage({ compare }: Props) {
     business,
     todayByMachine,
     todaySalesLoading,
+    liveSalesYmd,
+    livePeriodLabel,
     adminTargetsByMachine,
     periodLabel,
   } = useTargetsData(segmentId, compare);
@@ -88,7 +90,11 @@ export function TargetsPage({ compare }: Props) {
           locations={filtered}
           selectedId={selected?.machineId ?? null}
           onSelect={setSelectedId}
-          periodBadge={hideDateLabels ? undefined : periodLabel}
+          periodBadge={
+            hideDateLabels
+              ? undefined
+              : `${periodLabel} · live ${livePeriodLabel}`
+          }
           search={filter}
           onSearchChange={setFilter}
           emptyHint={
@@ -159,7 +165,7 @@ export function TargetsPage({ compare }: Props) {
                       }
                     }
                     todaySalesLoading={todaySalesLoading}
-                    salesYmd={business.salesYmd}
+                    salesYmd={liveSalesYmd}
                     periodTitle={periodLabel}
                     hideDateLabels={hideDateLabels}
                     adminTarget={adminTarget}
