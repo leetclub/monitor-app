@@ -80,86 +80,83 @@ export function TargetsPage({ compare }: Props) {
 
       <SegmentTabs value={segmentId} onChange={setSegmentId} counts={counts} />
 
-      {merged ? (
-        <div className="filterBar">
-          <input
-            type="search"
-            className="searchInput searchInputBar"
-            placeholder="Search location…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-        </div>
-      ) : null}
+      <div className="mainGrid targetsMainGrid">
+        <LocationSidebar
+          locations={filtered}
+          selectedId={selected?.machineId ?? null}
+          onSelect={setSelectedId}
+          periodBadge={hideDateLabels ? undefined : periodLabel}
+          search={filter}
+          onSearchChange={setFilter}
+          emptyHint={
+            loading
+              ? 'Loading locations…'
+              : 'No locations for this period. Try Yesterday or WTD.'
+          }
+        />
 
-      {loading && !merged ? (
-        <div className="stateBox stateBoxLoading">
-          <p>Loading targets…</p>
-          <p className="hint">First load for a new date range can take a few minutes.</p>
-        </div>
-      ) : null}
+        <section className="detail targetsDetailColumn">
+          {loading && !merged ? (
+            <div className="stateBox stateBoxLoading">
+              <p>Loading targets…</p>
+              <p className="hint">First load for a new date range can take a few minutes.</p>
+            </div>
+          ) : null}
 
-      {!loading && merged && merged.locations.length === 0 ? (
-        <div className="stateBox">
-          <p>No locations for this period.</p>
-          <p className="hint">
-            Try <strong>Yesterday</strong> or <strong>WTD</strong>. On Fri–Sat, “Today” is often empty for
-            campus sites (closed). Period above is the report window — not the live-sales day note.
-          </p>
-        </div>
-      ) : null}
+          {!loading && merged && merged.locations.length === 0 ? (
+            <div className="stateBox">
+              <p>No locations for this period.</p>
+              <p className="hint">
+                Try <strong>Yesterday</strong> or <strong>WTD</strong>. On Fri–Sat, campus sites are
+                often closed.
+              </p>
+            </div>
+          ) : null}
 
-      {merged && reportForDetail && merged.locations.length > 0 ? (
-        <div className="mainGrid targetsMainGrid">
-          <LocationSidebar
-            locations={filtered}
-            selectedId={selected?.machineId ?? null}
-            onSelect={setSelectedId}
-            periodBadge={hideDateLabels ? undefined : periodLabel}
-          />
+          {merged && reportForDetail && merged.locations.length > 0 ? (
+            <>
+              <TargetsHeatmap locations={filtered} onSelect={setSelectedId} />
 
-          <section className="detail targetsDetailColumn">
-            <TargetsHeatmap locations={filtered} onSelect={setSelectedId} />
-
-            {selected ? (
-              <div className="targetsDetail">
-                <h2 className="locTitle">
-                  <span className={`locSegPill locSegPill-${inferOwnerSegment(selected)}`}>
-                    {inferOwnerSegment(selected)}
-                  </span>
-                  {selected.locationName}
-                </h2>
-                <DataQualityBanner location={selected} hideDateLabels={hideDateLabels} />
-                <TargetKpiSection
-                  location={selected}
-                  todaySales={
-                    todaySales ?? {
-                      cups: 0,
-                      cupsCashless: 0,
-                      cupsWeb: 0,
-                      source: 'none',
+              {selected ? (
+                <div className="targetsDetail">
+                  <h2 className="locTitle">
+                    <span className={`locSegPill locSegPill-${inferOwnerSegment(selected)}`}>
+                      {inferOwnerSegment(selected)}
+                    </span>
+                    {selected.locationName}
+                  </h2>
+                  <DataQualityBanner location={selected} hideDateLabels={hideDateLabels} />
+                  <TargetKpiSection
+                    location={selected}
+                    todaySales={
+                      todaySales ?? {
+                        cups: 0,
+                        cupsCashless: 0,
+                        cupsWeb: 0,
+                        source: 'none',
+                      }
                     }
-                  }
-                  todaySalesLoading={todaySalesLoading}
-                  salesYmd={business.salesYmd}
-                  periodTitle={periodLabel}
-                  hideDateLabels={hideDateLabels}
-                  adminTarget={adminTarget}
-                />
-                <TargetsGraphSection location={selected} />
-                <TrajectorySection
-                  location={selected}
-                  defaultSalesYmd={business.salesYmd}
-                  hideDateLabels={hideDateLabels}
-                  adminTarget={adminTarget}
-                />
-              </div>
-            ) : (
-              <div className="stateBox">Select a location from the list or heatmap.</div>
-            )}
-          </section>
-        </div>
-      ) : null}
+                    todaySalesLoading={todaySalesLoading}
+                    salesYmd={business.salesYmd}
+                    periodTitle={periodLabel}
+                    hideDateLabels={hideDateLabels}
+                    adminTarget={adminTarget}
+                  />
+                  <TargetsGraphSection location={selected} />
+                  <TrajectorySection
+                    location={selected}
+                    defaultSalesYmd={business.salesYmd}
+                    hideDateLabels={hideDateLabels}
+                    adminTarget={adminTarget}
+                  />
+                </div>
+              ) : (
+                <div className="stateBox">Select a location from the list or heatmap.</div>
+              )}
+            </>
+          ) : null}
+        </section>
+      </div>
     </div>
   );
 }

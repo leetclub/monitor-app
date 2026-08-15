@@ -12,6 +12,9 @@ type Props = {
   onSelect: (machineId: string) => void;
   periodBadge?: string;
   showFleetPanel?: ReactNode;
+  search?: string;
+  onSearchChange?: (q: string) => void;
+  emptyHint?: string;
 };
 
 export function LocationSidebar({
@@ -20,46 +23,63 @@ export function LocationSidebar({
   onSelect,
   periodBadge,
   showFleetPanel,
+  search,
+  onSearchChange,
+  emptyHint,
 }: Props) {
   return (
     <section className="sidebar">
       {periodBadge ? <p className="periodBadge">{periodBadge}</p> : null}
-      <ul className="locList">
-        {locations.map((l) => {
-          const seg = inferOwnerSegment(l);
-          const footTag = footfallSidebarTag(l);
-          const ffDisplay = displayFootfallTotal(l);
-          const convPct =
-            ffDisplay > 0 ? Math.round((l.daily.totalCups / ffDisplay) * 10000) / 100 : null;
-          return (
-            <li key={l.machineId}>
-              <button
-                type="button"
-                className={selectedId === l.machineId ? 'locBtn active' : 'locBtn'}
-                onClick={() => onSelect(l.machineId)}
-              >
-                <span className="locName">
-                  <span className={`locSegPill locSegPill-${seg}`}>{seg}</span>
-                  {l.locationName}
-                </span>
-                <span className="locMeta">
-                  {convPct != null ? `${convPct}%` : '—'} · {Math.round(ffDisplay).toLocaleString()}{' '}
-                  {footTag}
-                  {' · '}
-                  <span
-                    style={
-                      isProxySales(l) ? { color: salesMetricColor(l), fontWeight: 600 } : undefined
-                    }
-                  >
-                    {formatCups(l.daily.totalCups)} cups
-                  </span>{' '}
-                  · {l.daily.totalRevenueKd.toFixed(1)} KD
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {onSearchChange ? (
+        <input
+          type="search"
+          className="searchInput searchInputSidebar"
+          placeholder="Search location…"
+          value={search ?? ''}
+          onChange={(e) => onSearchChange(e.target.value)}
+          aria-label="Search locations"
+        />
+      ) : null}
+      {locations.length === 0 ? (
+        <p className="sidebarEmpty hint">{emptyHint ?? 'No locations in this period.'}</p>
+      ) : (
+        <ul className="locList">
+          {locations.map((l) => {
+            const seg = inferOwnerSegment(l);
+            const footTag = footfallSidebarTag(l);
+            const ffDisplay = displayFootfallTotal(l);
+            const convPct =
+              ffDisplay > 0 ? Math.round((l.daily.totalCups / ffDisplay) * 10000) / 100 : null;
+            return (
+              <li key={l.machineId}>
+                <button
+                  type="button"
+                  className={selectedId === l.machineId ? 'locBtn active' : 'locBtn'}
+                  onClick={() => onSelect(l.machineId)}
+                >
+                  <span className="locName">
+                    <span className={`locSegPill locSegPill-${seg}`}>{seg}</span>
+                    {l.locationName}
+                  </span>
+                  <span className="locMeta">
+                    {convPct != null ? `${convPct}%` : '—'} · {Math.round(ffDisplay).toLocaleString()}{' '}
+                    {footTag}
+                    {' · '}
+                    <span
+                      style={
+                        isProxySales(l) ? { color: salesMetricColor(l), fontWeight: 600 } : undefined
+                      }
+                    >
+                      {formatCups(l.daily.totalCups)} cups
+                    </span>{' '}
+                    · {l.daily.totalRevenueKd.toFixed(1)} KD
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {showFleetPanel}
     </section>
   );
