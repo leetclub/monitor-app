@@ -2111,19 +2111,24 @@ def build_commercial_footfall_report(
     fetch_vends_fn(from_ts, to_ts, machine_id) -> (vends, error)
     """
     primary_days = list(primary_days or PRIMARY_BUSINESS_DAYS)
-    fallback_days = list(fallback_days or FALLBACK_BUSINESS_DAYS)
+    # None → default May week; [] → no fallback (Alert calendar windows).
+    if fallback_days is None:
+        fallback_days = list(FALLBACK_BUSINESS_DAYS)
+    else:
+        fallback_days = list(fallback_days)
     compare_days_list = list(compare_days) if compare_days else []
 
     from commercial_footfall_resolve import load_commercial_name_camera_map
 
     name_camera_map = load_commercial_name_camera_map()
     vl_cache: Optional[Dict[str, Dict[str, Dict[int, float]]]] = None
-    prefetch_days = (
-        fallback_days
-        if not _db_has_footfall_in_period(session, primary_days)
-        else primary_days
-    )
-    if not _db_has_footfall_in_period(session, prefetch_days):
+    if _db_has_footfall_in_period(session, primary_days):
+        prefetch_days = primary_days
+    elif fallback_days:
+        prefetch_days = fallback_days
+    else:
+        prefetch_days = primary_days
+    if prefetch_days and not _db_has_footfall_in_period(session, prefetch_days):
         logger.info(
             "No DB footfall for %s–%s; prefetching Videoloft",
             prefetch_days[0],

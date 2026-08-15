@@ -23,6 +23,9 @@ export function TargetsPage({ compare }: Props) {
   const {
     loading,
     fetching,
+    loadStatus,
+    loadError,
+    retryLoad,
     merged,
     filtered,
     selected,
@@ -89,21 +92,40 @@ export function TargetsPage({ compare }: Props) {
           search={filter}
           onSearchChange={setFilter}
           emptyHint={
-            loading
-              ? 'Loading locations…'
-              : 'No locations for this period. Try Yesterday or WTD.'
+            loadError
+              ? 'Load failed — see Retry'
+              : loading
+                ? 'Loading locations…'
+                : 'No locations for this period. Try Yesterday or WTD.'
           }
         />
 
         <section className="detail targetsDetailColumn">
-          {loading && !merged ? (
-            <div className="stateBox stateBoxLoading">
-              <p>Loading targets…</p>
-              <p className="hint">First load for a new date range can take a few minutes.</p>
+          {loadError && !merged ? (
+            <div className="stateBox">
+              <p>Could not load footfall for this period.</p>
+              <p className="hint">{loadError}</p>
+              <p className="hint">
+                Prefer <strong>WTD</strong> or <strong>Yesterday</strong>. Avoid switching presets
+                quickly while a range is still building.
+              </p>
+              <button type="button" className="btnSecondary" onClick={retryLoad}>
+                Retry
+              </button>
             </div>
           ) : null}
 
-          {!loading && merged && merged.locations.length === 0 ? (
+          {loading && !merged && !loadError ? (
+            <div className="stateBox stateBoxLoading">
+              <p>Loading targets…</p>
+              <p className="hint">
+                {loadStatus ||
+                  'First load for a new date range can take a few minutes on the server.'}
+              </p>
+            </div>
+          ) : null}
+
+          {!loading && !loadError && merged && merged.locations.length === 0 ? (
             <div className="stateBox">
               <p>No locations for this period.</p>
               <p className="hint">

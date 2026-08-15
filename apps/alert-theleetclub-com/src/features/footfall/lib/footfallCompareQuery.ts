@@ -38,25 +38,24 @@ function snapWeekendSingleDay(startDate: string, endDate: string): {
   return { startDate, endDate };
 }
 
-/** Build commercial-footfall report query from Alert compare selection. */
+/**
+ * Primary period only for the heavy commercial-footfall report.
+ * Compare dates stay in the UI for labels; including them (and the May
+ * fallback week) was causing unique cold builds + DB pool exhaustion / hangs.
+ */
 export function compareSelectionToReportQuery(compare: CompareSelection): ReportQuery {
   let primary = halfOpenToInclusive(compare.a.start, compare.a.end);
-  let baseline = halfOpenToInclusive(compare.b.start, compare.b.end);
   if (
     compare.preset === 'today_vs_yesterday' ||
-    compare.preset === 'today_vs_same_day_last_week'
+    compare.preset === 'today_vs_same_day_last_week' ||
+    compare.preset === 'yesterday_vs_day_before'
   ) {
     primary = snapWeekendSingleDay(primary.startDate, primary.endDate);
-  }
-  if (compare.preset === 'today_vs_yesterday') {
-    baseline = snapWeekendSingleDay(baseline.startDate, baseline.endDate);
   }
   return {
     startDate: primary.startDate,
     endDate: primary.endDate,
-    enableCompare: true,
-    compareStartDate: baseline.startDate,
-    compareEndDate: baseline.endDate,
+    enableCompare: false,
     calendarDays: true,
   };
 }

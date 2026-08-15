@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react';
-import type { CompareSelection } from '@/components/ComparePresetPicker';
+import {
+  applyComparePreset,
+  createDefaultCompareSelection,
+  type CompareSelection,
+} from '@/components/ComparePresetPicker';
 import { FootfallCompareBar } from '@/features/footfall/components/FootfallCompareBar';
 import { TargetsPage } from '@/features/footfall/TargetsPage';
 import {
@@ -8,11 +12,21 @@ import {
 } from '@/features/footfall/FootfallViewMode';
 import { useFootfallDarkSurface } from '@/features/footfall/NightChartContext';
 import {
-  initialCompareSelection,
   persistCompareSelection,
+  readStoredCompareSelection,
 } from '@/lib/comparePresetBridge';
 import '@/features/footfall/footfall-targets.css';
 import '@/features/footfall/footfall-alert.css';
+
+/** Prefer WTD over Today — single-day cold builds were hanging with empty campus data. */
+function initialFootfallCompare(): CompareSelection {
+  const stored = readStoredCompareSelection();
+  if (stored?.preset === 'wtd_vs_last_week' || stored?.preset === 'mtd_vs_mtd') {
+    return stored;
+  }
+  if (stored?.preset === 'custom_vs_custom') return stored;
+  return applyComparePreset('wtd_vs_last_week', createDefaultCompareSelection());
+}
 
 /**
  * Alert Footfall — same Targets layout as target.theleetclub.com (segment facets +
@@ -20,7 +34,7 @@ import '@/features/footfall/footfall-alert.css';
  */
 export function FootfallPage() {
   const [mode, setMode] = useState<FootfallViewMode>('raw');
-  const [compare, setCompareState] = useState<CompareSelection>(() => initialCompareSelection());
+  const [compare, setCompareState] = useState<CompareSelection>(() => initialFootfallCompare());
   const darkMode = useFootfallDarkSurface();
 
   const setCompare = useCallback((next: CompareSelection) => {

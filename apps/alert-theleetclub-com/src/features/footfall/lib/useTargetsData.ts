@@ -28,6 +28,7 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
   const viewMode = useFootfallViewMode();
   const [filter, setFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState('');
   const refreshNext = useRef(false);
   const business = useMemo(() => kuwaitBusinessContext(), []);
 
@@ -39,20 +40,29 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
       'targets-report',
       reportQ.startDate,
       reportQ.endDate,
-      reportQ.compareStartDate,
-      reportQ.compareEndDate,
       reportQ.calendarDays ? 'cal' : 'biz',
+      'primary-only',
     ],
     queryFn: async () => {
-      const data = await fetchReport(reportQ, refreshNext.current);
-      writeSessionReport(reportQ, data);
-      return data;
+      setLoadStatus('Loading report…');
+      try {
+        const data = await fetchReport(reportQ, refreshNext.current, setLoadStatus);
+        writeSessionReport(reportQ, data);
+        refreshNext.current = false;
+        setLoadStatus('');
+        return data;
+      } catch (e) {
+        refreshNext.current = false;
+        setLoadStatus('');
+        throw e;
+      }
     },
     initialData: () => readSessionReport(reportQ),
-    staleTime: 30_000,
+    staleTime: 60_000,
     gcTime: 6 * 3600 * 1000,
     retry: false,
-    refetchInterval: REALTIME_MS,
+    // Do not hammer the API every 90s while a cold build is still running.
+    refetchInterval: (q) => (q.state.data && !q.state.error ? REALTIME_MS : false),
   });
 
   const targetsMapQuery = useQuery({
@@ -64,6 +74,12 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
   });
 
   const loading = reportQuery.isLoading && !reportQuery.data;
+  const loadError =
+    reportQuery.error instanceof Error
+      ? reportQuery.error.message
+      : reportQuery.error
+        ? String(reportQuery.error)
+        : null;
 
   const merged = useMemo(() => {
     const payload = reportQuery.data;
@@ -222,9 +238,17 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
     return { ALL: c.KU + c.MOH + c.O2 + c.OTHER, KU: c.KU, MOH: c.MOH, O2: c.O2 };
   }, [reportQuery.data]);
 
+  const retryLoad = () => {
+    refreshNext.current = false;
+    void reportQuery.refetch();
+  };
+
   return {
     loading,
     fetching,
+    loadStatus,
+    loadError,
+    retryLoad,
     merged,
     filtered,
     selected,

@@ -60,6 +60,9 @@ def _truthy_arg(name: str) -> bool:
 
 def _params_from_request() -> Dict[str, Any]:
     calendar_days = _truthy_arg("calendar_days")
+    # Alert / arbitrary windows: skip the fixed May fallback week so each range
+    # does not rebuild an unrelated 5-day fleet slice (pool exhaustion + hangs).
+    skip_fallback = calendar_days or _truthy_arg("no_fallback")
     primary = parse_report_days(
         request.args.get("start_date"),
         request.args.get("end_date"),
@@ -79,13 +82,22 @@ def _params_from_request() -> Dict[str, Any]:
             [],
             calendar_days=calendar_days,
         )
-    fallback = parse_report_days(
-        request.args.get("fallback_start_date"),
-        request.args.get("fallback_end_date"),
-        request.args.get("fallback_dates"),
-        FALLBACK_BUSINESS_DAYS,
-        calendar_days=calendar_days,
-    )
+    if skip_fallback:
+        fallback = parse_report_days(
+            request.args.get("fallback_start_date"),
+            request.args.get("fallback_end_date"),
+            request.args.get("fallback_dates"),
+            [],
+            calendar_days=calendar_days,
+        )
+    else:
+        fallback = parse_report_days(
+            request.args.get("fallback_start_date"),
+            request.args.get("fallback_end_date"),
+            request.args.get("fallback_dates"),
+            FALLBACK_BUSINESS_DAYS,
+            calendar_days=calendar_days,
+        )
     return {
         "primary_days": primary,
         "fallback_days": fallback,

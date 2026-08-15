@@ -7,10 +7,10 @@ const STORAGE_PREFIX = 'alert-footfall-report:';
 const LOCAL_TTL_MS = 30 * 24 * 3600 * 1000;
 
 /** Server builds can take several minutes on first visit. */
-const MAX_POLL_ATTEMPTS = 100;
+const MAX_POLL_ATTEMPTS = 45;
 const POLL_MS_INITIAL = 2000;
 const POLL_MS_LATER = 4000;
-const SERVER_WAIT_SEC = 120;
+const SERVER_WAIT_SEC = 45;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -30,6 +30,7 @@ function queryString(q: ReportQuery, extra?: Record<string, string>): string {
   }
   if (q.calendarDays) {
     p.set('calendar_days', '1');
+    p.set('no_fallback', '1');
   }
   if (extra) {
     for (const [k, v] of Object.entries(extra)) {
@@ -123,7 +124,7 @@ async function fetchReportOnce(
   if (json.building || (!res.ok && res.status === 503)) {
     return null;
   }
-  if (!res.ok) {
+  if (!res.ok || json.success === false) {
     throw new Error(json.error || `Report failed (${res.status})`);
   }
   return null;
@@ -163,7 +164,7 @@ async function pollUntilReady(
     await sleep(attempt < 5 ? POLL_MS_INITIAL : POLL_MS_LATER);
   }
   throw new Error(
-    'Report build is still running on the server. Wait a minute and click Apply dates again, or try Jun 8–12 / May 10–14 presets.',
+    'Report is still building on the server (or the build failed). Wait ~1 minute and Retry — avoid switching presets rapidly.',
   );
 }
 
