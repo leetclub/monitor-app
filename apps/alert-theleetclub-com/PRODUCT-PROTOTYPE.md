@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-15 | **Footfall date UX:** Period/Compare labels (not A/B); inclusive dates; clearer weekend live-sales note; Today on Fri–Sat snaps report to last business day. |
 | 2026-08-15 | **Footfall = Alert dates + Admin targets:** Compare presets replace fixed Jul/May weeks; default footfall is as-measured (mirror/adjust opt-in); Admin → Targets override KPI / trajectory daily targets. |
 | 2026-08-13 | **Footfall no white charts:** Heatmaps use dark split-areas; ECharts canvas stays `#0a0e14` in dark / v2; v2 Footfall no longer inherits Pro light `--panel`. |
 | 2026-08-13 | **Footfall dark contrast:** Removed leftover white panels / dark-on-dark KPI text; location pills, explainer, export buttons, heatmaps, and metric colors follow Alert dark tokens. |

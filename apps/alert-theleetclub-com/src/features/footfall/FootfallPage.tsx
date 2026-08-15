@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { ComparePresetPicker, type CompareSelection } from '@/components/ComparePresetPicker';
+import type { CompareSelection } from '@/components/ComparePresetPicker';
+import { FootfallCompareBar } from '@/features/footfall/components/FootfallCompareBar';
 import { TargetsPage } from '@/features/footfall/TargetsPage';
 import { AnalyticsPage } from '@/features/footfall/AnalyticsPage';
 import {
@@ -75,7 +76,7 @@ export function FootfallPage() {
         </div>
       </div>
       <div className="ffAlertCompareRow">
-        <ComparePresetPicker value={compare} onChange={setCompare} />
+        <FootfallCompareBar value={compare} onChange={setCompare} />
       </div>
       <p className="ffAlertModeHint">
         {mode === 'adjusted'

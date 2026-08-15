@@ -55,11 +55,20 @@ export function TargetsPage({ compare }: Props) {
     <div className="targetsPage">
       {!hideDateLabels ? (
         <p className="targetsAccessDate" role="status">
-          {business.banner}
           {!business.isLiveBusinessDay ? (
-            <span className="targetsAccessDateNote"> · weekend — showing last business day sales</span>
+            <>
+              Kuwait weekend (Fri–Sat) · live cups use last business day{' '}
+              <strong>{business.banner}</strong>
+              <span className="targetsAccessDateNote">
+                {' '}
+                · report period is the preset above (not this sales day)
+              </span>
+            </>
           ) : (
-            <span className="targetsAccessDateNote"> · live refresh ~90s</span>
+            <>
+              Live sales day: <strong>{business.banner}</strong>
+              <span className="targetsAccessDateNote"> · refresh ~90s</span>
+            </>
           )}
           {fetching ? <span className="targetsLiveDot"> updating…</span> : null}
         </p>
@@ -86,10 +95,21 @@ export function TargetsPage({ compare }: Props) {
       {loading && !merged ? (
         <div className="stateBox stateBoxLoading">
           <p>Loading targets…</p>
+          <p className="hint">First load for a new date range can take a few minutes.</p>
         </div>
       ) : null}
 
-      {merged && reportForDetail ? (
+      {!loading && merged && merged.locations.length === 0 ? (
+        <div className="stateBox">
+          <p>No locations for this period.</p>
+          <p className="hint">
+            Try <strong>Yesterday</strong> or <strong>WTD</strong>. On Fri–Sat, “Today” is often empty for
+            campus sites (closed). Period above is the report window — not the live-sales day note.
+          </p>
+        </div>
+      ) : null}
+
+      {merged && reportForDetail && merged.locations.length > 0 ? (
         <div className="mainGrid targetsMainGrid">
           <LocationSidebar
             locations={filtered}

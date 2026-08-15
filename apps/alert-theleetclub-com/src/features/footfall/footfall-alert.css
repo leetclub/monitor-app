@@ -57,10 +57,50 @@
   background: var(--panel, #1a1f28);
 }
 
-.ffAlertCompareRow .comparePickerRow {
-  margin: 0;
+.ffCompareBarRow {
+  display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
   gap: 8px 12px;
+}
+
+.ffCompareField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text, #dee2ec);
+}
+
+.ffCompareLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #8a9aab);
+}
+
+.ffCompareField select,
+.ffCompareField input[type='date'] {
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #3a414d);
+  background: #121820;
+  color: var(--text, #dee2ec);
+  color-scheme: dark;
+}
+
+.ffCompareHint {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted, #8a9aab);
+  line-height: 1.35;
+}
+
+.ffCompareHint strong {
+  color: #ffd4c2;
+  font-weight: 600;
 }
 
 .ffAlertModeHint {
