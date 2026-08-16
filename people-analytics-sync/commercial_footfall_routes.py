@@ -104,16 +104,17 @@ def _params_from_request() -> Dict[str, Any]:
         "fallback_days": fallback,
         "compare_days": compare,
         "calendar_days": calendar_days,
+        # Alert calendar Periods must not reuse Target warm payloads that embed proxy cups.
+        "allow_sales_proxy": (not calendar_days) and (not _truthy_arg("no_sales_proxy")),
     }
 
 
 def _cache_key(params: Dict[str, Any]) -> str:
-    # Only day lists affect the build. Ignore flags like calendar_days so warm
-    # cron keys match live /api/commercial-footfall/report requests.
     normalized = {
         "primary_days": list(params.get("primary_days") or []),
         "fallback_days": list(params.get("fallback_days") or []),
         "compare_days": list(params.get("compare_days") or []),
+        "allow_sales_proxy": bool(params.get("allow_sales_proxy", True)),
     }
     raw = json.dumps(normalized, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
@@ -249,7 +250,7 @@ def _run_report_build(
                 fallback_days=report_params["fallback_days"],
                 compare_days=report_params["compare_days"] or None,
                 alert_camera_map=cmap,
-                allow_sales_proxy=not bool(report_params.get("calendar_days")),
+                allow_sales_proxy=bool(report_params.get("allow_sales_proxy", True)),
             )
         finally:
             try:
@@ -499,6 +500,9 @@ def _warm_presets(
                 "compare_days": [],
             }
         )
+    for p in presets:
+        p.setdefault("allow_sales_proxy", True)
+        p.setdefault("calendar_days", False)
     wait_labels = {
         "primary_jun2025",
         "primary_jul06_2025",

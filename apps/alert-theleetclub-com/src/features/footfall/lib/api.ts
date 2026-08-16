@@ -3,7 +3,7 @@ import type { ReportPayload, ReportQuery } from './types';
 
 /** Same-origin /api via Alert ingress → people-analytics-api (session cookies). */
 const base = (import.meta.env.VITE_PEOPLE_API_BASE || '').replace(/\/$/, '');
-const STORAGE_PREFIX = 'alert-footfall-report:';
+const STORAGE_PREFIX = 'alert-footfall-report-v2:';
 const LOCAL_TTL_MS = 30 * 24 * 3600 * 1000;
 
 /** Server builds can take several minutes on first visit. */
