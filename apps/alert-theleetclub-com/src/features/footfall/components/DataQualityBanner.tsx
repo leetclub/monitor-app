@@ -28,7 +28,7 @@ export function DataQualityBanner({ location, hideDateLabels }: Props) {
     !!salesDates?.length &&
     (ffDates[0] !== salesDates[0] || ffDates.at(-1) !== salesDates.at(-1));
   const noFootfall = d.totalFootfall <= 0 && !d.projectedFootfall && d.totalCups > 0;
-  const hasCamera = (location.uiddCount ?? 0) > 0 || (fd?.uiddCount ?? 0) > 0;
+  const hasCamera = (fd?.uiddCount ?? 0) > 0;
   const noCameraHint = hasCamera
     ? 'Mapped camera has no footfall in this Period (check dates / Videoloft sync).'
     : 'No Videoloft camera for this machine (only ~16 campus/hospital cameras are online).';
