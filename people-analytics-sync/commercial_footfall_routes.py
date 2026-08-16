@@ -27,6 +27,7 @@ from commercial_footfall_report import (
     fetch_machines_period_sales,
     finalize_commercial_report_payload,
     parse_report_days,
+    refresh_live_day_camera_footfall,
 )
 
 try:
@@ -49,6 +50,8 @@ _BUILD_LOCK = threading.Lock()
 _ACTIVE_BUILDS: Set[str] = set()
 _CACHES: Dict[str, Dict[str, Any]] = {}
 _CACHE_TTL_SEC = int(os.environ.get("COMMERCIAL_FOOTFALL_CACHE_TTL_SEC", str(6 * 3600)))
+# Single-day "today" reports must track live people_in like Monitor (not freeze for hours).
+_LIVE_CACHE_TTL_SEC = int(os.environ.get("COMMERCIAL_FOOTFALL_LIVE_CACHE_TTL_SEC", "90"))
 
 # Presentation compare window (matches SPA preset)
 _COMPARE_SAMPLE_DAYS = ["2025-05-04", "2025-05-05", "2025-05-06", "2025-05-07", "2025-05-08"]
@@ -144,6 +147,28 @@ def _purge_cache_key(get_db_session, key: str) -> None:
                 pass
 
 
+def _kuwait_today() -> str:
+    return datetime.now(ZoneInfo("Asia/Kuwait")).date().isoformat()
+
+
+def _includes_live_kuwait_day(params: Dict[str, Any]) -> bool:
+    today = _kuwait_today()
+    days = [str(d)[:10] for d in (params.get("primary_days") or [])]
+    return today in days
+
+
+def _is_single_live_day(params: Dict[str, Any]) -> bool:
+    today = _kuwait_today()
+    days = [str(d)[:10] for d in (params.get("primary_days") or [])]
+    return days == [today]
+
+
+def _cache_ttl_sec(params: Dict[str, Any]) -> int:
+    if _includes_live_kuwait_day(params):
+        return _LIVE_CACHE_TTL_SEC
+    return _CACHE_TTL_SEC
+
+
 def _hydrate_memory_from_db(
     get_db_session,
     key: str,
@@ -155,15 +180,16 @@ def _hydrate_memory_from_db(
         return None
     session = get_db_session()
     try:
-        payload = load_report_cache(
-            session, key, _CACHE_TTL_SEC, allow_stale=allow_stale
+        loaded = load_report_cache(
+            session, key, _cache_ttl_sec(report_params), allow_stale=allow_stale
         )
-        if not payload:
+        if not loaded:
             return None
+        payload, built_at = loaded
         with _CACHE_LOCK:
             _CACHES[key] = {
                 "payload": payload,
-                "built_at": time.time(),
+                "built_at": float(built_at),
                 "building": False,
                 "params": report_params,
                 "error": None,
@@ -184,8 +210,32 @@ def _hydrate_memory_from_db(
             pass
 
 
-def _is_fresh(entry: Dict[str, Any], now: float) -> bool:
-    return bool(entry.get("payload")) and (now - float(entry.get("built_at") or 0)) < _CACHE_TTL_SEC
+def _is_fresh(entry: Dict[str, Any], now: float, ttl_sec: int) -> bool:
+    return bool(entry.get("payload")) and (now - float(entry.get("built_at") or 0)) < ttl_sec
+
+
+def _prepare_served_payload(get_db_session, report_params: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = finalize_commercial_report_payload(payload)
+    if not _is_single_live_day(report_params):
+        return payload
+    session = get_db_session()
+    try:
+        resolve_fn = _make_resolve_uidds(session)
+        return refresh_live_day_camera_footfall(
+            session, payload, _kuwait_today(), resolve_fn
+        )
+    except Exception as ex:
+        logger.warning("live day footfall refresh failed: %s", ex)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return payload
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
 
 def _is_building(key: str, entry: Dict[str, Any]) -> bool:
@@ -348,6 +398,7 @@ def _get_cached_report(
     """
     key = _cache_key(report_params)
     now = time.time()
+    ttl_sec = _cache_ttl_sec(report_params)
 
     if purge:
         _purge_cache_key(get_db_session, key)
@@ -363,11 +414,11 @@ def _get_cached_report(
         if payload:
             entry = dict(_CACHES.get(key) or {})
 
-    fresh = _is_fresh(entry, now)
+    fresh = _is_fresh(entry, now, ttl_sec)
     payload = entry.get("payload") or payload
     if payload:
         before_v = int(payload.get("reportPayloadVersion") or 0)
-        payload = finalize_commercial_report_payload(payload)
+        payload = _prepare_served_payload(get_db_session, report_params, payload)
         if int(payload.get("reportPayloadVersion") or 0) > before_v:
             with _CACHE_LOCK:
                 prev = dict(_CACHES.get(key) or {})
@@ -375,7 +426,12 @@ def _get_cached_report(
                     prev["payload"] = payload
                     _CACHES[key] = prev
     building = _is_building(key, entry)
-    cache_meta: Dict[str, Any] = {"cacheKey": key, "fromCache": False, "building": building}
+    cache_meta: Dict[str, Any] = {
+        "cacheKey": key,
+        "fromCache": False,
+        "building": building,
+        "ttlSec": ttl_sec,
+    }
 
     if refresh and payload:
         _schedule_build(app, get_db_session, get_vendon_machines_fn, fetch_vends_fn, key, report_params)
@@ -394,7 +450,7 @@ def _get_cached_report(
         if wait_sec > 0:
             waited, err = _wait_for_cache(key, wait_sec)
             if waited:
-                waited = finalize_commercial_report_payload(waited)
+                waited = _prepare_served_payload(get_db_session, report_params, waited)
                 cache_meta["waitedSec"] = int(wait_sec)
                 return waited, None, cache_meta
             if err:
@@ -412,7 +468,7 @@ def _get_cached_report(
     if wait_sec > 0:
         waited, err = _wait_for_cache(key, wait_sec)
         if waited:
-            waited = finalize_commercial_report_payload(waited)
+            waited = _prepare_served_payload(get_db_session, report_params, waited)
             with _CACHE_LOCK:
                 _CACHES[key] = {
                     "payload": waited,
@@ -585,7 +641,7 @@ def register_commercial_footfall_routes(app, get_db_session, get_vendon_machines
                 with _CACHE_LOCK:
                     entry = dict(_CACHES.get(key) or {})
 
-            fresh = _is_fresh(entry, now)
+            fresh = _is_fresh(entry, now, _cache_ttl_sec(params))
             building = _is_building(key, entry)
             has_payload = bool(entry.get("payload"))
 

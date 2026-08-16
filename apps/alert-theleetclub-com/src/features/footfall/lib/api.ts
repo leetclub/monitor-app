@@ -1,10 +1,12 @@
-import { kuwaitBusinessDaysInRange } from '@/features/footfall/lib/kuwaitBusinessDay';
+import { kuwaitBusinessDaysInRange, kuwaitYmd } from '@/features/footfall/lib/kuwaitBusinessDay';
 import type { ReportPayload, ReportQuery } from './types';
 
 /** Same-origin /api via Alert ingress → people-analytics-api (session cookies). */
 const base = (import.meta.env.VITE_PEOPLE_API_BASE || '').replace(/\/$/, '');
-const STORAGE_PREFIX = 'alert-footfall-report-v2:';
+const STORAGE_PREFIX = 'alert-footfall-report-v3:';
 const LOCAL_TTL_MS = 30 * 24 * 3600 * 1000;
+/** Today (Kuwait) must stay near live Monitor people_in — not a multi-hour snapshot. */
+const LIVE_DAY_LOCAL_TTL_MS = 60_000;
 
 /** Server builds can take several minutes on first visit. */
 const MAX_POLL_ATTEMPTS = 45;
@@ -18,6 +20,16 @@ function sleep(ms: number) {
 
 export function apiUrl(path: string): string {
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function reportIncludesLiveKuwaitDay(q: ReportQuery): boolean {
+  if (!q.calendarDays) return false;
+  const today = kuwaitYmd();
+  return q.startDate <= today && q.endDate >= today;
+}
+
+function localTtlMs(q: ReportQuery): number {
+  return reportIncludesLiveKuwaitDay(q) ? LIVE_DAY_LOCAL_TTL_MS : LOCAL_TTL_MS;
 }
 
 function queryString(q: ReportQuery, extra?: Record<string, string>): string {
@@ -53,7 +65,7 @@ export function readLocalReport(q: ReportQuery): ReportPayload | undefined {
     const raw = localStorage.getItem(storageKey(q)) ?? sessionStorage.getItem(storageKey(q));
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as { savedAt: number; report: ReportPayload };
-    if (Date.now() - parsed.savedAt > LOCAL_TTL_MS) return undefined;
+    if (Date.now() - parsed.savedAt > localTtlMs(q)) return undefined;
     return parsed.report;
   } catch {
     return undefined;
@@ -243,8 +255,11 @@ export async function fetchReport(
   onStatus?: (message: string) => void,
 ): Promise<ReportPayload> {
   const local = readLocalReport(q);
+  const liveDay = reportIncludesLiveKuwaitDay(q);
 
-  if (local && !refresh) {
+  // Historical weeks: show local immediately. Live Kuwait day: prefer network so
+  // as-measured matches Monitor Total Visitors (not a frozen mid-day cache).
+  if (local && !refresh && !liveDay) {
     refreshInBackground(q);
     return local;
   }

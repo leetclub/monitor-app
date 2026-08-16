@@ -394,6 +394,7 @@ def _hourly_footfall_by_uidds(
     """
     meta: Dict[str, Any] = {
         "uiddCount": len(uidds),
+        "cameraUidds": list(uidds),
         "granularity": "none",
         "source": "none",
         "dbRows": 0,
@@ -2008,6 +2009,101 @@ def _insights(hours: List[Dict[str, Any]], location_name: str) -> Dict[str, Any]
         "highEfficiencyHours": [h["label"] for h in high_eff],
         "weakConversionWindowCount": len(weak),
     }
+
+
+def refresh_live_day_camera_footfall(
+    session: Session,
+    payload: Dict[str, Any],
+    live_day: str,
+    resolve_uidds_fn=None,
+) -> Dict[str, Any]:
+    """
+    Re-read today's people_in from DB for camera sites on single-day reports.
+    Cached commercial reports freeze mid-day; Monitor /api/people-analytics stays live.
+    """
+    locs = payload.get("locations") or []
+    if not locs:
+        return payload
+    primary = [str(d)[:10] for d in (payload.get("primaryPeriod") or [])]
+    if primary != [live_day]:
+        return payload
+
+    benchmark = float(payload.get("benchmarkConversionPct") or BENCHMARK_CONVERSION_PCT)
+    updated = 0
+    for loc in locs:
+        if not loc.get("hasPeopleFootfall"):
+            continue
+        dates = [str(d)[:10] for d in (loc.get("periodDates") or [])]
+        if dates and dates != [live_day]:
+            continue
+        diag = loc.get("footfallDiagnostics") if isinstance(loc.get("footfallDiagnostics"), dict) else {}
+        uidds = list(diag.get("cameraUidds") or [])
+        if not uidds and resolve_uidds_fn:
+            mid = str(loc.get("machineId") or "")
+            mname = str(loc.get("locationName") or "")
+            try:
+                uidds, _ = resolve_uidds_fn(mid, mname, [live_day])
+            except Exception:
+                uidds = []
+        if not uidds:
+            continue
+        fh, meta = _hourly_footfall_by_uidds(session, uidds, [live_day])
+        if diag is not None:
+            diag["cameraUidds"] = list(uidds)
+            diag["uiddCount"] = len(uidds)
+            diag["liveDayRefresh"] = live_day
+            if meta.get("dbRows") is not None:
+                diag["dbRows"] = meta.get("dbRows")
+            loc["footfallDiagnostics"] = diag
+        hours = loc.get("hours") or []
+        for row in hours:
+            h = int(row.get("hour") or 0)
+            ff = float((fh.get(h) or [0.0])[0] if fh.get(h) else 0.0)
+            cups = float(row.get("cupsCashless") if row.get("cupsCashless") is not None else row.get("cups") or 0)
+            rev = float(row.get("revenueKd") or 0)
+            row["footfall"] = round(ff, 1)
+            row["conversionPct"] = round((cups / ff * 100.0) if ff > 0 else 0.0, 2)
+            row["conversionRatio"] = f"{int(round(ff))}:{int(round(cups))}"
+            row["revenuePerVisitorKd"] = round(rev / ff, 4) if ff > 0 else 0.0
+            aspired = ff * benchmark / 100.0
+            row["aspiredCups"] = round(aspired, 1)
+            uplift_cups = max(0.0, aspired - float(row.get("cups") or 0))
+            row["upliftCups"] = round(uplift_cups, 1)
+            avg_p = (rev / float(row.get("cups") or 0)) if float(row.get("cups") or 0) > 0 else 0.5
+            row["upliftKd"] = round(uplift_cups * avg_p, 3)
+        period_ff = sum(float((fh.get(h) or [0.0])[0] if fh.get(h) else 0.0) for h in range(24))
+        daily = loc.setdefault("daily", {})
+        daily["totalFootfall"] = round(period_ff, 1)
+        daily["avgDailyFootfall"] = round(period_ff, 1)
+        daily["hourlyProfileFootfallSum"] = round(period_ff, 1)
+        cups = float(daily.get("totalCupsCashless") or daily.get("totalCups") or 0)
+        rev = float(daily.get("totalRevenueKd") or 0)
+        if period_ff > 0:
+            daily["conversionPct"] = round(cups / period_ff * 100.0, 2)
+            daily["conversionRatio"] = f"{int(round(period_ff))}:{int(round(cups))}"
+            daily["revenuePerVisitorKd"] = round(rev / period_ff, 4)
+            daily["detectionsPerCup"] = round(period_ff / cups, 1) if cups > 0 else None
+        bd = loc.get("daysBreakdown")
+        if isinstance(bd, dict) and bd.get("mode") == "aligned" and isinstance(bd.get("rows"), list):
+            for row in bd["rows"]:
+                if str(row.get("date") or "")[:10] == live_day:
+                    row["footfall"] = round(period_ff, 1)
+                    row["footfallEstimated"] = False
+                    tc = float(row.get("cups") or 0)
+                    tr = float(row.get("revenueKd") or 0)
+                    row["conversionPct"] = round((tc / period_ff * 100.0) if period_ff > 0 else 0.0, 2)
+                    row["conversionRatio"] = f"{int(round(period_ff))}:{int(round(tc))}"
+                    row["revenuePerVisitorKd"] = round(tr / period_ff, 4) if period_ff > 0 else 0.0
+        _refresh_location_metrics_from_hours(loc, benchmark)
+        updated += 1
+    if updated:
+        payload["liveDayFootfallRefresh"] = {
+            "day": live_day,
+            "locationsUpdated": updated,
+            "refreshedAt": datetime.now(tz=TZ).isoformat(),
+        }
+        payload["rankings"] = _build_commercial_rankings(locs)
+    return payload
 
 
 def finalize_commercial_report_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
