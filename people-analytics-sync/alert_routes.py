@@ -733,7 +733,9 @@ def _get_videoloft_cameras_cached() -> List[Dict[str, Any]]:
 def _normalize_fuzzy_fragment(s: str) -> str:
     if not s:
         return ""
-    return " ".join("".join(c.lower() if c.isalnum() else " " for c in str(s)).split())
+    # Vendon often uses "Enginnering"; Videoloft uses "engineering".
+    raw = " ".join("".join(c.lower() if c.isalnum() else " " for c in str(s)).split())
+    return raw.replace("enginnering", "engineering")
 
 
 def _uidds_from_mapping_entry(cameras: List[Dict[str, Any]], mapping_val: Any) -> List[str]:

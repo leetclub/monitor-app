@@ -28,6 +28,10 @@ export function DataQualityBanner({ location, hideDateLabels }: Props) {
     !!salesDates?.length &&
     (ffDates[0] !== salesDates[0] || ffDates.at(-1) !== salesDates.at(-1));
   const noFootfall = d.totalFootfall <= 0 && !d.projectedFootfall && d.totalCups > 0;
+  const hasCamera = (location.uiddCount ?? 0) > 0 || (fd?.uiddCount ?? 0) > 0;
+  const noCameraHint = hasCamera
+    ? 'Mapped camera has no footfall in this Period (check dates / Videoloft sync).'
+    : 'No camera mapped for this machine (Vendon name may not match Videoloft).';
 
   if (!proxySales && !misaligned && !noFootfall) return null;
 
@@ -47,7 +51,7 @@ export function DataQualityBanner({ location, hideDateLabels }: Props) {
             : `cups ${salesDates?.[0]} → ${salesDates?.at(-1)} · footfall ${ffDates?.[0]} → ${ffDates?.at(-1)}`}
         </p>
       ) : null}
-      {noFootfall ? <p>No camera mapped.</p> : null}
+      {noFootfall ? <p>{noCameraHint}</p> : null}
     </div>
   );
 }

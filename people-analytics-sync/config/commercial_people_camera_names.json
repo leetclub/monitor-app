@@ -46,5 +46,10 @@
   "Al Salam Casualty": ["Al Salam Casualty", "Al Salam"],
   "AlDahman": ["AlDahman", "Dahman"],
   "Dahia": ["Dahia"],
-  "Military Base": ["Military Base"]
+  "Military Base": ["Military Base"],
+  "KU Enginnering": ["KU engineering", "KU Engineering", "KU Enginnering"],
+  "KU Engineering": ["KU engineering", "KU Engineering", "KU Enginnering"],
+  "KU CBA": ["KU CBA"],
+  "KU Shuwaikh": ["KU Shuwaikh"],
+  "KU Law": ["KU Law"]
 }

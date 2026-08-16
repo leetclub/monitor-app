@@ -1,0 +1,22 @@
+{
+  "375535": { "cameraId": "1382465.8", "cameraNames": ["Jaber Hospital - Gate 2", "Jaber - Gate 2"] },
+  "413319": { "cameraNames": ["Mubarak hospital", "Mubarak hospital bar"] },
+  "375498": { "cameraNames": ["Oxygen Riggai", "O2 Riggae"] },
+  "385017": { "cameraId": "1382465.15", "cameraNames": ["Jahra Parking", "Jahra Parking 2", "Jahra Hospital - Parking"] },
+  "375464": {
+    "cameraId": "1382465.34",
+    "cameraNames": ["KU engineering", "KU Engineering", "KU Enginnering"]
+  },
+  "395195": {
+    "cameraId": "1382465.35",
+    "cameraNames": ["KU CBA"]
+  },
+  "398430": {
+    "cameraId": "1382465.28",
+    "cameraNames": ["KU Shuwaikh"]
+  },
+  "399425": {
+    "cameraId": "1382465.26",
+    "cameraNames": ["KU Law"]
+  }
+}
