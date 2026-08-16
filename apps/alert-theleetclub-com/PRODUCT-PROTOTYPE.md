@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-16 | **Footfall cameras + no Jun proxy:** Mapped all 16 live Videoloft devices to Vendon IDs; Alert calendar Periods no longer substitute Proxy · Jun 2025 cups — empty sales stay empty (live Achievement still uses Vendon today/WTD). |
 | 2026-08-16 | **Footfall KU Engineering camera:** Mapped Vendon `KU Enginnering` (375464) → Videoloft `KU engineering` (`1382465.34`); also KU CBA/Law/Shuwaikh. Normalize Enginnering↔Engineering in fuzzy match. |
 | 2026-08-16 | **Footfall dates = user Period again:** Removed fixed May/Jul UI; heatmap/KPIs follow Alert presets; live Vendon for Achievement on the same Period. Warm cron still prebuilds weekly windows for cache hits. |
 | 2026-08-15 | **Footfall = Target hybrid:** Fixed Jul/May reports from warm/DB cache; Alert presets only fetch live Vendon (today/WTD). Warm wait list includes KU Jul week; cache keys ignore `calendar_days` so cron hits match. |

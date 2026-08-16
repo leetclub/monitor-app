@@ -249,6 +249,7 @@ def _run_report_build(
                 fallback_days=report_params["fallback_days"],
                 compare_days=report_params["compare_days"] or None,
                 alert_camera_map=cmap,
+                allow_sales_proxy=not bool(report_params.get("calendar_days")),
             )
         finally:
             try:

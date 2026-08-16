@@ -2111,12 +2111,16 @@ def build_commercial_footfall_report(
     primary_days: Optional[List[str]] = None,
     fallback_days: Optional[List[str]] = None,
     compare_days: Optional[List[str]] = None,
+    allow_sales_proxy: bool = True,
 ) -> Dict[str, Any]:
     """
     Build full report payload.
 
     resolve_uidds_fn(machine_id, machine_name) -> (uidds, source)
     fetch_vends_fn(from_ts, to_ts, machine_id) -> (vends, error)
+
+    allow_sales_proxy: when False (Alert calendar Periods), never substitute
+    Jun/May proxy weeks — keep the requested dates with zero cups if empty.
     """
     primary_days = list(primary_days or PRIMARY_BUSINESS_DAYS)
     # None → default May week; [] → no fallback (Alert calendar windows).
@@ -2204,6 +2208,10 @@ def build_commercial_footfall_report(
         if _vh_total_cups(vh_req) > 0:
             return requested, "primary", "actual", requested, vh_req
 
+        # Alert user-selected Periods: do not swap in Jun/May proxy cups.
+        if not allow_sales_proxy:
+            return requested, "primary_no_sales", "none", requested, vh_req
+
         bench = list(fallback_days)
         if bench and list(requested) != list(bench):
             vh_bench = _get_cached_vh(machine_id, bench, fetch_vends_fn, vend_cache)
@@ -2250,9 +2258,11 @@ def build_commercial_footfall_report(
         vh_foot = _get_cached_vh(machine_id, foot_days, fetch_vends_fn, vend_cache)
         # Move sales to the camera week only when the resolved sales week has no Vendon cups.
         if _vh_total_cups(vh_foot) > 0 and _vh_total_cups(vh) <= 0:
+            if not allow_sales_proxy:
+                return sales_days, sales_days, vh, sales_kind, "sales_week_aligned"
             return foot_days, foot_days, vh_foot, "proxy_footfall_week", foot_period
 
-        if fallback_days and list(fallback_days) != list(sales_days):
+        if allow_sales_proxy and fallback_days and list(fallback_days) != list(sales_days):
             vh_fb = _get_cached_vh(machine_id, fallback_days, fetch_vends_fn, vend_cache)
             has_sales = _vh_total_cups(vh_fb) > 0
             has_ff = _db_has_footfall_for_uidds(session, uidds, fallback_days)

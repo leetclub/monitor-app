@@ -31,7 +31,7 @@ export function DataQualityBanner({ location, hideDateLabels }: Props) {
   const hasCamera = (location.uiddCount ?? 0) > 0 || (fd?.uiddCount ?? 0) > 0;
   const noCameraHint = hasCamera
     ? 'Mapped camera has no footfall in this Period (check dates / Videoloft sync).'
-    : 'No camera mapped for this machine (Vendon name may not match Videoloft).';
+    : 'No Videoloft camera for this machine (only ~16 campus/hospital cameras are online).';
 
   if (!proxySales && !misaligned && !noFootfall) return null;
 
@@ -41,6 +41,11 @@ export function DataQualityBanner({ location, hideDateLabels }: Props) {
         <p>
           <strong style={{ color: salesDisp.color }}>Proxy sales:</strong>{' '}
           {salesDisp.shortLabel}
+          <span className="targetsAccessDateNote">
+            {' '}
+            — cups shown are from another week because this Period has no Vendon sales for
+            this machine (Target-style reports only).
+          </span>
         </p>
       ) : null}
       {misaligned ? (

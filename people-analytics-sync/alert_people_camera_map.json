@@ -1,8 +1,20 @@
 {
-  "375535": { "cameraId": "1382465.8", "cameraNames": ["Jaber Hospital - Gate 2", "Jaber - Gate 2"] },
-  "413319": { "cameraNames": ["Mubarak hospital", "Mubarak hospital bar"] },
-  "375498": { "cameraNames": ["Oxygen Riggai", "O2 Riggae"] },
-  "385017": { "cameraId": "1382465.15", "cameraNames": ["Jahra Parking", "Jahra Parking 2", "Jahra Hospital - Parking"] },
+  "375535": {
+    "cameraId": "1382465.8",
+    "cameraNames": ["Jaber - Gate 2", "Jaber Hospital - Gate 2"]
+  },
+  "413319": {
+    "cameraId": "1382465.13",
+    "cameraNames": ["Mubarak Hospital", "Mubarak hospital", "Mubarak hospital bar"]
+  },
+  "375498": {
+    "cameraId": "1382465.17",
+    "cameraNames": ["O2 Riggai", "Oxygen Riggai", "O2 Riggae"]
+  },
+  "385017": {
+    "cameraId": "1382465.37",
+    "cameraNames": ["Jahra Parking", "Jahra Hospital - Parking", "Jahra Parking 2"]
+  },
   "375464": {
     "cameraId": "1382465.34",
     "cameraNames": ["KU engineering", "KU Engineering", "KU Enginnering"]
@@ -18,5 +30,49 @@
   "399425": {
     "cameraId": "1382465.26",
     "cameraNames": ["KU Law"]
+  },
+  "385264": {
+    "cameraId": "1382465.36",
+    "cameraNames": ["AUK"]
+  },
+  "517195": {
+    "cameraId": "1382465.36",
+    "cameraNames": ["AUK", "AU"]
+  },
+  "393161": {
+    "cameraId": "1382465.39",
+    "cameraNames": ["Adan Main", "Adan Main Gate"]
+  },
+  "554516": {
+    "cameraId": "1382465.30",
+    "cameraNames": ["Adan casualty", "Adan Hospital - Casualty", "adan casualty 2026"]
+  },
+  "399193": {
+    "cameraId": "1382465.33",
+    "cameraNames": ["Amiri New"]
+  },
+  "393030": {
+    "cameraId": "1382465.33",
+    "cameraNames": ["Amiri New", "Amiri Old"]
+  },
+  "412360": {
+    "cameraId": "1382465.33",
+    "cameraNames": ["Amiri New", "Amiri old 2"]
+  },
+  "375531": {
+    "cameraId": "1382465.38",
+    "cameraNames": ["Farwaniya Main", "Farwaniya Main gate"]
+  },
+  "385069": {
+    "cameraId": "1382465.25",
+    "cameraNames": ["Farwaniya hallway", "Farwaniya Hall"]
+  },
+  "393033": {
+    "cameraId": "1382465.29",
+    "cameraNames": ["Hamra Sultan", "Sultan Hamra"]
+  },
+  "417279": {
+    "cameraId": "1382465.20",
+    "cameraNames": ["O2 Jahra"]
   }
 }
