@@ -2599,7 +2599,9 @@ def build_commercial_footfall_report(
         if _is_moh_machine(mname, owner):
             continue
         days, period_key, sales_kind, requested_sales, vh = _resolve_sales_days(mid)
-        if _vh_total_cups(vh) <= 0:
+        # Target weeks + sales proxy almost always have cups; Alert calendar
+        # Periods must still list the machine (zeros) so the fleet matches Target.
+        if _vh_total_cups(vh) <= 0 and allow_sales_proxy:
             continue
         uidds, map_src = resolve_uidds_fn(mid, mname, days)
         if not uidds and videoloft_cameras:
@@ -2656,7 +2658,7 @@ def build_commercial_footfall_report(
         if not mid or mid in included_ids or not _is_ku_location(mname, owner):
             continue
         days, period_key, sales_kind, requested_sales, vh = _resolve_sales_days(mid)
-        if _vh_total_cups(vh) <= 0:
+        if _vh_total_cups(vh) <= 0 and allow_sales_proxy:
             continue
         foot_days = list(days)
         fh = {h: [0.0] * len(foot_days) for h in range(24)}
