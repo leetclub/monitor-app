@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-16 | **Footfall live camera parity (hard rule):** Every Alert `calendar_days` report **re-reads** camera `people_in` on serve for the full Period (Today, WTD, custom) so As measured cannot drift from Monitor Total Visitors again; windows that include Kuwait today keep ~90s cache TTL. |
 | 2026-08-16 | **Footfall Today = live visitors:** Single-day Kuwait Today re-reads camera `people_in` on each report serve (matches Monitor Total Visitors); short cache TTL; browser no longer keeps a multi-hour Today snapshot. |
 | 2026-08-16 | **Footfall default = As measured:** Opens on camera-only view; Mirror & adjust is opt-in. |
 | 2026-08-16 | **Footfall As measured = no mirror/unique labels:** Raw mode strips mirror metadata and unique-ratio; camera sites labeled **As measured**, no-camera sites show no footfall (not “Mirrored”). |

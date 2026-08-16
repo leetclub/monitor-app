@@ -2011,30 +2011,29 @@ def _insights(hours: List[Dict[str, Any]], location_name: str) -> Dict[str, Any]
     }
 
 
-def refresh_live_day_camera_footfall(
+def refresh_camera_footfall_from_db(
     session: Session,
     payload: Dict[str, Any],
-    live_day: str,
+    days: List[str],
     resolve_uidds_fn=None,
 ) -> Dict[str, Any]:
     """
-    Re-read today's people_in from DB for camera sites on single-day reports.
-    Cached commercial reports freeze mid-day; Monitor /api/people-analytics stays live.
+    Re-read people_in from DB for camera sites over ``days``.
+
+    Commercial report cache freezes footfall at build time; Monitor
+    GET /api/people-analytics always sums live hour buckets. Call this on
+    every Alert calendar Period serve so As measured stays aligned.
     """
+    days = [str(d)[:10] for d in (days or [])]
     locs = payload.get("locations") or []
-    if not locs:
-        return payload
-    primary = [str(d)[:10] for d in (payload.get("primaryPeriod") or [])]
-    if primary != [live_day]:
+    if not locs or not days:
         return payload
 
     benchmark = float(payload.get("benchmarkConversionPct") or BENCHMARK_CONVERSION_PCT)
+    n = len(days)
     updated = 0
     for loc in locs:
         if not loc.get("hasPeopleFootfall"):
-            continue
-        dates = [str(d)[:10] for d in (loc.get("periodDates") or [])]
-        if dates and dates != [live_day]:
             continue
         diag = loc.get("footfallDiagnostics") if isinstance(loc.get("footfallDiagnostics"), dict) else {}
         uidds = list(diag.get("cameraUidds") or [])
@@ -2042,23 +2041,28 @@ def refresh_live_day_camera_footfall(
             mid = str(loc.get("machineId") or "")
             mname = str(loc.get("locationName") or "")
             try:
-                uidds, _ = resolve_uidds_fn(mid, mname, [live_day])
+                uidds, _ = resolve_uidds_fn(mid, mname, days)
             except Exception:
                 uidds = []
         if not uidds:
             continue
-        fh, meta = _hourly_footfall_by_uidds(session, uidds, [live_day])
+        fh, meta = _hourly_footfall_by_uidds(session, uidds, days)
         if diag is not None:
             diag["cameraUidds"] = list(uidds)
             diag["uiddCount"] = len(uidds)
-            diag["liveDayRefresh"] = live_day
+            diag["cameraFootfallRefreshed"] = True
+            diag["cameraFootfallDays"] = list(days)
             if meta.get("dbRows") is not None:
                 diag["dbRows"] = meta.get("dbRows")
             loc["footfallDiagnostics"] = diag
+
         hours = loc.get("hours") or []
         for row in hours:
             h = int(row.get("hour") or 0)
-            ff = float((fh.get(h) or [0.0])[0] if fh.get(h) else 0.0)
+            vals = fh.get(h) or [0.0] * n
+            if len(vals) < n:
+                vals = list(vals) + [0.0] * (n - len(vals))
+            ff = (sum(float(v) for v in vals[:n]) / n) if n else 0.0
             cups = float(row.get("cupsCashless") if row.get("cupsCashless") is not None else row.get("cups") or 0)
             rev = float(row.get("revenueKd") or 0)
             row["footfall"] = round(ff, 1)
@@ -2071,11 +2075,21 @@ def refresh_live_day_camera_footfall(
             row["upliftCups"] = round(uplift_cups, 1)
             avg_p = (rev / float(row.get("cups") or 0)) if float(row.get("cups") or 0) > 0 else 0.5
             row["upliftKd"] = round(uplift_cups * avg_p, 3)
-        period_ff = sum(float((fh.get(h) or [0.0])[0] if fh.get(h) else 0.0) for h in range(24))
+
+        daily_ff: List[float] = []
+        for di in range(n):
+            day_sum = 0.0
+            for h in range(24):
+                vals = fh.get(h) or [0.0] * n
+                day_sum += float(vals[di] if di < len(vals) else 0.0)
+            daily_ff.append(day_sum)
+        period_ff = sum(daily_ff)
         daily = loc.setdefault("daily", {})
         daily["totalFootfall"] = round(period_ff, 1)
-        daily["avgDailyFootfall"] = round(period_ff, 1)
-        daily["hourlyProfileFootfallSum"] = round(period_ff, 1)
+        daily["avgDailyFootfall"] = round(period_ff / n, 1) if n else 0.0
+        daily["hourlyProfileFootfallSum"] = round(
+            sum(float(h.get("footfall") or 0) for h in hours), 1
+        )
         cups = float(daily.get("totalCupsCashless") or daily.get("totalCups") or 0)
         rev = float(daily.get("totalRevenueKd") or 0)
         if period_ff > 0:
@@ -2083,27 +2097,46 @@ def refresh_live_day_camera_footfall(
             daily["conversionRatio"] = f"{int(round(period_ff))}:{int(round(cups))}"
             daily["revenuePerVisitorKd"] = round(rev / period_ff, 4)
             daily["detectionsPerCup"] = round(period_ff / cups, 1) if cups > 0 else None
+
         bd = loc.get("daysBreakdown")
         if isinstance(bd, dict) and bd.get("mode") == "aligned" and isinstance(bd.get("rows"), list):
+            by_date = {str(days[i]): daily_ff[i] for i in range(n)}
             for row in bd["rows"]:
-                if str(row.get("date") or "")[:10] == live_day:
-                    row["footfall"] = round(period_ff, 1)
-                    row["footfallEstimated"] = False
-                    tc = float(row.get("cups") or 0)
-                    tr = float(row.get("revenueKd") or 0)
-                    row["conversionPct"] = round((tc / period_ff * 100.0) if period_ff > 0 else 0.0, 2)
-                    row["conversionRatio"] = f"{int(round(period_ff))}:{int(round(tc))}"
-                    row["revenuePerVisitorKd"] = round(tr / period_ff, 4) if period_ff > 0 else 0.0
+                d = str(row.get("date") or "")[:10]
+                if d not in by_date:
+                    continue
+                tf = float(by_date[d])
+                row["footfall"] = round(tf, 1)
+                row["footfallEstimated"] = False
+                tc = float(row.get("cups") or 0)
+                tr = float(row.get("revenueKd") or 0)
+                row["conversionPct"] = round((tc / tf * 100.0) if tf > 0 else 0.0, 2)
+                row["conversionRatio"] = f"{int(round(tf))}:{int(round(tc))}"
+                row["revenuePerVisitorKd"] = round(tr / tf, 4) if tf > 0 else 0.0
+
         _refresh_location_metrics_from_hours(loc, benchmark)
         updated += 1
+
     if updated:
-        payload["liveDayFootfallRefresh"] = {
-            "day": live_day,
+        payload["cameraFootfallRefresh"] = {
+            "days": days,
             "locationsUpdated": updated,
             "refreshedAt": datetime.now(tz=TZ).isoformat(),
         }
         payload["rankings"] = _build_commercial_rankings(locs)
     return payload
+
+
+def refresh_live_day_camera_footfall(
+    session: Session,
+    payload: Dict[str, Any],
+    live_day: str,
+    resolve_uidds_fn=None,
+) -> Dict[str, Any]:
+    """Backward-compatible alias: refresh a single Kuwait calendar day. """
+    return refresh_camera_footfall_from_db(
+        session, payload, [live_day], resolve_uidds_fn
+    )
 
 
 def finalize_commercial_report_payload(payload: Dict[str, Any]) -> Dict[str, Any]:

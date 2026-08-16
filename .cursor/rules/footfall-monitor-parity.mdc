@@ -1,0 +1,33 @@
+---
+description: Alert Footfall camera totals must stay live vs Monitor
+globs:
+  - apps/alert-theleetclub-com/src/features/footfall/**
+  - people-analytics-sync/commercial_footfall*.py
+alwaysApply: false
+---
+
+# Footfall ↔ Monitor visitor parity
+
+## Contract
+
+For **camera-mapped** machines, Alert Footfall **As measured** period total must equal Monitor **Total Visitors** for the **same Kuwait date range**:
+
+- Same metric: sum of Videoloft / DB `people_in` hour buckets (not unique-ratio, not mirror).
+- Same timezone day bounds: `Asia/Kuwait`.
+- Same devices: `alert_people_camera_map.json` / commercial name map → UIDDs.
+
+Monitor reads live `GET /api/people-analytics`. Alert commercial reports are **cached** — never trust cached `totalFootfall` alone for Alert `calendar_days` Periods.
+
+## Required behavior (do not regress)
+
+1. **Alert `calendar_days=1`**: on every report **serve**, re-read camera `people_in` via `refresh_camera_footfall_from_db` (full Period days), then return. Sales may stay cached; camera counts must not freeze mid-day.
+2. **Windows that include Kuwait today**: short cache TTL (`COMMERCIAL_FOOTFALL_LIVE_CACHE_TTL_SEC`, default 90s) so sales/structure rebuilds too.
+3. **Browser**: live Kuwait day local storage TTL ≤ ~60s; do not return a multi-hour Today snapshot ahead of the network.
+4. **As measured** UI: no Mirrored / Unique labels or unique-ratio / mirror fill (`applyRawCameraFootfall`).
+5. **Mirror & adjust**: opt-in only; Target-style unique + mirror stays there.
+
+## When changing footfall
+
+- Prefer fixing **serve-time camera refresh** over asking operators to hard-refresh or purge cache.
+- If you add a new Period preset that can include “today”, ensure it still hits `calendar_days` + live refresh.
+- Spot-check: pick a camera site (e.g. O2 Jahra), same day in Monitor vs Alert As measured — totals must match within rounding.

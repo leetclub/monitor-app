@@ -27,7 +27,7 @@ from commercial_footfall_report import (
     fetch_machines_period_sales,
     finalize_commercial_report_payload,
     parse_report_days,
-    refresh_live_day_camera_footfall,
+    refresh_camera_footfall_from_db,
 )
 
 try:
@@ -157,13 +157,13 @@ def _includes_live_kuwait_day(params: Dict[str, Any]) -> bool:
     return today in days
 
 
-def _is_single_live_day(params: Dict[str, Any]) -> bool:
-    today = _kuwait_today()
-    days = [str(d)[:10] for d in (params.get("primary_days") or [])]
-    return days == [today]
+def _should_live_refresh_camera(params: Dict[str, Any]) -> bool:
+    """Alert calendar Periods must never serve frozen camera counts."""
+    return bool(params.get("calendar_days"))
 
 
 def _cache_ttl_sec(params: Dict[str, Any]) -> int:
+    # Windows that include Kuwait today need frequent full rebuilds (sales + structure).
     if _includes_live_kuwait_day(params):
         return _LIVE_CACHE_TTL_SEC
     return _CACHE_TTL_SEC
@@ -216,16 +216,17 @@ def _is_fresh(entry: Dict[str, Any], now: float, ttl_sec: int) -> bool:
 
 def _prepare_served_payload(get_db_session, report_params: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = finalize_commercial_report_payload(payload)
-    if not _is_single_live_day(report_params):
+    if not _should_live_refresh_camera(report_params):
+        return payload
+    days = [str(d)[:10] for d in (report_params.get("primary_days") or payload.get("primaryPeriod") or [])]
+    if not days:
         return payload
     session = get_db_session()
     try:
         resolve_fn = _make_resolve_uidds(session)
-        return refresh_live_day_camera_footfall(
-            session, payload, _kuwait_today(), resolve_fn
-        )
+        return refresh_camera_footfall_from_db(session, payload, days, resolve_fn)
     except Exception as ex:
-        logger.warning("live day footfall refresh failed: %s", ex)
+        logger.warning("camera footfall live refresh failed: %s", ex)
         try:
             session.rollback()
         except Exception:
