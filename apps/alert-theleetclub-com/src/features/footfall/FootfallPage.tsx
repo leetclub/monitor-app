@@ -31,8 +31,8 @@ function initialFootfallCompare(): CompareSelection {
  * As-measured / mirror toggle; live Vendon for Achievement on the same Period.
  */
 export function FootfallPage() {
-  /** Default matches target.theleetclub.com (mirror + unique adjust). */
-  const [mode, setMode] = useState<FootfallViewMode>('adjusted');
+  /** Default: camera as measured — mirror/unique only via Mirror & adjust. */
+  const [mode, setMode] = useState<FootfallViewMode>('raw');
   const [compare, setCompareState] = useState<CompareSelection>(() => initialFootfallCompare());
   const darkMode = useFootfallDarkSurface();
 
