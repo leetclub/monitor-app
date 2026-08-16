@@ -1,10 +1,13 @@
 import type { LocationReport } from '@/features/footfall/lib/types';
 
-import { isMirroredFootfall } from '@/features/footfall/lib/footfallLabel';
-
 /** True when footfall is mirrored (no camera on this machine). */
 export function isEstimatedFootfall(loc: LocationReport): boolean {
-  return isMirroredFootfall(loc);
+  const kind = loc.footfallDataKind ?? 'none';
+  return (
+    kind === 'mirrored' ||
+    kind === 'projected' ||
+    Boolean(loc.kuFootfallEstimate)
+  );
 }
 
 /** Camera or mirrored detections only — for fleet peak-traffic ranking. */

@@ -1,10 +1,12 @@
 import type { LocationReport } from '@/features/footfall/lib/types';
-import { displayFootfallTotal } from '@/features/footfall/lib/footfallMetrics';
 
 /**
  * User-facing footfall taxonomy (two sources only):
  * - Mirrored footfall — no camera; shaped from a peer + segment benchmark
  * - Unique footfall — camera detections, adjusted when over-counted (repeat visitors)
+ *
+ * Do not call displayFootfallTotal / isMirroredFootfall from here — those call
+ * footfallSourceKind and would recurse forever.
  */
 export type FootfallSourceKind = 'none' | 'mirrored' | 'unique';
 
@@ -20,8 +22,11 @@ export function footfallSourceKind(loc: LocationReport): FootfallSourceKind {
   if (kind === 'actual' || loc.hasPeopleFootfall) {
     return 'unique';
   }
-  if (displayFootfallTotal(loc) > 0) {
+  if ((loc.daily.projectedFootfall ?? 0) > 0) {
     return 'mirrored';
+  }
+  if ((loc.daily.totalFootfall ?? 0) > 0) {
+    return 'unique';
   }
   return 'none';
 }
