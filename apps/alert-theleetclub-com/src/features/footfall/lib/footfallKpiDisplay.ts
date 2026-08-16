@@ -72,11 +72,21 @@ export function footfallKpiCopy(loc: LocationReport): FootfallKpiCopy {
     };
   }
 
+  if (src === 'unique') {
+    return {
+      periodLabel: footfallPeriodLabel(loc),
+      periodHint: 'Camera adjusted for repeat visitors vs segment benchmark',
+      periodValueColor: c.unique,
+      perDayLabel: footfallPerDayLabel(loc),
+      perDayValueColor: c.unique,
+      isNone: false,
+      isMirroredOrProjected: false,
+    };
+  }
+
   return {
     periodLabel: footfallPeriodLabel(loc),
-    periodHint: loc.uniqueAdjusted
-      ? 'Camera adjusted for repeat visitors vs segment benchmark'
-      : 'Camera detections (unique visitors)',
+    periodHint: 'Camera detections as measured — no mirror, no unique-ratio',
     periodValueColor: c.unique,
     perDayLabel: footfallPerDayLabel(loc),
     perDayValueColor: c.unique,
@@ -108,7 +118,11 @@ export function footfallSourceSummary(loc: LocationReport, copy: FootfallKpiCopy
       : `Mirrored footfall: ${total} (5 days)${perDayStr}`;
   }
 
-  return `Unique footfall: ${total} (5 days)${perDayStr}`;
+  if (footfallSourceKind(loc) === 'unique') {
+    return `Unique footfall: ${total} (5 days)${perDayStr}`;
+  }
+
+  return `As measured: ${total} (5 days)${perDayStr}`;
 }
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'];

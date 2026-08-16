@@ -207,7 +207,9 @@ export function TargetKpiSection({
           )}.`,
           copy.isMirroredOrProjected
             ? 'Mirrored footfall — hourly conversion = cashless cups ÷ peer-shaped footfall.'
-            : 'Unique footfall — camera detections adjusted when over-counted vs benchmark.',
+            : location.uniqueAdjusted
+              ? 'Unique footfall — camera detections adjusted when over-counted vs benchmark.'
+              : 'As measured — camera detections only (no mirror, no unique-ratio).',
         ],
       },
       {
