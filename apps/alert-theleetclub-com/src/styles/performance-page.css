@@ -1449,3 +1449,40 @@ button.perfKpiClick:hover {
 .perfProductsTable td:nth-child(n + 2) {
   font-family: var(--font-mono);
 }
+
+.perfSkuRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+  border-radius: 8px;
+}
+
+.perfSkuRow:hover,
+.perfSkuRow.active {
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.perfSkuKd {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.perfProductsRowActive td {
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.perfProductsTable tbody tr {
+  cursor: pointer;
+}

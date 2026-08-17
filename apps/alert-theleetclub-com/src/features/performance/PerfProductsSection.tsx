@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as echarts from 'echarts';
 import { apiGet } from '@/lib/api';
-import { MachineIdSearchSelect } from '@/components/MachineSearchSelect';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
@@ -75,6 +74,117 @@ function readTheme() {
   return { text: '#e2e8f0', muted: '#94a3b8', grid: 'rgba(148, 163, 184, 0.12)', axis: '#64748b' };
 }
 
+function SkuDropdown({
+  options,
+  value,
+  allowAll,
+  onChange,
+}: {
+  options: { name: string; kd: number }[];
+  value: string;
+  allowAll: boolean;
+  onChange: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.name === value);
+  const summary = value
+    ? selected?.name || value
+    : allowAll
+      ? `All drinks (${options.length})`
+      : 'Choose a drink';
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return options.slice(0, 80);
+    return options.filter((o) => o.name.toLowerCase().includes(needle)).slice(0, 80);
+  }, [options, q]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  return (
+    <section className="perfMachineFilter perfMachineFilterBar" aria-label="Filter drinks">
+      <div className="perfLocBarMain" ref={rootRef}>
+        <div className="perfLocBarLabel">
+          <h3 className="perfMachineFilterTitle">Products</h3>
+          <span className="perfMachineFilterCount">{summary}</span>
+        </div>
+        <div className="perfLocSelect">
+          <button
+            type="button"
+            className={`perfLocSelectTrigger ${open ? 'open' : ''}`}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-haspopup="listbox"
+          >
+            <span className="perfLocSelectSummary">{summary}</span>
+            <span className="perfLocSelectChevron" aria-hidden>
+              ▾
+            </span>
+          </button>
+          {open ? (
+            <div className="perfLocDropdown" role="listbox">
+              <div className="perfLocDropdownToolbar">
+                <input
+                  type="search"
+                  className="perfLocSearch"
+                  placeholder="Search drink…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="perfLocDropdownList">
+                {allowAll ? (
+                  <button
+                    type="button"
+                    className={`perfSkuRow perfSkuAll ${!value ? 'active' : ''}`}
+                    onClick={() => {
+                      onChange('');
+                      setOpen(false);
+                      setQ('');
+                    }}
+                  >
+                    All drinks
+                  </button>
+                ) : null}
+                {filtered.length === 0 ? (
+                  <p className="perfMuted">No matches.</p>
+                ) : (
+                  filtered.map((o) => (
+                    <button
+                      key={o.name}
+                      type="button"
+                      className={`perfSkuRow ${value === o.name ? 'active' : ''}`}
+                      onClick={() => {
+                        onChange(o.name);
+                        setOpen(false);
+                        setQ('');
+                      }}
+                      title={`${o.name} · ${formatKwd(o.kd)}`}
+                    >
+                      <span className="perfLocRowName">{o.name}</span>
+                      <span className="perfSkuKd">{formatKwd(o.kd)}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 type Props = {
   machines: MachineRow[];
   selectedIds: string[];
@@ -84,9 +194,7 @@ type Props = {
 export function PerfProductsSection({ machines, selectedIds, allSelected }: Props) {
   const [preset, setPreset] = useState<PerfPreset>('today');
   const [lens, setLens] = useState<ProductLens>('in_location');
-  const [focusId, setFocusId] = useState('');
   const [sku, setSku] = useState('');
-  const [skuQuery, setSkuQuery] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
 
@@ -96,16 +204,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
   }, [allSelected, machines, selectedIds]);
 
   const idsKey = ids.slice().sort().join(',');
-
-  useEffect(() => {
-    if (!ids.length) {
-      setFocusId('');
-      return;
-    }
-    if (!focusId || !ids.includes(focusId)) {
-      setFocusId(ids[0] || '');
-    }
-  }, [ids, focusId]);
+  const singleLocationId = !allSelected && selectedIds.length === 1 ? selectedIds[0] : '';
 
   const compareQ = useQuery({
     queryKey: ['alert-performance-product-compare', preset, idsKey],
@@ -135,11 +234,13 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       ? `${periodLabel}: ${win.start} → ${win.end} · ${priorLabel}: ${win.prevStart} → ${win.prevEnd}`
       : '';
 
-  const focusMachine = payloadMachines.find((m) => m.machineId === focusId) || payloadMachines[0];
+  const focusMachine = payloadMachines.find((m) => m.machineId === singleLocationId);
 
   const skuCatalog = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const m of payloadMachines) {
+    const source =
+      lens === 'in_location' && focusMachine ? [focusMachine] : payloadMachines;
+    for (const m of source) {
       for (const p of m.products || []) {
         const name = String(p.name || '').trim();
         if (!name) continue;
@@ -149,29 +250,27 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     return [...totals.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([name, kd]) => ({ name, kd }));
-  }, [payloadMachines]);
+  }, [payloadMachines, focusMachine, lens]);
 
   useEffect(() => {
     if (!skuCatalog.length) {
-      setSku('');
+      if (sku) setSku('');
       return;
     }
-    if (!sku || !skuCatalog.some((s) => s.name === sku)) {
+    if (lens === 'across_locations' && (!sku || !skuCatalog.some((s) => s.name === sku))) {
       setSku(skuCatalog[0]?.name || '');
     }
-  }, [skuCatalog, sku]);
-
-  const filteredSkus = useMemo(() => {
-    const q = skuQuery.trim().toLowerCase();
-    if (!q) return skuCatalog.slice(0, 40);
-    return skuCatalog.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 40);
-  }, [skuCatalog, skuQuery]);
+    if (lens === 'in_location' && sku && !skuCatalog.some((s) => s.name === sku)) {
+      setSku('');
+    }
+  }, [skuCatalog, sku, lens]);
 
   const inLocationRows = useMemo(() => {
     const rows = [...(focusMachine?.products || [])];
     rows.sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0));
+    if (sku) return rows.filter((p) => p.name === sku);
     return rows;
-  }, [focusMachine]);
+  }, [focusMachine, sku]);
 
   const acrossRows = useMemo(() => {
     const want = sku.trim().toLowerCase();
@@ -202,6 +301,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
         categories: top.map((p) => p.name),
         period: top.map((p) => Number(p.revenueKwd || 0)),
         prior: top.map((p) => Number(p.prevRevenueKwd || 0)),
+        clickSetsSku: true,
       };
     }
     const top = acrossRows.slice(0, GRAPH_MAX);
@@ -209,6 +309,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       categories: top.map((r) => r.machineName),
       period: top.map((r) => r.revenueKwd),
       prior: top.map((r) => r.prevRevenueKwd),
+      clickSetsSku: false,
     };
   }, [lens, inLocationRows, acrossRows]);
 
@@ -230,6 +331,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     if (!chart) return;
     const theme = readTheme();
     const cats = chartSeries.categories;
+    chart.off('click');
     if (!cats.length) {
       chart.clear();
       return;
@@ -267,6 +369,12 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       },
       true,
     );
+    if (chartSeries.clickSetsSku) {
+      chart.on('click', (params: { name?: string }) => {
+        const name = String(params.name || '').trim();
+        if (name) setSku((prev) => (prev === name ? '' : name));
+      });
+    }
   }, [chartSeries, periodLabel, priorLabel]);
 
   const exportChart = useCallback(() => {
@@ -281,10 +389,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     );
   }, [lens, focusMachine?.machineName, sku, preset]);
 
-  const filterMachines = useMemo(
-    () => machines.filter((m) => ids.includes(m.id)),
-    [machines, ids],
-  );
+  const needOneLocation = lens === 'in_location' && !singleLocationId;
 
   return (
     <section className="perfProducts" aria-labelledby="perf-products-title">
@@ -294,8 +399,8 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             Product performance
           </h3>
           <p className="perfSectionHint">
-            Compare drinks in one location, or the same drink across locations. Period vs prior uses
-            the same windows as Performance (Today / WTD / month). Ranked by KD.
+            Locations above pick the sites. Products dropdown picks the drink. Click a bar to filter
+            that drink. Period vs prior uses Today / WTD / month windows.
             {ids.length >= 80 ? ' Showing the first 80 selected locations.' : ''}
           </p>
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
@@ -332,47 +437,19 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
         </button>
       </div>
 
-      {lens === 'in_location' ? (
-        <div className="perfProductsPick">
-          <MachineIdSearchSelect
-            label="Location"
-            machines={filterMachines}
-            value={focusId}
-            onChange={setFocusId}
-            allowEmpty={false}
-            placeholder="Search location…"
-          />
-        </div>
-      ) : (
-        <div className="perfProductsPick">
-          <label className="perfProductsSkuLabel">
-            Drink
-            <input
-              type="search"
-              className="perfProductsSkuInput"
-              value={skuQuery}
-              placeholder={sku ? `Search… (selected: ${sku})` : 'Search drink…'}
-              onChange={(e) => setSkuQuery(e.target.value)}
-            />
-          </label>
-          <div className="perfModePills" role="listbox" aria-label="Drinks">
-            {filteredSkus.map((s) => (
-              <button
-                key={s.name}
-                type="button"
-                className={`perfSegPill ${sku === s.name ? 'active' : ''}`}
-                onClick={() => {
-                  setSku(s.name);
-                  setSkuQuery('');
-                }}
-                title={`${s.name} · ${formatKwd(s.kd)} period total`}
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <SkuDropdown
+        options={skuCatalog}
+        value={sku}
+        allowAll={lens === 'in_location'}
+        onChange={setSku}
+      />
+
+      {needOneLocation ? (
+        <p className="perfMuted">
+          Pick <strong>one</strong> location in <strong>Locations</strong> (use <strong>Only</strong>)
+          to see drinks at that site. Or switch to <strong>Same drink across locations</strong>.
+        </p>
+      ) : null}
 
       {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
       {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
@@ -388,6 +465,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       </ChartExportWrap>
       <p className="perfSectionHint">
         Graph shows top {GRAPH_MAX} by period KD. Full list is in the table.
+        {lens === 'in_location' ? ' Click a drink bar to filter; click again for all drinks.' : ''}
       </p>
 
       {lens === 'in_location' ? (
@@ -405,13 +483,21 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
               </tr>
             </thead>
             <tbody>
-              {inLocationRows.length === 0 ? (
+              {needOneLocation ? (
+                <tr>
+                  <td colSpan={7}>Select one location above.</td>
+                </tr>
+              ) : inLocationRows.length === 0 ? (
                 <tr>
                   <td colSpan={7}>No product mix for this location in the window yet.</td>
                 </tr>
               ) : (
                 inLocationRows.map((p) => (
-                  <tr key={p.name}>
+                  <tr
+                    key={p.name}
+                    className={sku === p.name ? 'perfProductsRowActive' : undefined}
+                    onClick={() => setSku((prev) => (prev === p.name ? '' : p.name))}
+                  >
                     <td>{p.name}</td>
                     <td>{formatKwd(Number(p.revenueKwd || 0))}</td>
                     <td>{formatKwd(Number(p.prevRevenueKwd || 0))}</td>
@@ -442,7 +528,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             <tbody>
               {!sku ? (
                 <tr>
-                  <td colSpan={7}>Pick a drink to compare locations.</td>
+                  <td colSpan={7}>Pick a drink in Products.</td>
                 </tr>
               ) : acrossRows.every((r) => r.revenueKwd <= 0 && r.prevRevenueKwd <= 0) ? (
                 <tr>
