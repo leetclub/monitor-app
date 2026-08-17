@@ -551,36 +551,21 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             Product performance
           </h3>
           <aside className="perfProductsGuide" aria-label="How to use product performance">
-            <p className="perfProductsGuideLead">
-              Most machines sell the same drinks. Use Locations and Products like this:
-            </p>
             <ol className="perfProductsGuideList">
               <li className={!locNone && !compareMode ? 'active' : undefined}>
-                <strong>One location</strong> — drink mix at that site (top {PERF_PRODUCTS_MAX_SKUS} on
-                the graph; table = full list).
-                <span className="perfProductsGuideWhy">
-                  Why: fair ranking — same place, hours, and traffic.
-                </span>
+                <strong>One location</strong> — mix at that site.
+                <span className="perfProductsGuideWhy">Fair ranking (same place & hours).</span>
               </li>
               <li className={compareMode && skus.length === 1 ? 'active' : undefined}>
-                <strong>2–{PERF_PRODUCTS_MAX_LOCATIONS} locations + one drink</strong> — where that
-                drink is strong or weak.
-                <span className="perfProductsGuideWhy">
-                  Why: best fleet insight — same product, different sites.
-                </span>
+                <strong>2–{PERF_PRODUCTS_MAX_LOCATIONS} locations + one drink</strong> — where it is
+                weak.
+                <span className="perfProductsGuideWhy">Best fleet compare (same product).</span>
               </li>
               <li className={compareMode && skus.length !== 1 ? 'active' : undefined}>
-                <strong>Several locations + a few drinks</strong> — promo / SKU push check (or no
-                filter = top {PERF_PRODUCTS_MAX_SKUS}).
-                <span className="perfProductsGuideWhy">
-                  Why: see which sites moved with the push (max {PERF_PRODUCTS_MAX_SKUS} drinks).
-                </span>
+                <strong>Several locations + few drinks</strong> — promo check.
+                <span className="perfProductsGuideWhy">Which sites moved (max {PERF_PRODUCTS_MAX_SKUS}).</span>
               </li>
             </ol>
-            <p className="perfProductsGuideLead">
-              Pick a time window below (Today / WTD / month). Prefer trend % across busy vs quiet
-              sites — raw KD alone favors high-traffic machines.
-            </p>
           </aside>
           {showingBlurb ? <p className="perfProductsNow">{showingBlurb}</p> : null}
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}

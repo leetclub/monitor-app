@@ -1,26 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360">
   <rect width="800" height="360" fill="#0f172a"/>
   <text x="24" y="28" fill="#e2e8f0" font-family="Segoe UI, sans-serif" font-size="16" font-weight="700">Performance — Location | Products</text>
-  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">How to use: 1 site = mix · 2+ sites + 1 drink = fleet compare · Why on each step</text>
+  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">1 site = mix · 2+ sites + 1 drink = fleet compare · few drinks = promo</text>
   <rect x="24" y="56" width="70" height="22" rx="11" fill="#1e293b" stroke="#334155"/>
   <text x="36" y="71" fill="#94a3b8" font-size="10" font-family="Segoe UI, sans-serif">Location</text>
   <rect x="98" y="56" width="72" height="22" rx="11" fill="rgba(45,212,191,0.18)" stroke="#2dd4bf"/>
   <text x="110" y="71" fill="#e2e8f0" font-size="10" font-weight="600" font-family="Segoe UI, sans-serif">Products</text>
-  <rect x="24" y="86" width="752" height="72" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="106" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">How to use</text>
-  <text x="36" y="124" fill="#94a3b8" font-size="9" font-family="Segoe UI, sans-serif">1) One location → mix (fair ranking)   2) 2–8 sites + one drink → where it is weak</text>
-  <text x="36" y="142" fill="#2dd4bf" font-size="9" font-family="Segoe UI, sans-serif">Looking at: Americano across Marina + Salmiya — each bar is a location</text>
-  <rect x="24" y="168" width="368" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="190" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Locations  2/8  ·  Marina · Salmiya ▾</text>
-  <rect x="408" y="168" width="368" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="420" y="190" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Products  1/8  ·  Americano ▾</text>
-  <rect x="24" y="214" width="752" height="130" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="234" fill="#cbd5e1" font-size="12" font-weight="600" font-family="Segoe UI, sans-serif">Compare same drink across sites · period vs prior</text>
-  <rect x="60" y="250" width="40" height="70" fill="#2dd4bf"/>
-  <rect x="108" y="250" width="40" height="42" fill="#64748b"/>
-  <rect x="200" y="260" width="40" height="60" fill="#2dd4bf"/>
-  <rect x="248" y="260" width="40" height="36" fill="#64748b"/>
-  <text x="60" y="338" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Marina</text>
-  <text x="200" y="338" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Salmiya</text>
-  <text x="480" y="290" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Same product · different sites</text>
+  <rect x="24" y="86" width="752" height="52" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="36" y="106" fill="#e2e8f0" font-size="9" font-family="Segoe UI, sans-serif">1) One location — mix   2) 2–8 sites + one drink — where weak   3) Few drinks — promo</text>
+  <text x="36" y="124" fill="#2dd4bf" font-size="9" font-family="Segoe UI, sans-serif">Looking at: Americano across Marina + Salmiya</text>
+  <rect x="24" y="148" width="368" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="36" y="170" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Locations  2/8  ·  Marina · Salmiya ▾</text>
+  <rect x="408" y="148" width="368" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="420" y="170" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Products  1/8  ·  Americano ▾</text>
+  <rect x="24" y="194" width="752" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="36" y="214" fill="#cbd5e1" font-size="12" font-weight="600" font-family="Segoe UI, sans-serif">Same drink across sites · period vs prior</text>
+  <rect x="60" y="234" width="40" height="80" fill="#2dd4bf"/>
+  <rect x="108" y="234" width="40" height="48" fill="#64748b"/>
+  <rect x="200" y="248" width="40" height="66" fill="#2dd4bf"/>
+  <rect x="248" y="248" width="40" height="40" fill="#64748b"/>
+  <text x="60" y="332" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Marina</text>
+  <text x="200" y="332" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Salmiya</text>
 </svg>

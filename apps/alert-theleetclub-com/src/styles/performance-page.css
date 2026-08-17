@@ -1401,39 +1401,28 @@ button.perfKpiClick:hover {
 
 .perfProductsGuide {
   margin: 6px 0 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--border-soft);
   background: var(--panel2);
 }
 
-.perfProductsGuideLead {
-  margin: 0 0 8px;
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.perfProductsGuideLead:last-child {
-  margin: 8px 0 0;
-}
-
 .perfProductsGuideList {
   margin: 0;
-  padding: 0 0 0 1.15rem;
+  padding: 0 0 0 1.1rem;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .perfProductsGuideList li {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text);
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
 .perfProductsGuideList li.active {
-  padding: 6px 8px;
+  padding: 5px 8px;
   margin-left: -8px;
   border-radius: 8px;
   background: rgba(45, 212, 191, 0.1);
@@ -1442,8 +1431,8 @@ button.perfKpiClick:hover {
 
 .perfProductsGuideWhy {
   display: block;
-  margin-top: 2px;
-  font-size: 0.72rem;
+  margin-top: 1px;
+  font-size: 0.7rem;
   color: var(--muted);
 }
 
