@@ -53,10 +53,11 @@ function parseIds(raw: string | null): string[] {
     .filter(Boolean);
 }
 
-/** Hide test / junk rows whose display name starts with a digit (e.g. "1 Foo", raw IDs). */
-function nameStartsWithDigit(name: string): boolean {
+/** Hide junk / test rows: names starting with a digit or with * (e.g. "*8 …"). */
+function isExcludedLocationName(name: string): boolean {
   const n = name.trim();
-  return n.length > 0 && /^\d/.test(n);
+  if (!n) return false;
+  return /^\d/.test(n) || n.startsWith('*');
 }
 
 function writeMachineParams(p: URLSearchParams, next: Set<string> | null) {
@@ -102,11 +103,20 @@ export function PerformancePage({
   const [preset, setPreset] = useState<PerfPreset>('last_week');
   const [showCompare, setShowCompare] = useState(false);
   const [loadProducts, setLoadProducts] = useState(false);
-  const [selected, setSelected] = useState<Set<string> | null>(() =>
-    urlIds.length ? new Set(urlIds) : focusId ? new Set([focusId]) : null,
-  );
-  /** Products keeps its own location picks so Location tab selection is not overwritten. */
-  const [productsSelected, setProductsSelected] = useState<Set<string> | null>(null);
+  /** Location tab selection — default All; ignore Products URL machine picks. */
+  const [selected, setSelected] = useState<Set<string> | null>(() => {
+    if (params.get('view') === 'products') return null;
+    if (urlIds.length) return new Set(urlIds);
+    if (focusId) return new Set([focusId]);
+    return null;
+  });
+  /** Products keeps its own location picks so Location stays All (or prior Location picks). */
+  const [productsSelected, setProductsSelected] = useState<Set<string> | null>(() => {
+    if (params.get('view') !== 'products') return null;
+    if (urlIds.length) return new Set(urlIds);
+    if (focusId) return new Set([focusId]);
+    return null;
+  });
   const [productMix, setProductMix] = useState<{ machineId: string; machineName: string } | null>(
     null,
   );
@@ -157,7 +167,7 @@ export function PerformancePage({
     }
 
     const out = [...byId.values()]
-      .filter((m) => !nameStartsWithDigit(m.name || m.id))
+      .filter((m) => !isExcludedLocationName(m.name || m.id))
       .sort((a, b) => a.name.localeCompare(b.name));
     return out;
   }, [apiMachines, snapQ.data?.rows]);
@@ -199,6 +209,7 @@ export function PerformancePage({
       writeMachineParams(p, capped);
     } else {
       p.delete('view');
+      // Location default is All unless the user already narrowed it on Location.
       writeMachineParams(p, selected);
     }
     setParams(p, { replace: true });
@@ -276,7 +287,7 @@ export function PerformancePage({
       else if (!prev.name.trim() || prev.name === id) byId.set(id, { id, name: fleetName });
     }
     return [...byId.values()]
-      .filter((m) => !nameStartsWithDigit(m.name || m.id))
+      .filter((m) => !isExcludedLocationName(m.name || m.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [machineRows, fleetMachines]);
 

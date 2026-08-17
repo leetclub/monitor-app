@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-17 | **Performance Locations:** Also hide names starting with `*`. Location tab defaults to **All**; Products URL picks no longer seed Location selection. |
 | 2026-08-17 | **Performance Locations cleanup:** Hide machines whose name starts with a digit. Products keeps its own site picks so returning to **Location** restores the prior selection (no longer stuck on 8). |
 | 2026-08-17 | **Performance Products guide trim:** Removed crowded lead-in copy; kept short mix / fleet / promo steps only. |
 | 2026-08-17 | **Performance Products How to use:** On-page recipe with why — one site = mix; 2–8 sites + one drink = fleet compare; a few drinks = promo check. Active step highlights from the current selection. |
