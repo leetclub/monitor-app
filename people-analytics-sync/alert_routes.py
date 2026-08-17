@@ -3983,6 +3983,149 @@ def register_alert_routes(app) -> None:
         finally:
             db.close()
 
+    @app.route("/api/alert/performance/product-compare", methods=["GET", "OPTIONS"])
+    def alert_performance_product_compare():
+        """
+        Product workspace on Performance: SKU KD by location for a preset window vs prior
+        (and same dates last year). Cache-backed — same Vendon daily mix as machine-products.
+        Query: machineIds=id1,id2 (required, max 80), preset=today|yesterday|this_week|...
+        """
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+
+        raw_ids = (request.args.get("machineIds") or request.args.get("machine_ids") or "").strip()
+        requested = [x.strip() for x in raw_ids.split(",") if x.strip()]
+        if not requested:
+            return jsonify({"error": "machineIds required"}), 400
+        if len(requested) > 80:
+            requested = requested[:80]
+
+        preset = (request.args.get("preset") or "today").strip().lower()
+        from alert_targets_lib import resolve_perf_window
+        import hashlib
+
+        tz = ZoneInfo("Asia/Kuwait")
+        now_local = datetime.now(tz)
+        today = now_local.date()
+        win_s, win_e, prev_s, prev_e, preset_id = resolve_perf_window(
+            today=today, preset=preset, history_days=31
+        )
+        span = (win_e - win_s).days
+        try:
+            yoy_s = date(win_s.year - 1, win_s.month, win_s.day)
+        except ValueError:
+            yoy_s = win_s - timedelta(days=365)
+        yoy_e = yoy_s + timedelta(days=span)
+
+        id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
+        cache_key = f"perf:product-compare:v1:{preset_id}:{win_s}:{win_e}:{id_sig}"
+        cached = _alert_cache_get(cache_key, 90)
+        if cached is not None:
+            return jsonify(cached)
+
+        preset_labels = {
+            "today": ("Today", "Yesterday"),
+            "yesterday": ("Yesterday", "Day before"),
+            "this_week": ("This week (WTD)", "Prior week (same days)"),
+            "last_week": ("Last week", "Week before"),
+            "last_2_weeks": ("Last 2 weeks", "Prior 2 weeks"),
+            "this_month": ("This month (MTD)", "Prior month (same days)"),
+            "last_month": ("Last month", "Month before"),
+        }
+        cur_label, prev_label = preset_labels.get(preset_id, (preset_id.replace("_", " ").title(), "Prior"))
+
+        def _trend(cur: float, base: float):
+            if base > 0:
+                return round(((cur - base) / base) * 100.0, 1)
+            if cur > 0:
+                return 100.0
+            return 0.0
+
+        db = _pa_session()
+        try:
+            fetch_lo = min(win_s, prev_s, yoy_s)
+            fetch_hi = max(win_e, today)
+            rows = (
+                db.query(VendonDailyMachineRevenueCache)
+                .filter(
+                    VendonDailyMachineRevenueCache.machine_id.in_(requested),
+                    VendonDailyMachineRevenueCache.cache_date >= fetch_lo,
+                    VendonDailyMachineRevenueCache.cache_date <= fetch_hi,
+                )
+                .all()
+            )
+            by_mid: Dict[str, List[Any]] = {}
+            names: Dict[str, str] = {}
+            for r in rows:
+                mid = str(r.machine_id or "").strip()
+                if not mid:
+                    continue
+                by_mid.setdefault(mid, []).append(r)
+                nm = str(r.machine_name or "").strip()
+                if nm and mid not in names:
+                    names[mid] = nm
+
+            machines_out: List[Dict[str, Any]] = []
+            for mid in requested:
+                mrows = by_mid.get(mid) or []
+                cur = _aggregate_product_sales_in_range(mrows, win_s, win_e + timedelta(days=1))
+                prev = _aggregate_product_sales_in_range(mrows, prev_s, prev_e + timedelta(days=1))
+                yoy = _aggregate_product_sales_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
+                cups = _aggregate_product_counts_in_range(mrows, win_s, win_e + timedelta(days=1))
+                sku_names = set(cur) | set(prev) | set(yoy)
+                products = []
+                for name in sku_names:
+                    kwd = float(cur.get(name) or 0)
+                    prev_kwd = float(prev.get(name) or 0)
+                    yoy_kwd = float(yoy.get(name) or 0)
+                    products.append(
+                        {
+                            "name": name,
+                            "revenueKwd": round(kwd, 4),
+                            "prevRevenueKwd": round(prev_kwd, 4),
+                            "yoyRevenueKwd": round(yoy_kwd, 4),
+                            "cups": int(cups.get(name) or 0),
+                            "trendPct": _trend(kwd, prev_kwd),
+                            "yoyTrendPct": _trend(kwd, yoy_kwd),
+                        }
+                    )
+                products.sort(key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()))
+                machines_out.append(
+                    {
+                        "machineId": mid,
+                        "machineName": names.get(mid) or mid,
+                        "products": products,
+                    }
+                )
+
+            body = {
+                "ok": True,
+                "preset": preset_id,
+                "asOf": now_local.replace(microsecond=0).isoformat(),
+                "window": {
+                    "start": win_s.isoformat(),
+                    "end": win_e.isoformat(),
+                    "prevStart": prev_s.isoformat(),
+                    "prevEnd": prev_e.isoformat(),
+                    "yoyStart": yoy_s.isoformat(),
+                    "yoyEnd": yoy_e.isoformat(),
+                    "label": cur_label,
+                    "prevLabel": prev_label,
+                },
+                "machineCount": len(machines_out),
+                "machines": machines_out,
+            }
+            _alert_cache_set(cache_key, body)
+            return jsonify(body)
+        except Exception as ex:
+            logger.exception("alert_performance_product_compare")
+            return jsonify({"ok": False, "error": str(ex)}), 500
+        finally:
+            db.close()
+
     @app.route("/api/alert/performance/machine-detail", methods=["GET", "OPTIONS"])
     def alert_performance_machine_detail():
         """

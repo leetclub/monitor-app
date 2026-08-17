@@ -18,12 +18,15 @@ import {
   ProductTrajectoryChart,
   RevenueTrajectoryChart,
 } from '@/features/performance/PerformanceCharts';
+import { PerfProductsSection } from '@/features/performance/PerfProductsSection';
 import type {
   FleetPayload,
   MachineRow,
   PerfDay,
   PerfPreset,
 } from '@/features/performance/perfTypes';
+
+type PerfWorkspace = 'location' | 'products';
 
 type PerfPayload = {
   machineId: string;
@@ -59,6 +62,7 @@ export function PerformancePage({
   const [params, setParams] = useSearchParams();
   const focusId = (params.get('machineId') || params.get('machine') || '').trim();
   const urlIds = parseIds(params.get('machineIds'));
+  const workspace: PerfWorkspace = params.get('view') === 'products' ? 'products' : 'location';
   const [preset, setPreset] = useState<PerfPreset>('last_week');
   const [showCompare, setShowCompare] = useState(false);
   const [loadProducts, setLoadProducts] = useState(false);
@@ -149,6 +153,13 @@ export function PerformancePage({
     setParams(p, { replace: true });
   };
 
+  const setWorkspace = (next: PerfWorkspace) => {
+    const p = new URLSearchParams(params);
+    if (next === 'products') p.set('view', 'products');
+    else p.delete('view');
+    setParams(p, { replace: true });
+  };
+
   const fleetQ = useQuery({
     queryKey: [
       'alert-performance-fleet',
@@ -174,7 +185,9 @@ export function PerformancePage({
         kpis: rebuildFleetKpis(payload.machines || [], payload.kpis),
       };
     },
-    enabled: (selected === null && machineRows.length > 0) || selectedIds.length > 0,
+    enabled:
+      workspace === 'location' &&
+      ((selected === null && machineRows.length > 0) || selectedIds.length > 0),
     staleTime: 90_000,
     refetchInterval: 3 * 60_000,
   });
@@ -192,7 +205,7 @@ export function PerformancePage({
       apiGet<PerfPayload>(
         `/api/alert/performance/machine-detail?machineId=${encodeURIComponent(singleId)}&days=14`,
       ),
-    enabled: Boolean(singleId),
+    enabled: workspace === 'location' && Boolean(singleId),
     staleTime: 60_000,
   });
 
@@ -283,6 +296,25 @@ export function PerformancePage({
           <Link className="perfBackLink" to={manus ? '/v2/red-flags' : '/red-flags'}>
             ← Red Flags
           </Link>
+          <div className="perfModePills" role="group" aria-label="Performance workspace">
+            <button
+              type="button"
+              className={`perfSegPill ${workspace === 'location' ? 'active' : ''}`}
+              aria-pressed={workspace === 'location'}
+              onClick={() => setWorkspace('location')}
+            >
+              Location
+            </button>
+            <button
+              type="button"
+              className={`perfSegPill ${workspace === 'products' ? 'active' : ''}`}
+              aria-pressed={workspace === 'products'}
+              onClick={() => setWorkspace('products')}
+            >
+              Products
+            </button>
+          </div>
+          {workspace === 'location' ? (
           <button
             type="button"
             className="perfSegPill perfSegPillEmphasis"
@@ -304,6 +336,7 @@ export function PerformancePage({
           >
             Product mix…
           </button>
+          ) : null}
         </div>
 
         {machinesQ.isError && !machineRows.length ? (
@@ -318,6 +351,14 @@ export function PerformancePage({
               <p className="perfMuted">Select one or more locations to plot.</p>
             ) : null}
 
+            {workspace === 'products' ? (
+              <PerfProductsSection
+                machines={filterMachines.length ? filterMachines : machineRows}
+                selectedIds={selectedIds}
+                allSelected={selected === null}
+              />
+            ) : (
+              <>
             {fleetQ.isError ? <p className="perfError">{(fleetQ.error as Error).message}</p> : null}
             {fleetQ.data?.error ? <p className="perfError">{fleetQ.data.error}</p> : null}
 
@@ -471,6 +512,8 @@ export function PerformancePage({
             {!multi && detailQ.isError ? (
               <p className="perfError">{(detailQ.error as Error).message}</p>
             ) : null}
+              </>
+            )}
           </div>
         </div>
 
@@ -490,7 +533,7 @@ export function PerformancePage({
       <div className="perfPage v2ManusBoard">
         <V2Panel
           title="Performance workbook"
-          subtitle="Same Classic filters, KPIs, ranking, and trajectory charts"
+          subtitle="Same Classic filters — Location graphs or Product compare"
         >
           {boardInner}
         </V2Panel>
@@ -502,7 +545,7 @@ export function PerformancePage({
     <div className="perfPage">
       <StitchOpsPanel
         title="Performance"
-        subtitle="Performance Trajectory · Target vs actual · Ranking"
+        subtitle="Location vs target · Product compare"
         iconName="performance"
       >
         {boardInner}

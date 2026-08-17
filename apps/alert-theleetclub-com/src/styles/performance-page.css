@@ -1380,3 +1380,72 @@ button.perfKpiClick:hover {
 .promoSwipeWhen {
   color: var(--muted);
 }
+
+.perfProducts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.perfProductsHead .perfSectionTitle {
+  margin-bottom: 4px;
+}
+
+.perfProductsPick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.perfProductsSkuLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  max-width: 28rem;
+}
+
+.perfProductsSkuInput {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.perfProductsTableWrap {
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.perfProductsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.perfProductsTable th,
+.perfProductsTable td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.perfProductsTable th {
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.perfProductsTable td:nth-child(n + 2) {
+  font-family: var(--font-mono);
+}
