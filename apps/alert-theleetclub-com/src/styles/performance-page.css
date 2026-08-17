@@ -1399,6 +1399,17 @@ button.perfKpiClick:hover {
   min-width: 0;
 }
 
+.perfProductsNow {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.08);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .perfProductsSkuLabel {
   display: flex;
   flex-direction: column;

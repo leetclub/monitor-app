@@ -117,11 +117,13 @@ function SkuMultiDropdown({
   selected,
   onToggle,
   onClear,
+  onSelectTop,
 }: {
   options: { name: string; kd: number }[];
   selected: string[];
   onToggle: (name: string) => void;
   onClear: () => void;
+  onSelectTop: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -132,8 +134,8 @@ function SkuMultiDropdown({
   const summary = selected.length
     ? selected.length === 1
       ? selected[0]
-      : `${selected.length} drinks`
-    : `All drinks (${options.length})`;
+      : `${selected.length} of ${PERF_PRODUCTS_MAX_SKUS} drinks`
+    : `No drink filter · graph top ${GRAPH_MAX}`;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -192,7 +194,17 @@ function SkuMultiDropdown({
                       setAtCapHint(false);
                     }}
                   >
-                    All drinks
+                    No filter
+                  </button>
+                  <button
+                    type="button"
+                    className={`perfSegPill ${selected.length === PERF_PRODUCTS_MAX_SKUS ? 'active' : ''}`}
+                    onClick={() => {
+                      onSelectTop();
+                      setAtCapHint(false);
+                    }}
+                  >
+                    Select {PERF_PRODUCTS_MAX_SKUS}
                   </button>
                 </div>
               </div>
@@ -251,7 +263,7 @@ function SkuMultiDropdown({
       <p className="perfMachineFilterHint">
         {atCapHint
           ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `Check up to ${PERF_PRODUCTS_MAX_SKUS} drinks. Empty = all drinks in the mix (graph still top ${GRAPH_MAX}).`}
+          : `No filter = every drink in the mix (none of the boxes are a selection). Graph still plots only the top ${GRAPH_MAX} by KD. Select ${PERF_PRODUCTS_MAX_SKUS} checks the highest-KD drinks.`}
       </p>
     </section>
   );
@@ -270,9 +282,12 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
 
-  const locTooMany = allSelected || selectedIds.length > PERF_PRODUCTS_MAX_LOCATIONS;
   const locNone = !allSelected && selectedIds.length === 0;
-  const ids = locTooMany || locNone ? [] : selectedIds;
+  const ids = useMemo(() => {
+    if (locNone) return [];
+    if (allSelected) return machines.slice(0, PERF_PRODUCTS_MAX_LOCATIONS).map((m) => m.id);
+    return selectedIds.slice(0, PERF_PRODUCTS_MAX_LOCATIONS);
+  }, [allSelected, locNone, machines, selectedIds]);
 
   const idsKey = ids.slice().sort().join(',');
 
@@ -499,13 +514,34 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     );
   }, [lens, ids.length, preset]);
 
-  const locBanner = allSelected
-    ? `All locations is too many for Products (max ${PERF_PRODUCTS_MAX_LOCATIONS}). Click a location to start with that site, then add more.`
-    : selectedIds.length > PERF_PRODUCTS_MAX_LOCATIONS
-      ? `${selectedIds.length} locations selected — Products allows ${PERF_PRODUCTS_MAX_LOCATIONS}. Uncheck extras or Clear and pick again.`
-      : locNone
-        ? 'Pick at least one location.'
-        : '';
+  const locNames = useMemo(() => {
+    const byId = new Map(machines.map((m) => [m.id, m.name]));
+    return ids.map((id) => byId.get(id) || id);
+  }, [ids, machines]);
+
+  const showingBlurb = useMemo(() => {
+    if (!ids.length) return '';
+    const locLabel =
+      locNames.length <= 3 ? locNames.join(' + ') : `${locNames.slice(0, 3).join(' + ')} + ${locNames.length - 3} more`;
+    const locBit =
+      locNames.length === 1 ? locLabel : `${locLabel} (KD summed per drink, not split by site)`;
+    if (compareQ.isLoading) return `Loading mix for ${locLabel}…`;
+    const graphN = Math.min(GRAPH_MAX, skus.length || mixedRows.length);
+    const mixN = mixedRows.length;
+    if (lens === 'in_location') {
+      if (!skus.length) {
+        return `Now showing: combined mix for ${locBit}. Graph: top ${graphN} of ${mixN} drinks by period KD vs prior. Table: every drink. Check drinks (max ${PERF_PRODUCTS_MAX_SKUS}) to limit the mix, or switch to Same drink(s) across locations to compare sites.`;
+      }
+      return `Now showing: ${skus.join(', ')} at ${locBit}. Graph and table are those drinks only (combined KD if several sites).`;
+    }
+    if (!skus.length) {
+      return `Now showing: pick at least one drink to compare ${locBit} side by side.`;
+    }
+    if (skus.length === 1) {
+      return `Now showing: ${skus[0]} at each of ${locNames.length} location(s) — period KD vs prior.`;
+    }
+    return `Now showing: ${skus.join(', ')} at each of ${locNames.length} location(s) — grouped bars, period KD.`;
+  }, [ids.length, locNames, skus, mixedRows.length, lens, compareQ.isLoading]);
 
   const acrossSkus = skus;
 
@@ -517,9 +553,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             Product performance
           </h3>
           <p className="perfSectionHint">
-            Locations: up to {PERF_PRODUCTS_MAX_LOCATIONS}. Products: up to {PERF_PRODUCTS_MAX_SKUS}.
-            Click a location to plot it. Click a drink bar to add/remove that drink.
+            Select all locations picks {PERF_PRODUCTS_MAX_LOCATIONS}. Max {PERF_PRODUCTS_MAX_SKUS}{' '}
+            drinks. No drink filter = full mix, not eight checked boxes.
           </p>
+          {showingBlurb ? <p className="perfProductsNow">{showingBlurb}</p> : null}
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
         </div>
       </header>
@@ -559,9 +596,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
         selected={skus}
         onToggle={toggleSku}
         onClear={() => setSkus([])}
+        onSelectTop={() => setSkus(skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name))}
       />
 
-      {locBanner ? <p className="perfMuted">{locBanner}</p> : null}
+      {locNone ? <p className="perfMuted">Pick at least one location.</p> : null}
 
       {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
       {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
@@ -601,7 +639,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
               </tr>
             </thead>
             <tbody>
-              {locBanner ? (
+              {locNone ? (
                 <tr>
                   <td colSpan={7}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
                 </tr>
@@ -645,7 +683,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
               </tr>
             </thead>
             <tbody>
-              {locBanner ? (
+              {locNone ? (
                 <tr>
                   <td colSpan={acrossSkus.length > 1 ? 8 : 7}>
                     Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).

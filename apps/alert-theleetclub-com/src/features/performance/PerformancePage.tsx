@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
@@ -234,6 +234,18 @@ export function PerformancePage({
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [machineRows, fleetMachines]);
 
+  useEffect(() => {
+    if (workspace !== 'products') return;
+    if (!filterMachines.length) return;
+    const max = PERF_PRODUCTS_MAX_LOCATIONS;
+    if (selected !== null && selected.size <= max) return;
+    const next =
+      selected === null
+        ? new Set(filterMachines.slice(0, max).map((m) => m.id))
+        : new Set([...selected].slice(0, max));
+    syncUrl(next);
+  }, [workspace, filterMachines, selected]);
+
   const aggregateDays = fleetQ.data?.aggregateDays || [];
   const kpis = useMemo(() => {
     const base = fleetQ.data?.kpis;
@@ -352,7 +364,7 @@ export function PerformancePage({
             narrowFromAll={workspace === 'products'}
             hint={
               workspace === 'products'
-                ? `Products compares up to ${PERF_PRODUCTS_MAX_LOCATIONS} locations. Click a location to start with that site, then check more. Use Only for one site.`
+                ? `Select all picks ${PERF_PRODUCTS_MAX_LOCATIONS} locations (the cap). Check more only after unchecking one.`
                 : undefined
             }
           />

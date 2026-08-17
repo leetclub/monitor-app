@@ -105,7 +105,9 @@ export function PerfMachineFilter({
         : `All locations (${machines.length})`
       : count === 1
         ? displayName(selectedRows[0] || { id: '', name: '1 location' })
-        : `${count} locations`;
+        : maxSelected != null
+          ? `${count} of ${maxSelected} locations`
+          : `${count} locations`;
 
   return (
     <section className="perfMachineFilter perfMachineFilterBar" aria-label="Filter machines for graphs">
@@ -140,19 +142,28 @@ export function PerfMachineFilter({
                   autoFocus
                 />
                 <div className="perfMachineFilterActions">
-                  {maxSelected == null ? (
-                    <button
-                      type="button"
-                      className={`perfSegPill ${allSelected ? 'active' : ''}`}
-                      onClick={() => onChange(null)}
-                    >
-                      Select all
-                    </button>
-                  ) : (
-                    <span className="perfMachineFilterCount">
-                      {count}/{maxSelected} max
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    className={`perfSegPill ${
+                      maxSelected == null
+                        ? allSelected
+                          ? 'active'
+                          : ''
+                        : selected !== null && selected.size === maxSelected
+                          ? 'active'
+                          : ''
+                    }`}
+                    onClick={() => {
+                      setAtCapHint(false);
+                      if (maxSelected == null) {
+                        onChange(null);
+                        return;
+                      }
+                      onChange(new Set(machines.slice(0, maxSelected).map((m) => m.id)));
+                    }}
+                  >
+                    {maxSelected == null ? 'Select all' : `Select all (${maxSelected})`}
+                  </button>
                   <button
                     type="button"
                     className={`perfSegPill ${empty ? 'active' : ''}`}
