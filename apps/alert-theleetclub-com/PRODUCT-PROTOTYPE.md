@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; toolbar **machine search** + **Risk sort**. **Live operator** — Task Manager name + attendance badge; **one tap** → schedule + icon-only contacts. **Last / tx** — 3-line stamp; highlight when no sales ≥4h. **Downtime** — Today mins + period + trend %; tap → projected loss (**5‑min grace**, peak bands). **Last clean** — last GC + next window / days left. **Credits sent** — tap → scrollable popup led by **est. lost revenue** (tests/refunds/unidentified) + WEB cashless breakdown. **Top / low drink** — highest/lowest SKU; tap → top 5 + lowest 5 names. Sales / Target / SX / Trend / QA; fleet bar Yest. full day / −2d. |
 | `/overall` | Overall | Workbook columns; toolbar **machine search** + **Risk sort**; **sortable headers**; **Operator Activity**; **Downtime** (Today mins · period · trend %; loss after 5‑min grace); **Last clean** next window / days left; **Last / tx** no-sales ≥4h highlight; **Attendance** from Task Manager; **Sales** daily-elapsed presets; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | **Location \| Products** switch. **Location:** sales vs target graphs (Targets Areas parity): **Performance Trajectory** (up to 12 lines) with **‹ › page**, series chips, **Customize graph**. Hero KPI **Product mix → Open insights** (and toolbar **Product mix…**) stays a one-location popup. **Products:** **1 location** = drink mix at that site. **2+ locations** = compare those sites (grouped bars, not summed mix). Select all = first **8** locations; graph and drink cap **8** (table still lists the full mix). Red Flags **Target** = today % only. |
+| `/performance` | Performance | **Location \| Products** switch. **Location:** sales vs target graphs (Targets Areas parity): **Performance Trajectory** (up to 12 lines) with **‹ › page**, series chips, **Customize graph**. Hero KPI **Product mix → Open insights** (and toolbar **Product mix…**) stays a one-location popup. **Products:** on-page **How to use** (with why): **1 location** = mix; **2–8 locations + one drink** = fleet compare; several drinks = promo check. Graph/drink cap **8**. Red Flags **Target** = today % only. |
 | `/footfall` · `/v2/footfall` | Footfall | Same Targets graph stack as [target.theleetclub.com](https://target.theleetclub.com/): heatmap + hourly footfall/conversion/revenue/gap chart + trajectory. **User-selected Alert Period** drives report + live Achievement. Default **As measured** (camera only). **Mirror & adjust** opt-in for Target-style mirror + unique-ratio. Full commercial fleet listed even when Period cups are zero. Admin → Targets override daily KPIs. |
 | `/promo` · `/v2/promo` | Promo | **Campaign cups** by location: date range → daily achieved/remaining bars (default product **Americano Max**). Same `target_promo_*` tables as Targets site. Configure under **Admin → Promo** (not Admin → Targets). Swipe instruments still on Performance + Area owners / Promo admin. |
 | `/admin` → Targets | Admin · Targets | **Searchable** machine pick (single + bulk multi). Location target once (KD or cups); **bulk-apply location target** to many machines (products unchanged). Promote **1..N Vendon products** per location, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** on hover-click. |
@@ -61,7 +61,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
-*Figure 6 — Performance Products: one site = mix; two or more = compare (not summed).*
+*Figure 6 — Performance Products: How to use (mix vs fleet compare) with why.*
 
 ![8 Promo](docs/product-prototype/figures/wire-08-promo.svg)
 
@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-17 | **Performance Products How to use:** On-page recipe with why — one site = mix; 2–8 sites + one drink = fleet compare; a few drinks = promo check. Active step highlights from the current selection. |
 | 2026-08-17 | **Performance Products graph cap = 8:** Dropdown and chart both use top **8** drinks (was “graph top 12” while the plot used 8). Table still lists the full mix. Location Trajectory 12-line pages unchanged. |
 | 2026-08-17 | **Performance Products mix vs compare:** One location shows that site’s drink mix. Two or more locations compare those sites (no summed mix). Lens pills removed; selection picks the view. |
 | 2026-08-17 | **Performance Products Select all = 8:** Opening Products / Select all checks the first 8 locations. **Now showing** states the graph: two sites + no drink filter = combined KD mix, top 12 bars, full table. Location-mode Select all still means the whole fleet. |

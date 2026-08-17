@@ -530,17 +530,17 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     const mixN = mixedRows.length;
     if (!compareMode) {
       if (!skus.length) {
-        return `Mix at ${locLabel}. Graph: top ${graphN} of ${mixN} drinks, period KD vs prior. Table: full mix.`;
+        return `Looking at: mix at ${locLabel}. Graph top ${graphN} of ${mixN} drinks · period vs prior.`;
       }
-      return `Mix at ${locLabel}, drinks: ${skus.join(', ')}.`;
+      return `Looking at: ${skus.join(', ')} at ${locLabel}.`;
     }
     const drinkBit = skus.length
       ? skus.join(', ')
       : `top ${compareSkus.length} drinks (no filter)`;
     if (compareSkus.length <= 1) {
-      return `Compare ${locLabel} on ${drinkBit} — each bar is a location, period vs prior.`;
+      return `Looking at: ${drinkBit} across ${locLabel} — each bar is a location.`;
     }
-    return `Compare ${locLabel}. Each cluster is a location; each color is a drink (${drinkBit}). Not a summed mix.`;
+    return `Looking at: ${drinkBit} across ${locLabel} — one cluster per site, one color per drink.`;
   }, [ids.length, locNames, skus, mixedRows.length, compareMode, compareSkus.length, compareQ.isLoading]);
 
   return (
@@ -550,11 +550,38 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
           <h3 id="perf-products-title" className="perfSectionTitle">
             Product performance
           </h3>
-          <p className="perfSectionHint">
-            One location = drink mix at that site. Two or more = compare those sites (not summed
-            together). Select all locations picks {PERF_PRODUCTS_MAX_LOCATIONS}. Max{' '}
-            {PERF_PRODUCTS_MAX_SKUS} drinks.
-          </p>
+          <aside className="perfProductsGuide" aria-label="How to use product performance">
+            <p className="perfProductsGuideLead">
+              Most machines sell the same drinks. Use Locations and Products like this:
+            </p>
+            <ol className="perfProductsGuideList">
+              <li className={!locNone && !compareMode ? 'active' : undefined}>
+                <strong>One location</strong> — drink mix at that site (top {PERF_PRODUCTS_MAX_SKUS} on
+                the graph; table = full list).
+                <span className="perfProductsGuideWhy">
+                  Why: fair ranking — same place, hours, and traffic.
+                </span>
+              </li>
+              <li className={compareMode && skus.length === 1 ? 'active' : undefined}>
+                <strong>2–{PERF_PRODUCTS_MAX_LOCATIONS} locations + one drink</strong> — where that
+                drink is strong or weak.
+                <span className="perfProductsGuideWhy">
+                  Why: best fleet insight — same product, different sites.
+                </span>
+              </li>
+              <li className={compareMode && skus.length !== 1 ? 'active' : undefined}>
+                <strong>Several locations + a few drinks</strong> — promo / SKU push check (or no
+                filter = top {PERF_PRODUCTS_MAX_SKUS}).
+                <span className="perfProductsGuideWhy">
+                  Why: see which sites moved with the push (max {PERF_PRODUCTS_MAX_SKUS} drinks).
+                </span>
+              </li>
+            </ol>
+            <p className="perfProductsGuideLead">
+              Pick a time window below (Today / WTD / month). Prefer trend % across busy vs quiet
+              sites — raw KD alone favors high-traffic machines.
+            </p>
+          </aside>
           {showingBlurb ? <p className="perfProductsNow">{showingBlurb}</p> : null}
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
         </div>
