@@ -50,8 +50,6 @@ const PRODUCT_PRESETS: { id: PerfPreset; label: string }[] = [
   { id: 'last_month', label: 'Last month vs month before' },
 ];
 
-const GRAPH_MAX = 12;
-
 function trendClass(pct: number | null | undefined): string {
   if (pct == null || !Number.isFinite(Number(pct))) return '';
   return Number(pct) >= 0 ? 'alertSalesUp' : 'alertSalesDown';
@@ -133,7 +131,7 @@ function SkuMultiDropdown({
     ? selected.length === 1
       ? selected[0]
       : `${selected.length} of ${PERF_PRODUCTS_MAX_SKUS} drinks`
-    : `No drink filter · graph top ${GRAPH_MAX}`;
+    : `No drink filter · graph top ${PERF_PRODUCTS_MAX_SKUS}`;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -261,7 +259,7 @@ function SkuMultiDropdown({
       <p className="perfMachineFilterHint">
         {atCapHint
           ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `No filter = full mix at one site, or top ${PERF_PRODUCTS_MAX_SKUS} drinks when comparing sites. Graph still plots a limited set by KD. Select ${PERF_PRODUCTS_MAX_SKUS} checks the highest-KD drinks.`}
+          : `No filter = table lists every drink; graph plots the top ${PERF_PRODUCTS_MAX_SKUS} by KD. Select ${PERF_PRODUCTS_MAX_SKUS} checks those drinks.`}
       </p>
     </section>
   );
@@ -379,7 +377,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
 
   const chartModel = useMemo(() => {
     if (!compareMode) {
-      const top = inLocationRows.slice(0, GRAPH_MAX);
+      const top = inLocationRows.slice(0, PERF_PRODUCTS_MAX_SKUS);
       return {
         kind: 'period-prior' as const,
         categories: top.map((p) => p.name),
@@ -402,7 +400,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     const rows = [...acrossByLocation].sort(
       (a, b) => b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName),
     );
-    const top = rows.slice(0, GRAPH_MAX);
+    const top = rows.slice(0, PERF_PRODUCTS_MAX_LOCATIONS);
     if (want.length <= 1) {
       const skuName = want[0] || '';
       return {
@@ -528,7 +526,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     const locLabel =
       locNames.length <= 3 ? locNames.join(' + ') : `${locNames.slice(0, 3).join(' + ')} + ${locNames.length - 3} more`;
     if (compareQ.isLoading) return `Loading ${locLabel}…`;
-    const graphN = Math.min(GRAPH_MAX, skus.length || mixedRows.length);
+    const graphN = Math.min(PERF_PRODUCTS_MAX_SKUS, skus.length || mixedRows.length);
     const mixN = mixedRows.length;
     if (!compareMode) {
       if (!skus.length) {
