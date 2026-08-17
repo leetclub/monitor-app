@@ -41,8 +41,6 @@ type ProductComparePayload = {
   machines?: ProductMachine[];
 };
 
-type ProductLens = 'in_location' | 'across_locations';
-
 const PRODUCT_PRESETS: { id: PerfPreset; label: string }[] = [
   { id: 'today', label: 'Today vs yesterday' },
   { id: 'yesterday', label: 'Yesterday vs day before' },
@@ -263,7 +261,7 @@ function SkuMultiDropdown({
       <p className="perfMachineFilterHint">
         {atCapHint
           ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `No filter = every drink in the mix (none of the boxes are a selection). Graph still plots only the top ${GRAPH_MAX} by KD. Select ${PERF_PRODUCTS_MAX_SKUS} checks the highest-KD drinks.`}
+          : `No filter = full mix at one site, or top ${PERF_PRODUCTS_MAX_SKUS} drinks when comparing sites. Graph still plots a limited set by KD. Select ${PERF_PRODUCTS_MAX_SKUS} checks the highest-KD drinks.`}
       </p>
     </section>
   );
@@ -277,7 +275,6 @@ type Props = {
 
 export function PerfProductsSection({ machines, selectedIds, allSelected }: Props) {
   const [preset, setPreset] = useState<PerfPreset>('today');
-  const [lens, setLens] = useState<ProductLens>('in_location');
   const [skus, setSkus] = useState<string[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
@@ -343,6 +340,13 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     });
   }, []);
 
+  const compareMode = ids.length > 1;
+  const compareSkus = useMemo(() => {
+    if (skus.length) return skus;
+    if (!compareMode) return [];
+    return skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name);
+  }, [skus, compareMode, skuCatalog]);
+
   const skuSet = useMemo(() => new Set(skus), [skus]);
 
   const inLocationRows = useMemo(() => {
@@ -351,12 +355,12 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
   }, [mixedRows, skus, skuSet]);
 
   const acrossByLocation = useMemo(() => {
-    if (!skus.length) return [];
+    if (!compareSkus.length) return [];
     return payloadMachines.map((m) => {
       const byName = new Map(
         (m.products || []).map((p) => [String(p.name || '').trim(), p] as const),
       );
-      const cells = skus.map((name) => {
+      const cells = compareSkus.map((name) => {
         const hit = byName.get(name);
         return {
           name,
@@ -371,10 +375,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       const revenueKwd = cells.reduce((s, c) => s + c.revenueKwd, 0);
       return { machineId: m.machineId, machineName: m.machineName, cells, revenueKwd };
     });
-  }, [payloadMachines, skus]);
+  }, [payloadMachines, compareSkus]);
 
   const chartModel = useMemo(() => {
-    if (lens === 'in_location') {
+    if (!compareMode) {
       const top = inLocationRows.slice(0, GRAPH_MAX);
       return {
         kind: 'period-prior' as const,
@@ -386,7 +390,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
         clickTogglesSku: true,
       };
     }
-    const want = skus;
+    const want = compareSkus;
     if (!want.length) {
       return {
         kind: 'period-prior' as const,
@@ -426,7 +430,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       })),
       clickTogglesSku: true,
     };
-  }, [lens, inLocationRows, acrossByLocation, skus, periodLabel, priorLabel]);
+  }, [compareMode, inLocationRows, acrossByLocation, compareSkus, periodLabel, priorLabel]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -508,11 +512,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       chartInst.current,
       chartFilename([
         'product-performance',
-        lens === 'in_location' ? `${ids.length}-loc` : 'across',
+        compareMode ? 'across' : 'mix',
         preset,
       ]),
     );
-  }, [lens, ids.length, preset]);
+  }, [compareMode, ids.length, preset]);
 
   const locNames = useMemo(() => {
     const byId = new Map(machines.map((m) => [m.id, m.name]));
@@ -523,27 +527,23 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     if (!ids.length) return '';
     const locLabel =
       locNames.length <= 3 ? locNames.join(' + ') : `${locNames.slice(0, 3).join(' + ')} + ${locNames.length - 3} more`;
-    const locBit =
-      locNames.length === 1 ? locLabel : `${locLabel} (KD summed per drink, not split by site)`;
-    if (compareQ.isLoading) return `Loading mix for ${locLabel}…`;
+    if (compareQ.isLoading) return `Loading ${locLabel}…`;
     const graphN = Math.min(GRAPH_MAX, skus.length || mixedRows.length);
     const mixN = mixedRows.length;
-    if (lens === 'in_location') {
+    if (!compareMode) {
       if (!skus.length) {
-        return `Now showing: combined mix for ${locBit}. Graph: top ${graphN} of ${mixN} drinks by period KD vs prior. Table: every drink. Check drinks (max ${PERF_PRODUCTS_MAX_SKUS}) to limit the mix, or switch to Same drink(s) across locations to compare sites.`;
+        return `Mix at ${locLabel}. Graph: top ${graphN} of ${mixN} drinks, period KD vs prior. Table: full mix.`;
       }
-      return `Now showing: ${skus.join(', ')} at ${locBit}. Graph and table are those drinks only (combined KD if several sites).`;
+      return `Mix at ${locLabel}, drinks: ${skus.join(', ')}.`;
     }
-    if (!skus.length) {
-      return `Now showing: pick at least one drink to compare ${locBit} side by side.`;
+    const drinkBit = skus.length
+      ? skus.join(', ')
+      : `top ${compareSkus.length} drinks (no filter)`;
+    if (compareSkus.length <= 1) {
+      return `Compare ${locLabel} on ${drinkBit} — each bar is a location, period vs prior.`;
     }
-    if (skus.length === 1) {
-      return `Now showing: ${skus[0]} at each of ${locNames.length} location(s) — period KD vs prior.`;
-    }
-    return `Now showing: ${skus.join(', ')} at each of ${locNames.length} location(s) — grouped bars, period KD.`;
-  }, [ids.length, locNames, skus, mixedRows.length, lens, compareQ.isLoading]);
-
-  const acrossSkus = skus;
+    return `Compare ${locLabel}. Each cluster is a location; each color is a drink (${drinkBit}). Not a summed mix.`;
+  }, [ids.length, locNames, skus, mixedRows.length, compareMode, compareSkus.length, compareQ.isLoading]);
 
   return (
     <section className="perfProducts" aria-labelledby="perf-products-title">
@@ -553,8 +553,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             Product performance
           </h3>
           <p className="perfSectionHint">
-            Select all locations picks {PERF_PRODUCTS_MAX_LOCATIONS}. Max {PERF_PRODUCTS_MAX_SKUS}{' '}
-            drinks. No drink filter = full mix, not eight checked boxes.
+            One location = drink mix at that site. Two or more = compare those sites (not summed
+            together). Select all locations picks {PERF_PRODUCTS_MAX_LOCATIONS}. Max{' '}
+            {PERF_PRODUCTS_MAX_SKUS} drinks.
           </p>
           {showingBlurb ? <p className="perfProductsNow">{showingBlurb}</p> : null}
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
@@ -572,23 +573,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             {p.label}
           </button>
         ))}
-      </div>
-
-      <div className="perfModePills" role="group" aria-label="Product lens">
-        <button
-          type="button"
-          className={`perfSegPill ${lens === 'in_location' ? 'active' : ''}`}
-          onClick={() => setLens('in_location')}
-        >
-          Drinks in location(s)
-        </button>
-        <button
-          type="button"
-          className={`perfSegPill ${lens === 'across_locations' ? 'active' : ''}`}
-          onClick={() => setLens('across_locations')}
-        >
-          Same drink(s) across locations
-        </button>
       </div>
 
       <SkuMultiDropdown
@@ -614,17 +598,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
         />
       </ChartExportWrap>
       <p className="perfSectionHint">
-        Graph shows top {GRAPH_MAX} by period KD.
-        {lens === 'in_location'
-          ? ids.length > 1
-            ? ` Combined mix for ${ids.length} locations.`
-            : ' Click a drink bar to include it in the product filter.'
-          : skus.length > 1
-            ? ' Grouped bars = one color per drink (period KD).'
-            : ''}
+        {compareMode
+          ? compareSkus.length > 1
+            ? 'Grouped bars: one cluster per location, one color per drink (period KD).'
+            : 'Each bar group is a location (period KD vs prior).'
+          : 'Click a drink bar to include it in the product filter.'}
       </p>
 
-      {lens === 'in_location' ? (
+      {!compareMode ? (
         <div className="perfProductsTableWrap">
           <table className="perfProductsTable">
             <thead>
@@ -673,7 +654,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             <thead>
               <tr>
                 <th>Location</th>
-                {acrossSkus.length > 1 ? <th>Drink</th> : null}
+                {compareSkus.length > 1 ? <th>Drink</th> : null}
                 <th>{periodLabel} KD</th>
                 <th>{priorLabel} KD</th>
                 <th>vs prior</th>
@@ -685,11 +666,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             <tbody>
               {locNone ? (
                 <tr>
-                  <td colSpan={acrossSkus.length > 1 ? 8 : 7}>
+                  <td colSpan={compareSkus.length > 1 ? 8 : 7}>
                     Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).
                   </td>
                 </tr>
-              ) : !acrossSkus.length ? (
+              ) : !compareSkus.length ? (
                 <tr>
                   <td colSpan={7}>Pick a drink in Products (max {PERF_PRODUCTS_MAX_SKUS}).</td>
                 </tr>
@@ -700,7 +681,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
                     r.cells.map((c) => (
                       <tr key={`${r.machineId}:${c.name}`}>
                         <td>{r.machineName}</td>
-                        {acrossSkus.length > 1 ? <td>{c.name}</td> : null}
+                        {compareSkus.length > 1 ? <td>{c.name}</td> : null}
                         <td>{formatKwd(c.revenueKwd)}</td>
                         <td>{formatKwd(c.prevRevenueKwd)}</td>
                         <td className={trendClass(c.trendPct)}>{trendText(c.trendPct)}</td>
