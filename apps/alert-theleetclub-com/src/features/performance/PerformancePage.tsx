@@ -18,7 +18,7 @@ import {
   ProductTrajectoryChart,
   RevenueTrajectoryChart,
 } from '@/features/performance/PerformanceCharts';
-import { PerfProductsSection } from '@/features/performance/PerfProductsSection';
+import { PerfProductsSection, PERF_PRODUCTS_MAX_LOCATIONS } from '@/features/performance/PerfProductsSection';
 import type {
   FleetPayload,
   MachineRow,
@@ -344,7 +344,18 @@ export function PerformancePage({
         ) : null}
 
         <div className="perfLayout">
-          <PerfMachineFilter machines={filterMachines} selected={selected} onChange={syncUrl} />
+          <PerfMachineFilter
+            machines={filterMachines}
+            selected={selected}
+            onChange={syncUrl}
+            maxSelected={workspace === 'products' ? PERF_PRODUCTS_MAX_LOCATIONS : undefined}
+            narrowFromAll={workspace === 'products'}
+            hint={
+              workspace === 'products'
+                ? `Products compares up to ${PERF_PRODUCTS_MAX_LOCATIONS} locations. Click a location to start with that site, then check more. Use Only for one site.`
+                : undefined
+            }
+          />
 
           <div className="perfMain">
             {selected !== null && selected.size === 0 ? (

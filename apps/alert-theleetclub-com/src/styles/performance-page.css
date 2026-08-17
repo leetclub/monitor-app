@@ -1477,6 +1477,7 @@ button.perfKpiClick:hover {
   font-family: var(--font-mono);
   font-size: 11px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .perfProductsRowActive td {

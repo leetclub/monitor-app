@@ -7,6 +7,9 @@ import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { SERIES_PALETTE, type MachineRow, type PerfPreset } from '@/features/performance/perfTypes';
 
+export const PERF_PRODUCTS_MAX_LOCATIONS = 8;
+export const PERF_PRODUCTS_MAX_SKUS = 8;
+
 type ProductRow = {
   name: string;
   revenueKwd: number;
@@ -74,26 +77,63 @@ function readTheme() {
   return { text: '#e2e8f0', muted: '#94a3b8', grid: 'rgba(148, 163, 184, 0.12)', axis: '#64748b' };
 }
 
-function SkuDropdown({
+function trendFrom(period: number, prior: number): number | null {
+  if (!(prior > 0)) return null;
+  return ((period - prior) / prior) * 100;
+}
+
+function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
+  const totals = new Map<
+    string,
+    { revenue: number; prev: number; yoy: number; cups: number }
+  >();
+  for (const m of machines) {
+    for (const p of m.products || []) {
+      const name = String(p.name || '').trim();
+      if (!name) continue;
+      const cur = totals.get(name) || { revenue: 0, prev: 0, yoy: 0, cups: 0 };
+      cur.revenue += Number(p.revenueKwd || 0);
+      cur.prev += Number(p.prevRevenueKwd || 0);
+      cur.yoy += Number(p.yoyRevenueKwd || 0);
+      cur.cups += Number(p.cups || 0);
+      totals.set(name, cur);
+    }
+  }
+  return [...totals.entries()]
+    .map(([name, v]) => ({
+      name,
+      revenueKwd: v.revenue,
+      prevRevenueKwd: v.prev,
+      yoyRevenueKwd: v.yoy,
+      cups: v.cups,
+      trendPct: trendFrom(v.revenue, v.prev),
+      yoyTrendPct: trendFrom(v.revenue, v.yoy),
+    }))
+    .sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0) || a.name.localeCompare(b.name));
+}
+
+function SkuMultiDropdown({
   options,
-  value,
-  allowAll,
-  onChange,
+  selected,
+  onToggle,
+  onClear,
 }: {
   options: { name: string; kd: number }[];
-  value: string;
-  allowAll: boolean;
-  onChange: (name: string) => void;
+  selected: string[];
+  onToggle: (name: string) => void;
+  onClear: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [atCapHint, setAtCapHint] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const selected = options.find((o) => o.name === value);
-  const summary = value
-    ? selected?.name || value
-    : allowAll
-      ? `All drinks (${options.length})`
-      : 'Choose a drink';
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const atCap = selected.length >= PERF_PRODUCTS_MAX_SKUS;
+  const summary = selected.length
+    ? selected.length === 1
+      ? selected[0]
+      : `${selected.length} drinks`
+    : `All drinks (${options.length})`;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -115,7 +155,9 @@ function SkuDropdown({
       <div className="perfLocBarMain" ref={rootRef}>
         <div className="perfLocBarLabel">
           <h3 className="perfMachineFilterTitle">Products</h3>
-          <span className="perfMachineFilterCount">{summary}</span>
+          <span className="perfMachineFilterCount">
+            {selected.length}/{PERF_PRODUCTS_MAX_SKUS} max
+          </span>
         </div>
         <div className="perfLocSelect">
           <button
@@ -141,46 +183,76 @@ function SkuDropdown({
                   onChange={(e) => setQ(e.target.value)}
                   autoFocus
                 />
-              </div>
-              <div className="perfLocDropdownList">
-                {allowAll ? (
+                <div className="perfMachineFilterActions">
                   <button
                     type="button"
-                    className={`perfSkuRow perfSkuAll ${!value ? 'active' : ''}`}
+                    className={`perfSegPill ${selected.length === 0 ? 'active' : ''}`}
                     onClick={() => {
-                      onChange('');
-                      setOpen(false);
-                      setQ('');
+                      onClear();
+                      setAtCapHint(false);
                     }}
                   >
                     All drinks
                   </button>
-                ) : null}
+                </div>
+              </div>
+              <div className="perfLocDropdownList">
                 {filtered.length === 0 ? (
                   <p className="perfMuted">No matches.</p>
                 ) : (
-                  filtered.map((o) => (
-                    <button
-                      key={o.name}
-                      type="button"
-                      className={`perfSkuRow ${value === o.name ? 'active' : ''}`}
-                      onClick={() => {
-                        onChange(o.name);
-                        setOpen(false);
-                        setQ('');
-                      }}
-                      title={`${o.name} · ${formatKwd(o.kd)}`}
-                    >
-                      <span className="perfLocRowName">{o.name}</span>
-                      <span className="perfSkuKd">{formatKwd(o.kd)}</span>
-                    </button>
-                  ))
+                  filtered.map((o) => {
+                    const checked = selectedSet.has(o.name);
+                    return (
+                      <label key={o.name} className={`perfLocRow ${checked ? 'perfLocRowSolo' : ''}`}>
+                        <span className="perfLocRowMain">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={!checked && atCap}
+                            onChange={() => {
+                              if (!checked && atCap) {
+                                setAtCapHint(true);
+                                return;
+                              }
+                              setAtCapHint(false);
+                              onToggle(o.name);
+                            }}
+                          />
+                          <span className="perfLocRowName" title={o.name}>
+                            {o.name}
+                          </span>
+                        </span>
+                        <span className="perfSkuKd">{formatKwd(o.kd)}</span>
+                      </label>
+                    );
+                  })
                 )}
               </div>
             </div>
           ) : null}
         </div>
+        {selected.length > 0 ? (
+          <div className="perfLocChips">
+            {selected.slice(0, 8).map((name) => (
+              <button
+                key={name}
+                type="button"
+                className="perfLocChip"
+                onClick={() => onToggle(name)}
+                title={`Remove ${name}`}
+              >
+                {name}
+                <span aria-hidden>×</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
+      <p className="perfMachineFilterHint">
+        {atCapHint
+          ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
+          : `Check up to ${PERF_PRODUCTS_MAX_SKUS} drinks. Empty = all drinks in the mix (graph still top ${GRAPH_MAX}).`}
+      </p>
     </section>
   );
 }
@@ -194,17 +266,15 @@ type Props = {
 export function PerfProductsSection({ machines, selectedIds, allSelected }: Props) {
   const [preset, setPreset] = useState<PerfPreset>('today');
   const [lens, setLens] = useState<ProductLens>('in_location');
-  const [sku, setSku] = useState('');
+  const [skus, setSkus] = useState<string[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
 
-  const ids = useMemo(() => {
-    const list = allSelected ? machines.map((m) => m.id) : selectedIds;
-    return list.slice(0, 80);
-  }, [allSelected, machines, selectedIds]);
+  const locTooMany = allSelected || selectedIds.length > PERF_PRODUCTS_MAX_LOCATIONS;
+  const locNone = !allSelected && selectedIds.length === 0;
+  const ids = locTooMany || locNone ? [] : selectedIds;
 
   const idsKey = ids.slice().sort().join(',');
-  const singleLocationId = !allSelected && selectedIds.length === 1 ? selectedIds[0] : '';
 
   const compareQ = useQuery({
     queryKey: ['alert-performance-product-compare', preset, idsKey],
@@ -220,11 +290,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
   const payloadMachines = useMemo(() => {
     const rows = compareQ.data?.machines || [];
     const byId = new Map(machines.map((m) => [m.id, m.name]));
-    return rows.map((m) => {
-      const name = byId.get(m.machineId);
-      return name ? { ...m, machineName: name } : m;
-    });
-  }, [compareQ.data?.machines, machines]);
+    const order = new Map(ids.map((id, i) => [id, i]));
+    return rows
+      .map((m) => {
+        const name = byId.get(m.machineId);
+        return name ? { ...m, machineName: name } : m;
+      })
+      .sort((a, b) => (order.get(a.machineId) ?? 99) - (order.get(b.machineId) ?? 99));
+  }, [compareQ.data?.machines, machines, ids]);
 
   const win = compareQ.data?.window;
   const periodLabel = win?.label || 'Period';
@@ -234,84 +307,111 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       ? `${periodLabel}: ${win.start} → ${win.end} · ${priorLabel}: ${win.prevStart} → ${win.prevEnd}`
       : '';
 
-  const focusMachine = payloadMachines.find((m) => m.machineId === singleLocationId);
+  const mixedRows = useMemo(() => aggregateProducts(payloadMachines), [payloadMachines]);
 
-  const skuCatalog = useMemo(() => {
-    const totals = new Map<string, number>();
-    const source =
-      lens === 'in_location' && focusMachine ? [focusMachine] : payloadMachines;
-    for (const m of source) {
-      for (const p of m.products || []) {
-        const name = String(p.name || '').trim();
-        if (!name) continue;
-        totals.set(name, (totals.get(name) || 0) + Number(p.revenueKwd || 0));
-      }
-    }
-    return [...totals.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([name, kd]) => ({ name, kd }));
-  }, [payloadMachines, focusMachine, lens]);
+  const skuCatalog = useMemo(
+    () => mixedRows.map((p) => ({ name: p.name, kd: Number(p.revenueKwd || 0) })),
+    [mixedRows],
+  );
 
   useEffect(() => {
-    if (!skuCatalog.length) {
-      if (sku) setSku('');
-      return;
-    }
-    if (lens === 'across_locations' && (!sku || !skuCatalog.some((s) => s.name === sku))) {
-      setSku(skuCatalog[0]?.name || '');
-    }
-    if (lens === 'in_location' && sku && !skuCatalog.some((s) => s.name === sku)) {
-      setSku('');
-    }
-  }, [skuCatalog, sku, lens]);
+    if (!skuCatalog.length) return;
+    const keep = skus.filter((s) => skuCatalog.some((c) => c.name === s));
+    if (keep.length !== skus.length) setSkus(keep);
+  }, [skuCatalog, skus]);
+
+  const toggleSku = useCallback((name: string) => {
+    setSkus((prev) => {
+      if (prev.includes(name)) return prev.filter((x) => x !== name);
+      if (prev.length >= PERF_PRODUCTS_MAX_SKUS) return prev;
+      return [...prev, name];
+    });
+  }, []);
+
+  const skuSet = useMemo(() => new Set(skus), [skus]);
 
   const inLocationRows = useMemo(() => {
-    const rows = [...(focusMachine?.products || [])];
-    rows.sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0));
-    if (sku) return rows.filter((p) => p.name === sku);
-    return rows;
-  }, [focusMachine, sku]);
+    if (!skus.length) return mixedRows;
+    return mixedRows.filter((p) => skuSet.has(p.name));
+  }, [mixedRows, skus, skuSet]);
 
-  const acrossRows = useMemo(() => {
-    const want = sku.trim().toLowerCase();
-    if (!want) return [];
-    const rows = payloadMachines.map((m) => {
-      const hit =
-        (m.products || []).find((p) => String(p.name || '').trim().toLowerCase() === want) ||
-        null;
-      return {
-        machineId: m.machineId,
-        machineName: m.machineName,
-        revenueKwd: Number(hit?.revenueKwd || 0),
-        prevRevenueKwd: Number(hit?.prevRevenueKwd || 0),
-        yoyRevenueKwd: Number(hit?.yoyRevenueKwd || 0),
-        cups: hit?.cups ?? 0,
-        trendPct: hit?.trendPct ?? null,
-        yoyTrendPct: hit?.yoyTrendPct ?? null,
-      };
+  const acrossByLocation = useMemo(() => {
+    if (!skus.length) return [];
+    return payloadMachines.map((m) => {
+      const byName = new Map(
+        (m.products || []).map((p) => [String(p.name || '').trim(), p] as const),
+      );
+      const cells = skus.map((name) => {
+        const hit = byName.get(name);
+        return {
+          name,
+          revenueKwd: Number(hit?.revenueKwd || 0),
+          prevRevenueKwd: Number(hit?.prevRevenueKwd || 0),
+          yoyRevenueKwd: Number(hit?.yoyRevenueKwd || 0),
+          cups: hit?.cups ?? 0,
+          trendPct: hit?.trendPct ?? null,
+          yoyTrendPct: hit?.yoyTrendPct ?? null,
+        };
+      });
+      const revenueKwd = cells.reduce((s, c) => s + c.revenueKwd, 0);
+      return { machineId: m.machineId, machineName: m.machineName, cells, revenueKwd };
     });
-    rows.sort((a, b) => b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName));
-    return rows;
-  }, [payloadMachines, sku]);
+  }, [payloadMachines, skus]);
 
-  const chartSeries = useMemo(() => {
+  const chartModel = useMemo(() => {
     if (lens === 'in_location') {
       const top = inLocationRows.slice(0, GRAPH_MAX);
       return {
+        kind: 'period-prior' as const,
         categories: top.map((p) => p.name),
-        period: top.map((p) => Number(p.revenueKwd || 0)),
-        prior: top.map((p) => Number(p.prevRevenueKwd || 0)),
-        clickSetsSku: true,
+        series: [
+          { name: periodLabel, data: top.map((p) => Number(p.revenueKwd || 0)) },
+          { name: priorLabel, data: top.map((p) => Number(p.prevRevenueKwd || 0)) },
+        ],
+        clickTogglesSku: true,
       };
     }
-    const top = acrossRows.slice(0, GRAPH_MAX);
+    const want = skus;
+    if (!want.length) {
+      return {
+        kind: 'period-prior' as const,
+        categories: [] as string[],
+        series: [] as { name: string; data: number[] }[],
+        clickTogglesSku: false,
+      };
+    }
+    const rows = [...acrossByLocation].sort(
+      (a, b) => b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName),
+    );
+    const top = rows.slice(0, GRAPH_MAX);
+    if (want.length <= 1) {
+      const skuName = want[0] || '';
+      return {
+        kind: 'period-prior' as const,
+        categories: top.map((r) => r.machineName),
+        series: [
+          {
+            name: periodLabel,
+            data: top.map((r) => r.cells.find((c) => c.name === skuName)?.revenueKwd || 0),
+          },
+          {
+            name: priorLabel,
+            data: top.map((r) => r.cells.find((c) => c.name === skuName)?.prevRevenueKwd || 0),
+          },
+        ],
+        clickTogglesSku: false,
+      };
+    }
     return {
+      kind: 'grouped' as const,
       categories: top.map((r) => r.machineName),
-      period: top.map((r) => r.revenueKwd),
-      prior: top.map((r) => r.prevRevenueKwd),
-      clickSetsSku: false,
+      series: want.map((name) => ({
+        name,
+        data: top.map((r) => r.cells.find((c) => c.name === name)?.revenueKwd || 0),
+      })),
+      clickTogglesSku: true,
     };
-  }, [lens, inLocationRows, acrossRows]);
+  }, [lens, inLocationRows, acrossByLocation, skus, periodLabel, priorLabel]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -330,7 +430,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     const chart = chartInst.current;
     if (!chart) return;
     const theme = readTheme();
-    const cats = chartSeries.categories;
+    const cats = chartModel.categories;
     chart.off('click');
     if (!cats.length) {
       chart.clear();
@@ -338,13 +438,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
     }
     chart.setOption(
       {
-        color: [SERIES_PALETTE[0], SERIES_PALETTE[1]],
+        color: SERIES_PALETTE,
         tooltip: {
           trigger: 'axis',
           axisPointer: { type: 'shadow' },
           valueFormatter: (v: number | string) => formatKwd(Number(v || 0)),
         },
-        legend: { data: [periodLabel, priorLabel], textStyle: { color: theme.muted } },
+        legend: {
+          data: chartModel.series.map((s) => s.name),
+          textStyle: { color: theme.muted },
+        },
         grid: { left: 56, right: 16, top: 36, bottom: 72 },
         xAxis: {
           type: 'category',
@@ -362,20 +465,27 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
           axisLabel: { color: theme.axis, formatter: (v: number) => formatKwd(v) },
           splitLine: { lineStyle: { color: theme.grid } },
         },
-        series: [
-          { name: periodLabel, type: 'bar', data: chartSeries.period, barMaxWidth: 22 },
-          { name: priorLabel, type: 'bar', data: chartSeries.prior, barMaxWidth: 22 },
-        ],
+        series: chartModel.series.map((s) => ({
+          name: s.name,
+          type: 'bar',
+          data: s.data,
+          barMaxWidth: chartModel.kind === 'grouped' ? 14 : 22,
+        })),
       },
       true,
     );
-    if (chartSeries.clickSetsSku) {
-      chart.on('click', (params: { name?: string }) => {
-        const name = String(params.name || '').trim();
-        if (name) setSku((prev) => (prev === name ? '' : name));
+    if (chartModel.clickTogglesSku) {
+      chart.on('click', (params: { name?: string; seriesName?: string }) => {
+        const fromSeries =
+          chartModel.kind === 'grouped' ? String(params.seriesName || '').trim() : '';
+        const name =
+          fromSeries && fromSeries !== periodLabel && fromSeries !== priorLabel
+            ? fromSeries
+            : String(params.name || '').trim();
+        if (name) toggleSku(name);
       });
     }
-  }, [chartSeries, periodLabel, priorLabel]);
+  }, [chartModel, periodLabel, priorLabel, toggleSku]);
 
   const exportChart = useCallback(() => {
     if (!chartInst.current) return;
@@ -383,13 +493,21 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
       chartInst.current,
       chartFilename([
         'product-performance',
-        lens === 'in_location' ? focusMachine?.machineName || 'location' : sku || 'sku',
+        lens === 'in_location' ? `${ids.length}-loc` : 'across',
         preset,
       ]),
     );
-  }, [lens, focusMachine?.machineName, sku, preset]);
+  }, [lens, ids.length, preset]);
 
-  const needOneLocation = lens === 'in_location' && !singleLocationId;
+  const locBanner = allSelected
+    ? `All locations is too many for Products (max ${PERF_PRODUCTS_MAX_LOCATIONS}). Click a location to start with that site, then add more.`
+    : selectedIds.length > PERF_PRODUCTS_MAX_LOCATIONS
+      ? `${selectedIds.length} locations selected — Products allows ${PERF_PRODUCTS_MAX_LOCATIONS}. Uncheck extras or Clear and pick again.`
+      : locNone
+        ? 'Pick at least one location.'
+        : '';
+
+  const acrossSkus = skus;
 
   return (
     <section className="perfProducts" aria-labelledby="perf-products-title">
@@ -399,9 +517,8 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             Product performance
           </h3>
           <p className="perfSectionHint">
-            Locations above pick the sites. Products dropdown picks the drink. Click a bar to filter
-            that drink. Period vs prior uses Today / WTD / month windows.
-            {ids.length >= 80 ? ' Showing the first 80 selected locations.' : ''}
+            Locations: up to {PERF_PRODUCTS_MAX_LOCATIONS}. Products: up to {PERF_PRODUCTS_MAX_SKUS}.
+            Click a location to plot it. Click a drink bar to add/remove that drink.
           </p>
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
         </div>
@@ -426,30 +543,25 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
           className={`perfSegPill ${lens === 'in_location' ? 'active' : ''}`}
           onClick={() => setLens('in_location')}
         >
-          Drinks in a location
+          Drinks in location(s)
         </button>
         <button
           type="button"
           className={`perfSegPill ${lens === 'across_locations' ? 'active' : ''}`}
           onClick={() => setLens('across_locations')}
         >
-          Same drink across locations
+          Same drink(s) across locations
         </button>
       </div>
 
-      <SkuDropdown
+      <SkuMultiDropdown
         options={skuCatalog}
-        value={sku}
-        allowAll={lens === 'in_location'}
-        onChange={setSku}
+        selected={skus}
+        onToggle={toggleSku}
+        onClear={() => setSkus([])}
       />
 
-      {needOneLocation ? (
-        <p className="perfMuted">
-          Pick <strong>one</strong> location in <strong>Locations</strong> (use <strong>Only</strong>)
-          to see drinks at that site. Or switch to <strong>Same drink across locations</strong>.
-        </p>
-      ) : null}
+      {locBanner ? <p className="perfMuted">{locBanner}</p> : null}
 
       {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
       {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
@@ -464,8 +576,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
         />
       </ChartExportWrap>
       <p className="perfSectionHint">
-        Graph shows top {GRAPH_MAX} by period KD. Full list is in the table.
-        {lens === 'in_location' ? ' Click a drink bar to filter; click again for all drinks.' : ''}
+        Graph shows top {GRAPH_MAX} by period KD.
+        {lens === 'in_location'
+          ? ids.length > 1
+            ? ` Combined mix for ${ids.length} locations.`
+            : ' Click a drink bar to include it in the product filter.'
+          : skus.length > 1
+            ? ' Grouped bars = one color per drink (period KD).'
+            : ''}
       </p>
 
       {lens === 'in_location' ? (
@@ -483,20 +601,20 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
               </tr>
             </thead>
             <tbody>
-              {needOneLocation ? (
+              {locBanner ? (
                 <tr>
-                  <td colSpan={7}>Select one location above.</td>
+                  <td colSpan={7}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
                 </tr>
               ) : inLocationRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>No product mix for this location in the window yet.</td>
+                  <td colSpan={7}>No product mix for this selection in the window yet.</td>
                 </tr>
               ) : (
                 inLocationRows.map((p) => (
                   <tr
                     key={p.name}
-                    className={sku === p.name ? 'perfProductsRowActive' : undefined}
-                    onClick={() => setSku((prev) => (prev === p.name ? '' : p.name))}
+                    className={skuSet.has(p.name) ? 'perfProductsRowActive' : undefined}
+                    onClick={() => toggleSku(p.name)}
                   >
                     <td>{p.name}</td>
                     <td>{formatKwd(Number(p.revenueKwd || 0))}</td>
@@ -517,6 +635,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
             <thead>
               <tr>
                 <th>Location</th>
+                {acrossSkus.length > 1 ? <th>Drink</th> : null}
                 <th>{periodLabel} KD</th>
                 <th>{priorLabel} KD</th>
                 <th>vs prior</th>
@@ -526,26 +645,33 @@ export function PerfProductsSection({ machines, selectedIds, allSelected }: Prop
               </tr>
             </thead>
             <tbody>
-              {!sku ? (
+              {locBanner ? (
                 <tr>
-                  <td colSpan={7}>Pick a drink in Products.</td>
+                  <td colSpan={acrossSkus.length > 1 ? 8 : 7}>
+                    Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).
+                  </td>
                 </tr>
-              ) : acrossRows.every((r) => r.revenueKwd <= 0 && r.prevRevenueKwd <= 0) ? (
+              ) : !acrossSkus.length ? (
                 <tr>
-                  <td colSpan={7}>No sales for {sku} in this window.</td>
+                  <td colSpan={7}>Pick a drink in Products (max {PERF_PRODUCTS_MAX_SKUS}).</td>
                 </tr>
               ) : (
-                acrossRows.map((r) => (
-                  <tr key={r.machineId}>
-                    <td>{r.machineName}</td>
-                    <td>{formatKwd(r.revenueKwd)}</td>
-                    <td>{formatKwd(r.prevRevenueKwd)}</td>
-                    <td className={trendClass(r.trendPct)}>{trendText(r.trendPct)}</td>
-                    <td>{formatKwd(r.yoyRevenueKwd)}</td>
-                    <td className={trendClass(r.yoyTrendPct)}>{trendText(r.yoyTrendPct)}</td>
-                    <td>{r.cups != null ? Math.round(Number(r.cups)) : '—'}</td>
-                  </tr>
-                ))
+                [...acrossByLocation]
+                  .sort((a, b) => b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName))
+                  .flatMap((r) =>
+                    r.cells.map((c) => (
+                      <tr key={`${r.machineId}:${c.name}`}>
+                        <td>{r.machineName}</td>
+                        {acrossSkus.length > 1 ? <td>{c.name}</td> : null}
+                        <td>{formatKwd(c.revenueKwd)}</td>
+                        <td>{formatKwd(c.prevRevenueKwd)}</td>
+                        <td className={trendClass(c.trendPct)}>{trendText(c.trendPct)}</td>
+                        <td>{formatKwd(c.yoyRevenueKwd)}</td>
+                        <td className={trendClass(c.yoyTrendPct)}>{trendText(c.yoyTrendPct)}</td>
+                        <td>{c.cups != null ? Math.round(Number(c.cups)) : '—'}</td>
+                      </tr>
+                    )),
+                  )
               )}
             </tbody>
           </table>

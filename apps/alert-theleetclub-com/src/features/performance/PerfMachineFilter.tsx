@@ -6,6 +6,11 @@ type Props = {
   /** null = all locations in the list */
   selected: Set<string> | null;
   onChange: (selected: Set<string> | null) => void;
+  /** When set, the user cannot check more than this many locations. */
+  maxSelected?: number;
+  /** When all locations are selected, clicking one starts a selection with only that site. */
+  narrowFromAll?: boolean;
+  hint?: string;
 };
 
 function isChecked(id: string, selected: Set<string> | null): boolean {
@@ -18,13 +23,22 @@ function displayName(m: MachineRow): string {
 }
 
 /** Compact searchable Locations bar (full width — not a tall empty sidebar). */
-export function PerfMachineFilter({ machines, selected, onChange }: Props) {
+export function PerfMachineFilter({
+  machines,
+  selected,
+  onChange,
+  maxSelected,
+  narrowFromAll = false,
+  hint,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [atCapHint, setAtCapHint] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const allSelected = selected === null;
   const empty = selected !== null && selected.size === 0;
   const count = allSelected ? machines.length : selected.size;
+  const atCap = maxSelected != null && selected !== null && selected.size >= maxSelected;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -53,17 +67,28 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
     const checked = isChecked(id, selected);
     if (checked) {
       if (allSelected) {
+        if (narrowFromAll) {
+          setAtCapHint(false);
+          onChange(new Set([id]));
+          return;
+        }
         onChange(new Set(machines.map((m) => m.id).filter((mid) => mid !== id)));
         return;
       }
       const next = new Set(selected);
       next.delete(id);
+      setAtCapHint(false);
       onChange(next);
+      return;
+    }
+    if (maxSelected != null && selected !== null && selected.size >= maxSelected) {
+      setAtCapHint(true);
       return;
     }
     const next = new Set(selected ?? []);
     next.add(id);
-    if (next.size >= machines.length) onChange(null);
+    setAtCapHint(false);
+    if (maxSelected == null && next.size >= machines.length) onChange(null);
     else onChange(next);
   };
 
@@ -75,7 +100,9 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
   const summary = empty
     ? 'No locations selected'
     : allSelected
-      ? `All locations (${machines.length})`
+      ? maxSelected != null
+        ? `Pick up to ${maxSelected}`
+        : `All locations (${machines.length})`
       : count === 1
         ? displayName(selectedRows[0] || { id: '', name: '1 location' })
         : `${count} locations`;
@@ -113,17 +140,26 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
                   autoFocus
                 />
                 <div className="perfMachineFilterActions">
-                  <button
-                    type="button"
-                    className={`perfSegPill ${allSelected ? 'active' : ''}`}
-                    onClick={() => onChange(null)}
-                  >
-                    Select all
-                  </button>
+                  {maxSelected == null ? (
+                    <button
+                      type="button"
+                      className={`perfSegPill ${allSelected ? 'active' : ''}`}
+                      onClick={() => onChange(null)}
+                    >
+                      Select all
+                    </button>
+                  ) : (
+                    <span className="perfMachineFilterCount">
+                      {count}/{maxSelected} max
+                    </span>
+                  )}
                   <button
                     type="button"
                     className={`perfSegPill ${empty ? 'active' : ''}`}
-                    onClick={() => onChange(new Set())}
+                    onClick={() => {
+                      setAtCapHint(false);
+                      onChange(new Set());
+                    }}
                   >
                     Clear
                   </button>
@@ -140,7 +176,12 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
                     return (
                       <div key={m.id} className={`perfLocRow ${solo ? 'perfLocRowSolo' : ''}`}>
                         <label className="perfLocRowMain">
-                          <input type="checkbox" checked={checked} onChange={() => toggle(m.id)} />
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={!checked && atCap}
+                            onChange={() => toggle(m.id)}
+                          />
                           <span className="perfLocRowName" title={label}>
                             {label}
                           </span>
@@ -182,8 +223,16 @@ export function PerfMachineFilter({ machines, selected, onChange }: Props) {
         ) : null}
       </div>
       <p className="perfMachineFilterHint">
-        Data scope for all charts. Trajectory lists up to 12 locations above the graph — side arrows
-        or swipe change pages; <strong>Mix machines</strong> combines ranks across pages.
+        {atCapHint && maxSelected != null ? (
+          `Maximum ${maxSelected} locations. Uncheck one to add another.`
+        ) : hint ? (
+          hint
+        ) : (
+          <>
+            Data scope for all charts. Trajectory lists up to 12 locations above the graph — side arrows
+            or swipe change pages; <strong>Mix machines</strong> combines ranks across pages.
+          </>
+        )}
       </p>
     </section>
   );
