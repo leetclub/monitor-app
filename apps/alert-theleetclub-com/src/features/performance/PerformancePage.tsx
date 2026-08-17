@@ -53,6 +53,42 @@ function parseIds(raw: string | null): string[] {
     .filter(Boolean);
 }
 
+/** Hide test / junk rows whose display name starts with a digit (e.g. "1 Foo", raw IDs). */
+function nameStartsWithDigit(name: string): boolean {
+  const n = name.trim();
+  return n.length > 0 && /^\d/.test(n);
+}
+
+function writeMachineParams(p: URLSearchParams, next: Set<string> | null) {
+  if (next === null) {
+    p.delete('machineIds');
+    p.delete('machineId');
+  } else if (next.size === 1) {
+    p.set('machineId', [...next][0]);
+    p.delete('machineIds');
+  } else if (next.size > 1) {
+    p.set('machineIds', [...next].join(','));
+    p.delete('machineId');
+  } else {
+    p.delete('machineIds');
+    p.delete('machineId');
+  }
+}
+
+function capProductsSelection(
+  source: Set<string> | null,
+  machines: MachineRow[],
+  max: number,
+): Set<string> {
+  const allowed = new Set(machines.map((m) => m.id));
+  if (source === null) {
+    return new Set(machines.slice(0, max).map((m) => m.id));
+  }
+  const kept = [...source].filter((id) => allowed.has(id));
+  if (!kept.length) return new Set(machines.slice(0, max).map((m) => m.id));
+  return new Set(kept.slice(0, max));
+}
+
 export function PerformancePage({
   variant = 'classic',
 }: {
@@ -69,6 +105,8 @@ export function PerformancePage({
   const [selected, setSelected] = useState<Set<string> | null>(() =>
     urlIds.length ? new Set(urlIds) : focusId ? new Set([focusId]) : null,
   );
+  /** Products keeps its own location picks so Location tab selection is not overwritten. */
+  const [productsSelected, setProductsSelected] = useState<Set<string> | null>(null);
   const [productMix, setProductMix] = useState<{ machineId: string; machineName: string } | null>(
     null,
   );
@@ -118,14 +156,15 @@ export function PerformancePage({
       }
     }
 
-    const out = [...byId.values()];
-    out.sort((a, b) => a.name.localeCompare(b.name));
+    const out = [...byId.values()]
+      .filter((m) => !nameStartsWithDigit(m.name || m.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
     return out;
   }, [apiMachines, snapQ.data?.rows]);
 
   const selectedIds = useMemo(() => {
     if (selected === null) return machineRows.map((m) => m.id);
-    return [...selected];
+    return [...selected].filter((id) => machineRows.some((m) => m.id === id));
   }, [selected, machineRows]);
 
   const selectedKey = useMemo(() => {
@@ -136,27 +175,32 @@ export function PerformancePage({
   const syncUrl = (next: Set<string> | null) => {
     setSelected(next);
     const p = new URLSearchParams(params);
-    if (next === null) {
-      p.delete('machineIds');
-      p.delete('machineId');
-    } else if (next.size === 1) {
-      const only = [...next][0];
-      p.set('machineId', only);
-      p.delete('machineIds');
-    } else if (next.size > 1) {
-      p.set('machineIds', [...next].join(','));
-      p.delete('machineId');
-    } else {
-      p.delete('machineIds');
-      p.delete('machineId');
-    }
+    writeMachineParams(p, next);
+    setParams(p, { replace: true });
+  };
+
+  const syncProductsUrl = (next: Set<string> | null) => {
+    setProductsSelected(next);
+    const p = new URLSearchParams(params);
+    writeMachineParams(p, next);
     setParams(p, { replace: true });
   };
 
   const setWorkspace = (next: PerfWorkspace) => {
     const p = new URLSearchParams(params);
-    if (next === 'products') p.set('view', 'products');
-    else p.delete('view');
+    if (next === 'products') {
+      p.set('view', 'products');
+      const capped = capProductsSelection(
+        productsSelected ?? selected,
+        machineRows,
+        PERF_PRODUCTS_MAX_LOCATIONS,
+      );
+      setProductsSelected(capped);
+      writeMachineParams(p, capped);
+    } else {
+      p.delete('view');
+      writeMachineParams(p, selected);
+    }
     setParams(p, { replace: true });
   };
 
@@ -231,20 +275,23 @@ export function PerformancePage({
       if (!prev) byId.set(id, { id, name: fleetName });
       else if (!prev.name.trim() || prev.name === id) byId.set(id, { id, name: fleetName });
     }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...byId.values()]
+      .filter((m) => !nameStartsWithDigit(m.name || m.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [machineRows, fleetMachines]);
+
+  const productsSelectedIds = useMemo(() => {
+    if (!productsSelected) return [];
+    return [...productsSelected].filter((id) => filterMachines.some((m) => m.id === id));
+  }, [productsSelected, filterMachines]);
 
   useEffect(() => {
     if (workspace !== 'products') return;
     if (!filterMachines.length) return;
-    const max = PERF_PRODUCTS_MAX_LOCATIONS;
-    if (selected !== null && selected.size <= max) return;
-    const next =
-      selected === null
-        ? new Set(filterMachines.slice(0, max).map((m) => m.id))
-        : new Set([...selected].slice(0, max));
-    syncUrl(next);
-  }, [workspace, filterMachines, selected]);
+    if (productsSelected !== null) return;
+    const capped = capProductsSelection(selected, filterMachines, PERF_PRODUCTS_MAX_LOCATIONS);
+    setProductsSelected(capped);
+  }, [workspace, filterMachines, productsSelected, selected]);
 
   const aggregateDays = fleetQ.data?.aggregateDays || [];
   const kpis = useMemo(() => {
@@ -358,8 +405,8 @@ export function PerformancePage({
         <div className="perfLayout">
           <PerfMachineFilter
             machines={filterMachines}
-            selected={selected}
-            onChange={syncUrl}
+            selected={workspace === 'products' ? productsSelected : selected}
+            onChange={workspace === 'products' ? syncProductsUrl : syncUrl}
             maxSelected={workspace === 'products' ? PERF_PRODUCTS_MAX_LOCATIONS : undefined}
             narrowFromAll={workspace === 'products'}
             hint={
@@ -370,15 +417,16 @@ export function PerformancePage({
           />
 
           <div className="perfMain">
-            {selected !== null && selected.size === 0 ? (
+            {((workspace === 'products' ? productsSelected : selected) !== null &&
+              (workspace === 'products' ? productsSelected!.size : selected!.size) === 0) ? (
               <p className="perfMuted">Select one or more locations to plot.</p>
             ) : null}
 
             {workspace === 'products' ? (
               <PerfProductsSection
                 machines={filterMachines.length ? filterMachines : machineRows}
-                selectedIds={selectedIds}
-                allSelected={selected === null}
+                selectedIds={productsSelectedIds}
+                allSelected={false}
               />
             ) : (
               <>
