@@ -438,6 +438,7 @@ export function PerformancePage({
                 machines={filterMachines.length ? filterMachines : machineRows}
                 selectedIds={productsSelectedIds}
                 allSelected={false}
+                fleetIds={(filterMachines.length ? filterMachines : machineRows).map((m) => m.id)}
               />
             ) : (
               <>

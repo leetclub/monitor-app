@@ -3989,6 +3989,8 @@ def register_alert_routes(app) -> None:
         Product workspace on Performance: SKU KD by location for a preset window vs prior
         (and same dates last year). Cache-backed — same Vendon daily mix as machine-products.
         Query: machineIds=id1,id2 (required, max 80), preset=today|yesterday|this_week|...
+        Optional start=&end= (inclusive ISO dates) for a custom range vs the equal-length prior.
+        Each SKU includes Admin cup target for the window when configured.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -4004,15 +4006,40 @@ def register_alert_routes(app) -> None:
             requested = requested[:80]
 
         preset = (request.args.get("preset") or "today").strip().lower()
-        from alert_targets_lib import resolve_perf_window
+        from alert_targets_lib import daily_yardstick, products_from_lmc_row, resolve_perf_window
         import hashlib
 
         tz = ZoneInfo("Asia/Kuwait")
         now_local = datetime.now(tz)
         today = now_local.date()
-        win_s, win_e, prev_s, prev_e, preset_id = resolve_perf_window(
-            today=today, preset=preset, history_days=31
-        )
+
+        custom_s = (request.args.get("start") or request.args.get("from") or "").strip()[:10]
+        custom_e = (request.args.get("end") or request.args.get("to") or "").strip()[:10]
+        win_s = win_e = prev_s = prev_e = None
+        preset_id = preset
+        if custom_s and custom_e:
+            try:
+                cs = date.fromisoformat(custom_s)
+                ce = date.fromisoformat(custom_e)
+                if cs > ce:
+                    cs, ce = ce, cs
+                if ce > today:
+                    ce = today
+                span_days = (ce - cs).days
+                if span_days > 62:
+                    cs = ce - timedelta(days=62)
+                    span_days = 62
+                if cs <= ce:
+                    win_s, win_e = cs, ce
+                    prev_e = win_s - timedelta(days=1)
+                    prev_s = prev_e - timedelta(days=span_days)
+                    preset_id = "custom"
+            except ValueError:
+                win_s = None
+        if win_s is None:
+            win_s, win_e, prev_s, prev_e, preset_id = resolve_perf_window(
+                today=today, preset=preset, history_days=31
+            )
         span = (win_e - win_s).days
         try:
             yoy_s = date(win_s.year - 1, win_s.month, win_s.day)
@@ -4021,7 +4048,7 @@ def register_alert_routes(app) -> None:
         yoy_e = yoy_s + timedelta(days=span)
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
-        cache_key = f"perf:product-compare:v1:{preset_id}:{win_s}:{win_e}:{id_sig}"
+        cache_key = f"perf:product-compare:v2:{preset_id}:{win_s}:{win_e}:{id_sig}"
         cached = _alert_cache_get(cache_key, 90)
         if cached is not None:
             return jsonify(cached)
@@ -4034,6 +4061,7 @@ def register_alert_routes(app) -> None:
             "last_2_weeks": ("Last 2 weeks", "Prior 2 weeks"),
             "this_month": ("This month (MTD)", "Prior month (same days)"),
             "last_month": ("Last month", "Month before"),
+            "custom": ("Custom", "Prior range"),
         }
         cur_label, prev_label = preset_labels.get(preset_id, (preset_id.replace("_", " ").title(), "Prior"))
 
@@ -4043,6 +4071,36 @@ def register_alert_routes(app) -> None:
             if cur > 0:
                 return 100.0
             return 0.0
+
+        day_count = (win_e - win_s).days + 1
+        tgt_by_mid: Dict[str, Dict[str, Tuple[str, Optional[float]]]] = {}
+        dash = _dash_session()
+        try:
+            lmcs = (
+                dash.query(LiveMachineConfig)
+                .filter(LiveMachineConfig.machine_id.in_(requested))
+                .all()
+            )
+            for lmc in lmcs:
+                mid = str(lmc.machine_id or "").strip()
+                if not mid:
+                    continue
+                by_name: Dict[str, Tuple[str, Optional[float]]] = {}
+                for spec in products_from_lmc_row(lmc):
+                    pname = str(spec.get("productName") or "").strip()
+                    if not pname:
+                        continue
+                    metric = str(spec.get("metric") or "cups").strip().lower()
+                    if metric and metric not in ("cups", "cup", "units"):
+                        continue
+                    yard = daily_yardstick(spec.get("dailyTarget"), str(spec.get("period") or "daily"))
+                    by_name[pname.lower()] = (pname, round(yard * day_count, 4) if yard else None)
+                if by_name:
+                    tgt_by_mid[mid] = by_name
+        except Exception:
+            logger.exception("product-compare targets")
+        finally:
+            dash.close()
 
         db = _pa_session()
         try:
@@ -4075,21 +4133,41 @@ def register_alert_routes(app) -> None:
                 prev = _aggregate_product_sales_in_range(mrows, prev_s, prev_e + timedelta(days=1))
                 yoy = _aggregate_product_sales_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
                 cups = _aggregate_product_counts_in_range(mrows, win_s, win_e + timedelta(days=1))
+                tgt_map = tgt_by_mid.get(mid) or {}
                 sku_names = set(cur) | set(prev) | set(yoy)
+                sales_lower = {str(n).strip().lower(): str(n).strip() for n in sku_names if str(n).strip()}
+                for tkey, (tname, _tgt) in tgt_map.items():
+                    if tkey not in sales_lower:
+                        sku_names.add(tname)
                 products = []
                 for name in sku_names:
-                    kwd = float(cur.get(name) or 0)
-                    prev_kwd = float(prev.get(name) or 0)
-                    yoy_kwd = float(yoy.get(name) or 0)
+                    display = str(name or "").strip()
+                    if not display:
+                        continue
+                    key = display.lower()
+                    if key in sales_lower:
+                        display = sales_lower[key]
+                    elif key in tgt_map:
+                        display = tgt_map[key][0]
+                    kwd = float(cur.get(display) or cur.get(name) or 0)
+                    prev_kwd = float(prev.get(display) or prev.get(name) or 0)
+                    yoy_kwd = float(yoy.get(display) or yoy.get(name) or 0)
+                    cup_n = int(cups.get(display) or cups.get(name) or 0)
+                    tgt = tgt_map[key][1] if key in tgt_map else None
+                    pct = None
+                    if tgt is not None and tgt > 0:
+                        pct = round((cup_n / tgt) * 100.0, 1)
                     products.append(
                         {
-                            "name": name,
+                            "name": display,
                             "revenueKwd": round(kwd, 4),
                             "prevRevenueKwd": round(prev_kwd, 4),
                             "yoyRevenueKwd": round(yoy_kwd, 4),
-                            "cups": int(cups.get(name) or 0),
+                            "cups": cup_n,
                             "trendPct": _trend(kwd, prev_kwd),
                             "yoyTrendPct": _trend(kwd, yoy_kwd),
+                            "targetCups": tgt,
+                            "pctOfTarget": pct,
                         }
                     )
                 products.sort(key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()))
