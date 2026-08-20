@@ -531,146 +531,6 @@ function SkuMultiDropdown({
   );
 }
 
-function PeriodPriorLines({
-  categories,
-  period,
-  prior,
-  periodLabel,
-  priorLabel,
-  onCategoryClick,
-  compact,
-  showPrior,
-  unit = 'kd',
-  exportName,
-  ariaLabel,
-}: {
-  categories: string[];
-  period: number[];
-  prior: number[];
-  periodLabel: string;
-  priorLabel: string;
-  onCategoryClick?: (name: string) => void;
-  compact?: boolean;
-  showPrior?: boolean;
-  unit?: 'kd' | 'cups' | 'pct';
-  exportName?: string;
-  ariaLabel?: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inst = useRef<echarts.ECharts | null>(null);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const chart = echarts.init(ref.current);
-    inst.current = chart;
-    const onResize = () => chart.resize();
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      chart.dispose();
-      inst.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const chart = inst.current;
-    if (!chart) return;
-    const theme = readTheme();
-    const fmt =
-      unit === 'cups'
-        ? (v: number) => String(Math.round(v))
-        : unit === 'pct'
-          ? (v: number) => `${Math.round(v)}%`
-          : formatKwd;
-    chart.off('click');
-    if (!categories.length) {
-      chart.clear();
-      return;
-    }
-    const series: echarts.SeriesOption[] = [
-      {
-        name: periodLabel,
-        type: 'line',
-        data: period,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: compact ? 6 : 8,
-        lineStyle: { width: 2.5 },
-      },
-    ];
-    if (showPrior !== false) {
-      series.push({
-        name: priorLabel,
-        type: 'line',
-        data: prior,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: compact ? 6 : 8,
-        lineStyle: { width: 2, type: 'dashed' },
-      });
-    }
-    chart.setOption(
-      {
-        color: SERIES_PALETTE,
-        tooltip: {
-          trigger: 'axis',
-          valueFormatter: (v: number | string) => fmt(Number(v || 0)),
-        },
-        legend: {
-          data: series.map((s) => String(s.name || '')),
-          textStyle: { color: theme.muted },
-        },
-        grid: { left: 56, right: 16, top: 36, bottom: compact ? 56 : 72 },
-        xAxis: {
-          type: 'category',
-          data: categories,
-          boundaryGap: false,
-          axisLabel: {
-            color: theme.axis,
-            rotate: categories.some((c) => c.length > 10) ? 28 : 0,
-            width: compact ? 72 : 90,
-            overflow: 'truncate',
-          },
-        },
-        yAxis: {
-          type: 'value',
-          name: unit === 'cups' ? 'Cups' : unit === 'pct' ? '%' : 'KD',
-          axisLabel: { color: theme.axis, formatter: (v: number) => fmt(v) },
-          splitLine: { lineStyle: { color: theme.grid } },
-        },
-        series,
-      },
-      true,
-    );
-    if (onCategoryClick) {
-      chart.on('click', (params: { name?: string }) => {
-        const name = String(params.name || '').trim();
-        if (name) onCategoryClick(name);
-      });
-    }
-  }, [categories, period, prior, periodLabel, priorLabel, onCategoryClick, compact, showPrior, unit]);
-
-  const onExport = useCallback(() => {
-    if (!inst.current || !exportName) return;
-    downloadChartPng(inst.current, chartFilename([exportName]));
-  }, [exportName]);
-
-  const chart = (
-    <div
-      ref={ref}
-      className={`perfEchart ${compact ? 'perfEchartCompact' : 'perfEchartOverview'}`}
-      role="img"
-      aria-label={ariaLabel || 'Product period line chart'}
-    />
-  );
-  if (!exportName) return chart;
-  return (
-    <ChartExportWrap onExport={onExport} label="PNG">
-      {chart}
-    </ChartExportWrap>
-  );
-}
-
 /** Location-style trajectory: calendar dates on X, one line per series. */
 function DateTrajectoryChart({
   days,
@@ -682,7 +542,7 @@ function DateTrajectoryChart({
   onSeriesClick,
 }: {
   days: Array<{ date: string; weekday?: string }>;
-  series: Array<{ name: string; data: number[]; dashed?: boolean }>;
+  series: Array<TrajSeries>;
   compact?: boolean;
   unit?: 'kd' | 'cups';
   exportName?: string;
@@ -784,11 +644,15 @@ function DateTrajectoryChart({
           name: s.name,
           type: 'line',
           data: s.data,
-          smooth: 0.25,
-          showSymbol: days.length <= 14,
+          smooth: s.dotted ? false : 0.25,
+          showSymbol: days.length <= 14 && !s.dotted,
           symbol: 'circle',
           symbolSize: compact ? 5 : 7,
-          lineStyle: { width: 2.4, type: s.dashed ? 'dashed' : 'solid' },
+          lineStyle: {
+            width: s.dotted ? 2 : 2.4,
+            type: s.dotted ? 'dotted' : s.dashed ? 'dashed' : 'solid',
+            opacity: s.dotted ? 0.85 : 1,
+          },
         })),
       },
       true,
@@ -796,7 +660,8 @@ function DateTrajectoryChart({
     if (onSeriesClick) {
       chart.on('click', (params: { seriesName?: string }) => {
         const name = String(params.seriesName || '').trim();
-        if (name && !name.startsWith('Prior ·')) onSeriesClick(name);
+        if (!name || name.startsWith('Prior ·') || name.startsWith('Target ·')) return;
+        onSeriesClick(name);
       });
     }
   }, [days, series, compact, unit, onSeriesClick]);
@@ -834,6 +699,46 @@ function daySkuPrevKwd(day: ProductDay | undefined, sku: string): number {
   if (hit?.prevRevenueKwd != null) return Number(hit.prevRevenueKwd || 0);
   return 0;
 }
+
+function daySkuCups(day: ProductDay | undefined, sku: string): number {
+  if (!day) return 0;
+  const hit = (day.products || []).find((p) => p.name === sku);
+  return Number(hit?.cups || 0);
+}
+
+function daySkuPrevCups(day: ProductDay | undefined, sku: string): number {
+  if (!day) return 0;
+  const hit = (day.products || []).find((p) => p.name === sku);
+  if (hit?.prevCups != null) return Number(hit.prevCups || 0);
+  return 0;
+}
+
+function daySkuValue(day: ProductDay | undefined, sku: string, unit: TargetUnit): number {
+  return unit === 'cups' ? daySkuCups(day, sku) : daySkuKwd(day, sku);
+}
+
+function daySkuPrevValue(day: ProductDay | undefined, sku: string, unit: TargetUnit): number {
+  return unit === 'cups' ? daySkuPrevCups(day, sku) : daySkuPrevKwd(day, sku);
+}
+
+function dayTotalValue(day: ProductDay | undefined, unit: TargetUnit): number {
+  if (!day) return 0;
+  return unit === 'cups' ? Number(day.cups || 0) : Number(day.revenueKwd || 0);
+}
+
+function dayPrevTotalValue(day: ProductDay | undefined, unit: TargetUnit): number {
+  if (!day) return 0;
+  return unit === 'cups' ? Number(day.prevCups || 0) : Number(day.prevRevenueKwd || 0);
+}
+
+/** Spread period target evenly across X points (daily/hourly pace line). */
+function paceLine(periodTarget: number, n: number): number[] {
+  if (n <= 0 || !(periodTarget > 0)) return Array.from({ length: Math.max(0, n) }, () => 0);
+  const pace = periodTarget / n;
+  return Array.from({ length: n }, () => pace);
+}
+
+type TrajSeries = { name: string; data: number[]; dashed?: boolean; dotted?: boolean };
 
 type Props = {
   machines: MachineRow[];
@@ -1020,52 +925,131 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     return fleetMix.slice(0, PERF_PRODUCTS_MAX_SKUS).map((p) => p.name);
   }, [skus, fleetMix]);
 
+  const showProductTargets = targetType === 'product' || targetType === 'both';
+  const showMachineTargets = targetType === 'machine' || targetType === 'both';
+  const chartUnit: 'kd' | 'cups' = targetUnit === 'cups' ? 'cups' : 'kd';
+
+  const productTargetForSku = useCallback(
+    (mix: ProductRow[], name: string): number => {
+      const hit = mix.find((p) => p.name === name);
+      if (!hit) return 0;
+      return targetUnit === 'cups'
+        ? Number(hit.targetCups || 0)
+        : Number(hit.targetRevenueKwd || 0);
+    },
+    [targetUnit],
+  );
+
+  const machineLocTarget = useCallback(
+    (m: ProductMachine): number => {
+      return targetUnit === 'cups'
+        ? Number(m.locationTargetCups || 0)
+        : Number(m.locationTargetKd || 0);
+    },
+    [targetUnit],
+  );
+
   const fleetTrajectorySeries = useMemo(() => {
-    const series: Array<{ name: string; data: number[]; dashed?: boolean }> = [];
+    const series: TrajSeries[] = [];
+    const n = fleetDays.length;
     for (const name of fleetPlotSkus) {
       series.push({
         name,
-        data: fleetDays.map((d) => daySkuKwd(d, name)),
+        data: fleetDays.map((d) => daySkuValue(d, name, targetUnit)),
       });
     }
-    // Prior overlay only when few series — otherwise the chart is unreadable.
     if (compareOn && fleetPlotSkus.length > 0 && fleetPlotSkus.length <= 2) {
       for (const name of fleetPlotSkus) {
         series.push({
           name: `Prior · ${name}`,
-          data: fleetDays.map((d) => daySkuPrevKwd(d, name)),
+          data: fleetDays.map((d) => daySkuPrevValue(d, name, targetUnit)),
           dashed: true,
         });
       }
     } else if (compareOn && !fleetPlotSkus.length) {
       series.push({
         name: 'All products',
-        data: fleetDays.map((d) => Number(d.revenueKwd || 0)),
+        data: fleetDays.map((d) => dayTotalValue(d, targetUnit)),
       });
       series.push({
         name: 'Prior · all',
-        data: fleetDays.map((d) => Number(d.prevRevenueKwd || 0)),
+        data: fleetDays.map((d) => dayPrevTotalValue(d, targetUnit)),
         dashed: true,
       });
     } else if (!fleetPlotSkus.length) {
       series.push({
         name: 'All products',
-        data: fleetDays.map((d) => Number(d.revenueKwd || 0)),
+        data: fleetDays.map((d) => dayTotalValue(d, targetUnit)),
       });
     }
+    if (showProductTargets) {
+      for (const name of fleetPlotSkus) {
+        const tgt = productTargetForSku(fleetMix, name);
+        if (tgt > 0) {
+          series.push({
+            name: `Target · ${name}`,
+            data: paceLine(tgt, n),
+            dotted: true,
+          });
+        }
+      }
+    }
+    if (showMachineTargets && !fleetPlotSkus.length) {
+      const locSum = fleetMachinesNamed.reduce((s, m) => s + machineLocTarget(m), 0);
+      if (locSum > 0) {
+        series.push({
+          name: 'Target · locations',
+          data: paceLine(locSum, n),
+          dotted: true,
+        });
+      }
+    }
     return series;
-  }, [fleetDays, fleetPlotSkus, compareOn]);
+  }, [
+    fleetDays,
+    fleetPlotSkus,
+    compareOn,
+    targetUnit,
+    showProductTargets,
+    showMachineTargets,
+    fleetMix,
+    fleetMachinesNamed,
+    productTargetForSku,
+    machineLocTarget,
+  ]);
 
   const selectedTrajectorySeries = useMemo(() => {
-    const series: Array<{ name: string; data: number[]; dashed?: boolean }> = [];
+    const series: TrajSeries[] = [];
+    const n = selectedDays.length;
     if (skus.length === 1) {
       const sku = skus[0];
       for (const m of payloadMachines) {
         const days = m.days?.length ? m.days : selectedDays;
         series.push({
           name: m.machineName,
-          data: days.map((d) => daySkuKwd(d, sku)),
+          data: days.map((d) => daySkuValue(d, sku, targetUnit)),
         });
+      }
+      if (showProductTargets) {
+        for (const m of payloadMachines) {
+          const cell = skuOnMachine(m, [sku]);
+          const tgt =
+            targetUnit === 'cups'
+              ? cell.hasTarget
+                ? cell.target
+                : 0
+              : cell.hasTargetRev
+                ? cell.targetRev
+                : 0;
+          if (tgt > 0) {
+            const pts = (m.days?.length ? m.days : selectedDays).length;
+            series.push({
+              name: `Target · ${m.machineName}`,
+              data: paceLine(tgt, pts || n),
+              dotted: true,
+            });
+          }
+        }
       }
       return series;
     }
@@ -1074,24 +1058,67 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       for (const name of want) {
         series.push({
           name,
-          data: selectedDays.map((d) => daySkuKwd(d, name)),
+          data: selectedDays.map((d) => daySkuValue(d, name, targetUnit)),
         });
+      }
+      if (showProductTargets) {
+        for (const name of want) {
+          let tgt = 0;
+          for (const m of payloadMachines) {
+            const cell = skuOnMachine(m, [name]);
+            tgt +=
+              targetUnit === 'cups'
+                ? cell.hasTarget
+                  ? cell.target
+                  : 0
+                : cell.hasTargetRev
+                  ? cell.targetRev
+                  : 0;
+          }
+          if (tgt > 0) {
+            series.push({
+              name: `Target · ${name}`,
+              data: paceLine(tgt, n),
+              dotted: true,
+            });
+          }
+        }
       }
       return series;
     }
     series.push({
       name: 'Selected sites',
-      data: selectedDays.map((d) => Number(d.revenueKwd || 0)),
+      data: selectedDays.map((d) => dayTotalValue(d, targetUnit)),
     });
     if (compareOn) {
       series.push({
         name: 'Prior · selected',
-        data: selectedDays.map((d) => Number(d.prevRevenueKwd || 0)),
+        data: selectedDays.map((d) => dayPrevTotalValue(d, targetUnit)),
         dashed: true,
       });
     }
+    if (showMachineTargets) {
+      const locSum = payloadMachines.reduce((s, m) => s + machineLocTarget(m), 0);
+      if (locSum > 0) {
+        series.push({
+          name: 'Target · locations',
+          data: paceLine(locSum, n),
+          dotted: true,
+        });
+      }
+    }
     return series;
-  }, [skus, payloadMachines, selectedDays, compareSkus, compareOn]);
+  }, [
+    skus,
+    payloadMachines,
+    selectedDays,
+    compareSkus,
+    compareOn,
+    targetUnit,
+    showProductTargets,
+    showMachineTargets,
+    machineLocTarget,
+  ]);
 
   const rising = useMemo(
     () =>
@@ -1134,62 +1161,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         .slice(0, TOP_LOW),
     [rankedForSku],
   );
-
-  const fleetTargetRows = useMemo(() => {
-    if (targetUnit === 'revenue') {
-      return fleetMix
-        .filter((p) => p.targetRevenueKwd != null && Number(p.targetRevenueKwd) > 0)
-        .slice(0, PERF_PRODUCTS_MAX_SKUS);
-    }
-    return fleetMix
-      .filter((p) => p.targetCups != null && Number(p.targetCups) > 0)
-      .slice(0, PERF_PRODUCTS_MAX_SKUS);
-  }, [fleetMix, targetUnit]);
-
-  const machineTargetRows = useMemo(() => {
-    if (targetUnit === 'cups') {
-      return fleetMachinesNamed
-        .filter((m) => m.locationTargetCups != null && Number(m.locationTargetCups) > 0)
-        .map((m) => ({
-          label: m.machineName,
-          actual: Number(
-            m.periodCups != null
-              ? m.periodCups
-              : (m.products || []).reduce((s, p) => s + Number(p.cups || 0), 0),
-          ),
-          target: Number(m.locationTargetCups || 0),
-          pct: m.pctOfLocationCupsTarget ?? null,
-        }))
-        .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))
-        .slice(0, 16);
-    }
-    return fleetMachinesNamed
-      .filter((m) => m.locationTargetKd != null && Number(m.locationTargetKd) > 0)
-      .map((m) => ({
-        label: m.machineName,
-        actual: Number(m.periodKd || 0),
-        target: Number(m.locationTargetKd || 0),
-        pct: m.pctOfLocationTarget ?? null,
-      }))
-      .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))
-      .slice(0, 16);
-  }, [fleetMachinesNamed, targetUnit]);
-
-  const productMachineTargetRows = useMemo(() => {
-    if (!skus.length) return [];
-    const out: { label: string; actual: number; target: number }[] = [];
-    for (const m of fleetMachinesNamed) {
-      const cell = skuOnMachine(m, skus);
-      if (targetUnit === 'revenue') {
-        if (!cell.hasTargetRev) continue;
-        out.push({ label: m.machineName, actual: cell.revenue, target: cell.targetRev });
-      } else {
-        if (!cell.hasTarget) continue;
-        out.push({ label: m.machineName, actual: cell.cups, target: cell.target });
-      }
-    }
-    return out.sort((a, b) => b.target - a.target || b.actual - a.actual).slice(0, 16);
-  }, [fleetMachinesNamed, skus, targetUnit]);
 
   const periodMeta = PERIOD_OPTIONS.find((p) => p.id === period);
 
@@ -1363,7 +1334,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             <option value="machine">Machine target</option>
             <option value="both">Both</option>
           </select>
-          <small>Product and/or location targets from Admin → Targets.</small>
+          <small>Product and/or location targets draw as dotted lines on the graphs.</small>
         </label>
 
         <label className="perfProductsCriteriaField">
@@ -1376,7 +1347,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             <option value="cups">Cups</option>
             <option value="revenue">Revenue (KD)</option>
           </select>
-          <small>Switch between cup targets and revenue targets.</small>
+          <small>Y-axis and target lines use this unit.</small>
         </label>
       </div>
 
@@ -1446,12 +1417,15 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           {xAxisKind === 'hourly'
             ? 'Single day — hours on the X-axis, one line per drink (fleet total).'
             : 'Daily trajectory like Location — dates on the X-axis, one line per drink (fleet total).'}{' '}
-          {compareOn ? 'Dashed = same day-index in the prior window.' : 'Comparison off.'}
+          {compareOn ? 'Dashed = prior. ' : ''}
+          Dotted = target pace ({targetUnit === 'cups' ? 'cups' : 'KD'}). Y-axis follows Target
+          unit.
         </p>
         {fleetQ.isLoading ? <p className="perfMuted">Loading fleet mix…</p> : null}
         <DateTrajectoryChart
           days={fleetDays}
           series={fleetTrajectorySeries}
+          unit={chartUnit}
           onSeriesClick={toggleSku}
           exportName="product-fleet-mix"
           ariaLabel="Fleet product daily trajectory"
@@ -1528,13 +1502,15 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         <DateTrajectoryChart
           days={selectedDays}
           series={selectedTrajectorySeries}
+          unit={chartUnit}
           onSeriesClick={toggleSku}
           exportName="product-selected-trajectory"
           ariaLabel="Selected locations daily product trajectory"
         />
         <p className="perfSectionHint">
           {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}. One drink selected → one line
-          per location. Several drinks → one line per drink (summed across selected sites).
+          per location (dotted = that site’s product target). Several drinks → one line per
+          drink + dotted target pace.
         </p>
       </section>
 
@@ -1543,8 +1519,8 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           3. Per location
         </h4>
         <p className="perfSectionHint">
-          Same window, {xAxisKind === 'hourly' ? 'hourly' : 'daily'} KD trajectory per selected
-          site.
+          Same window, {xAxisKind === 'hourly' ? 'hourly' : 'daily'} trajectory per selected
+          site. Dotted = product target pace when configured.
         </p>
         {locNone ? (
           <p className="perfMuted">Select locations above.</p>
@@ -1555,20 +1531,53 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               const want = skus.length
                 ? skus
                 : (m.products || []).slice(0, PERF_PRODUCTS_MAX_SKUS).map((p) => p.name);
-              const series = want.map((name) => ({
+              const series: TrajSeries[] = want.map((name) => ({
                 name,
-                data: days.map((d) => daySkuKwd(d, name)),
+                data: days.map((d) => daySkuValue(d, name, targetUnit)),
               }));
+              if (showProductTargets) {
+                for (const name of want) {
+                  const cell = skuOnMachine(m, [name]);
+                  const tgt =
+                    targetUnit === 'cups'
+                      ? cell.hasTarget
+                        ? cell.target
+                        : 0
+                      : cell.hasTargetRev
+                        ? cell.targetRev
+                        : 0;
+                  if (tgt > 0) {
+                    series.push({
+                      name: `Target · ${name}`,
+                      data: paceLine(tgt, days.length),
+                      dotted: true,
+                    });
+                  }
+                }
+              }
+              if (!series.length) {
+                series.push({
+                  name: 'All products',
+                  data: days.map((d) => dayTotalValue(d, targetUnit)),
+                });
+                if (showMachineTargets) {
+                  const loc = machineLocTarget(m);
+                  if (loc > 0) {
+                    series.push({
+                      name: 'Target · location',
+                      data: paceLine(loc, days.length),
+                      dotted: true,
+                    });
+                  }
+                }
+              }
               return (
                 <article key={m.machineId} className="perfProductsMachineCard">
                   <h5 className="perfProductsMachineName">{m.machineName}</h5>
                   <DateTrajectoryChart
                     days={days}
-                    series={
-                      series.length
-                        ? series
-                        : [{ name: 'All products', data: days.map((d) => Number(d.revenueKwd || 0)) }]
-                    }
+                    series={series}
+                    unit={chartUnit}
                     compact
                     exportName={`product-mix-${m.machineId}`}
                     ariaLabel={`Daily product mix at ${m.machineName}`}
@@ -1600,9 +1609,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                   const days = row?.days || fleetDays;
                   return {
                     name: m.machineName,
-                    data: days.map((d) => daySkuKwd(d, skus[0])),
+                    data: days.map((d) => daySkuValue(d, skus[0], targetUnit)),
                   };
                 })}
+                unit={chartUnit}
                 compact
                 exportName="product-top-sites"
                 ariaLabel="Top performing locations daily"
@@ -1617,9 +1627,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                   const days = row?.days || fleetDays;
                   return {
                     name: m.machineName,
-                    data: days.map((d) => daySkuKwd(d, skus[0])),
+                    data: days.map((d) => daySkuValue(d, skus[0], targetUnit)),
                   };
                 })}
+                unit={chartUnit}
                 compact
                 exportName="product-low-sites"
                 ariaLabel="Lowest performing locations daily"
@@ -1629,110 +1640,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         )}
       </section>
 
-      <section className="perfProductsBlock" aria-labelledby="perf-products-targets">
-        <h4 id="perf-products-targets" className="perfSectionTitle">
-          5. Targets achieved
-        </h4>
-        <p className="perfSectionHint">
-          {targetUnit === 'cups'
-            ? targetType === 'product'
-              ? 'Product cup targets vs actual cups.'
-              : targetType === 'machine'
-                ? 'Machine cup targets vs actual cups.'
-                : 'Product cups and machine cup targets.'
-            : targetType === 'product'
-              ? 'Product revenue targets vs actual KD.'
-              : targetType === 'machine'
-                ? 'Machine KD targets vs actual KD.'
-                : 'Product revenue and machine KD targets.'}
-        </p>
-        {(targetType === 'product' || targetType === 'both') && (
-          <>
-            {fleetTargetRows.length ? (
-              <PeriodPriorLines
-                categories={fleetTargetRows.map((p) => p.name)}
-                period={fleetTargetRows.map((p) =>
-                  targetUnit === 'cups' ? Number(p.cups || 0) : Number(p.revenueKwd || 0),
-                )}
-                prior={fleetTargetRows.map((p) =>
-                  targetUnit === 'cups'
-                    ? Number(p.targetCups || 0)
-                    : Number(p.targetRevenueKwd || 0),
-                )}
-                periodLabel={targetUnit === 'cups' ? 'Actual cups' : 'Actual KD'}
-                priorLabel={targetUnit === 'cups' ? 'Target cups' : 'Target KD'}
-                unit={targetUnit === 'cups' ? 'cups' : 'kd'}
-                exportName="product-fleet-targets"
-                ariaLabel={
-                  targetUnit === 'cups'
-                    ? 'Fleet product cups vs target'
-                    : 'Fleet product revenue vs target'
-                }
-              />
-            ) : (
-              <p className="perfMuted">
-                No Admin {targetUnit === 'cups' ? 'cup' : 'revenue'} targets on the mix for this
-                window.
-              </p>
-            )}
-            {skus.length ? (
-              productMachineTargetRows.length ? (
-                <>
-                  <h5 className="perfProductsTrendHead">
-                    Per location {targetUnit === 'cups' ? 'cups' : 'KD'} — {skus.join(', ')}
-                  </h5>
-                  <PeriodPriorLines
-                    categories={productMachineTargetRows.map((r) => r.label)}
-                    period={productMachineTargetRows.map((r) => r.actual)}
-                    prior={productMachineTargetRows.map((r) => r.target)}
-                    periodLabel={targetUnit === 'cups' ? 'Actual cups' : 'Actual KD'}
-                    priorLabel={targetUnit === 'cups' ? 'Target cups' : 'Target KD'}
-                    unit={targetUnit === 'cups' ? 'cups' : 'kd'}
-                    exportName="product-machine-cup-targets"
-                    ariaLabel={`Location product ${targetUnit} vs target`}
-                  />
-                </>
-              ) : (
-                <p className="perfMuted">
-                  No {targetUnit === 'cups' ? 'cup' : 'revenue'} target on the selected drink(s).
-                </p>
-              )
-            ) : (
-              <p className="perfMuted">Select a drink for per-location product targets.</p>
-            )}
-          </>
-        )}
-        {(targetType === 'machine' || targetType === 'both') && (
-          <>
-            <h5 className="perfProductsTrendHead">
-              Machine {targetUnit === 'cups' ? 'cups' : 'KD'} vs target
-            </h5>
-            {machineTargetRows.length ? (
-              <PeriodPriorLines
-                categories={machineTargetRows.map((r) => r.label)}
-                period={machineTargetRows.map((r) => r.actual)}
-                prior={machineTargetRows.map((r) => r.target)}
-                periodLabel={targetUnit === 'cups' ? 'Actual cups' : 'Actual KD'}
-                priorLabel={targetUnit === 'cups' ? 'Target cups' : 'Target KD'}
-                unit={targetUnit === 'cups' ? 'cups' : 'kd'}
-                exportName="product-machine-kd-targets"
-                ariaLabel={`Machine ${targetUnit} vs target`}
-              />
-            ) : (
-              <p className="perfMuted">
-                No Admin location {targetUnit === 'cups' ? 'cup' : 'KD'} targets for these
-                machines.
-              </p>
-            )}
-          </>
-        )}
-      </section>
-
       <section className="perfProductsBlock" aria-labelledby="perf-products-table">
         <h4 id="perf-products-table" className="perfSectionTitle">
-          6. Selected locations — detail table
+          5. Selected locations — detail table
         </h4>
-        <p className="perfSectionHint">Numbers behind chart 2 (moved below the graphs for a clearer read).</p>
+        <p className="perfSectionHint">
+          Numbers behind chart 2. Targets are the dotted lines on graphs 1–3 (Target type +
+          unit above).
+        </p>
         {detailTable}
       </section>
     </section>

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
   <rect width="800" height="520" fill="#0f172a"/>
   <text x="24" y="28" fill="#e2e8f0" font-family="Segoe UI, sans-serif" font-size="16" font-weight="700">Performance — Location | Products</text>
-  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">Period ▾ · Products · Target type · Cups|Revenue · line charts (dates / hours) · Export</text>
+  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">Period ▾ · Target type · Cups|Revenue · dotted target on same lines · Export</text>
   <rect x="24" y="56" width="70" height="22" rx="11" fill="#1e293b" stroke="#334155"/>
   <text x="36" y="71" fill="#94a3b8" font-size="10" font-family="Segoe UI, sans-serif">Location</text>
   <rect x="98" y="56" width="72" height="22" rx="11" fill="rgba(45,212,191,0.18)" stroke="#2dd4bf"/>
