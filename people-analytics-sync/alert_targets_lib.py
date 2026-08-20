@@ -140,8 +140,10 @@ def resolve_perf_window(
     """
     p = (preset or "last_week").strip().lower().replace("-", "_").replace(" ", "_")
     aliases = {
-        "wtd": "this_week",
-        "week_to_date": "this_week",
+        "wtd": "wtd",
+        "week_to_date": "wtd",
+        "wtd_only": "wtd",
+        "wtd_vs_wtd": "this_week",
         "thisweek": "this_week",
         "lastweek": "last_week",
         "last_2_week": "last_2_weeks",
@@ -152,6 +154,8 @@ def resolve_perf_window(
         "lastmonth": "last_month",
         "rolling": "rolling",
         "days": "rolling",
+        "wtd_vs_ly": "wtd_vs_ly",
+        "wtd_vs_yoy": "wtd_vs_ly",
     }
     p = aliases.get(p, p)
 
@@ -166,6 +170,16 @@ def resolve_perf_window(
         prev_start = prev_end = y - timedelta(days=1)
         return win_start, win_end, prev_start, prev_end, "yesterday"
 
+    # WTD alone — current week to today; prior window mirrors for callers that still need it,
+    # but product-compare can disable comparison via compare=0.
+    if p == "wtd":
+        win_start = _kuwait_week_start(today)
+        win_end = today
+        span = (win_end - win_start).days + 1
+        prev_end = win_start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=span - 1)
+        return win_start, win_end, prev_start, prev_end, "wtd"
+
     if p in ("this_week",):
         win_start = _kuwait_week_start(today)
         win_end = today
@@ -173,6 +187,18 @@ def resolve_perf_window(
         prev_end = win_start - timedelta(days=1)
         prev_start = prev_end - timedelta(days=span - 1)
         return win_start, win_end, prev_start, prev_end, "this_week"
+
+    # WTD vs same week last year (up to same weekday / elapsed days).
+    if p == "wtd_vs_ly":
+        win_start = _kuwait_week_start(today)
+        win_end = today
+        span = (win_end - win_start).days
+        try:
+            prev_start = date(win_start.year - 1, win_start.month, win_start.day)
+        except ValueError:
+            prev_start = win_start - timedelta(days=365)
+        prev_end = prev_start + timedelta(days=span)
+        return win_start, win_end, prev_start, prev_end, "wtd_vs_ly"
 
     if p in ("last_week",):
         this_sun = _kuwait_week_start(today)

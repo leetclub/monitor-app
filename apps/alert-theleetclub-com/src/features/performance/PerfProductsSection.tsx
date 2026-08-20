@@ -5,10 +5,25 @@ import { apiGet } from '@/lib/api';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
-import { SERIES_PALETTE, type MachineRow, type PerfPreset } from '@/features/performance/perfTypes';
+import { SERIES_PALETTE, type MachineRow } from '@/features/performance/perfTypes';
+import { downloadWeeklyProductReport } from '@/features/performance/exportWeeklyProductReport';
 
 export const PERF_PRODUCTS_MAX_LOCATIONS = 8;
 export const PERF_PRODUCTS_MAX_SKUS = 8;
+
+type ProductPeriod =
+  | 'today'
+  | 'yesterday'
+  | 'wtd'
+  | 'this_week'
+  | 'wtd_vs_ly'
+  | 'last_week'
+  | 'this_month'
+  | 'last_month'
+  | 'custom_vs_custom'
+  | 'custom_single';
+
+type TargetType = 'product' | 'machine' | 'both';
 
 type ProductRow = {
   name: string;
@@ -16,7 +31,10 @@ type ProductRow = {
   prevRevenueKwd?: number | null;
   yoyRevenueKwd?: number | null;
   cups?: number | null;
+  prevCups?: number | null;
+  yoyCups?: number | null;
   trendPct?: number | null;
+  cupsTrendPct?: number | null;
   yoyTrendPct?: number | null;
   targetCups?: number | null;
   pctOfTarget?: number | null;
@@ -25,6 +43,10 @@ type ProductRow = {
 type ProductMachine = {
   machineId: string;
   machineName: string;
+  periodKd?: number | null;
+  prevKd?: number | null;
+  locationTargetKd?: number | null;
+  pctOfLocationTarget?: number | null;
   products: ProductRow[];
 };
 
@@ -32,28 +54,33 @@ type ProductComparePayload = {
   ok?: boolean;
   error?: string;
   preset?: string;
+  compare?: boolean;
   window?: {
     start?: string;
     end?: string;
-    prevStart?: string;
-    prevEnd?: string;
+    prevStart?: string | null;
+    prevEnd?: string | null;
     label?: string;
     prevLabel?: string;
   };
   machines?: ProductMachine[];
 };
 
-const PRODUCT_PRESETS: { id: PerfPreset; label: string }[] = [
-  { id: 'today', label: 'Today vs yesterday' },
-  { id: 'yesterday', label: 'Yesterday vs day before' },
-  { id: 'this_week', label: 'This week vs last' },
-  { id: 'last_week', label: 'Last week vs week before' },
-  { id: 'last_2_weeks', label: 'Last 2 weeks vs prior' },
-  { id: 'this_month', label: 'This month vs last' },
-  { id: 'last_month', label: 'Last month vs month before' },
+const PERIOD_OPTIONS: { id: ProductPeriod; label: string; hint: string }[] = [
+  { id: 'today', label: 'Today vs yesterday', hint: 'Single day vs prior day' },
+  { id: 'yesterday', label: 'Yesterday vs day before', hint: 'Closed day vs day before' },
+  { id: 'wtd', label: 'Week to date (WTD)', hint: 'This week only — no comparison' },
+  { id: 'this_week', label: 'WTD vs WTD', hint: 'This week vs last week, same days' },
+  { id: 'wtd_vs_ly', label: 'WTD vs LY', hint: 'This week vs same week last year' },
+  { id: 'last_week', label: 'Last week vs week before', hint: 'Closed week vs prior week' },
+  { id: 'this_month', label: 'This month vs last', hint: 'MTD vs prior month same days' },
+  { id: 'last_month', label: 'Last month vs month before', hint: 'Closed month vs prior' },
+  { id: 'custom_vs_custom', label: 'Custom date vs custom date', hint: 'Pick two ranges to compare' },
+  { id: 'custom_single', label: 'Custom date (no comparison)', hint: 'One range only' },
 ];
 
 const COMPARE_BATCH = 80;
+const TOP_LOW = 5;
 
 function kuwaitIsoToday(): string {
   return new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
@@ -65,24 +92,39 @@ function addDaysIso(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function productComparePath(
-  ids: string[],
-  opts: { preset: string; start?: string; end?: string },
-): string {
+type CompareOpts = {
+  preset: string;
+  compare?: boolean;
+  start?: string;
+  end?: string;
+  aStart?: string;
+  aEnd?: string;
+  bStart?: string;
+  bEnd?: string;
+};
+
+function productComparePath(ids: string[], opts: CompareOpts): string {
   const qs = new URLSearchParams();
   qs.set('machineIds', ids.join(','));
-  if (opts.start && opts.end) {
+  if (opts.aStart && opts.aEnd && opts.bStart && opts.bEnd) {
+    qs.set('aStart', opts.aStart);
+    qs.set('aEnd', opts.aEnd);
+    qs.set('bStart', opts.bStart);
+    qs.set('bEnd', opts.bEnd);
+  } else if (opts.start && opts.end) {
     qs.set('start', opts.start);
     qs.set('end', opts.end);
+    qs.set('compare', opts.compare === false ? '0' : '1');
   } else {
     qs.set('preset', opts.preset);
+    if (opts.compare === false) qs.set('compare', '0');
   }
   return `/api/alert/performance/product-compare?${qs.toString()}`;
 }
 
 async function fetchProductCompareBatched(
   ids: string[],
-  opts: { preset: string; start?: string; end?: string },
+  opts: CompareOpts,
 ): Promise<ProductComparePayload> {
   const unique = [...new Set(ids.map((x) => String(x).trim()).filter(Boolean))];
   if (!unique.length) return { machines: [] };
@@ -132,7 +174,17 @@ function trendFrom(period: number, prior: number): number | null {
 function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
   const totals = new Map<
     string,
-    { revenue: number; prev: number; yoy: number; cups: number; target: number; hasTarget: boolean }
+    {
+      revenue: number;
+      prev: number;
+      yoy: number;
+      cups: number;
+      prevCups: number;
+      yoyCups: number;
+      target: number;
+      hasTarget: boolean;
+      hasPrev: boolean;
+    }
   >();
   for (const m of machines) {
     for (const p of m.products || []) {
@@ -143,13 +195,21 @@ function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
         prev: 0,
         yoy: 0,
         cups: 0,
+        prevCups: 0,
+        yoyCups: 0,
         target: 0,
         hasTarget: false,
+        hasPrev: false,
       };
       cur.revenue += Number(p.revenueKwd || 0);
-      cur.prev += Number(p.prevRevenueKwd || 0);
+      if (p.prevRevenueKwd != null) {
+        cur.prev += Number(p.prevRevenueKwd || 0);
+        cur.hasPrev = true;
+      }
       cur.yoy += Number(p.yoyRevenueKwd || 0);
       cur.cups += Number(p.cups || 0);
+      if (p.prevCups != null) cur.prevCups += Number(p.prevCups || 0);
+      cur.yoyCups += Number(p.yoyCups || 0);
       if (p.targetCups != null && Number.isFinite(Number(p.targetCups))) {
         cur.target += Number(p.targetCups);
         cur.hasTarget = true;
@@ -161,10 +221,13 @@ function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
     .map(([name, v]) => ({
       name,
       revenueKwd: v.revenue,
-      prevRevenueKwd: v.prev,
+      prevRevenueKwd: v.hasPrev ? v.prev : null,
       yoyRevenueKwd: v.yoy,
       cups: v.cups,
-      trendPct: trendFrom(v.revenue, v.prev),
+      prevCups: v.hasPrev ? v.prevCups : null,
+      yoyCups: v.yoyCups,
+      trendPct: v.hasPrev ? trendFrom(v.revenue, v.prev) : null,
+      cupsTrendPct: v.hasPrev ? trendFrom(v.cups, v.prevCups) : null,
       yoyTrendPct: trendFrom(v.revenue, v.yoy),
       targetCups: v.hasTarget ? v.target : null,
       pctOfTarget: v.hasTarget && v.target > 0 ? (v.cups / v.target) * 100 : null,
@@ -177,13 +240,19 @@ function skuOnMachine(m: ProductMachine, names: string[]) {
   let revenue = 0;
   let prev = 0;
   let cups = 0;
+  let prevCups = 0;
   let target = 0;
   let hasTarget = false;
+  let hasPrev = false;
   for (const p of m.products || []) {
     if (!want.has(String(p.name || '').toLowerCase())) continue;
     revenue += Number(p.revenueKwd || 0);
-    prev += Number(p.prevRevenueKwd || 0);
     cups += Number(p.cups || 0);
+    if (p.prevRevenueKwd != null) {
+      prev += Number(p.prevRevenueKwd || 0);
+      hasPrev = true;
+    }
+    if (p.prevCups != null) prevCups += Number(p.prevCups || 0);
     if (p.targetCups != null && Number.isFinite(Number(p.targetCups))) {
       target += Number(p.targetCups);
       hasTarget = true;
@@ -191,11 +260,12 @@ function skuOnMachine(m: ProductMachine, names: string[]) {
   }
   return {
     revenue,
-    prev,
+    prev: hasPrev ? prev : null,
     cups,
+    prevCups: hasPrev ? prevCups : null,
     target,
     hasTarget,
-    trendPct: trendFrom(revenue, prev),
+    trendPct: hasPrev ? trendFrom(revenue, prev) : null,
     pctOfTarget: hasTarget && target > 0 ? (cups / target) * 100 : null,
   };
 }
@@ -351,15 +421,13 @@ function SkuMultiDropdown({
       <p className="perfMachineFilterHint">
         {atCapHint
           ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `No filter = table lists every drink; graph plots the top ${PERF_PRODUCTS_MAX_SKUS} by KD. Select ${PERF_PRODUCTS_MAX_SKUS} checks those drinks.`}
+          : `No filter = table lists every drink; graph plots the top ${PERF_PRODUCTS_MAX_SKUS} by KD.`}
       </p>
     </section>
   );
 }
 
-const TOP_LOW = 5;
-
-function PeriodPriorBars({
+function PeriodPriorLines({
   categories,
   period,
   prior,
@@ -367,7 +435,7 @@ function PeriodPriorBars({
   priorLabel,
   onCategoryClick,
   compact,
-  tintByTrend,
+  showPrior,
   unit = 'kd',
   exportName,
   ariaLabel,
@@ -379,13 +447,14 @@ function PeriodPriorBars({
   priorLabel: string;
   onCategoryClick?: (name: string) => void;
   compact?: boolean;
-  tintByTrend?: boolean;
-  unit?: 'kd' | 'cups';
+  showPrior?: boolean;
+  unit?: 'kd' | 'cups' | 'pct';
   exportName?: string;
   ariaLabel?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inst = useRef<echarts.ECharts | null>(null);
+
   useEffect(() => {
     if (!ref.current) return;
     const chart = echarts.init(ref.current);
@@ -403,35 +472,55 @@ function PeriodPriorBars({
     const chart = inst.current;
     if (!chart) return;
     const theme = readTheme();
-    const fmt = unit === 'cups' ? (v: number) => String(Math.round(v)) : formatKwd;
+    const fmt =
+      unit === 'cups'
+        ? (v: number) => String(Math.round(v))
+        : unit === 'pct'
+          ? (v: number) => `${Math.round(v)}%`
+          : formatKwd;
     chart.off('click');
     if (!categories.length) {
       chart.clear();
       return;
     }
-    const periodData = categories.map((_, i) => {
-      const v = period[i] || 0;
-      if (!tintByTrend) return v;
-      const prev = prior[i] || 0;
-      const up = v >= prev;
-      return {
-        value: v,
-        itemStyle: { color: up ? '#2dd4bf' : '#f87171' },
-      };
-    });
+    const series: echarts.SeriesOption[] = [
+      {
+        name: periodLabel,
+        type: 'line',
+        data: period,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: compact ? 6 : 8,
+        lineStyle: { width: 2.5 },
+      },
+    ];
+    if (showPrior !== false) {
+      series.push({
+        name: priorLabel,
+        type: 'line',
+        data: prior,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: compact ? 6 : 8,
+        lineStyle: { width: 2, type: 'dashed' },
+      });
+    }
     chart.setOption(
       {
-        color: [SERIES_PALETTE[0], SERIES_PALETTE[1]],
+        color: SERIES_PALETTE,
         tooltip: {
           trigger: 'axis',
-          axisPointer: { type: 'shadow' },
           valueFormatter: (v: number | string) => fmt(Number(v || 0)),
         },
-        legend: { data: [periodLabel, priorLabel], textStyle: { color: theme.muted } },
+        legend: {
+          data: series.map((s) => String(s.name || '')),
+          textStyle: { color: theme.muted },
+        },
         grid: { left: 56, right: 16, top: 36, bottom: compact ? 56 : 72 },
         xAxis: {
           type: 'category',
           data: categories,
+          boundaryGap: false,
           axisLabel: {
             color: theme.axis,
             rotate: categories.some((c) => c.length > 10) ? 28 : 0,
@@ -441,14 +530,11 @@ function PeriodPriorBars({
         },
         yAxis: {
           type: 'value',
-          name: unit === 'cups' ? 'Cups' : 'KD',
+          name: unit === 'cups' ? 'Cups' : unit === 'pct' ? '%' : 'KD',
           axisLabel: { color: theme.axis, formatter: (v: number) => fmt(v) },
           splitLine: { lineStyle: { color: theme.grid } },
         },
-        series: [
-          { name: periodLabel, type: 'bar', data: periodData, barMaxWidth: compact ? 16 : 22 },
-          { name: priorLabel, type: 'bar', data: prior, barMaxWidth: compact ? 16 : 22 },
-        ],
+        series,
       },
       true,
     );
@@ -458,7 +544,7 @@ function PeriodPriorBars({
         if (name) onCategoryClick(name);
       });
     }
-  }, [categories, period, prior, periodLabel, priorLabel, onCategoryClick, compact, tintByTrend, unit]);
+  }, [categories, period, prior, periodLabel, priorLabel, onCategoryClick, compact, showPrior, unit]);
 
   const onExport = useCallback(() => {
     if (!inst.current || !exportName) return;
@@ -470,7 +556,7 @@ function PeriodPriorBars({
       ref={ref}
       className={`perfEchart ${compact ? 'perfEchartCompact' : 'perfEchartOverview'}`}
       role="img"
-      aria-label={ariaLabel || 'Product period vs prior'}
+      aria-label={ariaLabel || 'Product period line chart'}
     />
   );
   if (!exportName) return chart;
@@ -485,16 +571,19 @@ type Props = {
   machines: MachineRow[];
   selectedIds: string[];
   allSelected: boolean;
-  /** All plottable locations (not the 8-cap) for fleet mix + top/low. */
   fleetIds: string[];
 };
 
 export function PerfProductsSection({ machines, selectedIds, allSelected, fleetIds }: Props) {
-  const [preset, setPreset] = useState<PerfPreset>('today');
-  const [customOn, setCustomOn] = useState(false);
+  const [period, setPeriod] = useState<ProductPeriod>('this_week');
+  const [aStart, setAStart] = useState(() => addDaysIso(kuwaitIsoToday(), -6));
+  const [aEnd, setAEnd] = useState(() => kuwaitIsoToday());
+  const [bStart, setBStart] = useState(() => addDaysIso(kuwaitIsoToday(), -13));
+  const [bEnd, setBEnd] = useState(() => addDaysIso(kuwaitIsoToday(), -7));
   const [customStart, setCustomStart] = useState(() => addDaysIso(kuwaitIsoToday(), -7));
   const [customEnd, setCustomEnd] = useState(() => addDaysIso(kuwaitIsoToday(), -1));
   const [skus, setSkus] = useState<string[]>([]);
+  const [targetType, setTargetType] = useState<TargetType>('both');
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<echarts.ECharts | null>(null);
 
@@ -506,30 +595,47 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, [allSelected, locNone, machines, selectedIds]);
 
   const idsKey = ids.slice().sort().join(',');
-  const customValid = customOn && Boolean(customStart && customEnd && customStart <= customEnd);
-  const compareOpts = useMemo(
-    () =>
-      customValid
-        ? { preset: 'custom', start: customStart, end: customEnd }
-        : { preset },
-    [customValid, customStart, customEnd, preset],
-  );
-  const compareOptsKey = customValid
-    ? `custom:${customStart}:${customEnd}`
-    : `preset:${preset}`;
+
+  const compareOpts = useMemo((): CompareOpts | null => {
+    if (period === 'custom_vs_custom') {
+      if (!(aStart && aEnd && bStart && bEnd && aStart <= aEnd && bStart <= bEnd)) return null;
+      return { preset: 'custom_vs_custom', aStart, aEnd, bStart, bEnd };
+    }
+    if (period === 'custom_single') {
+      if (!(customStart && customEnd && customStart <= customEnd)) return null;
+      return { preset: 'custom_single', start: customStart, end: customEnd, compare: false };
+    }
+    if (period === 'wtd') return { preset: 'wtd', compare: false };
+    return { preset: period };
+  }, [period, aStart, aEnd, bStart, bEnd, customStart, customEnd]);
+
+  const compareOptsKey = useMemo(() => {
+    if (!compareOpts) return 'invalid';
+    if (compareOpts.aStart) {
+      return `cvsc:${compareOpts.aStart}:${compareOpts.aEnd}:${compareOpts.bStart}:${compareOpts.bEnd}`;
+    }
+    if (compareOpts.start) {
+      return `c:${compareOpts.start}:${compareOpts.end}:cmp${compareOpts.compare === false ? 0 : 1}`;
+    }
+    return `p:${compareOpts.preset}:cmp${compareOpts.compare === false ? 0 : 1}`;
+  }, [compareOpts]);
 
   const compareQ = useQuery({
     queryKey: ['alert-performance-product-compare', compareOptsKey, idsKey],
-    queryFn: () => apiGet<ProductComparePayload>(productComparePath(ids, compareOpts)),
-    enabled: ids.length > 0,
+    queryFn: () => apiGet<ProductComparePayload>(productComparePath(ids, compareOpts!)),
+    enabled: ids.length > 0 && Boolean(compareOpts),
     staleTime: 60_000,
     refetchInterval: 90_000,
   });
 
   const fleetQ = useQuery({
-    queryKey: ['alert-performance-product-compare-fleet', compareOptsKey, fleetIds.slice().sort().join(',')],
-    queryFn: () => fetchProductCompareBatched(fleetIds, compareOpts),
-    enabled: fleetIds.length > 0,
+    queryKey: [
+      'alert-performance-product-compare-fleet',
+      compareOptsKey,
+      fleetIds.slice().sort().join(','),
+    ],
+    queryFn: () => fetchProductCompareBatched(fleetIds, compareOpts!),
+    enabled: fleetIds.length > 0 && Boolean(compareOpts),
     staleTime: 60_000,
     refetchInterval: 90_000,
   });
@@ -556,11 +662,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, [fleetQ.data?.machines, machines]);
 
   const win = fleetQ.data?.window || compareQ.data?.window;
+  const compareOn = (fleetQ.data?.compare ?? compareQ.data?.compare) !== false && period !== 'wtd' && period !== 'custom_single';
   const periodLabel = win?.label || 'Period';
   const priorLabel = win?.prevLabel || 'Prior';
   const windowHint =
     win?.start && win?.end
-      ? `${periodLabel}: ${win.start} → ${win.end} · ${priorLabel}: ${win.prevStart} → ${win.prevEnd}`
+      ? compareOn && win.prevStart && win.prevEnd
+        ? `${periodLabel}: ${win.start} → ${win.end} · ${priorLabel}: ${win.prevStart} → ${win.prevEnd}`
+        : `${periodLabel}: ${win.start} → ${win.end} (no comparison)`
       : '';
 
   const mixedRows = useMemo(() => aggregateProducts(payloadMachines), [payloadMachines]);
@@ -585,12 +694,12 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     });
   }, []);
 
-  const compareMode = ids.length > 1;
+  const multiLoc = ids.length > 1;
   const compareSkus = useMemo(() => {
     if (skus.length) return skus;
-    if (!compareMode) return [];
+    if (!multiLoc) return [];
     return skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name);
-  }, [skus, compareMode, skuCatalog]);
+  }, [skus, multiLoc, skuCatalog]);
 
   const skuSet = useMemo(() => new Set(skus), [skus]);
 
@@ -602,17 +711,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const acrossByLocation = useMemo(() => {
     if (!compareSkus.length) return [];
     return payloadMachines.map((m) => {
-      const byName = new Map(
-        (m.products || []).map((p) => [String(p.name || '').trim(), p] as const),
-      );
+      const byName = new Map((m.products || []).map((p) => [String(p.name || '').trim(), p] as const));
       const cells = compareSkus.map((name) => {
         const hit = byName.get(name);
         return {
           name,
           revenueKwd: Number(hit?.revenueKwd || 0),
-          prevRevenueKwd: Number(hit?.prevRevenueKwd || 0),
+          prevRevenueKwd: hit?.prevRevenueKwd ?? null,
           yoyRevenueKwd: Number(hit?.yoyRevenueKwd || 0),
           cups: hit?.cups ?? 0,
+          prevCups: hit?.prevCups ?? null,
           trendPct: hit?.trendPct ?? null,
           yoyTrendPct: hit?.yoyTrendPct ?? null,
         };
@@ -623,14 +731,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, [payloadMachines, compareSkus]);
 
   const chartModel = useMemo(() => {
-    if (!compareMode) {
+    if (!multiLoc) {
       const top = inLocationRows.slice(0, PERF_PRODUCTS_MAX_SKUS);
       return {
         kind: 'period-prior' as const,
         categories: top.map((p) => p.name),
         series: [
           { name: periodLabel, data: top.map((p) => Number(p.revenueKwd || 0)) },
-          { name: priorLabel, data: top.map((p) => Number(p.prevRevenueKwd || 0)) },
+          ...(compareOn
+            ? [{ name: priorLabel, data: top.map((p) => Number(p.prevRevenueKwd || 0)) }]
+            : []),
         ],
         clickTogglesSku: true,
       };
@@ -658,10 +768,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             name: periodLabel,
             data: top.map((r) => r.cells.find((c) => c.name === skuName)?.revenueKwd || 0),
           },
-          {
-            name: priorLabel,
-            data: top.map((r) => r.cells.find((c) => c.name === skuName)?.prevRevenueKwd || 0),
-          },
+          ...(compareOn
+            ? [
+                {
+                  name: priorLabel,
+                  data: top.map(
+                    (r) => Number(r.cells.find((c) => c.name === skuName)?.prevRevenueKwd || 0),
+                  ),
+                },
+              ]
+            : []),
         ],
         clickTogglesSku: false,
       };
@@ -675,7 +791,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       })),
       clickTogglesSku: true,
     };
-  }, [compareMode, inLocationRows, acrossByLocation, compareSkus, periodLabel, priorLabel]);
+  }, [multiLoc, inLocationRows, acrossByLocation, compareSkus, periodLabel, priorLabel, compareOn]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -705,7 +821,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         color: SERIES_PALETTE,
         tooltip: {
           trigger: 'axis',
-          axisPointer: { type: 'shadow' },
           valueFormatter: (v: number | string) => formatKwd(Number(v || 0)),
         },
         legend: {
@@ -716,6 +831,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         xAxis: {
           type: 'category',
           data: cats,
+          boundaryGap: false,
           axisLabel: {
             color: theme.axis,
             rotate: cats.some((c) => c.length > 10) ? 28 : 0,
@@ -731,9 +847,12 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         },
         series: chartModel.series.map((s) => ({
           name: s.name,
-          type: 'bar',
+          type: 'line',
           data: s.data,
-          barMaxWidth: chartModel.kind === 'grouped' ? 14 : 22,
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 7,
+          lineStyle: { width: 2.5 },
         })),
       },
       true,
@@ -755,13 +874,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     if (!chartInst.current) return;
     downloadChartPng(
       chartInst.current,
-      chartFilename([
-        'product-performance',
-        compareMode ? 'across' : 'mix',
-        preset,
-      ]),
+      chartFilename(['product-performance', multiLoc ? 'across' : 'mix', period]),
     );
-  }, [compareMode, ids.length, preset]);
+  }, [multiLoc, period]);
 
   const fleetChartRows = useMemo(() => {
     const src = skus.length ? fleetMix.filter((p) => skuSet.has(p.name)) : fleetMix;
@@ -790,13 +905,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     return fleetMachinesNamed
       .map((m) => {
         const cell = skuOnMachine(m, skus);
-        return {
-          machineId: m.machineId,
-          machineName: m.machineName,
-          ...cell,
-        };
+        return { machineId: m.machineId, machineName: m.machineName, ...cell };
       })
-      .filter((r) => r.revenue > 0 || r.prev > 0);
+      .filter((r) => r.revenue > 0 || (r.prev != null && r.prev > 0));
   }, [fleetMachinesNamed, skus]);
 
   const topMachines = useMemo(
@@ -818,60 +929,161 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     () =>
       payloadMachines.map((m) => {
         const rows = aggregateProducts([m]);
-        const shown = skus.length ? rows.filter((p) => skuSet.has(p.name)) : rows.slice(0, PERF_PRODUCTS_MAX_SKUS);
+        const shown = skus.length
+          ? rows.filter((p) => skuSet.has(p.name))
+          : rows.slice(0, PERF_PRODUCTS_MAX_SKUS);
         return { machineId: m.machineId, machineName: m.machineName, rows: shown };
       }),
     [payloadMachines, skus, skuSet],
   );
 
   const fleetTargetRows = useMemo(
-    () => fleetMix.filter((p) => p.targetCups != null && Number(p.targetCups) > 0).slice(0, PERF_PRODUCTS_MAX_SKUS),
+    () =>
+      fleetMix
+        .filter((p) => p.targetCups != null && Number(p.targetCups) > 0)
+        .slice(0, PERF_PRODUCTS_MAX_SKUS),
     [fleetMix],
   );
 
   const machineTargetRows = useMemo(() => {
+    return fleetMachinesNamed
+      .filter((m) => m.locationTargetKd != null && Number(m.locationTargetKd) > 0)
+      .map((m) => ({
+        label: m.machineName,
+        actual: Number(m.periodKd || 0),
+        target: Number(m.locationTargetKd || 0),
+        pct: m.pctOfLocationTarget ?? null,
+      }))
+      .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))
+      .slice(0, 16);
+  }, [fleetMachinesNamed]);
+
+  const productMachineTargetRows = useMemo(() => {
     if (!skus.length) return [];
     const out: { label: string; cups: number; target: number }[] = [];
     for (const m of fleetMachinesNamed) {
       const cell = skuOnMachine(m, skus);
       if (!cell.hasTarget) continue;
-      out.push({
-        label: m.machineName,
-        cups: cell.cups,
-        target: cell.target,
-      });
+      out.push({ label: m.machineName, cups: cell.cups, target: cell.target });
     }
-    return out
-      .sort((a, b) => b.target - a.target || b.cups - a.cups)
-      .slice(0, 16);
+    return out.sort((a, b) => b.target - a.target || b.cups - a.cups).slice(0, 16);
   }, [fleetMachinesNamed, skus]);
 
-  const locNames = useMemo(() => {
-    const byId = new Map(machines.map((m) => [m.id, m.name]));
-    return ids.map((id) => byId.get(id) || id);
-  }, [ids, machines]);
+  const periodMeta = PERIOD_OPTIONS.find((p) => p.id === period);
 
-  const showingBlurb = useMemo(() => {
-    if (!ids.length) return '';
-    const locLabel =
-      locNames.length <= 3 ? locNames.join(' + ') : `${locNames.slice(0, 3).join(' + ')} + ${locNames.length - 3} more`;
-    if (compareQ.isLoading) return `Loading ${locLabel}…`;
-    const graphN = Math.min(PERF_PRODUCTS_MAX_SKUS, skus.length || mixedRows.length);
-    const mixN = mixedRows.length;
-    if (!compareMode) {
-      if (!skus.length) {
-        return `Looking at: mix at ${locLabel}. Graph top ${graphN} of ${mixN} drinks · period vs prior.`;
-      }
-      return `Looking at: ${skus.join(', ')} at ${locLabel}.`;
-    }
-    const drinkBit = skus.length
-      ? skus.join(', ')
-      : `top ${compareSkus.length} drinks (no filter)`;
-    if (compareSkus.length <= 1) {
-      return `Looking at: ${drinkBit} across ${locLabel} — each bar is a location.`;
-    }
-    return `Looking at: ${drinkBit} across ${locLabel} — one cluster per site, one color per drink.`;
-  }, [ids.length, locNames, skus, mixedRows.length, compareMode, compareSkus.length, compareQ.isLoading]);
+  const onExportReport = useCallback(() => {
+    downloadWeeklyProductReport({
+      periodLabel,
+      priorLabel,
+      windowStart: win?.start,
+      windowEnd: win?.end,
+      fleetProducts: fleetMix,
+      machines: fleetMachinesNamed,
+      focusProduct: skus[0] || null,
+      compare: compareOn,
+    });
+  }, [periodLabel, priorLabel, win, fleetMix, fleetMachinesNamed, skus, compareOn]);
+
+  const detailTable = (
+    <div className="perfProductsTableWrap">
+      {!multiLoc ? (
+        <table className="perfProductsTable">
+          <thead>
+            <tr>
+              <th>Drink</th>
+              <th>{periodLabel} KD</th>
+              {compareOn ? <th>{priorLabel} KD</th> : null}
+              {compareOn ? <th>vs prior</th> : null}
+              <th>Cups</th>
+              {compareOn ? <th>Prior cups</th> : null}
+              <th>LY KD</th>
+              <th>YoY</th>
+            </tr>
+          </thead>
+          <tbody>
+            {locNone ? (
+              <tr>
+                <td colSpan={8}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
+              </tr>
+            ) : inLocationRows.length === 0 ? (
+              <tr>
+                <td colSpan={8}>No product mix for this selection in the window yet.</td>
+              </tr>
+            ) : (
+              inLocationRows.map((p) => (
+                <tr
+                  key={p.name}
+                  className={skuSet.has(p.name) ? 'perfProductsRowActive' : undefined}
+                  onClick={() => toggleSku(p.name)}
+                >
+                  <td>{p.name}</td>
+                  <td>{formatKwd(Number(p.revenueKwd || 0))}</td>
+                  {compareOn ? <td>{formatKwd(Number(p.prevRevenueKwd || 0))}</td> : null}
+                  {compareOn ? (
+                    <td className={trendClass(p.trendPct)}>{trendText(p.trendPct)}</td>
+                  ) : null}
+                  <td>{p.cups != null ? Math.round(Number(p.cups)) : '—'}</td>
+                  {compareOn ? (
+                    <td>{p.prevCups != null ? Math.round(Number(p.prevCups)) : '—'}</td>
+                  ) : null}
+                  <td>{formatKwd(Number(p.yoyRevenueKwd || 0))}</td>
+                  <td className={trendClass(p.yoyTrendPct)}>{trendText(p.yoyTrendPct)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      ) : (
+        <table className="perfProductsTable">
+          <thead>
+            <tr>
+              <th>Location</th>
+              {compareSkus.length > 1 ? <th>Drink</th> : null}
+              <th>{periodLabel} KD</th>
+              {compareOn ? <th>{priorLabel} KD</th> : null}
+              {compareOn ? <th>vs prior</th> : null}
+              <th>Cups</th>
+              <th>LY KD</th>
+              <th>YoY</th>
+            </tr>
+          </thead>
+          <tbody>
+            {locNone ? (
+              <tr>
+                <td colSpan={8}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
+              </tr>
+            ) : !compareSkus.length ? (
+              <tr>
+                <td colSpan={8}>Pick a drink in Products (max {PERF_PRODUCTS_MAX_SKUS}).</td>
+              </tr>
+            ) : (
+              [...acrossByLocation]
+                .sort(
+                  (a, b) =>
+                    b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName),
+                )
+                .flatMap((r) =>
+                  r.cells.map((c) => (
+                    <tr key={`${r.machineId}:${c.name}`}>
+                      <td>{r.machineName}</td>
+                      {compareSkus.length > 1 ? <td>{c.name}</td> : null}
+                      <td>{formatKwd(c.revenueKwd)}</td>
+                      {compareOn ? <td>{formatKwd(Number(c.prevRevenueKwd || 0))}</td> : null}
+                      {compareOn ? (
+                        <td className={trendClass(c.trendPct)}>{trendText(c.trendPct)}</td>
+                      ) : null}
+                      <td>{c.cups != null ? Math.round(Number(c.cups)) : '—'}</td>
+                      <td>{formatKwd(c.yoyRevenueKwd)}</td>
+                      <td className={trendClass(c.yoyTrendPct)}>{trendText(c.yoyTrendPct)}</td>
+                    </tr>
+                  )),
+                )
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
 
   return (
     <section className="perfProducts" aria-labelledby="perf-products-title">
@@ -882,48 +1094,78 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           </h3>
           <aside className="perfProductsGuide" aria-label="How to use product performance">
             <ol className="perfProductsGuideList">
-              <li>
-                <strong>Fleet mix</strong> — all sites summed, no location names.
-                <span className="perfProductsGuideWhy">Which drinks are up or down.</span>
+              <li className="active">
+                <strong>1. Period</strong> — choose a preset or custom dates below.
               </li>
               <li className={!locNone ? 'active' : undefined}>
-                <strong>Selected sites</strong> — mix or compare the {PERF_PRODUCTS_MAX_LOCATIONS}-cap
-                pick.
+                <strong>2. Locations</strong> — pick up to {PERF_PRODUCTS_MAX_LOCATIONS} in the bar
+                above (scroll if needed).
               </li>
               <li className={skus.length > 0 ? 'active' : undefined}>
-                <strong>Pick a drink</strong> — top / lowest sites across the whole fleet, plus cup
-                targets.
+                <strong>3. Products + target type</strong> — filter drinks, then read the line charts.
               </li>
             </ol>
           </aside>
-          {showingBlurb ? <p className="perfProductsNow">{showingBlurb}</p> : null}
           {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
         </div>
+        <button type="button" className="perfSegPill perfSegPillEmphasis" onClick={onExportReport}>
+          Export weekly report
+        </button>
       </header>
 
-      <div className="perfModePills" role="group" aria-label="Product compare window">
-        {PRODUCT_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`perfSegPill ${!customOn && preset === p.id ? 'active' : ''}`}
-            onClick={() => {
-              setCustomOn(false);
-              setPreset(p.id);
-            }}
+      <div className="perfProductsCriteria" aria-label="Product criteria">
+        <label className="perfProductsCriteriaField">
+          <span>Period</span>
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as ProductPeriod)}
+            aria-label="Compare period"
           >
-            {p.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`perfSegPill ${customOn ? 'active' : ''}`}
-          onClick={() => setCustomOn(true)}
-        >
-          Custom range
-        </button>
+            {PERIOD_OPTIONS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          {periodMeta ? <small>{periodMeta.hint}</small> : null}
+        </label>
+
+        <label className="perfProductsCriteriaField">
+          <span>Target type</span>
+          <select
+            value={targetType}
+            onChange={(e) => setTargetType(e.target.value as TargetType)}
+            aria-label="Target type"
+          >
+            <option value="product">Product target</option>
+            <option value="machine">Machine target</option>
+            <option value="both">Both</option>
+          </select>
+          <small>Admin → Targets sets cup and location KD targets.</small>
+        </label>
       </div>
-      {customOn ? (
+
+      {period === 'custom_vs_custom' ? (
+        <div className="perfProductsCustomRange">
+          <label>
+            Period A from
+            <input type="date" value={aStart} max={aEnd || kuwaitIsoToday()} onChange={(e) => setAStart(e.target.value)} />
+          </label>
+          <label>
+            Period A to
+            <input type="date" value={aEnd} min={aStart} max={kuwaitIsoToday()} onChange={(e) => setAEnd(e.target.value)} />
+          </label>
+          <label>
+            Period B from
+            <input type="date" value={bStart} max={bEnd || kuwaitIsoToday()} onChange={(e) => setBStart(e.target.value)} />
+          </label>
+          <label>
+            Period B to
+            <input type="date" value={bEnd} min={bStart} max={kuwaitIsoToday()} onChange={(e) => setBEnd(e.target.value)} />
+          </label>
+        </div>
+      ) : null}
+      {period === 'custom_single' ? (
         <div className="perfProductsCustomRange">
           <label>
             From
@@ -944,9 +1186,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               onChange={(e) => setCustomEnd(e.target.value)}
             />
           </label>
-          <p className="perfSectionHint">Compared with the same number of days immediately before.</p>
+          <p className="perfSectionHint">Single range — no prior comparison lines or rising/falling.</p>
         </div>
       ) : null}
+
+      {!compareOpts ? <p className="perfError">Fix the custom dates (from ≤ to) to load charts.</p> : null}
 
       <SkuMultiDropdown
         options={skuCatalog}
@@ -964,61 +1208,81 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           1. Fleet mix — all locations
         </h4>
         <p className="perfSectionHint">
-          Period vs prior for the whole fleet (no site names). Teal = up vs prior, red = down. Click a
-          drink to filter.
+          Line chart of drinks (no site names). {compareOn ? 'Solid = period, dashed = prior.' : 'Comparison off.'}
         </p>
         {fleetQ.isLoading ? <p className="perfMuted">Loading fleet mix…</p> : null}
-        <PeriodPriorBars
+        <PeriodPriorLines
           categories={fleetChartRows.map((p) => p.name)}
           period={fleetChartRows.map((p) => Number(p.revenueKwd || 0))}
           prior={fleetChartRows.map((p) => Number(p.prevRevenueKwd || 0))}
           periodLabel={periodLabel}
           priorLabel={priorLabel}
           onCategoryClick={toggleSku}
-          tintByTrend
+          showPrior={compareOn}
           exportName="product-fleet-mix"
-          ariaLabel="Fleet product mix period vs prior"
+          ariaLabel="Fleet product mix line chart"
         />
-        <div className="perfProductsTrendCols">
-          <div>
-            <h5 className="perfProductsTrendHead">Rising</h5>
-            {rising.length ? (
-              <ul className="perfProductsTrendList">
-                {rising.map((p) => (
-                  <li key={p.name}>
-                    <button type="button" onClick={() => toggleSku(p.name)}>
-                      {p.name}
-                    </button>
-                    <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="perfMuted">None up vs prior in the top mix.</p>
-            )}
+        {compareOn ? (
+          <div className="perfProductsTrendCols">
+            <div>
+              <h5 className="perfProductsTrendHead">Rising (KD + cups)</h5>
+              {rising.length ? (
+                <ul className="perfProductsTrendList perfProductsTrendDetailed">
+                  {rising.map((p) => (
+                    <li key={p.name}>
+                      <button type="button" onClick={() => toggleSku(p.name)}>
+                        {p.name}
+                      </button>
+                      <div className="perfProductsTrendMeta">
+                        <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
+                        <span>
+                          {formatKwd(Number(p.prevRevenueKwd || 0))} → {formatKwd(Number(p.revenueKwd || 0))}
+                        </span>
+                        <span className={trendClass(p.cupsTrendPct)}>
+                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))} cups{' '}
+                          ({trendText(p.cupsTrendPct)})
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="perfMuted">None up vs prior.</p>
+              )}
+            </div>
+            <div>
+              <h5 className="perfProductsTrendHead">Falling (KD + cups)</h5>
+              {falling.length ? (
+                <ul className="perfProductsTrendList perfProductsTrendDetailed">
+                  {falling.map((p) => (
+                    <li key={p.name}>
+                      <button type="button" onClick={() => toggleSku(p.name)}>
+                        {p.name}
+                      </button>
+                      <div className="perfProductsTrendMeta">
+                        <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
+                        <span>
+                          {formatKwd(Number(p.prevRevenueKwd || 0))} → {formatKwd(Number(p.revenueKwd || 0))}
+                        </span>
+                        <span className={trendClass(p.cupsTrendPct)}>
+                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))} cups{' '}
+                          ({trendText(p.cupsTrendPct)})
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="perfMuted">None down vs prior.</p>
+              )}
+            </div>
           </div>
-          <div>
-            <h5 className="perfProductsTrendHead">Falling</h5>
-            {falling.length ? (
-              <ul className="perfProductsTrendList">
-                {falling.map((p) => (
-                  <li key={p.name}>
-                    <button type="button" onClick={() => toggleSku(p.name)}>
-                      {p.name}
-                    </button>
-                    <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="perfMuted">None down vs prior in the top mix.</p>
-            )}
-          </div>
-        </div>
+        ) : (
+          <p className="perfMuted">Rising / falling need a comparison period.</p>
+        )}
       </section>
 
-      {locNone ? <p className="perfMuted">Pick at least one location for the selected-site graphs.</p> : null}
-
+      {locNone ? <p className="perfMuted">Pick at least one location for selected-site graphs.</p> : null}
       {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
       {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
 
@@ -1032,115 +1296,23 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             ref={chartRef}
             className="perfEchart perfEchartOverview"
             role="img"
-            aria-label="Selected locations product comparison"
+            aria-label="Selected locations product line chart"
           />
         </ChartExportWrap>
         <p className="perfSectionHint">
-          {compareMode
+          {multiLoc
             ? compareSkus.length > 1
-              ? 'Grouped bars: one cluster per location, one color per drink (period KD).'
-              : 'Each bar group is a location (period KD vs prior).'
-            : 'Click a drink bar to include it in the product filter.'}
+              ? 'One line per drink across selected sites.'
+              : 'Period vs prior lines across selected sites.'
+            : 'Click a drink point to include it in the product filter.'}
         </p>
-
-        {!compareMode ? (
-          <div className="perfProductsTableWrap">
-            <table className="perfProductsTable">
-              <thead>
-                <tr>
-                  <th>Drink</th>
-                  <th>{periodLabel} KD</th>
-                  <th>{priorLabel} KD</th>
-                  <th>vs prior</th>
-                  <th>LY KD</th>
-                  <th>YoY</th>
-                  <th>Cups</th>
-                </tr>
-              </thead>
-              <tbody>
-                {locNone ? (
-                  <tr>
-                    <td colSpan={7}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
-                  </tr>
-                ) : inLocationRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>No product mix for this selection in the window yet.</td>
-                  </tr>
-                ) : (
-                  inLocationRows.map((p) => (
-                    <tr
-                      key={p.name}
-                      className={skuSet.has(p.name) ? 'perfProductsRowActive' : undefined}
-                      onClick={() => toggleSku(p.name)}
-                    >
-                      <td>{p.name}</td>
-                      <td>{formatKwd(Number(p.revenueKwd || 0))}</td>
-                      <td>{formatKwd(Number(p.prevRevenueKwd || 0))}</td>
-                      <td className={trendClass(p.trendPct)}>{trendText(p.trendPct)}</td>
-                      <td>{formatKwd(Number(p.yoyRevenueKwd || 0))}</td>
-                      <td className={trendClass(p.yoyTrendPct)}>{trendText(p.yoyTrendPct)}</td>
-                      <td>{p.cups != null ? Math.round(Number(p.cups)) : '—'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="perfProductsTableWrap">
-            <table className="perfProductsTable">
-              <thead>
-                <tr>
-                  <th>Location</th>
-                  {compareSkus.length > 1 ? <th>Drink</th> : null}
-                  <th>{periodLabel} KD</th>
-                  <th>{priorLabel} KD</th>
-                  <th>vs prior</th>
-                  <th>LY KD</th>
-                  <th>YoY</th>
-                  <th>Cups</th>
-                </tr>
-              </thead>
-              <tbody>
-                {locNone ? (
-                  <tr>
-                    <td colSpan={compareSkus.length > 1 ? 8 : 7}>
-                      Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).
-                    </td>
-                  </tr>
-                ) : !compareSkus.length ? (
-                  <tr>
-                    <td colSpan={7}>Pick a drink in Products (max {PERF_PRODUCTS_MAX_SKUS}).</td>
-                  </tr>
-                ) : (
-                  [...acrossByLocation]
-                    .sort((a, b) => b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName))
-                    .flatMap((r) =>
-                      r.cells.map((c) => (
-                        <tr key={`${r.machineId}:${c.name}`}>
-                          <td>{r.machineName}</td>
-                          {compareSkus.length > 1 ? <td>{c.name}</td> : null}
-                          <td>{formatKwd(c.revenueKwd)}</td>
-                          <td>{formatKwd(c.prevRevenueKwd)}</td>
-                          <td className={trendClass(c.trendPct)}>{trendText(c.trendPct)}</td>
-                          <td>{formatKwd(c.yoyRevenueKwd)}</td>
-                          <td className={trendClass(c.yoyTrendPct)}>{trendText(c.yoyTrendPct)}</td>
-                          <td>{c.cups != null ? Math.round(Number(c.cups)) : '—'}</td>
-                        </tr>
-                      )),
-                    )
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
       </section>
 
       <section className="perfProductsBlock" aria-labelledby="perf-products-per-machine">
         <h4 id="perf-products-per-machine" className="perfSectionTitle">
           3. Per location
         </h4>
-        <p className="perfSectionHint">Same window, one mix chart per selected site.</p>
+        <p className="perfSectionHint">Same window, one line chart per selected site.</p>
         {locNone ? (
           <p className="perfMuted">Select locations above.</p>
         ) : (
@@ -1148,14 +1320,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             {perMachineMix.map((m) => (
               <article key={m.machineId} className="perfProductsMachineCard">
                 <h5 className="perfProductsMachineName">{m.machineName}</h5>
-                <PeriodPriorBars
+                <PeriodPriorLines
                   categories={m.rows.map((p) => p.name)}
                   period={m.rows.map((p) => Number(p.revenueKwd || 0))}
                   prior={m.rows.map((p) => Number(p.prevRevenueKwd || 0))}
                   periodLabel={periodLabel}
                   priorLabel={priorLabel}
                   compact
-                  tintByTrend
+                  showPrior={compareOn}
                   exportName={`product-mix-${m.machineId}`}
                   ariaLabel={`Product mix at ${m.machineName}`}
                 />
@@ -1170,7 +1342,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           4. Top and lowest sites
         </h4>
         <p className="perfSectionHint">
-          Uses the whole fleet, not the Locations pick. Select a drink (or a few) to rank sites.
+          Whole fleet (ignores Locations pick). Select a drink to rank sites.
         </p>
         {!skus.length ? (
           <p className="perfMuted">Select a drink above to see top and lowest locations.</p>
@@ -1178,28 +1350,30 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <div className="perfProductsTopLow">
             <div>
               <h5 className="perfProductsTrendHead">Top {TOP_LOW}</h5>
-              <PeriodPriorBars
+              <PeriodPriorLines
                 categories={topMachines.map((m) => m.machineName)}
                 period={topMachines.map((m) => m.revenue)}
-                prior={topMachines.map((m) => m.prev)}
+                prior={topMachines.map((m) => Number(m.prev || 0))}
                 periodLabel={periodLabel}
                 priorLabel={priorLabel}
                 compact
+                showPrior={compareOn}
                 exportName="product-top-sites"
-                ariaLabel="Top performing locations for selected drinks"
+                ariaLabel="Top performing locations"
               />
             </div>
             <div>
               <h5 className="perfProductsTrendHead">Lowest {TOP_LOW}</h5>
-              <PeriodPriorBars
+              <PeriodPriorLines
                 categories={lowMachines.map((m) => m.machineName)}
                 period={lowMachines.map((m) => m.revenue)}
-                prior={lowMachines.map((m) => m.prev)}
+                prior={lowMachines.map((m) => Number(m.prev || 0))}
                 periodLabel={periodLabel}
                 priorLabel={priorLabel}
                 compact
+                showPrior={compareOn}
                 exportName="product-low-sites"
-                ariaLabel="Lowest performing locations for selected drinks"
+                ariaLabel="Lowest performing locations"
               />
             </div>
           </div>
@@ -1211,46 +1385,77 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           5. Targets achieved
         </h4>
         <p className="perfSectionHint">
-          Admin cup targets for the window vs actual cups. Fleet bars have no site names; pick a drink
-          for per-location achievement.
+          {targetType === 'product'
+            ? 'Product cup targets vs actual.'
+            : targetType === 'machine'
+              ? 'Machine KD targets vs actual.'
+              : 'Product cups and machine KD targets.'}
         </p>
-        {fleetTargetRows.length ? (
-          <PeriodPriorBars
-            categories={fleetTargetRows.map((p) => p.name)}
-            period={fleetTargetRows.map((p) => Number(p.cups || 0))}
-            prior={fleetTargetRows.map((p) => Number(p.targetCups || 0))}
-            periodLabel="Actual cups"
-            priorLabel="Target cups"
-            unit="cups"
-            exportName="product-fleet-targets"
-            ariaLabel="Fleet product cups vs target"
-          />
-        ) : (
-          <p className="perfMuted">No Admin cup targets on the mix for this window.</p>
-        )}
-        {skus.length ? (
-          machineTargetRows.length ? (
-            <>
-              <h5 className="perfProductsTrendHead">Per location — {skus.join(', ')}</h5>
-              <PeriodPriorBars
-                categories={machineTargetRows.map((r) => r.label)}
-                period={machineTargetRows.map((r) => r.cups)}
-                prior={machineTargetRows.map((r) => r.target)}
+        {(targetType === 'product' || targetType === 'both') && (
+          <>
+            {fleetTargetRows.length ? (
+              <PeriodPriorLines
+                categories={fleetTargetRows.map((p) => p.name)}
+                period={fleetTargetRows.map((p) => Number(p.cups || 0))}
+                prior={fleetTargetRows.map((p) => Number(p.targetCups || 0))}
                 periodLabel="Actual cups"
                 priorLabel="Target cups"
                 unit="cups"
-                exportName="product-machine-targets"
-                ariaLabel="Location product cups vs target"
+                exportName="product-fleet-targets"
+                ariaLabel="Fleet product cups vs target"
               />
-            </>
-          ) : (
-            <p className="perfMuted">
-              No cup target on the selected drink(s). Set them under Admin → Targets.
-            </p>
-          )
-        ) : (
-          <p className="perfMuted">Select a drink to compare target vs actual at each location.</p>
+            ) : (
+              <p className="perfMuted">No Admin cup targets on the mix for this window.</p>
+            )}
+            {skus.length ? (
+              productMachineTargetRows.length ? (
+                <>
+                  <h5 className="perfProductsTrendHead">Per location cups — {skus.join(', ')}</h5>
+                  <PeriodPriorLines
+                    categories={productMachineTargetRows.map((r) => r.label)}
+                    period={productMachineTargetRows.map((r) => r.cups)}
+                    prior={productMachineTargetRows.map((r) => r.target)}
+                    periodLabel="Actual cups"
+                    priorLabel="Target cups"
+                    unit="cups"
+                    exportName="product-machine-cup-targets"
+                    ariaLabel="Location product cups vs target"
+                  />
+                </>
+              ) : (
+                <p className="perfMuted">No cup target on the selected drink(s).</p>
+              )
+            ) : (
+              <p className="perfMuted">Select a drink for per-location product targets.</p>
+            )}
+          </>
         )}
+        {(targetType === 'machine' || targetType === 'both') && (
+          <>
+            <h5 className="perfProductsTrendHead">Machine KD vs target</h5>
+            {machineTargetRows.length ? (
+              <PeriodPriorLines
+                categories={machineTargetRows.map((r) => r.label)}
+                period={machineTargetRows.map((r) => r.actual)}
+                prior={machineTargetRows.map((r) => r.target)}
+                periodLabel="Actual KD"
+                priorLabel="Target KD"
+                exportName="product-machine-kd-targets"
+                ariaLabel="Machine KD vs target"
+              />
+            ) : (
+              <p className="perfMuted">No Admin location KD targets for these machines.</p>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="perfProductsBlock" aria-labelledby="perf-products-table">
+        <h4 id="perf-products-table" className="perfSectionTitle">
+          6. Selected locations — detail table
+        </h4>
+        <p className="perfSectionHint">Numbers behind chart 2 (moved below the graphs for a clearer read).</p>
+        {detailTable}
       </section>
     </section>
   );

@@ -3988,9 +3988,13 @@ def register_alert_routes(app) -> None:
         """
         Product workspace on Performance: SKU KD by location for a preset window vs prior
         (and same dates last year). Cache-backed — same Vendon daily mix as machine-products.
-        Query: machineIds=id1,id2 (required, max 80), preset=today|yesterday|this_week|...
-        Optional start=&end= (inclusive ISO dates) for a custom range vs the equal-length prior.
-        Each SKU includes Admin cup target for the window when configured.
+        Query: machineIds=id1,id2 (required, max 80),
+               preset=today|yesterday|wtd|this_week|wtd_vs_ly|last_week|...
+               Optional custom:
+                 start=&end= with compare=0 → single range, no prior comparison
+                 aStart=&aEnd=&bStart=&bEnd= → custom vs custom
+                 start=&end= alone → custom vs equal-length prior (legacy)
+        Each SKU includes Admin cup target; each machine includes location KD target when set.
         """
         if request.method == "OPTIONS":
             return "", 204
@@ -4006,6 +4010,8 @@ def register_alert_routes(app) -> None:
             requested = requested[:80]
 
         preset = (request.args.get("preset") or "today").strip().lower()
+        compare_raw = (request.args.get("compare") or "1").strip().lower()
+        compare_on = compare_raw not in ("0", "false", "no", "off")
         from alert_targets_lib import daily_yardstick, products_from_lmc_row, resolve_perf_window
         import hashlib
 
@@ -4013,33 +4019,62 @@ def register_alert_routes(app) -> None:
         now_local = datetime.now(tz)
         today = now_local.date()
 
-        custom_s = (request.args.get("start") or request.args.get("from") or "").strip()[:10]
-        custom_e = (request.args.get("end") or request.args.get("to") or "").strip()[:10]
+        def _parse_d(raw: Optional[str]) -> Optional[date]:
+            s = (raw or "").strip()[:10]
+            if not s:
+                return None
+            try:
+                return date.fromisoformat(s)
+            except ValueError:
+                return None
+
+        a_s = _parse_d(request.args.get("aStart") or request.args.get("a_start"))
+        a_e = _parse_d(request.args.get("aEnd") or request.args.get("a_end"))
+        b_s = _parse_d(request.args.get("bStart") or request.args.get("b_start"))
+        b_e = _parse_d(request.args.get("bEnd") or request.args.get("b_end"))
+        custom_s = _parse_d(request.args.get("start") or request.args.get("from"))
+        custom_e = _parse_d(request.args.get("end") or request.args.get("to"))
+
         win_s = win_e = prev_s = prev_e = None
         preset_id = preset
-        if custom_s and custom_e:
-            try:
-                cs = date.fromisoformat(custom_s)
-                ce = date.fromisoformat(custom_e)
-                if cs > ce:
-                    cs, ce = ce, cs
-                if ce > today:
-                    ce = today
+        if a_s and a_e and b_s and b_e:
+            if a_s > a_e:
+                a_s, a_e = a_e, a_s
+            if b_s > b_e:
+                b_s, b_e = b_e, b_s
+            if a_e > today:
+                a_e = today
+            if (a_e - a_s).days > 62:
+                a_s = a_e - timedelta(days=62)
+            if (b_e - b_s).days > 62:
+                b_s = b_e - timedelta(days=62)
+            win_s, win_e, prev_s, prev_e = a_s, a_e, b_s, b_e
+            preset_id = "custom_vs_custom"
+            compare_on = True
+        elif custom_s and custom_e:
+            cs, ce = custom_s, custom_e
+            if cs > ce:
+                cs, ce = ce, cs
+            if ce > today:
+                ce = today
+            if (ce - cs).days > 62:
+                cs = ce - timedelta(days=62)
+            win_s, win_e = cs, ce
+            if compare_on:
                 span_days = (ce - cs).days
-                if span_days > 62:
-                    cs = ce - timedelta(days=62)
-                    span_days = 62
-                if cs <= ce:
-                    win_s, win_e = cs, ce
-                    prev_e = win_s - timedelta(days=1)
-                    prev_s = prev_e - timedelta(days=span_days)
-                    preset_id = "custom"
-            except ValueError:
-                win_s = None
+                prev_e = win_s - timedelta(days=1)
+                prev_s = prev_e - timedelta(days=span_days)
+                preset_id = "custom"
+            else:
+                prev_s = prev_e = win_s
+                preset_id = "custom_single"
+                compare_on = False
         if win_s is None:
             win_s, win_e, prev_s, prev_e, preset_id = resolve_perf_window(
                 today=today, preset=preset, history_days=31
             )
+            if preset_id == "wtd":
+                compare_on = False
         span = (win_e - win_s).days
         try:
             yoy_s = date(win_s.year - 1, win_s.month, win_s.day)
@@ -4048,7 +4083,10 @@ def register_alert_routes(app) -> None:
         yoy_e = yoy_s + timedelta(days=span)
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
-        cache_key = f"perf:product-compare:v2:{preset_id}:{win_s}:{win_e}:{id_sig}"
+        cache_key = (
+            f"perf:product-compare:v3:{preset_id}:{win_s}:{win_e}:"
+            f"{prev_s}:{prev_e}:c{int(compare_on)}:{id_sig}"
+        )
         cached = _alert_cache_get(cache_key, 90)
         if cached is not None:
             return jsonify(cached)
@@ -4056,16 +4094,24 @@ def register_alert_routes(app) -> None:
         preset_labels = {
             "today": ("Today", "Yesterday"),
             "yesterday": ("Yesterday", "Day before"),
-            "this_week": ("This week (WTD)", "Prior week (same days)"),
+            "wtd": ("Week to date", "—"),
+            "this_week": ("WTD", "Prior WTD (same days)"),
+            "wtd_vs_ly": ("WTD", "Same week last year"),
             "last_week": ("Last week", "Week before"),
             "last_2_weeks": ("Last 2 weeks", "Prior 2 weeks"),
             "this_month": ("This month (MTD)", "Prior month (same days)"),
             "last_month": ("Last month", "Month before"),
             "custom": ("Custom", "Prior range"),
+            "custom_vs_custom": ("Period A", "Period B"),
+            "custom_single": ("Custom", "—"),
         }
         cur_label, prev_label = preset_labels.get(preset_id, (preset_id.replace("_", " ").title(), "Prior"))
+        if not compare_on:
+            prev_label = "—"
 
         def _trend(cur: float, base: float):
+            if not compare_on:
+                return None
             if base > 0:
                 return round(((cur - base) / base) * 100.0, 1)
             if cur > 0:
@@ -4074,6 +4120,7 @@ def register_alert_routes(app) -> None:
 
         day_count = (win_e - win_s).days + 1
         tgt_by_mid: Dict[str, Dict[str, Tuple[str, Optional[float]]]] = {}
+        loc_tgt_by_mid: Dict[str, Optional[float]] = {}
         dash = _dash_session()
         try:
             lmcs = (
@@ -4097,6 +4144,11 @@ def register_alert_routes(app) -> None:
                     by_name[pname.lower()] = (pname, round(yard * day_count, 4) if yard else None)
                 if by_name:
                     tgt_by_mid[mid] = by_name
+                loc_yard = daily_yardstick(
+                    float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None,
+                    str(lmc.sx_target_period or "daily"),
+                )
+                loc_tgt_by_mid[mid] = round(loc_yard * day_count, 4) if loc_yard else None
         except Exception:
             logger.exception("product-compare targets")
         finally:
@@ -4130,9 +4182,25 @@ def register_alert_routes(app) -> None:
             for mid in requested:
                 mrows = by_mid.get(mid) or []
                 cur = _aggregate_product_sales_in_range(mrows, win_s, win_e + timedelta(days=1))
-                prev = _aggregate_product_sales_in_range(mrows, prev_s, prev_e + timedelta(days=1))
+                prev = (
+                    _aggregate_product_sales_in_range(mrows, prev_s, prev_e + timedelta(days=1))
+                    if compare_on
+                    else {}
+                )
                 yoy = _aggregate_product_sales_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
                 cups = _aggregate_product_counts_in_range(mrows, win_s, win_e + timedelta(days=1))
+                prev_cups = (
+                    _aggregate_product_counts_in_range(mrows, prev_s, prev_e + timedelta(days=1))
+                    if compare_on
+                    else {}
+                )
+                yoy_cups = _aggregate_product_counts_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
+                period_kd = round(sum(float(v or 0) for v in cur.values()), 4)
+                prev_kd = round(sum(float(v or 0) for v in prev.values()), 4) if compare_on else None
+                loc_tgt = loc_tgt_by_mid.get(mid)
+                loc_pct = None
+                if loc_tgt is not None and loc_tgt > 0:
+                    loc_pct = round((period_kd / loc_tgt) * 100.0, 1)
                 tgt_map = tgt_by_mid.get(mid) or {}
                 sku_names = set(cur) | set(prev) | set(yoy)
                 sales_lower = {str(n).strip().lower(): str(n).strip() for n in sku_names if str(n).strip()}
@@ -4150,9 +4218,11 @@ def register_alert_routes(app) -> None:
                     elif key in tgt_map:
                         display = tgt_map[key][0]
                     kwd = float(cur.get(display) or cur.get(name) or 0)
-                    prev_kwd = float(prev.get(display) or prev.get(name) or 0)
+                    prev_kwd = float(prev.get(display) or prev.get(name) or 0) if compare_on else 0.0
                     yoy_kwd = float(yoy.get(display) or yoy.get(name) or 0)
                     cup_n = int(cups.get(display) or cups.get(name) or 0)
+                    prev_cup_n = int(prev_cups.get(display) or prev_cups.get(name) or 0) if compare_on else 0
+                    yoy_cup_n = int(yoy_cups.get(display) or yoy_cups.get(name) or 0)
                     tgt = tgt_map[key][1] if key in tgt_map else None
                     pct = None
                     if tgt is not None and tgt > 0:
@@ -4161,10 +4231,13 @@ def register_alert_routes(app) -> None:
                         {
                             "name": display,
                             "revenueKwd": round(kwd, 4),
-                            "prevRevenueKwd": round(prev_kwd, 4),
+                            "prevRevenueKwd": round(prev_kwd, 4) if compare_on else None,
                             "yoyRevenueKwd": round(yoy_kwd, 4),
                             "cups": cup_n,
+                            "prevCups": prev_cup_n if compare_on else None,
+                            "yoyCups": yoy_cup_n,
                             "trendPct": _trend(kwd, prev_kwd),
+                            "cupsTrendPct": _trend(float(cup_n), float(prev_cup_n)),
                             "yoyTrendPct": _trend(kwd, yoy_kwd),
                             "targetCups": tgt,
                             "pctOfTarget": pct,
@@ -4175,6 +4248,10 @@ def register_alert_routes(app) -> None:
                     {
                         "machineId": mid,
                         "machineName": names.get(mid) or mid,
+                        "periodKd": period_kd,
+                        "prevKd": prev_kd,
+                        "locationTargetKd": loc_tgt,
+                        "pctOfLocationTarget": loc_pct,
                         "products": products,
                     }
                 )
@@ -4182,12 +4259,13 @@ def register_alert_routes(app) -> None:
             body = {
                 "ok": True,
                 "preset": preset_id,
+                "compare": compare_on,
                 "asOf": now_local.replace(microsecond=0).isoformat(),
                 "window": {
                     "start": win_s.isoformat(),
                     "end": win_e.isoformat(),
-                    "prevStart": prev_s.isoformat(),
-                    "prevEnd": prev_e.isoformat(),
+                    "prevStart": prev_s.isoformat() if compare_on else None,
+                    "prevEnd": prev_e.isoformat() if compare_on else None,
                     "yoyStart": yoy_s.isoformat(),
                     "yoyEnd": yoy_e.isoformat(),
                     "label": cur_label,
