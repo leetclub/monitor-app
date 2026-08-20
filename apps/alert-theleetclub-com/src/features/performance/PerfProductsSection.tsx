@@ -24,6 +24,7 @@ type ProductPeriod =
   | 'custom_single';
 
 type TargetType = 'product' | 'machine' | 'both';
+type TargetUnit = 'cups' | 'revenue';
 
 type ProductRow = {
   name: string;
@@ -37,16 +38,21 @@ type ProductRow = {
   cupsTrendPct?: number | null;
   yoyTrendPct?: number | null;
   targetCups?: number | null;
+  targetRevenueKwd?: number | null;
   pctOfTarget?: number | null;
+  pctOfRevenueTarget?: number | null;
 };
 
 type ProductMachine = {
   machineId: string;
   machineName: string;
   periodKd?: number | null;
+  periodCups?: number | null;
   prevKd?: number | null;
   locationTargetKd?: number | null;
+  locationTargetCups?: number | null;
   pctOfLocationTarget?: number | null;
+  pctOfLocationCupsTarget?: number | null;
   products: ProductRow[];
   days?: ProductDay[];
 };
@@ -72,6 +78,7 @@ type ProductComparePayload = {
   error?: string;
   preset?: string;
   compare?: boolean;
+  granularity?: 'day' | 'hour' | string;
   window?: {
     start?: string;
     end?: string;
@@ -260,7 +267,9 @@ function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
       prevCups: number;
       yoyCups: number;
       target: number;
+      targetRev: number;
       hasTarget: boolean;
+      hasTargetRev: boolean;
       hasPrev: boolean;
     }
   >();
@@ -276,7 +285,9 @@ function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
         prevCups: 0,
         yoyCups: 0,
         target: 0,
+        targetRev: 0,
         hasTarget: false,
+        hasTargetRev: false,
         hasPrev: false,
       };
       cur.revenue += Number(p.revenueKwd || 0);
@@ -291,6 +302,10 @@ function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
       if (p.targetCups != null && Number.isFinite(Number(p.targetCups))) {
         cur.target += Number(p.targetCups);
         cur.hasTarget = true;
+      }
+      if (p.targetRevenueKwd != null && Number.isFinite(Number(p.targetRevenueKwd))) {
+        cur.targetRev += Number(p.targetRevenueKwd);
+        cur.hasTargetRev = true;
       }
       totals.set(name, cur);
     }
@@ -308,7 +323,9 @@ function aggregateProducts(machines: ProductMachine[]): ProductRow[] {
       cupsTrendPct: v.hasPrev ? trendFrom(v.cups, v.prevCups) : null,
       yoyTrendPct: trendFrom(v.revenue, v.yoy),
       targetCups: v.hasTarget ? v.target : null,
+      targetRevenueKwd: v.hasTargetRev ? v.targetRev : null,
       pctOfTarget: v.hasTarget && v.target > 0 ? (v.cups / v.target) * 100 : null,
+      pctOfRevenueTarget: v.hasTargetRev && v.targetRev > 0 ? (v.revenue / v.targetRev) * 100 : null,
     }))
     .sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0) || a.name.localeCompare(b.name));
 }
@@ -320,7 +337,9 @@ function skuOnMachine(m: ProductMachine, names: string[]) {
   let cups = 0;
   let prevCups = 0;
   let target = 0;
+  let targetRev = 0;
   let hasTarget = false;
+  let hasTargetRev = false;
   let hasPrev = false;
   for (const p of m.products || []) {
     if (!want.has(String(p.name || '').toLowerCase())) continue;
@@ -335,6 +354,10 @@ function skuOnMachine(m: ProductMachine, names: string[]) {
       target += Number(p.targetCups);
       hasTarget = true;
     }
+    if (p.targetRevenueKwd != null && Number.isFinite(Number(p.targetRevenueKwd))) {
+      targetRev += Number(p.targetRevenueKwd);
+      hasTargetRev = true;
+    }
   }
   return {
     revenue,
@@ -342,9 +365,12 @@ function skuOnMachine(m: ProductMachine, names: string[]) {
     cups,
     prevCups: hasPrev ? prevCups : null,
     target,
+    targetRev,
     hasTarget,
+    hasTargetRev,
     trendPct: hasPrev ? trendFrom(revenue, prev) : null,
     pctOfTarget: hasTarget && target > 0 ? (cups / target) * 100 : null,
+    pctOfRevenueTarget: hasTargetRev && targetRev > 0 ? (revenue / targetRev) * 100 : null,
   };
 }
 
@@ -690,6 +716,8 @@ function DateTrajectoryChart({
       return;
     }
     const labels = days.map((d) => {
+      const isHour = Boolean(d.date && /^\d{1,2}:\d{2}$/.test(d.date));
+      if (isHour) return d.date;
       const md = d.date.length >= 10 ? d.date.slice(5) : d.date;
       const wd = (d.weekday || '').slice(0, 3);
       return wd ? `${wd} ${md}` : md;
@@ -710,8 +738,11 @@ function DateTrajectoryChart({
             }[];
             const i = arr[0]?.dataIndex ?? 0;
             const day = days[i];
+            const isHour = Boolean(day?.date && /^\d{1,2}:\d{2}$/.test(day.date));
             const head = day
-              ? `${(day.weekday || '').slice(0, 3)} · ${day.date}`
+              ? isHour
+                ? day.date
+                : `${(day.weekday || '').slice(0, 3)} · ${day.date}`
               : labels[i] || '';
             const lines = [`<div style="font-weight:700;margin-bottom:6px">${head}</div>`];
             for (const p of arr) {
@@ -728,12 +759,20 @@ function DateTrajectoryChart({
           data: series.map((s) => s.name),
           textStyle: { color: theme.muted, fontSize: 11 },
         },
-        grid: { left: 56, right: 16, top: 40, bottom: compact ? 48 : 56 },
+        grid: { left: 56, right: 52, top: 40, bottom: compact ? 48 : 56, containLabel: false },
         xAxis: {
           type: 'category',
           data: labels,
           boundaryGap: false,
-          axisLabel: { color: theme.axis, fontSize: 10 },
+          axisLabel: {
+            color: theme.axis,
+            fontSize: 10,
+            hideOverlap: true,
+            showMinLabel: true,
+            showMaxLabel: true,
+            alignMinLabel: 'left',
+            alignMaxLabel: 'right',
+          },
         },
         yAxis: {
           type: 'value',
@@ -746,7 +785,7 @@ function DateTrajectoryChart({
           type: 'line',
           data: s.data,
           smooth: 0.25,
-          showSymbol: days.length <= 10,
+          showSymbol: days.length <= 14,
           symbol: 'circle',
           symbolSize: compact ? 5 : 7,
           lineStyle: { width: 2.4, type: s.dashed ? 'dashed' : 'solid' },
@@ -813,6 +852,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const [customEnd, setCustomEnd] = useState(() => addDaysIso(kuwaitIsoToday(), -1));
   const [skus, setSkus] = useState<string[]>([]);
   const [targetType, setTargetType] = useState<TargetType>('both');
+  const [targetUnit, setTargetUnit] = useState<TargetUnit>('cups');
 
   const locNone = !allSelected && selectedIds.length === 0;
   const ids = useMemo(() => {
@@ -892,6 +932,8 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const compareOn = (fleetQ.data?.compare ?? compareQ.data?.compare) !== false && period !== 'wtd' && period !== 'custom_single';
   const periodLabel = win?.label || 'Period';
   const priorLabel = win?.prevLabel || 'Prior';
+  const granularity = (fleetQ.data?.granularity || compareQ.data?.granularity || 'day') as string;
+  const xAxisKind = granularity === 'hour' ? 'hourly' : 'daily';
   const windowHint =
     win?.start && win?.end
       ? compareOn && win.prevStart && win.prevEnd
@@ -1093,15 +1135,34 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     [rankedForSku],
   );
 
-  const fleetTargetRows = useMemo(
-    () =>
-      fleetMix
-        .filter((p) => p.targetCups != null && Number(p.targetCups) > 0)
-        .slice(0, PERF_PRODUCTS_MAX_SKUS),
-    [fleetMix],
-  );
+  const fleetTargetRows = useMemo(() => {
+    if (targetUnit === 'revenue') {
+      return fleetMix
+        .filter((p) => p.targetRevenueKwd != null && Number(p.targetRevenueKwd) > 0)
+        .slice(0, PERF_PRODUCTS_MAX_SKUS);
+    }
+    return fleetMix
+      .filter((p) => p.targetCups != null && Number(p.targetCups) > 0)
+      .slice(0, PERF_PRODUCTS_MAX_SKUS);
+  }, [fleetMix, targetUnit]);
 
   const machineTargetRows = useMemo(() => {
+    if (targetUnit === 'cups') {
+      return fleetMachinesNamed
+        .filter((m) => m.locationTargetCups != null && Number(m.locationTargetCups) > 0)
+        .map((m) => ({
+          label: m.machineName,
+          actual: Number(
+            m.periodCups != null
+              ? m.periodCups
+              : (m.products || []).reduce((s, p) => s + Number(p.cups || 0), 0),
+          ),
+          target: Number(m.locationTargetCups || 0),
+          pct: m.pctOfLocationCupsTarget ?? null,
+        }))
+        .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))
+        .slice(0, 16);
+    }
     return fleetMachinesNamed
       .filter((m) => m.locationTargetKd != null && Number(m.locationTargetKd) > 0)
       .map((m) => ({
@@ -1112,18 +1173,23 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       }))
       .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))
       .slice(0, 16);
-  }, [fleetMachinesNamed]);
+  }, [fleetMachinesNamed, targetUnit]);
 
   const productMachineTargetRows = useMemo(() => {
     if (!skus.length) return [];
-    const out: { label: string; cups: number; target: number }[] = [];
+    const out: { label: string; actual: number; target: number }[] = [];
     for (const m of fleetMachinesNamed) {
       const cell = skuOnMachine(m, skus);
-      if (!cell.hasTarget) continue;
-      out.push({ label: m.machineName, cups: cell.cups, target: cell.target });
+      if (targetUnit === 'revenue') {
+        if (!cell.hasTargetRev) continue;
+        out.push({ label: m.machineName, actual: cell.revenue, target: cell.targetRev });
+      } else {
+        if (!cell.hasTarget) continue;
+        out.push({ label: m.machineName, actual: cell.cups, target: cell.target });
+      }
     }
-    return out.sort((a, b) => b.target - a.target || b.cups - a.cups).slice(0, 16);
-  }, [fleetMachinesNamed, skus]);
+    return out.sort((a, b) => b.target - a.target || b.actual - a.actual).slice(0, 16);
+  }, [fleetMachinesNamed, skus, targetUnit]);
 
   const periodMeta = PERIOD_OPTIONS.find((p) => p.id === period);
 
@@ -1297,7 +1363,20 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             <option value="machine">Machine target</option>
             <option value="both">Both</option>
           </select>
-          <small>Admin → Targets sets cup and location KD targets.</small>
+          <small>Product and/or location targets from Admin → Targets.</small>
+        </label>
+
+        <label className="perfProductsCriteriaField">
+          <span>Target unit</span>
+          <select
+            value={targetUnit}
+            onChange={(e) => setTargetUnit(e.target.value as TargetUnit)}
+            aria-label="Target unit cups or revenue"
+          >
+            <option value="cups">Cups</option>
+            <option value="revenue">Revenue (KD)</option>
+          </select>
+          <small>Switch between cup targets and revenue targets.</small>
         </label>
       </div>
 
@@ -1364,8 +1443,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           1. Fleet mix — all locations
         </h4>
         <p className="perfSectionHint">
-          Daily trajectory like Location — dates on the X-axis, one line per drink (fleet
-          total). {compareOn ? 'Dashed = same day-index in the prior window.' : 'Comparison off.'}
+          {xAxisKind === 'hourly'
+            ? 'Single day — hours on the X-axis, one line per drink (fleet total).'
+            : 'Daily trajectory like Location — dates on the X-axis, one line per drink (fleet total).'}{' '}
+          {compareOn ? 'Dashed = same day-index in the prior window.' : 'Comparison off.'}
         </p>
         {fleetQ.isLoading ? <p className="perfMuted">Loading fleet mix…</p> : null}
         <DateTrajectoryChart
@@ -1452,8 +1533,8 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           ariaLabel="Selected locations daily product trajectory"
         />
         <p className="perfSectionHint">
-          Dates on X. One drink selected → one line per location. Several drinks → one line per
-          drink (summed across selected sites).
+          {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}. One drink selected → one line
+          per location. Several drinks → one line per drink (summed across selected sites).
         </p>
       </section>
 
@@ -1461,7 +1542,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         <h4 id="perf-products-per-machine" className="perfSectionTitle">
           3. Per location
         </h4>
-        <p className="perfSectionHint">Same window, daily KD trajectory per selected site.</p>
+        <p className="perfSectionHint">
+          Same window, {xAxisKind === 'hourly' ? 'hourly' : 'daily'} KD trajectory per selected
+          site.
+        </p>
         {locNone ? (
           <p className="perfMuted">Select locations above.</p>
         ) : (
@@ -1550,45 +1634,68 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           5. Targets achieved
         </h4>
         <p className="perfSectionHint">
-          {targetType === 'product'
-            ? 'Product cup targets vs actual.'
-            : targetType === 'machine'
-              ? 'Machine KD targets vs actual.'
-              : 'Product cups and machine KD targets.'}
+          {targetUnit === 'cups'
+            ? targetType === 'product'
+              ? 'Product cup targets vs actual cups.'
+              : targetType === 'machine'
+                ? 'Machine cup targets vs actual cups.'
+                : 'Product cups and machine cup targets.'
+            : targetType === 'product'
+              ? 'Product revenue targets vs actual KD.'
+              : targetType === 'machine'
+                ? 'Machine KD targets vs actual KD.'
+                : 'Product revenue and machine KD targets.'}
         </p>
         {(targetType === 'product' || targetType === 'both') && (
           <>
             {fleetTargetRows.length ? (
               <PeriodPriorLines
                 categories={fleetTargetRows.map((p) => p.name)}
-                period={fleetTargetRows.map((p) => Number(p.cups || 0))}
-                prior={fleetTargetRows.map((p) => Number(p.targetCups || 0))}
-                periodLabel="Actual cups"
-                priorLabel="Target cups"
-                unit="cups"
+                period={fleetTargetRows.map((p) =>
+                  targetUnit === 'cups' ? Number(p.cups || 0) : Number(p.revenueKwd || 0),
+                )}
+                prior={fleetTargetRows.map((p) =>
+                  targetUnit === 'cups'
+                    ? Number(p.targetCups || 0)
+                    : Number(p.targetRevenueKwd || 0),
+                )}
+                periodLabel={targetUnit === 'cups' ? 'Actual cups' : 'Actual KD'}
+                priorLabel={targetUnit === 'cups' ? 'Target cups' : 'Target KD'}
+                unit={targetUnit === 'cups' ? 'cups' : 'kd'}
                 exportName="product-fleet-targets"
-                ariaLabel="Fleet product cups vs target"
+                ariaLabel={
+                  targetUnit === 'cups'
+                    ? 'Fleet product cups vs target'
+                    : 'Fleet product revenue vs target'
+                }
               />
             ) : (
-              <p className="perfMuted">No Admin cup targets on the mix for this window.</p>
+              <p className="perfMuted">
+                No Admin {targetUnit === 'cups' ? 'cup' : 'revenue'} targets on the mix for this
+                window.
+              </p>
             )}
             {skus.length ? (
               productMachineTargetRows.length ? (
                 <>
-                  <h5 className="perfProductsTrendHead">Per location cups — {skus.join(', ')}</h5>
+                  <h5 className="perfProductsTrendHead">
+                    Per location {targetUnit === 'cups' ? 'cups' : 'KD'} — {skus.join(', ')}
+                  </h5>
                   <PeriodPriorLines
                     categories={productMachineTargetRows.map((r) => r.label)}
-                    period={productMachineTargetRows.map((r) => r.cups)}
+                    period={productMachineTargetRows.map((r) => r.actual)}
                     prior={productMachineTargetRows.map((r) => r.target)}
-                    periodLabel="Actual cups"
-                    priorLabel="Target cups"
-                    unit="cups"
+                    periodLabel={targetUnit === 'cups' ? 'Actual cups' : 'Actual KD'}
+                    priorLabel={targetUnit === 'cups' ? 'Target cups' : 'Target KD'}
+                    unit={targetUnit === 'cups' ? 'cups' : 'kd'}
                     exportName="product-machine-cup-targets"
-                    ariaLabel="Location product cups vs target"
+                    ariaLabel={`Location product ${targetUnit} vs target`}
                   />
                 </>
               ) : (
-                <p className="perfMuted">No cup target on the selected drink(s).</p>
+                <p className="perfMuted">
+                  No {targetUnit === 'cups' ? 'cup' : 'revenue'} target on the selected drink(s).
+                </p>
               )
             ) : (
               <p className="perfMuted">Select a drink for per-location product targets.</p>
@@ -1597,19 +1704,25 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         )}
         {(targetType === 'machine' || targetType === 'both') && (
           <>
-            <h5 className="perfProductsTrendHead">Machine KD vs target</h5>
+            <h5 className="perfProductsTrendHead">
+              Machine {targetUnit === 'cups' ? 'cups' : 'KD'} vs target
+            </h5>
             {machineTargetRows.length ? (
               <PeriodPriorLines
                 categories={machineTargetRows.map((r) => r.label)}
                 period={machineTargetRows.map((r) => r.actual)}
                 prior={machineTargetRows.map((r) => r.target)}
-                periodLabel="Actual KD"
-                priorLabel="Target KD"
+                periodLabel={targetUnit === 'cups' ? 'Actual cups' : 'Actual KD'}
+                priorLabel={targetUnit === 'cups' ? 'Target cups' : 'Target KD'}
+                unit={targetUnit === 'cups' ? 'cups' : 'kd'}
                 exportName="product-machine-kd-targets"
-                ariaLabel="Machine KD vs target"
+                ariaLabel={`Machine ${targetUnit} vs target`}
               />
             ) : (
-              <p className="perfMuted">No Admin location KD targets for these machines.</p>
+              <p className="perfMuted">
+                No Admin location {targetUnit === 'cups' ? 'cup' : 'KD'} targets for these
+                machines.
+              </p>
             )}
           </>
         )}

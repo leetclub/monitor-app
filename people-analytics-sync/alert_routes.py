@@ -571,6 +571,157 @@ def _vend_ts(v: Dict[str, Any]) -> int:
         return 0
 
 
+def _vend_ts_seconds(v: Dict[str, Any]) -> int:
+    ts = _vend_ts(v)
+    if ts > 10_000_000_000:
+        return ts // 1000
+    return ts
+
+
+def _bucket_vends_by_hour_product(
+    vends: List[Dict[str, Any]],
+    *,
+    day_d: date,
+    until_hour: Optional[int] = None,
+) -> Dict[int, Dict[str, Dict[str, float]]]:
+    """Kuwait local hour → product → {revenueKwd, cups} for one calendar day."""
+    from vendon_proxy_routes import _stats_vend_product_fields
+
+    tz = ZoneInfo("Asia/Kuwait")
+    out: Dict[int, Dict[str, Dict[str, float]]] = {}
+    for v in vends or []:
+        if not isinstance(v, dict):
+            continue
+        ts = _vend_ts_seconds(v)
+        if not ts:
+            continue
+        local = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(tz)
+        if local.date() != day_d:
+            continue
+        h = int(local.hour)
+        if until_hour is not None and h > until_hour:
+            continue
+        pn, _ = _stats_vend_product_fields(v)
+        pname = (pn or "Unknown").strip() or "Unknown"
+        bucket = out.setdefault(h, {})
+        cell = bucket.setdefault(pname, {"revenueKwd": 0.0, "cups": 0.0})
+        cell["revenueKwd"] += _vend_amount_kwd(v)
+        cell["cups"] += 1.0
+    return out
+
+
+def _hours_out_from_buckets(
+    cur_buckets: Dict[int, Dict[str, Dict[str, float]]],
+    prev_buckets: Dict[int, Dict[str, Dict[str, float]]],
+    *,
+    compare_on: bool,
+    until_hour: Optional[int],
+) -> List[Dict[str, Any]]:
+    max_h = 23 if until_hour is None else max(0, min(23, int(until_hour)))
+    hours_out: List[Dict[str, Any]] = []
+    for h in range(0, max_h + 1):
+        mix = cur_buckets.get(h) or {}
+        prev_mix = prev_buckets.get(h) or {} if compare_on else {}
+        tot_kwd = round(sum(float(v.get("revenueKwd") or 0) for v in mix.values()), 4)
+        tot_cups = int(sum(float(v.get("cups") or 0) for v in mix.values()))
+        prev_kwd = prev_cups = None
+        if compare_on:
+            prev_kwd = round(sum(float(v.get("revenueKwd") or 0) for v in prev_mix.values()), 4)
+            prev_cups = int(sum(float(v.get("cups") or 0) for v in prev_mix.values()))
+        hours_out.append(
+            {
+                "date": f"{h:02d}:00",
+                "weekday": "",
+                "hour": h,
+                "revenueKwd": tot_kwd,
+                "cups": tot_cups,
+                "prevRevenueKwd": prev_kwd,
+                "prevCups": prev_cups,
+                "products": [
+                    {
+                        "name": pname,
+                        "revenueKwd": round(float(vals.get("revenueKwd") or 0), 4),
+                        "cups": int(float(vals.get("cups") or 0)),
+                        "prevRevenueKwd": (
+                            round(float((prev_mix.get(pname) or {}).get("revenueKwd") or 0), 4)
+                            if compare_on
+                            else None
+                        ),
+                        "prevCups": (
+                            int(float((prev_mix.get(pname) or {}).get("cups") or 0))
+                            if compare_on
+                            else None
+                        ),
+                    }
+                    for pname, vals in sorted(
+                        mix.items(),
+                        key=lambda kv: (-float(kv[1].get("revenueKwd") or 0), kv[0].lower()),
+                    )
+                ],
+            }
+        )
+    return hours_out
+
+
+def _fetch_hourly_product_buckets_for_machines(
+    machine_ids: List[str],
+    day_d: date,
+    *,
+    until_hour: Optional[int] = None,
+) -> Dict[str, Dict[int, Dict[str, Dict[str, float]]]]:
+    """Load vends and bucket by hour/product. ≤8 machines: parallel per-id; else one fleet fetch."""
+    from vendon_proxy_routes import _kuwait_day_bounds_utc
+
+    mids = [str(m).strip() for m in machine_ids if str(m).strip()]
+    if not mids:
+        return {}
+    from_ts, to_ts = _kuwait_day_bounds_utc(day_d.isoformat())
+    if until_hour is not None:
+        tz = ZoneInfo("Asia/Kuwait")
+        end_local = datetime(
+            day_d.year, day_d.month, day_d.day, until_hour, 59, 59, tzinfo=tz
+        )
+        to_ts = min(to_ts, int(end_local.astimezone(timezone.utc).timestamp()))
+
+    out: Dict[str, Dict[int, Dict[str, Dict[str, float]]]] = {mid: {} for mid in mids}
+    mid_set = set(mids)
+
+    if len(mids) <= 8:
+        def _one(mid: str) -> Tuple[str, List[Dict[str, Any]]]:
+            vends, err = _fetch_vends_machine_day(mid, from_ts, to_ts)
+            if err:
+                logger.warning("product-compare hourly vends %s %s: %s", mid, day_d, err)
+                return mid, []
+            return mid, vends or []
+
+        with ThreadPoolExecutor(max_workers=min(6, len(mids))) as pool:
+            futs = [pool.submit(_one, mid) for mid in mids]
+            for fut in as_completed(futs):
+                mid, vends = fut.result()
+                out[mid] = _bucket_vends_by_hour_product(
+                    vends, day_d=day_d, until_hour=until_hour
+                )
+        return out
+
+    vends, err = _fetch_all_vends(from_ts, to_ts, max_rows=25000)
+    if err:
+        logger.warning("product-compare fleet hourly vends %s: %s", day_d, err)
+        return out
+    by_mid: Dict[str, List[Dict[str, Any]]] = {}
+    for v in vends or []:
+        if not isinstance(v, dict):
+            continue
+        mid = str(v.get("machine_id") or v.get("machineId") or "").strip()
+        if mid not in mid_set:
+            continue
+        by_mid.setdefault(mid, []).append(v)
+    for mid in mids:
+        out[mid] = _bucket_vends_by_hour_product(
+            by_mid.get(mid) or [], day_d=day_d, until_hour=until_hour
+        )
+    return out
+
+
 def _waste_metrics_v1(machine_id: str, date_str: str) -> Tuple[Optional[float], Optional[str], Dict[str, Any]]:
     """
     Port of monitoring-app-v1 calculateWaste / location aggregate (wastePercent formula).
@@ -4084,7 +4235,7 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v4:{preset_id}:{win_s}:{win_e}:"
+            f"perf:product-compare:v5:{preset_id}:{win_s}:{win_e}:"
             f"{prev_s}:{prev_e}:c{int(compare_on)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)
@@ -4119,10 +4270,14 @@ def register_alert_routes(app) -> None:
             return 0.0
 
         day_count = (win_e - win_s).days + 1
-        tgt_by_mid: Dict[str, Dict[str, Tuple[str, Optional[float]]]] = {}
-        loc_tgt_by_mid: Dict[str, Optional[float]] = {}
+        # product key -> {name, targetCups, targetRevenueKwd}
+        tgt_by_mid: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        loc_tgt_kd_by_mid: Dict[str, Optional[float]] = {}
+        loc_tgt_cups_by_mid: Dict[str, Optional[float]] = {}
         dash = _dash_session()
         try:
+            from alert_targets_lib import normalize_metric
+
             lmcs = (
                 dash.query(LiveMachineConfig)
                 .filter(LiveMachineConfig.machine_id.in_(requested))
@@ -4132,23 +4287,43 @@ def register_alert_routes(app) -> None:
                 mid = str(lmc.machine_id or "").strip()
                 if not mid:
                     continue
-                by_name: Dict[str, Tuple[str, Optional[float]]] = {}
+                by_name: Dict[str, Dict[str, Any]] = {}
                 for spec in products_from_lmc_row(lmc):
                     pname = str(spec.get("productName") or "").strip()
                     if not pname:
                         continue
-                    metric = str(spec.get("metric") or "cups").strip().lower()
-                    if metric and metric not in ("cups", "cup", "units"):
-                        continue
+                    metric = normalize_metric(spec.get("metric") or "cups", "cups")
                     yard = daily_yardstick(spec.get("dailyTarget"), str(spec.get("period") or "daily"))
-                    by_name[pname.lower()] = (pname, round(yard * day_count, 4) if yard else None)
+                    scaled = round(yard * day_count, 4) if yard else None
+                    key = pname.lower()
+                    entry = by_name.get(key) or {
+                        "name": pname,
+                        "targetCups": None,
+                        "targetRevenueKwd": None,
+                    }
+                    if metric == "cups":
+                        entry["targetCups"] = scaled
+                    else:
+                        entry["targetRevenueKwd"] = scaled
+                    by_name[key] = entry
                 if by_name:
                     tgt_by_mid[mid] = by_name
-                loc_yard = daily_yardstick(
+                period = str(lmc.sx_target_period or "daily")
+                loc_yard_kd = daily_yardstick(
                     float(lmc.daily_sales_target) if lmc.daily_sales_target is not None else None,
-                    str(lmc.sx_target_period or "daily"),
+                    period,
                 )
-                loc_tgt_by_mid[mid] = round(loc_yard * day_count, 4) if loc_yard else None
+                loc_tgt_kd_by_mid[mid] = (
+                    round(loc_yard_kd * day_count, 4) if loc_yard_kd else None
+                )
+                cups_raw = getattr(lmc, "daily_location_cups_target", None)
+                loc_yard_cups = daily_yardstick(
+                    float(cups_raw) if cups_raw is not None else None,
+                    period,
+                )
+                loc_tgt_cups_by_mid[mid] = (
+                    round(loc_yard_cups * day_count, 4) if loc_yard_cups else None
+                )
         except Exception:
             logger.exception("product-compare targets")
         finally:
@@ -4178,6 +4353,26 @@ def register_alert_routes(app) -> None:
                 if nm and mid not in names:
                     names[mid] = nm
 
+            # Single-day windows: X-axis hours from live vends (Location-style day detail).
+            granularity = "day"
+            hourly_cur: Dict[str, Dict[int, Dict[str, Dict[str, float]]]] = {}
+            hourly_prev: Dict[str, Dict[int, Dict[str, Dict[str, float]]]] = {}
+            until_hour: Optional[int] = None
+            if day_count == 1:
+                granularity = "hour"
+                until_hour = now_local.hour if win_s == today else None
+                try:
+                    hourly_cur = _fetch_hourly_product_buckets_for_machines(
+                        requested, win_s, until_hour=until_hour
+                    )
+                    if compare_on:
+                        hourly_prev = _fetch_hourly_product_buckets_for_machines(
+                            requested, prev_s, until_hour=None
+                        )
+                except Exception:
+                    logger.exception("product-compare hourly buckets")
+                    granularity = "day"
+
             machines_out: List[Dict[str, Any]] = []
             for mid in requested:
                 mrows = by_mid.get(mid) or []
@@ -4196,17 +4391,22 @@ def register_alert_routes(app) -> None:
                 )
                 yoy_cups = _aggregate_product_counts_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
                 period_kd = round(sum(float(v or 0) for v in cur.values()), 4)
+                period_cups = int(sum(int(v or 0) for v in cups.values()))
                 prev_kd = round(sum(float(v or 0) for v in prev.values()), 4) if compare_on else None
-                loc_tgt = loc_tgt_by_mid.get(mid)
+                loc_tgt = loc_tgt_kd_by_mid.get(mid)
+                loc_tgt_cups = loc_tgt_cups_by_mid.get(mid)
                 loc_pct = None
                 if loc_tgt is not None and loc_tgt > 0:
                     loc_pct = round((period_kd / loc_tgt) * 100.0, 1)
+                loc_cups_pct = None
+                if loc_tgt_cups is not None and loc_tgt_cups > 0:
+                    loc_cups_pct = round((period_cups / loc_tgt_cups) * 100.0, 1)
                 tgt_map = tgt_by_mid.get(mid) or {}
                 sku_names = set(cur) | set(prev) | set(yoy)
                 sales_lower = {str(n).strip().lower(): str(n).strip() for n in sku_names if str(n).strip()}
-                for tkey, (tname, _tgt) in tgt_map.items():
+                for tkey, tinfo in tgt_map.items():
                     if tkey not in sales_lower:
-                        sku_names.add(tname)
+                        sku_names.add(str(tinfo.get("name") or tkey))
                 products = []
                 for name in sku_names:
                     display = str(name or "").strip()
@@ -4216,17 +4416,22 @@ def register_alert_routes(app) -> None:
                     if key in sales_lower:
                         display = sales_lower[key]
                     elif key in tgt_map:
-                        display = tgt_map[key][0]
+                        display = str(tgt_map[key].get("name") or display)
                     kwd = float(cur.get(display) or cur.get(name) or 0)
                     prev_kwd = float(prev.get(display) or prev.get(name) or 0) if compare_on else 0.0
                     yoy_kwd = float(yoy.get(display) or yoy.get(name) or 0)
                     cup_n = int(cups.get(display) or cups.get(name) or 0)
                     prev_cup_n = int(prev_cups.get(display) or prev_cups.get(name) or 0) if compare_on else 0
                     yoy_cup_n = int(yoy_cups.get(display) or yoy_cups.get(name) or 0)
-                    tgt = tgt_map[key][1] if key in tgt_map else None
+                    tinfo = tgt_map.get(key) or {}
+                    tgt_cups = tinfo.get("targetCups")
+                    tgt_rev = tinfo.get("targetRevenueKwd")
                     pct = None
-                    if tgt is not None and tgt > 0:
-                        pct = round((cup_n / tgt) * 100.0, 1)
+                    if tgt_cups is not None and float(tgt_cups) > 0:
+                        pct = round((cup_n / float(tgt_cups)) * 100.0, 1)
+                    pct_rev = None
+                    if tgt_rev is not None and float(tgt_rev) > 0:
+                        pct_rev = round((kwd / float(tgt_rev)) * 100.0, 1)
                     products.append(
                         {
                             "name": display,
@@ -4239,8 +4444,10 @@ def register_alert_routes(app) -> None:
                             "trendPct": _trend(kwd, prev_kwd),
                             "cupsTrendPct": _trend(float(cup_n), float(prev_cup_n)),
                             "yoyTrendPct": _trend(kwd, yoy_kwd),
-                            "targetCups": tgt,
+                            "targetCups": tgt_cups,
+                            "targetRevenueKwd": tgt_rev,
                             "pctOfTarget": pct,
+                            "pctOfRevenueTarget": pct_rev,
                         }
                     )
                 products.sort(key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()))
@@ -4318,14 +4525,25 @@ def register_alert_routes(app) -> None:
                     d_cur += timedelta(days=1)
                     idx += 1
 
+                if granularity == "hour":
+                    days_out = _hours_out_from_buckets(
+                        hourly_cur.get(mid) or {},
+                        hourly_prev.get(mid) or {},
+                        compare_on=compare_on,
+                        until_hour=until_hour,
+                    )
+
                 machines_out.append(
                     {
                         "machineId": mid,
                         "machineName": names.get(mid) or mid,
                         "periodKd": period_kd,
+                        "periodCups": period_cups,
                         "prevKd": prev_kd,
                         "locationTargetKd": loc_tgt,
+                        "locationTargetCups": loc_tgt_cups,
                         "pctOfLocationTarget": loc_pct,
+                        "pctOfLocationCupsTarget": loc_cups_pct,
                         "products": products,
                         "days": days_out,
                     }
@@ -4404,6 +4622,7 @@ def register_alert_routes(app) -> None:
                 "ok": True,
                 "preset": preset_id,
                 "compare": compare_on,
+                "granularity": granularity,
                 "asOf": now_local.replace(microsecond=0).isoformat(),
                 "window": {
                     "start": win_s.isoformat(),

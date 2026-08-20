@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; toolbar **machine search** + **Risk sort**. **Live operator** — Task Manager name + attendance badge; **one tap** → schedule + icon-only contacts. **Last / tx** — 3-line stamp; highlight when no sales ≥4h. **Downtime** — Today mins + period + trend %; tap → projected loss (**5‑min grace**, peak bands). **Last clean** — last GC + next window / days left. **Credits sent** — tap → scrollable popup led by **est. lost revenue** (tests/refunds/unidentified) + WEB cashless breakdown. **Top / low drink** — highest/lowest SKU; tap → top 5 + lowest 5 names. Sales / Target / SX / Trend / QA; fleet bar Yest. full day / −2d. |
 | `/overall` | Overall | Workbook columns; toolbar **machine search** + **Risk sort**; **sortable headers**; **Operator Activity**; **Downtime** (Today mins · period · trend %; loss after 5‑min grace); **Last clean** next window / days left; **Last / tx** no-sales ≥4h highlight; **Attendance** from Task Manager; **Sales** daily-elapsed presets; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | **Location \| Products** switch. **Location:** sales vs target graphs (unchanged). **Products:** criteria dropdowns — **Period** (Today/Yest., WTD, WTD vs WTD, WTD vs LY, custom vs custom, custom alone = no compare), **Products**, **Target type** (product cups / machine KD / both). All charts are **line graphs**. Fleet mix + rising/falling (KD + cups), selected sites, per site, top/low, targets, detail table below. **Export weekly report** Excel. Mix popup stays a shortcut. |
+| `/performance` | Performance | **Location \| Products** switch. **Location:** sales vs target graphs (unchanged). **Products:** criteria — **Period**, **Products**, **Target type** (product / machine / both), **Target unit** (Cups \| Revenue). Line charts: multi-day = dates on X; today/yesterday/single day = **hours** on X. Fleet mix + rising/falling (KD + cups), selected sites, per site, top/low, targets (cups or revenue), detail table. **Export weekly report** Excel. Mix popup stays a shortcut. |
 | `/footfall` · `/v2/footfall` | Footfall | Same Targets graph stack as [target.theleetclub.com](https://target.theleetclub.com/): heatmap + hourly footfall/conversion/revenue/gap chart + trajectory. **User-selected Alert Period** drives report + live Achievement. Default **As measured** (camera only). **Mirror & adjust** opt-in for Target-style mirror + unique-ratio. Full commercial fleet listed even when Period cups are zero. Admin → Targets override daily KPIs. |
 | `/promo` · `/v2/promo` | Promo | **Campaign cups** by location: date range → daily achieved/remaining bars (default product **Americano Max**). Same `target_promo_*` tables as Targets site. Configure under **Admin → Promo** (not Admin → Targets). Swipe instruments still on Performance + Area owners / Promo admin. |
 | `/admin` → Targets | Admin · Targets | **Searchable** machine pick (single + bulk multi). Location target once (KD or cups); **bulk-apply location target** to many machines (products unchanged). Promote **1..N Vendon products** per location, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** on hover-click. |
@@ -61,7 +61,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
-*Figure 6 — Performance Products: period dropdown, line charts, rising/falling KD+cups, export.*
+*Figure 6 — Performance Products: period, cups/revenue target switch, dates or hours on X, export.*
 
 ![8 Promo](docs/product-prototype/figures/wire-08-promo.svg)
 
@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-20 | **Performance Products polish:** Last X date no longer clipped; single-day periods use **hourly** X; **Target unit** switch Cups \| Revenue (product + machine targets). |
 | 2026-08-20 | **Performance Products X-axis = dates:** Main product graphs use daily trajectories (dates on X like Location), not drinks/locations on X. |
 | 2026-08-17 | **Performance Products — rising vs falling:** Five graphs on the same window (presets + custom range): fleet mix (all sites, no names), selected sites, per site, top/lowest 5 sites when a drink is picked (ignores Locations), Admin cup targets vs actual. Location graphs unchanged. |
 | 2026-08-17 | **Performance Locations:** Also hide names starting with `*`. Location tab defaults to **All**; Products URL picks no longer seed Location selection. |
