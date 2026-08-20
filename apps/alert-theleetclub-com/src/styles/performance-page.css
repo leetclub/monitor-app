@@ -1767,6 +1767,27 @@ button.perfKpiClick:hover {
   font-size: 0.85rem;
 }
 
+.perfProductsGraphBControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px;
+  margin: 0 0 10px;
+}
+
+.perfSkuDropdownOpen {
+  position: relative;
+  z-index: 50;
+}
+
+.perfSkuDropdownOpen .perfLocDropdown {
+  z-index: 60;
+}
+
+.perfProducts {
+  overflow: visible;
+}
+
 .perfProductsHeatmap {
   min-height: 280px;
   height: min(56vh, 520px);
