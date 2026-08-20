@@ -674,8 +674,14 @@
   cursor: not-allowed;
 }
 
-.perfGraphStage .perfEchartOverview {
+.perfGraphStage .perfEchartOverview,
+.perfGraphStage .chartExportWrap {
   min-width: 0;
+}
+
+.perfGraphStage .chartExportWrap {
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 720px) {
@@ -1386,6 +1392,50 @@ button.perfKpiClick:hover {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.perfProductsMetricBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.perfProductsMetricBar small {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.perfProductsPace {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+  font-size: 0.85rem;
+}
+
+.perfProductsPace strong {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.perfProductsBlockHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.perfProductsBlockHead .perfSectionTitle {
+  margin-bottom: 0;
 }
 
 .perfProductsHead {

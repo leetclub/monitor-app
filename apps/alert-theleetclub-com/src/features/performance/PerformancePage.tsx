@@ -18,7 +18,7 @@ import {
   ProductTrajectoryChart,
   RevenueTrajectoryChart,
 } from '@/features/performance/PerformanceCharts';
-import { PerfProductsSection, PERF_PRODUCTS_MAX_LOCATIONS } from '@/features/performance/PerfProductsSection';
+import { PerfProductsSection, PERF_PRODUCTS_GRAPH_PAGE } from '@/features/performance/PerfProductsSection';
 import type {
   FleetPayload,
   MachineRow,
@@ -76,18 +76,18 @@ function writeMachineParams(p: URLSearchParams, next: Set<string> | null) {
   }
 }
 
-function capProductsSelection(
+function seedProductsSelection(
   source: Set<string> | null,
   machines: MachineRow[],
-  max: number,
+  defaultCount: number,
 ): Set<string> {
   const allowed = new Set(machines.map((m) => m.id));
   if (source === null) {
-    return new Set(machines.slice(0, max).map((m) => m.id));
+    return new Set(machines.slice(0, defaultCount).map((m) => m.id));
   }
   const kept = [...source].filter((id) => allowed.has(id));
-  if (!kept.length) return new Set(machines.slice(0, max).map((m) => m.id));
-  return new Set(kept.slice(0, max));
+  if (!kept.length) return new Set(machines.slice(0, defaultCount).map((m) => m.id));
+  return new Set(kept);
 }
 
 export function PerformancePage({
@@ -200,13 +200,13 @@ export function PerformancePage({
     const p = new URLSearchParams(params);
     if (next === 'products') {
       p.set('view', 'products');
-      const capped = capProductsSelection(
+      const seeded = seedProductsSelection(
         productsSelected ?? selected,
         machineRows,
-        PERF_PRODUCTS_MAX_LOCATIONS,
+        PERF_PRODUCTS_GRAPH_PAGE,
       );
-      setProductsSelected(capped);
-      writeMachineParams(p, capped);
+      setProductsSelected(seeded);
+      writeMachineParams(p, seeded);
     } else {
       p.delete('view');
       // Location default is All unless the user already narrowed it on Location.
@@ -300,8 +300,8 @@ export function PerformancePage({
     if (workspace !== 'products') return;
     if (!filterMachines.length) return;
     if (productsSelected !== null) return;
-    const capped = capProductsSelection(selected, filterMachines, PERF_PRODUCTS_MAX_LOCATIONS);
-    setProductsSelected(capped);
+    const seeded = seedProductsSelection(selected, filterMachines, PERF_PRODUCTS_GRAPH_PAGE);
+    setProductsSelected(seeded);
   }, [workspace, filterMachines, productsSelected, selected]);
 
   const aggregateDays = fleetQ.data?.aggregateDays || [];
@@ -417,12 +417,22 @@ export function PerformancePage({
           <PerfMachineFilter
             machines={filterMachines}
             selected={workspace === 'products' ? productsSelected : selected}
-            onChange={workspace === 'products' ? syncProductsUrl : syncUrl}
-            maxSelected={workspace === 'products' ? PERF_PRODUCTS_MAX_LOCATIONS : undefined}
+            onChange={
+              workspace === 'products'
+                ? (next) => {
+                    if (next === null) {
+                      syncProductsUrl(new Set(filterMachines.map((m) => m.id)));
+                    } else {
+                      syncProductsUrl(next);
+                    }
+                  }
+                : syncUrl
+            }
+            maxSelected={undefined}
             narrowFromAll={workspace === 'products'}
             hint={
               workspace === 'products'
-                ? `Select all picks ${PERF_PRODUCTS_MAX_LOCATIONS} locations (the cap). Check more only after unchecking one.`
+                ? `Select any number of locations. Product charts show ${PERF_PRODUCTS_GRAPH_PAGE} sites per page (‹ ›), like Location.`
                 : undefined
             }
           />

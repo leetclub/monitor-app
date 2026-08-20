@@ -1,32 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
   <rect width="800" height="520" fill="#0f172a"/>
   <text x="24" y="28" fill="#e2e8f0" font-family="Segoe UI, sans-serif" font-size="16" font-weight="700">Performance — Location | Products</text>
-  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">Period ▾ · Target type · Cups|Revenue · dotted target on same lines · Export</text>
+  <text x="24" y="46" fill="#94a3b8" font-family="Segoe UI, sans-serif" font-size="10">Time (1 range | compare) · Locations any · Products ≤8 · Revenue|Cups · Export</text>
   <rect x="24" y="56" width="70" height="22" rx="11" fill="#1e293b" stroke="#334155"/>
   <text x="36" y="71" fill="#94a3b8" font-size="10" font-family="Segoe UI, sans-serif">Location</text>
   <rect x="98" y="56" width="72" height="22" rx="11" fill="rgba(45,212,191,0.18)" stroke="#2dd4bf"/>
   <text x="110" y="71" fill="#e2e8f0" font-size="10" font-weight="600" font-family="Segoe UI, sans-serif">Products</text>
   <rect x="24" y="86" width="368" height="44" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="112" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Period  WTD vs WTD ▾</text>
+  <text x="36" y="112" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Time  Compare · WTD vs WTD ▾</text>
   <rect x="408" y="86" width="368" height="44" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="420" y="112" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Target type Both ▾ · Unit Cups ▾</text>
-  <rect x="24" y="142" width="368" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="162" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">1. Selected locations (lines)</text>
-  <polyline points="48,250 100,200 160,220 220,180 280,190" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
-  <polyline points="48,260 100,230 160,240 220,210 280,220" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4 3"/>
-  <text x="48" y="280" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Rising / Falling = KD + cups</text>
-  <rect x="408" y="142" width="368" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="420" y="162" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">2. Per location (lines)</text>
-  <polyline points="440,250 500,210 560,230 620,190 680,200" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
-  <polyline points="440,255 500,235 560,245 620,220 680,230" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="420" y="112" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Y-axis Revenue ▾ · Target type Both ▾</text>
+  <rect x="24" y="142" width="752" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="36" y="162" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">A. Product across sites (‹ › page 8) + pace</text>
+  <polyline points="80,250 160,200 240,220 320,180 400,190 480,210 560,185 640,205" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
+  <polyline points="80,260 160,240 240,250 320,230 400,235 480,245 560,228 640,240" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="2 4"/>
+  <text x="36" y="280" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Solid = actual · Dotted = target · Hover = KD + cups + %</text>
   <rect x="24" y="304" width="368" height="96" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="324" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">3. Top / lowest (whole fleet)</text>
+  <text x="36" y="324" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">B. Products in selection</text>
   <polyline points="48,370 100,350 160,360 200,340 280,355" fill="none" stroke="#2dd4bf" stroke-width="2"/>
+  <text x="36" y="388" fill="#94a3b8" font-size="8" font-family="Segoe UI, sans-serif">Hide when exactly 1 drink · Rising/Falling below</text>
   <rect x="408" y="304" width="368" height="96" rx="8" fill="#1e293b" stroke="#334155"/>
   <text x="420" y="324" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">Export weekly report</text>
-  <polyline points="440,370 500,350 560,360 620,340" fill="none" stroke="#2dd4bf" stroke-width="2"/>
+  <text x="420" y="360" fill="#94a3b8" font-size="9" font-family="Segoe UI, sans-serif">Excel · focus product + fleet mix</text>
   <rect x="24" y="412" width="752" height="88" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="436" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">4. Detail table (selected locations)</text>
-  <text x="36" y="460" fill="#94a3b8" font-size="9" font-family="Segoe UI, sans-serif">Drink · Period KD · Prior · Cups · Prior cups · YoY</text>
-  <text x="36" y="482" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Graphs follow Locations pick (≤8) · Custom alone = no comparison</text>
+  <text x="36" y="436" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">Detail table</text>
+  <text x="36" y="460" fill="#94a3b8" font-size="9" font-family="Segoe UI, sans-serif">Drink · Period KD · Prior · Cups · Target</text>
+  <text x="36" y="482" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Select any # locations · Graph A pages 8 · one duration or compare two</text>
 </svg>

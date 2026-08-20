@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as echarts from 'echarts';
 import { apiGet } from '@/lib/api';
@@ -8,23 +8,31 @@ import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { SERIES_PALETTE, type MachineRow } from '@/features/performance/perfTypes';
 import { downloadWeeklyProductReport } from '@/features/performance/exportWeeklyProductReport';
 
-export const PERF_PRODUCTS_MAX_LOCATIONS = 8;
+/** Sites drawn on Graph A per page (‹ ›). */
+export const PERF_PRODUCTS_GRAPH_PAGE = 8;
+/** @deprecated Alias — machine selection is uncapped; paging uses GRAPH_PAGE. */
+export const PERF_PRODUCTS_MAX_LOCATIONS = PERF_PRODUCTS_GRAPH_PAGE;
 export const PERF_PRODUCTS_MAX_SKUS = 8;
 
-type ProductPeriod =
-  | 'today'
-  | 'yesterday'
-  | 'wtd'
-  | 'this_week'
-  | 'wtd_vs_ly'
-  | 'last_week'
-  | 'this_month'
-  | 'last_month'
-  | 'custom_vs_custom'
-  | 'custom_single';
+type TimeCriteria =
+  | 'single:today'
+  | 'single:yesterday'
+  | 'single:wtd'
+  | 'single:last_week'
+  | 'single:this_month'
+  | 'single:last_month'
+  | 'single:custom'
+  | 'compare:today'
+  | 'compare:yesterday'
+  | 'compare:this_week'
+  | 'compare:wtd_vs_ly'
+  | 'compare:last_week'
+  | 'compare:this_month'
+  | 'compare:last_month'
+  | 'compare:custom_vs_custom';
 
 type TargetType = 'product' | 'machine' | 'both';
-type TargetUnit = 'cups' | 'revenue';
+type YMetric = 'revenue' | 'cups';
 
 type ProductRow = {
   name: string;
@@ -91,21 +99,45 @@ type ProductComparePayload = {
   days?: ProductDay[];
 };
 
-const PERIOD_OPTIONS: { id: ProductPeriod; label: string; hint: string }[] = [
-  { id: 'today', label: 'Today vs yesterday', hint: 'Single day vs prior day' },
-  { id: 'yesterday', label: 'Yesterday vs day before', hint: 'Closed day vs day before' },
-  { id: 'wtd', label: 'Week to date (WTD)', hint: 'This week only — no comparison' },
-  { id: 'this_week', label: 'WTD vs WTD', hint: 'This week vs last week, same days' },
-  { id: 'wtd_vs_ly', label: 'WTD vs LY', hint: 'This week vs same week last year' },
-  { id: 'last_week', label: 'Last week vs week before', hint: 'Closed week vs prior week' },
-  { id: 'this_month', label: 'This month vs last', hint: 'MTD vs prior month same days' },
-  { id: 'last_month', label: 'Last month vs month before', hint: 'Closed month vs prior' },
-  { id: 'custom_vs_custom', label: 'Custom date vs custom date', hint: 'Pick two ranges to compare' },
-  { id: 'custom_single', label: 'Custom date (no comparison)', hint: 'One range only' },
+type HoverPoint = {
+  kd: number;
+  cups: number;
+  priorKd?: number | null;
+  priorCups?: number | null;
+  target?: number | null;
+  pctOfTarget?: number | null;
+};
+
+type TrajSeries = {
+  name: string;
+  data: number[];
+  dashed?: boolean;
+  dotted?: boolean;
+  hover?: HoverPoint[];
+};
+
+const SINGLE_OPTIONS: { id: TimeCriteria; label: string }[] = [
+  { id: 'single:today', label: 'Today' },
+  { id: 'single:yesterday', label: 'Yesterday' },
+  { id: 'single:wtd', label: 'Week to date (WTD)' },
+  { id: 'single:last_week', label: 'Last week' },
+  { id: 'single:this_month', label: 'This month (MTD)' },
+  { id: 'single:last_month', label: 'Last month' },
+  { id: 'single:custom', label: 'Custom range' },
+];
+
+const COMPARE_OPTIONS: { id: TimeCriteria; label: string }[] = [
+  { id: 'compare:today', label: 'Today vs yesterday' },
+  { id: 'compare:yesterday', label: 'Yesterday vs day before' },
+  { id: 'compare:this_week', label: 'WTD vs prior WTD' },
+  { id: 'compare:wtd_vs_ly', label: 'WTD vs same week LY' },
+  { id: 'compare:last_week', label: 'Last week vs week before' },
+  { id: 'compare:this_month', label: 'This month vs last' },
+  { id: 'compare:last_month', label: 'Last month vs month before' },
+  { id: 'compare:custom_vs_custom', label: 'Custom vs custom' },
 ];
 
 const COMPARE_BATCH = 80;
-const TOP_LOW = 5;
 
 function kuwaitIsoToday(): string {
   return new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
@@ -374,6 +406,48 @@ function skuOnMachine(m: ProductMachine, names: string[]) {
   };
 }
 
+function daySkuHit(day: ProductDay | undefined, sku: string) {
+  if (!day) return undefined;
+  return (day.products || []).find((p) => p.name === sku);
+}
+
+function daySkuKwd(day: ProductDay | undefined, sku: string): number {
+  return Number(daySkuHit(day, sku)?.revenueKwd || 0);
+}
+
+function daySkuPrevKwd(day: ProductDay | undefined, sku: string): number {
+  const hit = daySkuHit(day, sku);
+  return hit?.prevRevenueKwd != null ? Number(hit.prevRevenueKwd || 0) : 0;
+}
+
+function daySkuCups(day: ProductDay | undefined, sku: string): number {
+  return Number(daySkuHit(day, sku)?.cups || 0);
+}
+
+function daySkuPrevCups(day: ProductDay | undefined, sku: string): number {
+  const hit = daySkuHit(day, sku);
+  return hit?.prevCups != null ? Number(hit.prevCups || 0) : 0;
+}
+
+function daySkuValue(day: ProductDay | undefined, sku: string, metric: YMetric): number {
+  return metric === 'cups' ? daySkuCups(day, sku) : daySkuKwd(day, sku);
+}
+
+function daySkuPrevValue(day: ProductDay | undefined, sku: string, metric: YMetric): number {
+  return metric === 'cups' ? daySkuPrevCups(day, sku) : daySkuPrevKwd(day, sku);
+}
+
+/** Spread period target evenly across X points (daily/hourly pace line). */
+function paceLine(periodTarget: number, n: number): number[] {
+  if (n <= 0 || !(periodTarget > 0)) return Array.from({ length: Math.max(0, n) }, () => 0);
+  const pace = periodTarget / n;
+  return Array.from({ length: n }, () => pace);
+}
+
+function formatHoverValue(metric: YMetric, v: number): string {
+  return metric === 'cups' ? String(Math.round(v)) : formatKwd(v);
+}
+
 function SkuMultiDropdown({
   options,
   selected,
@@ -525,7 +599,7 @@ function SkuMultiDropdown({
       <p className="perfMachineFilterHint">
         {atCapHint
           ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `No filter = table lists every drink; graph plots the top ${PERF_PRODUCTS_MAX_SKUS} by KD.`}
+          : `No filter = Graph B uses top ${PERF_PRODUCTS_MAX_SKUS} by KD; Graph A focuses the top drink.`}
       </p>
     </section>
   );
@@ -582,6 +656,7 @@ function DateTrajectoryChart({
       const wd = (d.weekday || '').slice(0, 3);
       return wd ? `${wd} ${md}` : md;
     });
+    const byName = new Map(series.map((s) => [s.name, s]));
     chart.setOption(
       {
         color: SERIES_PALETTE,
@@ -607,9 +682,34 @@ function DateTrajectoryChart({
             const lines = [`<div style="font-weight:700;margin-bottom:6px">${head}</div>`];
             for (const p of arr) {
               if (p.value == null || !Number.isFinite(Number(p.value))) continue;
-              lines.push(
-                `<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span><b>${p.seriesName}</b>: ${fmt(Number(p.value))}</div>`,
-              );
+              const s = byName.get(String(p.seriesName || ''));
+              const h = s?.hover?.[i];
+              const name = String(p.seriesName || '');
+              if (h) {
+                const bits: string[] = [
+                  `<b>${name}</b>: ${formatHoverValue(unit === 'cups' ? 'cups' : 'revenue', Number(p.value))}`,
+                ];
+                bits.push(`KD ${formatKwd(h.kd)} · ${Math.round(h.cups)} cups`);
+                if (h.priorKd != null || h.priorCups != null) {
+                  bits.push(
+                    `Prior: ${formatKwd(Number(h.priorKd || 0))} · ${Math.round(Number(h.priorCups || 0))} cups`,
+                  );
+                }
+                if (h.target != null && Number(h.target) > 0) {
+                  const tgtLabel = unit === 'cups' ? `${Math.round(h.target)} cups` : formatKwd(h.target);
+                  bits.push(`Period target: ${tgtLabel}`);
+                  if (h.pctOfTarget != null && Number.isFinite(h.pctOfTarget)) {
+                    bits.push(`${h.pctOfTarget.toFixed(0)}% of target`);
+                  }
+                }
+                lines.push(
+                  `<div style="margin-bottom:4px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span>${bits.join('<br/>')}</div>`,
+                );
+              } else {
+                lines.push(
+                  `<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span><b>${name}</b>: ${fmt(Number(p.value))}</div>`,
+                );
+              }
             }
             return lines.join('');
           },
@@ -687,59 +787,6 @@ function DateTrajectoryChart({
   );
 }
 
-function daySkuKwd(day: ProductDay | undefined, sku: string): number {
-  if (!day) return 0;
-  const hit = (day.products || []).find((p) => p.name === sku);
-  return Number(hit?.revenueKwd || 0);
-}
-
-function daySkuPrevKwd(day: ProductDay | undefined, sku: string): number {
-  if (!day) return 0;
-  const hit = (day.products || []).find((p) => p.name === sku);
-  if (hit?.prevRevenueKwd != null) return Number(hit.prevRevenueKwd || 0);
-  return 0;
-}
-
-function daySkuCups(day: ProductDay | undefined, sku: string): number {
-  if (!day) return 0;
-  const hit = (day.products || []).find((p) => p.name === sku);
-  return Number(hit?.cups || 0);
-}
-
-function daySkuPrevCups(day: ProductDay | undefined, sku: string): number {
-  if (!day) return 0;
-  const hit = (day.products || []).find((p) => p.name === sku);
-  if (hit?.prevCups != null) return Number(hit.prevCups || 0);
-  return 0;
-}
-
-function daySkuValue(day: ProductDay | undefined, sku: string, unit: TargetUnit): number {
-  return unit === 'cups' ? daySkuCups(day, sku) : daySkuKwd(day, sku);
-}
-
-function daySkuPrevValue(day: ProductDay | undefined, sku: string, unit: TargetUnit): number {
-  return unit === 'cups' ? daySkuPrevCups(day, sku) : daySkuPrevKwd(day, sku);
-}
-
-function dayTotalValue(day: ProductDay | undefined, unit: TargetUnit): number {
-  if (!day) return 0;
-  return unit === 'cups' ? Number(day.cups || 0) : Number(day.revenueKwd || 0);
-}
-
-function dayPrevTotalValue(day: ProductDay | undefined, unit: TargetUnit): number {
-  if (!day) return 0;
-  return unit === 'cups' ? Number(day.prevCups || 0) : Number(day.prevRevenueKwd || 0);
-}
-
-/** Spread period target evenly across X points (daily/hourly pace line). */
-function paceLine(periodTarget: number, n: number): number[] {
-  if (n <= 0 || !(periodTarget > 0)) return Array.from({ length: Math.max(0, n) }, () => 0);
-  const pace = periodTarget / n;
-  return Array.from({ length: n }, () => pace);
-}
-
-type TrajSeries = { name: string; data: number[]; dashed?: boolean; dotted?: boolean };
-
 type Props = {
   machines: MachineRow[];
   selectedIds: string[];
@@ -748,7 +795,7 @@ type Props = {
 };
 
 export function PerfProductsSection({ machines, selectedIds, allSelected, fleetIds }: Props) {
-  const [period, setPeriod] = useState<ProductPeriod>('this_week');
+  const [timeCriteria, setTimeCriteria] = useState<TimeCriteria>('compare:this_week');
   const [aStart, setAStart] = useState(() => addDaysIso(kuwaitIsoToday(), -6));
   const [aEnd, setAEnd] = useState(() => kuwaitIsoToday());
   const [bStart, setBStart] = useState(() => addDaysIso(kuwaitIsoToday(), -13));
@@ -757,29 +804,35 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const [customEnd, setCustomEnd] = useState(() => addDaysIso(kuwaitIsoToday(), -1));
   const [skus, setSkus] = useState<string[]>([]);
   const [targetType, setTargetType] = useState<TargetType>('both');
-  const [targetUnit, setTargetUnit] = useState<TargetUnit>('cups');
+  const [yMetric, setYMetric] = useState<YMetric>('revenue');
+  const [graphPage, setGraphPage] = useState(0);
+  const touchX = useRef<number | null>(null);
 
   const locNone = !allSelected && selectedIds.length === 0;
   const ids = useMemo(() => {
     if (locNone) return [];
-    if (allSelected) return machines.slice(0, PERF_PRODUCTS_MAX_LOCATIONS).map((m) => m.id);
-    return selectedIds.slice(0, PERF_PRODUCTS_MAX_LOCATIONS);
+    if (allSelected) return machines.map((m) => m.id);
+    return selectedIds.slice();
   }, [allSelected, locNone, machines, selectedIds]);
 
   const idsKey = ids.slice().sort().join(',');
 
   const compareOpts = useMemo((): CompareOpts | null => {
-    if (period === 'custom_vs_custom') {
+    const [kind, key] = timeCriteria.split(':') as ['single' | 'compare', string];
+    if (timeCriteria === 'compare:custom_vs_custom') {
       if (!(aStart && aEnd && bStart && bEnd && aStart <= aEnd && bStart <= bEnd)) return null;
       return { preset: 'custom_vs_custom', aStart, aEnd, bStart, bEnd };
     }
-    if (period === 'custom_single') {
+    if (timeCriteria === 'single:custom') {
       if (!(customStart && customEnd && customStart <= customEnd)) return null;
       return { preset: 'custom_single', start: customStart, end: customEnd, compare: false };
     }
-    if (period === 'wtd') return { preset: 'wtd', compare: false };
-    return { preset: period };
-  }, [period, aStart, aEnd, bStart, bEnd, customStart, customEnd]);
+    if (kind === 'single') {
+      // today/yesterday/etc.: API accepts preset + compare=0 (no prior series / trends).
+      return { preset: key, compare: false };
+    }
+    return { preset: key };
+  }, [timeCriteria, aStart, aEnd, bStart, bEnd, customStart, customEnd]);
 
   const compareOptsKey = useMemo(() => {
     if (!compareOpts) return 'invalid';
@@ -794,7 +847,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
   const compareQ = useQuery({
     queryKey: ['alert-performance-product-compare', compareOptsKey, idsKey],
-    queryFn: () => apiGet<ProductComparePayload>(productComparePath(ids, compareOpts!)),
+    queryFn: () => fetchProductCompareBatched(ids, compareOpts!),
     enabled: ids.length > 0 && Boolean(compareOpts),
     staleTime: 60_000,
     refetchInterval: 90_000,
@@ -834,7 +887,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, [fleetQ.data?.machines, machines]);
 
   const win = fleetQ.data?.window || compareQ.data?.window;
-  const compareOn = (fleetQ.data?.compare ?? compareQ.data?.compare) !== false && period !== 'wtd' && period !== 'custom_single';
+  const compareOn =
+    timeCriteria.startsWith('compare:') &&
+    (fleetQ.data?.compare ?? compareQ.data?.compare) !== false;
   const periodLabel = win?.label || 'Period';
   const priorLabel = win?.prevLabel || 'Prior';
   const granularity = (fleetQ.data?.granularity || compareQ.data?.granularity || 'day') as string;
@@ -868,14 +923,15 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     });
   }, []);
 
-  const multiLoc = ids.length > 1;
-  const compareSkus = useMemo(() => {
-    if (skus.length) return skus;
-    if (!multiLoc) return [];
+  const focusSku = skus[0] || skuCatalog[0]?.name || '';
+  const showGraphB = skus.length !== 1;
+  const graphBSkus = useMemo(() => {
+    if (skus.length >= 2) return skus;
     return skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name);
-  }, [skus, multiLoc, skuCatalog]);
+  }, [skus, skuCatalog]);
 
   const skuSet = useMemo(() => new Set(skus), [skus]);
+  const multiLoc = ids.length > 1;
 
   const inLocationRows = useMemo(() => {
     if (!skus.length) return mixedRows;
@@ -883,10 +939,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, [mixedRows, skus, skuSet]);
 
   const acrossByLocation = useMemo(() => {
-    if (!compareSkus.length) return [];
+    const want = skus.length ? skus : graphBSkus;
+    if (!want.length) return [];
     return payloadMachines.map((m) => {
       const byName = new Map((m.products || []).map((p) => [String(p.name || '').trim(), p] as const));
-      const cells = compareSkus.map((name) => {
+      const cells = want.map((name) => {
         const hit = byName.get(name);
         return {
           name,
@@ -902,15 +959,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       const revenueKwd = cells.reduce((s, c) => s + c.revenueKwd, 0);
       return { machineId: m.machineId, machineName: m.machineName, cells, revenueKwd };
     });
-  }, [payloadMachines, compareSkus]);
-
-  const fleetDays = useMemo(
-    () =>
-      (fleetQ.data?.days?.length
-        ? fleetQ.data.days
-        : rollupDaysFromMachines(fleetMachinesNamed)) as ProductDay[],
-    [fleetQ.data?.days, fleetMachinesNamed],
-  );
+  }, [payloadMachines, skus, graphBSkus]);
 
   const selectedDays = useMemo(
     () =>
@@ -922,118 +971,254 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
   const showProductTargets = targetType === 'product' || targetType === 'both';
   const showMachineTargets = targetType === 'machine' || targetType === 'both';
-  const chartUnit: 'kd' | 'cups' = targetUnit === 'cups' ? 'cups' : 'kd';
+  const chartUnit: 'kd' | 'cups' = yMetric === 'cups' ? 'cups' : 'kd';
 
-  const machineLocTarget = useCallback(
-    (m: ProductMachine): number => {
-      return targetUnit === 'cups'
-        ? Number(m.locationTargetCups || 0)
-        : Number(m.locationTargetKd || 0);
-    },
-    [targetUnit],
+  const pageCount = Math.max(1, Math.ceil(payloadMachines.length / PERF_PRODUCTS_GRAPH_PAGE));
+  const canPage = payloadMachines.length > PERF_PRODUCTS_GRAPH_PAGE;
+
+  useEffect(() => {
+    setGraphPage(0);
+  }, [idsKey, compareOptsKey]);
+
+  useEffect(() => {
+    setGraphPage((p) => Math.min(p, Math.max(0, pageCount - 1)));
+  }, [pageCount]);
+
+  const pageMachines = useMemo(() => {
+    const start = graphPage * PERF_PRODUCTS_GRAPH_PAGE;
+    return payloadMachines.slice(start, start + PERF_PRODUCTS_GRAPH_PAGE);
+  }, [payloadMachines, graphPage]);
+
+  const goPrevPage = useCallback(() => setGraphPage((p) => Math.max(0, p - 1)), []);
+  const goNextPage = useCallback(
+    () => setGraphPage((p) => Math.min(pageCount - 1, p + 1)),
+    [pageCount],
   );
 
-  const selectedTrajectorySeries = useMemo(() => {
+  const onGraphTouchStart = (e: TouchEvent) => {
+    touchX.current = e.changedTouches[0]?.clientX ?? null;
+  };
+  const onGraphTouchEnd = (e: TouchEvent) => {
+    const start = touchX.current;
+    touchX.current = null;
+    if (start == null || !canPage) return;
+    const end = e.changedTouches[0]?.clientX ?? start;
+    const dx = end - start;
+    if (Math.abs(dx) < 48) return;
+    if (dx < 0) goNextPage();
+    else goPrevPage();
+  };
+
+  /** Graph A — focus product across sites on current page. */
+  const graphASeries = useMemo(() => {
     const series: TrajSeries[] = [];
+    if (!focusSku || !pageMachines.length || !selectedDays.length) return series;
     const n = selectedDays.length;
-    if (skus.length === 1) {
-      const sku = skus[0];
-      for (const m of payloadMachines) {
-        const days = m.days?.length ? m.days : selectedDays;
-        series.push({
-          name: m.machineName,
-          data: days.map((d) => daySkuValue(d, sku, targetUnit)),
-        });
-      }
-      if (showProductTargets) {
-        for (const m of payloadMachines) {
-          const cell = skuOnMachine(m, [sku]);
-          const tgt =
-            targetUnit === 'cups'
-              ? cell.hasTarget
-                ? cell.target
-                : 0
-              : cell.hasTargetRev
-                ? cell.targetRev
-                : 0;
-          if (tgt > 0) {
-            const pts = (m.days?.length ? m.days : selectedDays).length;
-            series.push({
-              name: `Target · ${m.machineName}`,
-              data: paceLine(tgt, pts || n),
-              dotted: true,
-            });
-          }
-        }
-      }
-      return series;
-    }
-    const want = skus.length ? skus : compareSkus.slice(0, PERF_PRODUCTS_MAX_SKUS);
-    if (want.length) {
-      for (const name of want) {
-        series.push({
-          name,
-          data: selectedDays.map((d) => daySkuValue(d, name, targetUnit)),
-        });
-      }
-      if (showProductTargets) {
-        for (const name of want) {
-          let tgt = 0;
-          for (const m of payloadMachines) {
-            const cell = skuOnMachine(m, [name]);
-            tgt +=
-              targetUnit === 'cups'
-                ? cell.hasTarget
-                  ? cell.target
-                  : 0
-                : cell.hasTargetRev
-                  ? cell.targetRev
-                  : 0;
-          }
-          if (tgt > 0) {
-            series.push({
-              name: `Target · ${name}`,
-              data: paceLine(tgt, n),
-              dotted: true,
-            });
-          }
-        }
-      }
-      return series;
-    }
-    series.push({
-      name: 'Selected sites',
-      data: selectedDays.map((d) => dayTotalValue(d, targetUnit)),
-    });
-    if (compareOn) {
-      series.push({
-        name: 'Prior · selected',
-        data: selectedDays.map((d) => dayPrevTotalValue(d, targetUnit)),
-        dashed: true,
+
+    for (const m of pageMachines) {
+      const machineDays = m.days?.length ? m.days : selectedDays;
+      const dayAt = (i: number) => machineDays[i] || selectedDays[i];
+      const cell = skuOnMachine(m, [focusSku]);
+      const productTgt =
+        yMetric === 'cups'
+          ? cell.hasTarget
+            ? cell.target
+            : 0
+          : cell.hasTargetRev
+            ? cell.targetRev
+            : 0;
+      const locTgt =
+        yMetric === 'cups'
+          ? Number(m.locationTargetCups || 0)
+          : Number(m.locationTargetKd || 0);
+      const periodTgt = showProductTargets && productTgt > 0 ? productTgt : null;
+      const hover: HoverPoint[] = selectedDays.map((_, i) => {
+        const d = dayAt(i);
+        const kd = daySkuKwd(d, focusSku);
+        const cups = daySkuCups(d, focusSku);
+        const priorKd = compareOn ? daySkuPrevKwd(d, focusSku) : null;
+        const priorCups = compareOn ? daySkuPrevCups(d, focusSku) : null;
+        const tgt = periodTgt;
+        const actual = yMetric === 'cups' ? cups : kd;
+        return {
+          kd,
+          cups,
+          priorKd,
+          priorCups,
+          target: tgt,
+          pctOfTarget: tgt != null && tgt > 0 ? (actual / tgt) * 100 : null,
+        };
       });
-    }
-    if (showMachineTargets) {
-      const locSum = payloadMachines.reduce((s, m) => s + machineLocTarget(m), 0);
-      if (locSum > 0) {
+      series.push({
+        name: m.machineName,
+        data: selectedDays.map((_, i) => daySkuValue(dayAt(i), focusSku, yMetric)),
+        hover,
+      });
+      if (compareOn) {
         series.push({
-          name: 'Target · locations',
-          data: paceLine(locSum, n),
+          name: `Prior · ${m.machineName}`,
+          data: selectedDays.map((_, i) => daySkuPrevValue(dayAt(i), focusSku, yMetric)),
+          dashed: true,
+        });
+      }
+      if (showProductTargets && productTgt > 0) {
+        series.push({
+          name: `Target · ${m.machineName}`,
+          data: paceLine(productTgt, n),
+          dotted: true,
+        });
+      }
+      if (showMachineTargets && locTgt > 0) {
+        series.push({
+          name: `Target · loc · ${m.machineName}`,
+          data: paceLine(locTgt, n),
           dotted: true,
         });
       }
     }
     return series;
   }, [
-    skus,
-    payloadMachines,
+    focusSku,
+    pageMachines,
     selectedDays,
-    compareSkus,
+    yMetric,
     compareOn,
-    targetUnit,
     showProductTargets,
     showMachineTargets,
-    machineLocTarget,
   ]);
+
+  /** Graph B — products summed across all selected machines. */
+  const graphBSeries = useMemo(() => {
+    const series: TrajSeries[] = [];
+    if (!showGraphB || !graphBSkus.length || !selectedDays.length) return series;
+    const n = selectedDays.length;
+
+    for (const name of graphBSkus) {
+      let tgt = 0;
+      let hasTgt = false;
+      for (const m of payloadMachines) {
+        const cell = skuOnMachine(m, [name]);
+        if (yMetric === 'cups') {
+          if (cell.hasTarget) {
+            tgt += cell.target;
+            hasTgt = true;
+          }
+        } else if (cell.hasTargetRev) {
+          tgt += cell.targetRev;
+          hasTgt = true;
+        }
+      }
+      const hover: HoverPoint[] = selectedDays.map((d) => {
+        const kd = daySkuKwd(d, name);
+        const cups = daySkuCups(d, name);
+        const priorKd = compareOn ? daySkuPrevKwd(d, name) : null;
+        const priorCups = compareOn ? daySkuPrevCups(d, name) : null;
+        const actual = yMetric === 'cups' ? cups : kd;
+        const periodTgt = showProductTargets && hasTgt && tgt > 0 ? tgt : null;
+        return {
+          kd,
+          cups,
+          priorKd,
+          priorCups,
+          target: periodTgt,
+          pctOfTarget: periodTgt != null && periodTgt > 0 ? (actual / periodTgt) * 100 : null,
+        };
+      });
+      series.push({
+        name,
+        data: selectedDays.map((d) => daySkuValue(d, name, yMetric)),
+        hover,
+      });
+      if (compareOn) {
+        series.push({
+          name: `Prior · ${name}`,
+          data: selectedDays.map((d) => daySkuPrevValue(d, name, yMetric)),
+          dashed: true,
+        });
+      }
+      if (showProductTargets && hasTgt && tgt > 0) {
+        series.push({
+          name: `Target · ${name}`,
+          data: paceLine(tgt, n),
+          dotted: true,
+        });
+      }
+    }
+    return series;
+  }, [
+    showGraphB,
+    graphBSkus,
+    selectedDays,
+    payloadMachines,
+    yMetric,
+    compareOn,
+    showProductTargets,
+  ]);
+
+  const paceStrip = useMemo(() => {
+    if (!focusSku || !payloadMachines.length) return null;
+    let actual = 0;
+    let target = 0;
+    let hasTarget = false;
+    for (const m of payloadMachines) {
+      const cell = skuOnMachine(m, [focusSku]);
+      actual += yMetric === 'cups' ? cell.cups : cell.revenue;
+      if (yMetric === 'cups') {
+        if (cell.hasTarget) {
+          target += cell.target;
+          hasTarget = true;
+        }
+      } else if (cell.hasTargetRev) {
+        target += cell.targetRev;
+        hasTarget = true;
+      }
+    }
+    if (!hasTarget || !(target > 0)) {
+      return {
+        focusSku,
+        actual,
+        target: null as number | null,
+        pct: null as number | null,
+        expected: null as number | null,
+        delta: null as number | null,
+        ahead: null as boolean | null,
+      };
+    }
+    return {
+      focusSku,
+      actual,
+      target,
+      pct: (actual / target) * 100,
+      expected: target,
+      delta: actual - target,
+      ahead: actual >= target,
+    };
+  }, [focusSku, payloadMachines, yMetric]);
+
+  // Better linear pace: use calendar span when window dates exist.
+  const paceStripCalibrated = useMemo(() => {
+    if (!paceStrip || paceStrip.target == null) return paceStrip;
+    const start = win?.start;
+    const end = win?.end;
+    if (!start || !end) return paceStrip;
+    const startMs = Date.parse(`${start}T12:00:00Z`);
+    const endMs = Date.parse(`${end}T12:00:00Z`);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return paceStrip;
+    const spanDays = Math.round((endMs - startMs) / 86400000) + 1;
+    const today = kuwaitIsoToday();
+    const todayMs = Date.parse(`${today}T12:00:00Z`);
+    const elapsedEnd = Math.min(endMs, todayMs);
+    const elapsedDays = Math.max(1, Math.round((elapsedEnd - startMs) / 86400000) + 1);
+    const expected = paceStrip.target * (elapsedDays / spanDays);
+    const delta = paceStrip.actual - expected;
+    return {
+      ...paceStrip,
+      expected,
+      delta,
+      ahead: delta >= 0,
+      pct: (paceStrip.actual / paceStrip.target) * 100,
+    };
+  }, [paceStrip, win?.start, win?.end]);
 
   const rising = useMemo(
     () =>
@@ -1052,33 +1237,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     [mixedRows],
   );
 
-  const rankedForSku = useMemo(() => {
-    if (!skus.length) return [];
-    return fleetMachinesNamed
-      .map((m) => {
-        const cell = skuOnMachine(m, skus);
-        return { machineId: m.machineId, machineName: m.machineName, ...cell };
-      })
-      .filter((r) => r.revenue > 0 || (r.prev != null && r.prev > 0));
-  }, [fleetMachinesNamed, skus]);
-
-  const topMachines = useMemo(
-    () =>
-      [...rankedForSku]
-        .sort((a, b) => b.revenue - a.revenue || a.machineName.localeCompare(b.machineName))
-        .slice(0, TOP_LOW),
-    [rankedForSku],
-  );
-  const lowMachines = useMemo(
-    () =>
-      [...rankedForSku]
-        .sort((a, b) => a.revenue - b.revenue || a.machineName.localeCompare(b.machineName))
-        .slice(0, TOP_LOW),
-    [rankedForSku],
-  );
-
-  const periodMeta = PERIOD_OPTIONS.find((p) => p.id === period);
-
   const onExportReport = useCallback(() => {
     downloadWeeklyProductReport({
       periodLabel,
@@ -1087,10 +1245,12 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       windowEnd: win?.end,
       fleetProducts: fleetMix,
       machines: fleetMachinesNamed,
-      focusProduct: skus[0] || null,
+      focusProduct: focusSku || null,
       compare: compareOn,
     });
-  }, [periodLabel, priorLabel, win, fleetMix, fleetMachinesNamed, skus, compareOn]);
+  }, [periodLabel, priorLabel, win, fleetMix, fleetMachinesNamed, focusSku, compareOn]);
+
+  const tableSkus = skus.length ? skus : graphBSkus;
 
   const detailTable = (
     <div className="perfProductsTableWrap">
@@ -1111,7 +1271,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <tbody>
             {locNone ? (
               <tr>
-                <td colSpan={8}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
+                <td colSpan={8}>Select locations above.</td>
               </tr>
             ) : inLocationRows.length === 0 ? (
               <tr>
@@ -1146,7 +1306,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <thead>
             <tr>
               <th>Location</th>
-              {compareSkus.length > 1 ? <th>Drink</th> : null}
+              {tableSkus.length > 1 ? <th>Drink</th> : null}
               <th>{periodLabel} KD</th>
               {compareOn ? <th>{priorLabel} KD</th> : null}
               {compareOn ? <th>vs prior</th> : null}
@@ -1158,9 +1318,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <tbody>
             {locNone ? (
               <tr>
-                <td colSpan={8}>Select locations above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</td>
+                <td colSpan={8}>Select locations above.</td>
               </tr>
-            ) : !compareSkus.length ? (
+            ) : !tableSkus.length ? (
               <tr>
                 <td colSpan={8}>Pick a drink in Products (max {PERF_PRODUCTS_MAX_SKUS}).</td>
               </tr>
@@ -1174,7 +1334,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                   r.cells.map((c) => (
                     <tr key={`${r.machineId}:${c.name}`}>
                       <td>{r.machineName}</td>
-                      {compareSkus.length > 1 ? <td>{c.name}</td> : null}
+                      {tableSkus.length > 1 ? <td>{c.name}</td> : null}
                       <td>{formatKwd(c.revenueKwd)}</td>
                       {compareOn ? <td>{formatKwd(Number(c.prevRevenueKwd || 0))}</td> : null}
                       {compareOn ? (
@@ -1193,6 +1353,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     </div>
   );
 
+  const fmtPace = (v: number) =>
+    yMetric === 'cups' ? `${Math.round(v)} cups` : formatKwd(v);
+
   return (
     <section className="perfProducts" aria-labelledby="perf-products-title">
       <header className="perfProductsHead">
@@ -1203,14 +1366,15 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <aside className="perfProductsGuide" aria-label="How to use product performance">
             <ol className="perfProductsGuideList">
               <li className="active">
-                <strong>1. Period</strong> — choose a preset or custom dates below.
+                <strong>1. Time</strong> — one duration or compare two durations.
               </li>
               <li className={!locNone ? 'active' : undefined}>
-                <strong>2. Locations</strong> — pick up to {PERF_PRODUCTS_MAX_LOCATIONS} in the bar
-                above (scroll if needed).
+                <strong>2. Locations</strong> — any number; Graph A pages {PERF_PRODUCTS_GRAPH_PAGE}{' '}
+                sites at a time.
               </li>
               <li className={skus.length > 0 ? 'active' : undefined}>
-                <strong>3. Products + target type</strong> — filter drinks, then read the line charts.
+                <strong>3. Products</strong> — up to {PERF_PRODUCTS_MAX_SKUS}; Graph A focuses the
+                first pick.
               </li>
             </ol>
           </aside>
@@ -1223,19 +1387,33 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
       <div className="perfProductsCriteria" aria-label="Product criteria">
         <label className="perfProductsCriteriaField">
-          <span>Period</span>
+          <span>Time criteria</span>
           <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as ProductPeriod)}
-            aria-label="Compare period"
+            value={timeCriteria}
+            onChange={(e) => setTimeCriteria(e.target.value as TimeCriteria)}
+            aria-label="Time criteria"
           >
-            {PERIOD_OPTIONS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
+            <optgroup label="One duration (no comparison)">
+              {SINGLE_OPTIONS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Compare two durations">
+              {COMPARE_OPTIONS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
-          {periodMeta ? <small>{periodMeta.hint}</small> : null}
+          <small>
+            {timeCriteria.startsWith('single:')
+              ? 'No prior lines or rising/falling.'
+              : 'Dashed = prior period.'}{' '}
+            Dotted = target pace.
+          </small>
         </label>
 
         <label className="perfProductsCriteriaField">
@@ -1249,44 +1427,53 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             <option value="machine">Machine target</option>
             <option value="both">Both</option>
           </select>
-          <small>Product and/or location targets draw as dotted lines on the graphs.</small>
-        </label>
-
-        <label className="perfProductsCriteriaField">
-          <span>Target unit</span>
-          <select
-            value={targetUnit}
-            onChange={(e) => setTargetUnit(e.target.value as TargetUnit)}
-            aria-label="Target unit cups or revenue"
-          >
-            <option value="cups">Cups</option>
-            <option value="revenue">Revenue (KD)</option>
-          </select>
-          <small>Y-axis and target lines use this unit.</small>
+          <small>Dotted overlays on Graph A (and product targets on Graph B).</small>
         </label>
       </div>
 
-      {period === 'custom_vs_custom' ? (
+      {timeCriteria === 'compare:custom_vs_custom' ? (
         <div className="perfProductsCustomRange">
           <label>
             Period A from
-            <input type="date" value={aStart} max={aEnd || kuwaitIsoToday()} onChange={(e) => setAStart(e.target.value)} />
+            <input
+              type="date"
+              value={aStart}
+              max={aEnd || kuwaitIsoToday()}
+              onChange={(e) => setAStart(e.target.value)}
+            />
           </label>
           <label>
             Period A to
-            <input type="date" value={aEnd} min={aStart} max={kuwaitIsoToday()} onChange={(e) => setAEnd(e.target.value)} />
+            <input
+              type="date"
+              value={aEnd}
+              min={aStart}
+              max={kuwaitIsoToday()}
+              onChange={(e) => setAEnd(e.target.value)}
+            />
           </label>
           <label>
             Period B from
-            <input type="date" value={bStart} max={bEnd || kuwaitIsoToday()} onChange={(e) => setBStart(e.target.value)} />
+            <input
+              type="date"
+              value={bStart}
+              max={bEnd || kuwaitIsoToday()}
+              onChange={(e) => setBStart(e.target.value)}
+            />
           </label>
           <label>
             Period B to
-            <input type="date" value={bEnd} min={bStart} max={kuwaitIsoToday()} onChange={(e) => setBEnd(e.target.value)} />
+            <input
+              type="date"
+              value={bEnd}
+              min={bStart}
+              max={kuwaitIsoToday()}
+              onChange={(e) => setBEnd(e.target.value)}
+            />
           </label>
         </div>
       ) : null}
-      {period === 'custom_single' ? (
+      {timeCriteria === 'single:custom' ? (
         <div className="perfProductsCustomRange">
           <label>
             From
@@ -1307,7 +1494,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               onChange={(e) => setCustomEnd(e.target.value)}
             />
           </label>
-          <p className="perfSectionHint">Single range — no prior comparison lines or rising/falling.</p>
+          <p className="perfSectionHint">Single range — no prior comparison.</p>
         </div>
       ) : null}
 
@@ -1321,224 +1508,195 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         onSelectTop={() => setSkus(skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name))}
       />
 
-      {locNone ? <p className="perfMuted">Pick at least one location above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</p> : null}
+      {locNone ? <p className="perfMuted">Pick at least one location above.</p> : null}
       {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
       {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
 
-      <section className="perfProductsBlock" aria-labelledby="perf-products-selected">
-        <h4 id="perf-products-selected" className="perfSectionTitle">
-          1. Selected locations
-        </h4>
-        <p className="perfSectionHint">
-          Follows your Locations pick (max {PERF_PRODUCTS_MAX_LOCATIONS}).{' '}
-          {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}.{' '}
-          {compareOn ? 'Dashed = prior. ' : ''}
-          Dotted = target pace ({targetUnit === 'cups' ? 'cups' : 'KD'}).
-        </p>
+      <div className="perfProductsMetricBar" role="group" aria-label="Y-axis metric">
+        <span>Y-axis</span>
+        <button
+          type="button"
+          className={`perfSegPill ${yMetric === 'revenue' ? 'active' : ''}`}
+          onClick={() => setYMetric('revenue')}
+        >
+          Revenue
+        </button>
+        <button
+          type="button"
+          className={`perfSegPill ${yMetric === 'cups' ? 'active' : ''}`}
+          onClick={() => setYMetric('cups')}
+        >
+          Cups
+        </button>
+        <small>Target stays a dotted overlay.</small>
+      </div>
+
+      <section className="perfProductsBlock" aria-labelledby="perf-products-graph-a">
+        <div className="perfProductsBlockHead">
+          <h4 id="perf-products-graph-a" className="perfSectionTitle">
+            A. {focusSku || 'Product'} across sites
+          </h4>
+          <p className="perfSectionHint">
+            Focus drink = first selected (or top catalog). Lines = machines on this page.{' '}
+            {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}.{' '}
+            {compareOn ? 'Dashed = prior. ' : ''}
+            Dotted = target.
+          </p>
+        </div>
         {compareQ.isLoading && ids.length > 0 ? <p className="perfMuted">Loading selected mix…</p> : null}
-        <DateTrajectoryChart
-          days={selectedDays}
-          series={selectedTrajectorySeries}
-          unit={chartUnit}
-          onSeriesClick={toggleSku}
-          exportName="product-selected-trajectory"
-          ariaLabel="Selected locations product trajectory"
-        />
-        {compareOn ? (
-          <div className="perfProductsTrendCols">
-            <div>
-              <h5 className="perfProductsTrendHead">Rising (KD + cups)</h5>
-              {rising.length ? (
-                <ul className="perfProductsTrendList perfProductsTrendDetailed">
-                  {rising.map((p) => (
-                    <li key={p.name}>
-                      <button type="button" onClick={() => toggleSku(p.name)}>
-                        {p.name}
-                      </button>
-                      <div className="perfProductsTrendMeta">
-                        <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
-                        <span>
-                          {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
-                          {formatKwd(Number(p.revenueKwd || 0))}
-                        </span>
-                        <span className={trendClass(p.cupsTrendPct)}>
-                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
-                          cups ({trendText(p.cupsTrendPct)})
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+        <div className="perfGraphPageMeta" aria-live="polite">
+          {canPage
+            ? `Page ${graphPage + 1} / ${pageCount} · sites ${graphPage * PERF_PRODUCTS_GRAPH_PAGE + 1}–${graphPage * PERF_PRODUCTS_GRAPH_PAGE + pageMachines.length} of ${payloadMachines.length}`
+            : `${pageMachines.length} site${pageMachines.length === 1 ? '' : 's'} on graph`}
+        </div>
+        <div
+          className="perfGraphStage"
+          onTouchStart={onGraphTouchStart}
+          onTouchEnd={onGraphTouchEnd}
+        >
+          <button
+            type="button"
+            className="perfGraphSideBtn"
+            disabled={!canPage || graphPage <= 0}
+            onClick={goPrevPage}
+            aria-label="Previous graph page"
+          >
+            ‹
+          </button>
+          <DateTrajectoryChart
+            days={selectedDays}
+            series={graphASeries}
+            unit={chartUnit}
+            exportName="product-across-sites"
+            ariaLabel="Focus product across sites"
+          />
+          <button
+            type="button"
+            className="perfGraphSideBtn"
+            disabled={!canPage || graphPage >= pageCount - 1}
+            onClick={goNextPage}
+            aria-label="Next graph page"
+          >
+            ›
+          </button>
+        </div>
+        {paceStripCalibrated ? (
+          <div className="perfProductsPace" aria-label="Pace vs target">
+            <strong>{paceStripCalibrated.focusSku}</strong>
+            <span>
+              Actual {fmtPace(paceStripCalibrated.actual)}
+              {paceStripCalibrated.target != null ? (
+                <>
+                  {' '}
+                  · Target {fmtPace(paceStripCalibrated.target)}
+                  {paceStripCalibrated.pct != null
+                    ? ` (${paceStripCalibrated.pct.toFixed(0)}% of target)`
+                    : ''}
+                </>
               ) : (
-                <p className="perfMuted">None up vs prior for this selection.</p>
+                ' · No product target set'
               )}
-            </div>
-            <div>
-              <h5 className="perfProductsTrendHead">Falling (KD + cups)</h5>
-              {falling.length ? (
-                <ul className="perfProductsTrendList perfProductsTrendDetailed">
-                  {falling.map((p) => (
-                    <li key={p.name}>
-                      <button type="button" onClick={() => toggleSku(p.name)}>
-                        {p.name}
-                      </button>
-                      <div className="perfProductsTrendMeta">
-                        <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
-                        <span>
-                          {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
-                          {formatKwd(Number(p.revenueKwd || 0))}
-                        </span>
-                        <span className={trendClass(p.cupsTrendPct)}>
-                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
-                          cups ({trendText(p.cupsTrendPct)})
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="perfMuted">None down vs prior for this selection.</p>
-              )}
-            </div>
+            </span>
+            {paceStripCalibrated.expected != null && paceStripCalibrated.delta != null ? (
+              <span className={paceStripCalibrated.ahead ? 'alertSalesUp' : 'alertSalesDown'}>
+                {paceStripCalibrated.ahead ? 'Ahead' : 'Behind'} linear pace by{' '}
+                {fmtPace(Math.abs(paceStripCalibrated.delta))} (expected{' '}
+                {fmtPace(paceStripCalibrated.expected)})
+              </span>
+            ) : null}
           </div>
-        ) : (
-          <p className="perfMuted">Rising / falling need a comparison period.</p>
-        )}
+        ) : null}
       </section>
 
-      <section className="perfProductsBlock" aria-labelledby="perf-products-per-machine">
-        <h4 id="perf-products-per-machine" className="perfSectionTitle">
-          2. Per location
-        </h4>
-        <p className="perfSectionHint">
-          Same window, {xAxisKind === 'hourly' ? 'hourly' : 'daily'} trajectory per selected
-          site. Dotted = product target pace when configured.
-        </p>
-        {locNone ? (
-          <p className="perfMuted">Select locations above.</p>
-        ) : (
-          <div className="perfProductsMachineGrid">
-            {payloadMachines.map((m) => {
-              const days = m.days || [];
-              const want = skus.length
-                ? skus
-                : (m.products || []).slice(0, PERF_PRODUCTS_MAX_SKUS).map((p) => p.name);
-              const series: TrajSeries[] = want.map((name) => ({
-                name,
-                data: days.map((d) => daySkuValue(d, name, targetUnit)),
-              }));
-              if (showProductTargets) {
-                for (const name of want) {
-                  const cell = skuOnMachine(m, [name]);
-                  const tgt =
-                    targetUnit === 'cups'
-                      ? cell.hasTarget
-                        ? cell.target
-                        : 0
-                      : cell.hasTargetRev
-                        ? cell.targetRev
-                        : 0;
-                  if (tgt > 0) {
-                    series.push({
-                      name: `Target · ${name}`,
-                      data: paceLine(tgt, days.length),
-                      dotted: true,
-                    });
-                  }
-                }
-              }
-              if (!series.length) {
-                series.push({
-                  name: 'All products',
-                  data: days.map((d) => dayTotalValue(d, targetUnit)),
-                });
-                if (showMachineTargets) {
-                  const loc = machineLocTarget(m);
-                  if (loc > 0) {
-                    series.push({
-                      name: 'Target · location',
-                      data: paceLine(loc, days.length),
-                      dotted: true,
-                    });
-                  }
-                }
-              }
-              return (
-                <article key={m.machineId} className="perfProductsMachineCard">
-                  <h5 className="perfProductsMachineName">{m.machineName}</h5>
-                  <DateTrajectoryChart
-                    days={days}
-                    series={series}
-                    unit={chartUnit}
-                    compact
-                    exportName={`product-mix-${m.machineId}`}
-                    ariaLabel={`Daily product mix at ${m.machineName}`}
-                  />
-                </article>
-              );
-            })}
+      {showGraphB ? (
+        <section className="perfProductsBlock" aria-labelledby="perf-products-graph-b">
+          <div className="perfProductsBlockHead">
+            <h4 id="perf-products-graph-b" className="perfSectionTitle">
+              B. Products in selection
+            </h4>
+            <p className="perfSectionHint">
+              {skus.length === 0
+                ? `Top ${PERF_PRODUCTS_MAX_SKUS} drinks by KD`
+                : `${skus.length} selected drinks`}{' '}
+              · summed across all selected sites.
+            </p>
           </div>
-        )}
-      </section>
-
-      <section className="perfProductsBlock" aria-labelledby="perf-products-toplow">
-        <h4 id="perf-products-toplow" className="perfSectionTitle">
-          3. Top and lowest sites
-        </h4>
-        <p className="perfSectionHint">
-          Whole fleet ranking for the drink you pick (Locations filter does not apply here).
-        </p>
-        {!skus.length ? (
-          <p className="perfMuted">Select a drink above to see top and lowest locations.</p>
-        ) : (
-          <div className="perfProductsTopLow">
-            <div>
-              <h5 className="perfProductsTrendHead">Top {TOP_LOW}</h5>
-              <DateTrajectoryChart
-                days={selectedDays.length ? selectedDays : fleetDays}
-                series={topMachines.map((m) => {
-                  const row = fleetMachinesNamed.find((x) => x.machineId === m.machineId);
-                  const days = row?.days || fleetDays;
-                  return {
-                    name: m.machineName,
-                    data: days.map((d) => daySkuValue(d, skus[0], targetUnit)),
-                  };
-                })}
-                unit={chartUnit}
-                compact
-                exportName="product-top-sites"
-                ariaLabel="Top performing locations daily"
-              />
+          <DateTrajectoryChart
+            days={selectedDays}
+            series={graphBSeries}
+            unit={chartUnit}
+            onSeriesClick={toggleSku}
+            exportName="product-selection-mix"
+            ariaLabel="Products in selection trajectory"
+          />
+          {compareOn ? (
+            <div className="perfProductsTrendCols">
+              <div>
+                <h5 className="perfProductsTrendHead">Rising (KD + cups)</h5>
+                {rising.length ? (
+                  <ul className="perfProductsTrendList perfProductsTrendDetailed">
+                    {rising.map((p) => (
+                      <li key={p.name}>
+                        <button type="button" onClick={() => toggleSku(p.name)}>
+                          {p.name}
+                        </button>
+                        <div className="perfProductsTrendMeta">
+                          <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
+                          <span>
+                            {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
+                            {formatKwd(Number(p.revenueKwd || 0))}
+                          </span>
+                          <span className={trendClass(p.cupsTrendPct)}>
+                            {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
+                            cups ({trendText(p.cupsTrendPct)})
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="perfMuted">None up vs prior for this selection.</p>
+                )}
+              </div>
+              <div>
+                <h5 className="perfProductsTrendHead">Falling (KD + cups)</h5>
+                {falling.length ? (
+                  <ul className="perfProductsTrendList perfProductsTrendDetailed">
+                    {falling.map((p) => (
+                      <li key={p.name}>
+                        <button type="button" onClick={() => toggleSku(p.name)}>
+                          {p.name}
+                        </button>
+                        <div className="perfProductsTrendMeta">
+                          <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
+                          <span>
+                            {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
+                            {formatKwd(Number(p.revenueKwd || 0))}
+                          </span>
+                          <span className={trendClass(p.cupsTrendPct)}>
+                            {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
+                            cups ({trendText(p.cupsTrendPct)})
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="perfMuted">None down vs prior for this selection.</p>
+                )}
+              </div>
             </div>
-            <div>
-              <h5 className="perfProductsTrendHead">Lowest {TOP_LOW}</h5>
-              <DateTrajectoryChart
-                days={selectedDays.length ? selectedDays : fleetDays}
-                series={lowMachines.map((m) => {
-                  const row = fleetMachinesNamed.find((x) => x.machineId === m.machineId);
-                  const days = row?.days || fleetDays;
-                  return {
-                    name: m.machineName,
-                    data: days.map((d) => daySkuValue(d, skus[0], targetUnit)),
-                  };
-                })}
-                unit={chartUnit}
-                compact
-                exportName="product-low-sites"
-                ariaLabel="Lowest performing locations daily"
-              />
-            </div>
-          </div>
-        )}
-      </section>
+          ) : (
+            <p className="perfMuted">Rising / falling need a comparison period.</p>
+          )}
+        </section>
+      ) : null}
 
       <section className="perfProductsBlock" aria-labelledby="perf-products-table">
         <h4 id="perf-products-table" className="perfSectionTitle">
-          4. Selected locations — detail table
+          Detail table
         </h4>
-        <p className="perfSectionHint">
-          Numbers behind chart 1. Targets are dotted lines on graphs 1–2.
-        </p>
+        <p className="perfSectionHint">Numbers behind the charts. Click a drink row to toggle filter.</p>
         {detailTable}
       </section>
     </section>
