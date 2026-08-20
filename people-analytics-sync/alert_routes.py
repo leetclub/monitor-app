@@ -4084,7 +4084,7 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v3:{preset_id}:{win_s}:{win_e}:"
+            f"perf:product-compare:v4:{preset_id}:{win_s}:{win_e}:"
             f"{prev_s}:{prev_e}:c{int(compare_on)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)
@@ -4244,6 +4244,80 @@ def register_alert_routes(app) -> None:
                         }
                     )
                 products.sort(key=lambda p: (-float(p["revenueKwd"]), str(p["name"]).lower()))
+
+                # Daily trajectory (Location-style: dates on X).
+                day_rows_by_date: Dict[date, Any] = {}
+                for r in mrows:
+                    cd = r.cache_date
+                    if cd is None:
+                        continue
+                    day_rows_by_date[cd] = r
+
+                def _day_mix(cd: date) -> Tuple[float, int, Dict[str, Dict[str, float]]]:
+                    r = day_rows_by_date.get(cd)
+                    if r is None:
+                        return 0.0, 0, {}
+                    sales = _aggregate_product_sales_in_range([r], cd, cd + timedelta(days=1))
+                    counts = _aggregate_product_counts_in_range([r], cd, cd + timedelta(days=1))
+                    mix: Dict[str, Dict[str, float]] = {}
+                    for pname, kwd in sales.items():
+                        mix[pname] = {
+                            "revenueKwd": round(float(kwd or 0), 4),
+                            "cups": float(counts.get(pname) or 0),
+                        }
+                    for pname, cup_n in counts.items():
+                        if pname not in mix:
+                            mix[pname] = {"revenueKwd": 0.0, "cups": float(cup_n or 0)}
+                    tot_kwd = round(sum(float(v.get("revenueKwd") or 0) for v in mix.values()), 4)
+                    tot_cups = int(sum(float(v.get("cups") or 0) for v in mix.values()))
+                    return tot_kwd, tot_cups, mix
+
+                days_out: List[Dict[str, Any]] = []
+                d_cur = win_s
+                idx = 0
+                while d_cur <= win_e:
+                    tot_kwd, tot_cups, mix = _day_mix(d_cur)
+                    prev_kwd = prev_cups = None
+                    prev_mix: Dict[str, Dict[str, float]] = {}
+                    if compare_on:
+                        prev_day = prev_s + timedelta(days=idx)
+                        if prev_day <= prev_e:
+                            pk, pc, prev_mix = _day_mix(prev_day)
+                            prev_kwd, prev_cups = pk, pc
+                    days_out.append(
+                        {
+                            "date": d_cur.isoformat(),
+                            "weekday": d_cur.strftime("%a"),
+                            "revenueKwd": tot_kwd,
+                            "cups": tot_cups,
+                            "prevRevenueKwd": prev_kwd,
+                            "prevCups": prev_cups,
+                            "products": [
+                                {
+                                    "name": pname,
+                                    "revenueKwd": vals["revenueKwd"],
+                                    "cups": int(vals["cups"]),
+                                    "prevRevenueKwd": (
+                                        round(float((prev_mix.get(pname) or {}).get("revenueKwd") or 0), 4)
+                                        if compare_on
+                                        else None
+                                    ),
+                                    "prevCups": (
+                                        int((prev_mix.get(pname) or {}).get("cups") or 0)
+                                        if compare_on
+                                        else None
+                                    ),
+                                }
+                                for pname, vals in sorted(
+                                    mix.items(),
+                                    key=lambda kv: (-float(kv[1]["revenueKwd"]), kv[0].lower()),
+                                )
+                            ],
+                        }
+                    )
+                    d_cur += timedelta(days=1)
+                    idx += 1
+
                 machines_out.append(
                     {
                         "machineId": mid,
@@ -4253,8 +4327,78 @@ def register_alert_routes(app) -> None:
                         "locationTargetKd": loc_tgt,
                         "pctOfLocationTarget": loc_pct,
                         "products": products,
+                        "days": days_out,
                     }
                 )
+
+            # Fleet-level daily rollup (same dates, products summed across requested machines).
+            fleet_days: List[Dict[str, Any]] = []
+            if machines_out:
+                n_days = len(machines_out[0].get("days") or [])
+                for i in range(n_days):
+                    sample = (machines_out[0].get("days") or [])[i]
+                    mix_tot: Dict[str, Dict[str, float]] = {}
+                    tot_kwd = 0.0
+                    tot_cups = 0
+                    prev_kwd_sum = 0.0
+                    prev_cups_sum = 0
+                    has_prev = False
+                    for m in machines_out:
+                        day = (m.get("days") or [None] * n_days)[i]
+                        if not isinstance(day, dict):
+                            continue
+                        tot_kwd += float(day.get("revenueKwd") or 0)
+                        tot_cups += int(day.get("cups") or 0)
+                        if day.get("prevRevenueKwd") is not None:
+                            prev_kwd_sum += float(day.get("prevRevenueKwd") or 0)
+                            prev_cups_sum += int(day.get("prevCups") or 0)
+                            has_prev = True
+                        for p in day.get("products") or []:
+                            pname = str(p.get("name") or "").strip()
+                            if not pname:
+                                continue
+                            cur = mix_tot.get(pname) or {
+                                "revenueKwd": 0.0,
+                                "cups": 0.0,
+                                "prevRevenueKwd": 0.0,
+                                "prevCups": 0.0,
+                            }
+                            cur["revenueKwd"] += float(p.get("revenueKwd") or 0)
+                            cur["cups"] += float(p.get("cups") or 0)
+                            if p.get("prevRevenueKwd") is not None:
+                                cur["prevRevenueKwd"] += float(p.get("prevRevenueKwd") or 0)
+                            if p.get("prevCups") is not None:
+                                cur["prevCups"] += float(p.get("prevCups") or 0)
+                            mix_tot[pname] = cur
+                    fleet_days.append(
+                        {
+                            "date": sample.get("date"),
+                            "weekday": sample.get("weekday"),
+                            "revenueKwd": round(tot_kwd, 4),
+                            "cups": tot_cups,
+                            "prevRevenueKwd": round(prev_kwd_sum, 4) if has_prev else None,
+                            "prevCups": prev_cups_sum if has_prev else None,
+                            "products": [
+                                {
+                                    "name": pname,
+                                    "revenueKwd": round(vals["revenueKwd"], 4),
+                                    "cups": int(vals["cups"]),
+                                    "prevRevenueKwd": (
+                                        round(float(vals.get("prevRevenueKwd") or 0), 4)
+                                        if has_prev
+                                        else None
+                                    ),
+                                    "prevCups": (
+                                        int(vals.get("prevCups") or 0) if has_prev else None
+                                    ),
+                                }
+                                for pname, vals in sorted(
+                                    mix_tot.items(),
+                                    key=lambda kv: (-float(kv[1]["revenueKwd"]), kv[0].lower()),
+                                )
+                            ],
+                        }
+                    )
 
             body = {
                 "ok": True,
@@ -4273,6 +4417,7 @@ def register_alert_routes(app) -> None:
                 },
                 "machineCount": len(machines_out),
                 "machines": machines_out,
+                "days": fleet_days,
             }
             _alert_cache_set(cache_key, body)
             return jsonify(body)

@@ -48,6 +48,23 @@ type ProductMachine = {
   locationTargetKd?: number | null;
   pctOfLocationTarget?: number | null;
   products: ProductRow[];
+  days?: ProductDay[];
+};
+
+type ProductDay = {
+  date: string;
+  weekday?: string;
+  revenueKwd?: number;
+  cups?: number;
+  prevRevenueKwd?: number | null;
+  prevCups?: number | null;
+  products?: Array<{
+    name: string;
+    revenueKwd?: number;
+    cups?: number;
+    prevRevenueKwd?: number | null;
+    prevCups?: number | null;
+  }>;
 };
 
 type ProductComparePayload = {
@@ -64,6 +81,7 @@ type ProductComparePayload = {
     prevLabel?: string;
   };
   machines?: ProductMachine[];
+  days?: ProductDay[];
 };
 
 const PERIOD_OPTIONS: { id: ProductPeriod; label: string; hint: string }[] = [
@@ -136,11 +154,71 @@ async function fetchProductCompareBatched(
     chunks.map((chunk) => apiGet<ProductComparePayload>(productComparePath(chunk, opts))),
   );
   const first = parts.find((p) => !p.error) || parts[0] || {};
+  const machines = parts.flatMap((p) => p.machines || []);
   return {
     ...first,
-    machines: parts.flatMap((p) => p.machines || []),
+    machines,
+    days: rollupDaysFromMachines(machines),
     error: parts.map((p) => p.error).find(Boolean),
   };
+}
+
+function rollupDaysFromMachines(machines: ProductMachine[]): ProductDay[] {
+  if (!machines.length) return [];
+  const n = Math.max(0, ...machines.map((m) => (m.days || []).length));
+  if (!n) return [];
+  const out: ProductDay[] = [];
+  for (let i = 0; i < n; i++) {
+    const sample = (machines[0].days || [])[i];
+    const mix = new Map<
+      string,
+      { revenueKwd: number; cups: number; prevRevenueKwd: number; prevCups: number }
+    >();
+    let revenueKwd = 0;
+    let cups = 0;
+    let prevRevenueKwd = 0;
+    let prevCups = 0;
+    let hasPrev = false;
+    for (const m of machines) {
+      const day = (m.days || [])[i];
+      if (!day) continue;
+      revenueKwd += Number(day.revenueKwd || 0);
+      cups += Number(day.cups || 0);
+      if (day.prevRevenueKwd != null) {
+        prevRevenueKwd += Number(day.prevRevenueKwd || 0);
+        prevCups += Number(day.prevCups || 0);
+        hasPrev = true;
+      }
+      for (const p of day.products || []) {
+        const name = String(p.name || '').trim();
+        if (!name) continue;
+        const cur = mix.get(name) || { revenueKwd: 0, cups: 0, prevRevenueKwd: 0, prevCups: 0 };
+        cur.revenueKwd += Number(p.revenueKwd || 0);
+        cur.cups += Number(p.cups || 0);
+        if (p.prevRevenueKwd != null) cur.prevRevenueKwd += Number(p.prevRevenueKwd || 0);
+        if (p.prevCups != null) cur.prevCups += Number(p.prevCups || 0);
+        mix.set(name, cur);
+      }
+    }
+    out.push({
+      date: sample?.date || '',
+      weekday: sample?.weekday,
+      revenueKwd,
+      cups,
+      prevRevenueKwd: hasPrev ? prevRevenueKwd : null,
+      prevCups: hasPrev ? prevCups : null,
+      products: [...mix.entries()]
+        .map(([name, v]) => ({
+          name,
+          revenueKwd: v.revenueKwd,
+          cups: v.cups,
+          prevRevenueKwd: hasPrev ? v.prevRevenueKwd : null,
+          prevCups: hasPrev ? v.prevCups : null,
+        }))
+        .sort((a, b) => b.revenueKwd - a.revenueKwd || a.name.localeCompare(b.name)),
+    });
+  }
+  return out;
 }
 
 function trendClass(pct: number | null | undefined): string {
@@ -567,6 +645,157 @@ function PeriodPriorLines({
   );
 }
 
+/** Location-style trajectory: calendar dates on X, one line per series. */
+function DateTrajectoryChart({
+  days,
+  series,
+  compact,
+  unit = 'kd',
+  exportName,
+  ariaLabel,
+  onSeriesClick,
+}: {
+  days: Array<{ date: string; weekday?: string }>;
+  series: Array<{ name: string; data: number[]; dashed?: boolean }>;
+  compact?: boolean;
+  unit?: 'kd' | 'cups';
+  exportName?: string;
+  ariaLabel?: string;
+  onSeriesClick?: (name: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inst = useRef<echarts.ECharts | null>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const chart = echarts.init(ref.current);
+    inst.current = chart;
+    const onResize = () => chart.resize();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      chart.dispose();
+      inst.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const chart = inst.current;
+    if (!chart) return;
+    const theme = readTheme();
+    const fmt = unit === 'cups' ? (v: number) => String(Math.round(v)) : formatKwd;
+    chart.off('click');
+    if (!days.length || !series.length) {
+      chart.clear();
+      return;
+    }
+    const labels = days.map((d) => {
+      const md = d.date.length >= 10 ? d.date.slice(5) : d.date;
+      const wd = (d.weekday || '').slice(0, 3);
+      return wd ? `${wd} ${md}` : md;
+    });
+    chart.setOption(
+      {
+        color: SERIES_PALETTE,
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'line', lineStyle: { type: 'dashed' } },
+          formatter: (params: unknown) => {
+            const arr = params as {
+              seriesName?: string;
+              value?: number | null;
+              dataIndex?: number;
+              color?: string;
+            }[];
+            const i = arr[0]?.dataIndex ?? 0;
+            const day = days[i];
+            const head = day
+              ? `${(day.weekday || '').slice(0, 3)} · ${day.date}`
+              : labels[i] || '';
+            const lines = [`<div style="font-weight:700;margin-bottom:6px">${head}</div>`];
+            for (const p of arr) {
+              if (p.value == null || !Number.isFinite(Number(p.value))) continue;
+              lines.push(
+                `<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span><b>${p.seriesName}</b>: ${fmt(Number(p.value))}</div>`,
+              );
+            }
+            return lines.join('');
+          },
+        },
+        legend: {
+          type: 'scroll',
+          data: series.map((s) => s.name),
+          textStyle: { color: theme.muted, fontSize: 11 },
+        },
+        grid: { left: 56, right: 16, top: 40, bottom: compact ? 48 : 56 },
+        xAxis: {
+          type: 'category',
+          data: labels,
+          boundaryGap: false,
+          axisLabel: { color: theme.axis, fontSize: 10 },
+        },
+        yAxis: {
+          type: 'value',
+          name: unit === 'cups' ? 'Cups' : 'KD',
+          axisLabel: { color: theme.axis, formatter: (v: number) => fmt(v) },
+          splitLine: { lineStyle: { color: theme.grid } },
+        },
+        series: series.map((s) => ({
+          name: s.name,
+          type: 'line',
+          data: s.data,
+          smooth: 0.25,
+          showSymbol: days.length <= 10,
+          symbol: 'circle',
+          symbolSize: compact ? 5 : 7,
+          lineStyle: { width: 2.4, type: s.dashed ? 'dashed' : 'solid' },
+        })),
+      },
+      true,
+    );
+    if (onSeriesClick) {
+      chart.on('click', (params: { seriesName?: string }) => {
+        const name = String(params.seriesName || '').trim();
+        if (name && !name.startsWith('Prior ·')) onSeriesClick(name);
+      });
+    }
+  }, [days, series, compact, unit, onSeriesClick]);
+
+  const onExport = useCallback(() => {
+    if (!inst.current || !exportName) return;
+    downloadChartPng(inst.current, chartFilename([exportName]));
+  }, [exportName]);
+
+  const chart = (
+    <div
+      ref={ref}
+      className={`perfEchart ${compact ? 'perfEchartCompact' : 'perfEchartOverview'}`}
+      role="img"
+      aria-label={ariaLabel || 'Daily product trajectory'}
+    />
+  );
+  if (!exportName) return chart;
+  return (
+    <ChartExportWrap onExport={onExport} label="PNG">
+      {chart}
+    </ChartExportWrap>
+  );
+}
+
+function daySkuKwd(day: ProductDay | undefined, sku: string): number {
+  if (!day) return 0;
+  const hit = (day.products || []).find((p) => p.name === sku);
+  return Number(hit?.revenueKwd || 0);
+}
+
+function daySkuPrevKwd(day: ProductDay | undefined, sku: string): number {
+  if (!day) return 0;
+  const hit = (day.products || []).find((p) => p.name === sku);
+  if (hit?.prevRevenueKwd != null) return Number(hit.prevRevenueKwd || 0);
+  return 0;
+}
+
 type Props = {
   machines: MachineRow[];
   selectedIds: string[];
@@ -584,8 +813,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const [customEnd, setCustomEnd] = useState(() => addDaysIso(kuwaitIsoToday(), -1));
   const [skus, setSkus] = useState<string[]>([]);
   const [targetType, setTargetType] = useState<TargetType>('both');
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInst = useRef<echarts.ECharts | null>(null);
 
   const locNone = !allSelected && selectedIds.length === 0;
   const ids = useMemo(() => {
@@ -730,158 +957,99 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     });
   }, [payloadMachines, compareSkus]);
 
-  const chartModel = useMemo(() => {
-    if (!multiLoc) {
-      const top = inLocationRows.slice(0, PERF_PRODUCTS_MAX_SKUS);
-      return {
-        kind: 'period-prior' as const,
-        categories: top.map((p) => p.name),
-        series: [
-          { name: periodLabel, data: top.map((p) => Number(p.revenueKwd || 0)) },
-          ...(compareOn
-            ? [{ name: priorLabel, data: top.map((p) => Number(p.prevRevenueKwd || 0)) }]
-            : []),
-        ],
-        clickTogglesSku: true,
-      };
-    }
-    const want = compareSkus;
-    if (!want.length) {
-      return {
-        kind: 'period-prior' as const,
-        categories: [] as string[],
-        series: [] as { name: string; data: number[] }[],
-        clickTogglesSku: false,
-      };
-    }
-    const rows = [...acrossByLocation].sort(
-      (a, b) => b.revenueKwd - a.revenueKwd || a.machineName.localeCompare(b.machineName),
-    );
-    const top = rows.slice(0, PERF_PRODUCTS_MAX_LOCATIONS);
-    if (want.length <= 1) {
-      const skuName = want[0] || '';
-      return {
-        kind: 'period-prior' as const,
-        categories: top.map((r) => r.machineName),
-        series: [
-          {
-            name: periodLabel,
-            data: top.map((r) => r.cells.find((c) => c.name === skuName)?.revenueKwd || 0),
-          },
-          ...(compareOn
-            ? [
-                {
-                  name: priorLabel,
-                  data: top.map(
-                    (r) => Number(r.cells.find((c) => c.name === skuName)?.prevRevenueKwd || 0),
-                  ),
-                },
-              ]
-            : []),
-        ],
-        clickTogglesSku: false,
-      };
-    }
-    return {
-      kind: 'grouped' as const,
-      categories: top.map((r) => r.machineName),
-      series: want.map((name) => ({
+  const fleetDays = useMemo(
+    () =>
+      (fleetQ.data?.days?.length
+        ? fleetQ.data.days
+        : rollupDaysFromMachines(fleetMachinesNamed)) as ProductDay[],
+    [fleetQ.data?.days, fleetMachinesNamed],
+  );
+
+  const selectedDays = useMemo(
+    () =>
+      (compareQ.data?.days?.length
+        ? compareQ.data.days
+        : rollupDaysFromMachines(payloadMachines)) as ProductDay[],
+    [compareQ.data?.days, payloadMachines],
+  );
+
+  const fleetPlotSkus = useMemo(() => {
+    if (skus.length) return skus;
+    return fleetMix.slice(0, PERF_PRODUCTS_MAX_SKUS).map((p) => p.name);
+  }, [skus, fleetMix]);
+
+  const fleetTrajectorySeries = useMemo(() => {
+    const series: Array<{ name: string; data: number[]; dashed?: boolean }> = [];
+    for (const name of fleetPlotSkus) {
+      series.push({
         name,
-        data: top.map((r) => r.cells.find((c) => c.name === name)?.revenueKwd || 0),
-      })),
-      clickTogglesSku: true,
-    };
-  }, [multiLoc, inLocationRows, acrossByLocation, compareSkus, periodLabel, priorLabel, compareOn]);
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-    const chart = echarts.init(chartRef.current);
-    chartInst.current = chart;
-    const onResize = () => chart.resize();
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      chart.dispose();
-      chartInst.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const chart = chartInst.current;
-    if (!chart) return;
-    const theme = readTheme();
-    const cats = chartModel.categories;
-    chart.off('click');
-    if (!cats.length) {
-      chart.clear();
-      return;
-    }
-    chart.setOption(
-      {
-        color: SERIES_PALETTE,
-        tooltip: {
-          trigger: 'axis',
-          valueFormatter: (v: number | string) => formatKwd(Number(v || 0)),
-        },
-        legend: {
-          data: chartModel.series.map((s) => s.name),
-          textStyle: { color: theme.muted },
-        },
-        grid: { left: 56, right: 16, top: 36, bottom: 72 },
-        xAxis: {
-          type: 'category',
-          data: cats,
-          boundaryGap: false,
-          axisLabel: {
-            color: theme.axis,
-            rotate: cats.some((c) => c.length > 10) ? 28 : 0,
-            width: 90,
-            overflow: 'truncate',
-          },
-        },
-        yAxis: {
-          type: 'value',
-          name: 'KD',
-          axisLabel: { color: theme.axis, formatter: (v: number) => formatKwd(v) },
-          splitLine: { lineStyle: { color: theme.grid } },
-        },
-        series: chartModel.series.map((s) => ({
-          name: s.name,
-          type: 'line',
-          data: s.data,
-          smooth: true,
-          symbol: 'circle',
-          symbolSize: 7,
-          lineStyle: { width: 2.5 },
-        })),
-      },
-      true,
-    );
-    if (chartModel.clickTogglesSku) {
-      chart.on('click', (params: { name?: string; seriesName?: string }) => {
-        const fromSeries =
-          chartModel.kind === 'grouped' ? String(params.seriesName || '').trim() : '';
-        const name =
-          fromSeries && fromSeries !== periodLabel && fromSeries !== priorLabel
-            ? fromSeries
-            : String(params.name || '').trim();
-        if (name) toggleSku(name);
+        data: fleetDays.map((d) => daySkuKwd(d, name)),
       });
     }
-  }, [chartModel, periodLabel, priorLabel, toggleSku]);
+    // Prior overlay only when few series — otherwise the chart is unreadable.
+    if (compareOn && fleetPlotSkus.length > 0 && fleetPlotSkus.length <= 2) {
+      for (const name of fleetPlotSkus) {
+        series.push({
+          name: `Prior · ${name}`,
+          data: fleetDays.map((d) => daySkuPrevKwd(d, name)),
+          dashed: true,
+        });
+      }
+    } else if (compareOn && !fleetPlotSkus.length) {
+      series.push({
+        name: 'All products',
+        data: fleetDays.map((d) => Number(d.revenueKwd || 0)),
+      });
+      series.push({
+        name: 'Prior · all',
+        data: fleetDays.map((d) => Number(d.prevRevenueKwd || 0)),
+        dashed: true,
+      });
+    } else if (!fleetPlotSkus.length) {
+      series.push({
+        name: 'All products',
+        data: fleetDays.map((d) => Number(d.revenueKwd || 0)),
+      });
+    }
+    return series;
+  }, [fleetDays, fleetPlotSkus, compareOn]);
 
-  const exportChart = useCallback(() => {
-    if (!chartInst.current) return;
-    downloadChartPng(
-      chartInst.current,
-      chartFilename(['product-performance', multiLoc ? 'across' : 'mix', period]),
-    );
-  }, [multiLoc, period]);
-
-  const fleetChartRows = useMemo(() => {
-    const src = skus.length ? fleetMix.filter((p) => skuSet.has(p.name)) : fleetMix;
-    return src.slice(0, PERF_PRODUCTS_MAX_SKUS);
-  }, [fleetMix, skus, skuSet]);
+  const selectedTrajectorySeries = useMemo(() => {
+    const series: Array<{ name: string; data: number[]; dashed?: boolean }> = [];
+    if (skus.length === 1) {
+      const sku = skus[0];
+      for (const m of payloadMachines) {
+        const days = m.days?.length ? m.days : selectedDays;
+        series.push({
+          name: m.machineName,
+          data: days.map((d) => daySkuKwd(d, sku)),
+        });
+      }
+      return series;
+    }
+    const want = skus.length ? skus : compareSkus.slice(0, PERF_PRODUCTS_MAX_SKUS);
+    if (want.length) {
+      for (const name of want) {
+        series.push({
+          name,
+          data: selectedDays.map((d) => daySkuKwd(d, name)),
+        });
+      }
+      return series;
+    }
+    series.push({
+      name: 'Selected sites',
+      data: selectedDays.map((d) => Number(d.revenueKwd || 0)),
+    });
+    if (compareOn) {
+      series.push({
+        name: 'Prior · selected',
+        data: selectedDays.map((d) => Number(d.prevRevenueKwd || 0)),
+        dashed: true,
+      });
+    }
+    return series;
+  }, [skus, payloadMachines, selectedDays, compareSkus, compareOn]);
 
   const rising = useMemo(
     () =>
@@ -923,18 +1091,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         .sort((a, b) => a.revenue - b.revenue || a.machineName.localeCompare(b.machineName))
         .slice(0, TOP_LOW),
     [rankedForSku],
-  );
-
-  const perMachineMix = useMemo(
-    () =>
-      payloadMachines.map((m) => {
-        const rows = aggregateProducts([m]);
-        const shown = skus.length
-          ? rows.filter((p) => skuSet.has(p.name))
-          : rows.slice(0, PERF_PRODUCTS_MAX_SKUS);
-        return { machineId: m.machineId, machineName: m.machineName, rows: shown };
-      }),
-    [payloadMachines, skus, skuSet],
   );
 
   const fleetTargetRows = useMemo(
@@ -1208,19 +1364,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           1. Fleet mix — all locations
         </h4>
         <p className="perfSectionHint">
-          Line chart of drinks (no site names). {compareOn ? 'Solid = period, dashed = prior.' : 'Comparison off.'}
+          Daily trajectory like Location — dates on the X-axis, one line per drink (fleet
+          total). {compareOn ? 'Dashed = same day-index in the prior window.' : 'Comparison off.'}
         </p>
         {fleetQ.isLoading ? <p className="perfMuted">Loading fleet mix…</p> : null}
-        <PeriodPriorLines
-          categories={fleetChartRows.map((p) => p.name)}
-          period={fleetChartRows.map((p) => Number(p.revenueKwd || 0))}
-          prior={fleetChartRows.map((p) => Number(p.prevRevenueKwd || 0))}
-          periodLabel={periodLabel}
-          priorLabel={priorLabel}
-          onCategoryClick={toggleSku}
-          showPrior={compareOn}
+        <DateTrajectoryChart
+          days={fleetDays}
+          series={fleetTrajectorySeries}
+          onSeriesClick={toggleSku}
           exportName="product-fleet-mix"
-          ariaLabel="Fleet product mix line chart"
+          ariaLabel="Fleet product daily trajectory"
         />
         {compareOn ? (
           <div className="perfProductsTrendCols">
@@ -1291,20 +1444,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           2. Selected locations
         </h4>
         {compareQ.isLoading && ids.length > 0 ? <p className="perfMuted">Loading selected mix…</p> : null}
-        <ChartExportWrap onExport={exportChart} label="PNG">
-          <div
-            ref={chartRef}
-            className="perfEchart perfEchartOverview"
-            role="img"
-            aria-label="Selected locations product line chart"
-          />
-        </ChartExportWrap>
+        <DateTrajectoryChart
+          days={selectedDays}
+          series={selectedTrajectorySeries}
+          onSeriesClick={toggleSku}
+          exportName="product-selected-trajectory"
+          ariaLabel="Selected locations daily product trajectory"
+        />
         <p className="perfSectionHint">
-          {multiLoc
-            ? compareSkus.length > 1
-              ? 'One line per drink across selected sites.'
-              : 'Period vs prior lines across selected sites.'
-            : 'Click a drink point to include it in the product filter.'}
+          Dates on X. One drink selected → one line per location. Several drinks → one line per
+          drink (summed across selected sites).
         </p>
       </section>
 
@@ -1312,27 +1461,37 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         <h4 id="perf-products-per-machine" className="perfSectionTitle">
           3. Per location
         </h4>
-        <p className="perfSectionHint">Same window, one line chart per selected site.</p>
+        <p className="perfSectionHint">Same window, daily KD trajectory per selected site.</p>
         {locNone ? (
           <p className="perfMuted">Select locations above.</p>
         ) : (
           <div className="perfProductsMachineGrid">
-            {perMachineMix.map((m) => (
-              <article key={m.machineId} className="perfProductsMachineCard">
-                <h5 className="perfProductsMachineName">{m.machineName}</h5>
-                <PeriodPriorLines
-                  categories={m.rows.map((p) => p.name)}
-                  period={m.rows.map((p) => Number(p.revenueKwd || 0))}
-                  prior={m.rows.map((p) => Number(p.prevRevenueKwd || 0))}
-                  periodLabel={periodLabel}
-                  priorLabel={priorLabel}
-                  compact
-                  showPrior={compareOn}
-                  exportName={`product-mix-${m.machineId}`}
-                  ariaLabel={`Product mix at ${m.machineName}`}
-                />
-              </article>
-            ))}
+            {payloadMachines.map((m) => {
+              const days = m.days || [];
+              const want = skus.length
+                ? skus
+                : (m.products || []).slice(0, PERF_PRODUCTS_MAX_SKUS).map((p) => p.name);
+              const series = want.map((name) => ({
+                name,
+                data: days.map((d) => daySkuKwd(d, name)),
+              }));
+              return (
+                <article key={m.machineId} className="perfProductsMachineCard">
+                  <h5 className="perfProductsMachineName">{m.machineName}</h5>
+                  <DateTrajectoryChart
+                    days={days}
+                    series={
+                      series.length
+                        ? series
+                        : [{ name: 'All products', data: days.map((d) => Number(d.revenueKwd || 0)) }]
+                    }
+                    compact
+                    exportName={`product-mix-${m.machineId}`}
+                    ariaLabel={`Daily product mix at ${m.machineName}`}
+                  />
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -1350,30 +1509,36 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <div className="perfProductsTopLow">
             <div>
               <h5 className="perfProductsTrendHead">Top {TOP_LOW}</h5>
-              <PeriodPriorLines
-                categories={topMachines.map((m) => m.machineName)}
-                period={topMachines.map((m) => m.revenue)}
-                prior={topMachines.map((m) => Number(m.prev || 0))}
-                periodLabel={periodLabel}
-                priorLabel={priorLabel}
+              <DateTrajectoryChart
+                days={selectedDays.length ? selectedDays : fleetDays}
+                series={topMachines.map((m) => {
+                  const row = fleetMachinesNamed.find((x) => x.machineId === m.machineId);
+                  const days = row?.days || fleetDays;
+                  return {
+                    name: m.machineName,
+                    data: days.map((d) => daySkuKwd(d, skus[0])),
+                  };
+                })}
                 compact
-                showPrior={compareOn}
                 exportName="product-top-sites"
-                ariaLabel="Top performing locations"
+                ariaLabel="Top performing locations daily"
               />
             </div>
             <div>
               <h5 className="perfProductsTrendHead">Lowest {TOP_LOW}</h5>
-              <PeriodPriorLines
-                categories={lowMachines.map((m) => m.machineName)}
-                period={lowMachines.map((m) => m.revenue)}
-                prior={lowMachines.map((m) => Number(m.prev || 0))}
-                periodLabel={periodLabel}
-                priorLabel={priorLabel}
+              <DateTrajectoryChart
+                days={selectedDays.length ? selectedDays : fleetDays}
+                series={lowMachines.map((m) => {
+                  const row = fleetMachinesNamed.find((x) => x.machineId === m.machineId);
+                  const days = row?.days || fleetDays;
+                  return {
+                    name: m.machineName,
+                    data: days.map((d) => daySkuKwd(d, skus[0])),
+                  };
+                })}
                 compact
-                showPrior={compareOn}
                 exportName="product-low-sites"
-                ariaLabel="Lowest performing locations"
+                ariaLabel="Lowest performing locations daily"
               />
             </div>
           </div>

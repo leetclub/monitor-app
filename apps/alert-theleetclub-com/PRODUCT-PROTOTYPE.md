@@ -103,7 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-08-20 | **Performance Products criteria + lines + export:** Period dropdown (WTD / WTD vs WTD / WTD vs LY / custom vs custom / single custom = no compare), Target type, all **line** charts, rising/falling show KD + cups, detail table moved below, **Export weekly report** Excel. Location graphs unchanged. |
+| 2026-08-20 | **Performance Products X-axis = dates:** Main product graphs use daily trajectories (dates on X like Location), not drinks/locations on X. |
 | 2026-08-17 | **Performance Products — rising vs falling:** Five graphs on the same window (presets + custom range): fleet mix (all sites, no names), selected sites, per site, top/lowest 5 sites when a drink is picked (ignores Locations), Admin cup targets vs actual. Location graphs unchanged. |
 | 2026-08-17 | **Performance Locations:** Also hide names starting with `*`. Location tab defaults to **All**; Products URL picks no longer seed Location selection. |
 | 2026-08-17 | **Performance Locations cleanup:** Hide machines whose name starts with a digit. Products keeps its own site picks so returning to **Location** restores the prior selection (no longer stuck on 8). |
