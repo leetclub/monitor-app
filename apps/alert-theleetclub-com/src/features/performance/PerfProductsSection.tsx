@@ -920,25 +920,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     [compareQ.data?.days, payloadMachines],
   );
 
-  const fleetPlotSkus = useMemo(() => {
-    if (skus.length) return skus;
-    return fleetMix.slice(0, PERF_PRODUCTS_MAX_SKUS).map((p) => p.name);
-  }, [skus, fleetMix]);
-
   const showProductTargets = targetType === 'product' || targetType === 'both';
   const showMachineTargets = targetType === 'machine' || targetType === 'both';
   const chartUnit: 'kd' | 'cups' = targetUnit === 'cups' ? 'cups' : 'kd';
-
-  const productTargetForSku = useCallback(
-    (mix: ProductRow[], name: string): number => {
-      const hit = mix.find((p) => p.name === name);
-      if (!hit) return 0;
-      return targetUnit === 'cups'
-        ? Number(hit.targetCups || 0)
-        : Number(hit.targetRevenueKwd || 0);
-    },
-    [targetUnit],
-  );
 
   const machineLocTarget = useCallback(
     (m: ProductMachine): number => {
@@ -948,75 +932,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     },
     [targetUnit],
   );
-
-  const fleetTrajectorySeries = useMemo(() => {
-    const series: TrajSeries[] = [];
-    const n = fleetDays.length;
-    for (const name of fleetPlotSkus) {
-      series.push({
-        name,
-        data: fleetDays.map((d) => daySkuValue(d, name, targetUnit)),
-      });
-    }
-    if (compareOn && fleetPlotSkus.length > 0 && fleetPlotSkus.length <= 2) {
-      for (const name of fleetPlotSkus) {
-        series.push({
-          name: `Prior · ${name}`,
-          data: fleetDays.map((d) => daySkuPrevValue(d, name, targetUnit)),
-          dashed: true,
-        });
-      }
-    } else if (compareOn && !fleetPlotSkus.length) {
-      series.push({
-        name: 'All products',
-        data: fleetDays.map((d) => dayTotalValue(d, targetUnit)),
-      });
-      series.push({
-        name: 'Prior · all',
-        data: fleetDays.map((d) => dayPrevTotalValue(d, targetUnit)),
-        dashed: true,
-      });
-    } else if (!fleetPlotSkus.length) {
-      series.push({
-        name: 'All products',
-        data: fleetDays.map((d) => dayTotalValue(d, targetUnit)),
-      });
-    }
-    if (showProductTargets) {
-      for (const name of fleetPlotSkus) {
-        const tgt = productTargetForSku(fleetMix, name);
-        if (tgt > 0) {
-          series.push({
-            name: `Target · ${name}`,
-            data: paceLine(tgt, n),
-            dotted: true,
-          });
-        }
-      }
-    }
-    if (showMachineTargets && !fleetPlotSkus.length) {
-      const locSum = fleetMachinesNamed.reduce((s, m) => s + machineLocTarget(m), 0);
-      if (locSum > 0) {
-        series.push({
-          name: 'Target · locations',
-          data: paceLine(locSum, n),
-          dotted: true,
-        });
-      }
-    }
-    return series;
-  }, [
-    fleetDays,
-    fleetPlotSkus,
-    compareOn,
-    targetUnit,
-    showProductTargets,
-    showMachineTargets,
-    fleetMix,
-    fleetMachinesNamed,
-    productTargetForSku,
-    machineLocTarget,
-  ]);
 
   const selectedTrajectorySeries = useMemo(() => {
     const series: TrajSeries[] = [];
@@ -1122,19 +1037,19 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
   const rising = useMemo(
     () =>
-      fleetMix
+      mixedRows
         .filter((p) => p.trendPct != null && Number(p.trendPct) > 0)
         .sort((a, b) => Number(b.trendPct) - Number(a.trendPct))
         .slice(0, 8),
-    [fleetMix],
+    [mixedRows],
   );
   const falling = useMemo(
     () =>
-      fleetMix
+      mixedRows
         .filter((p) => p.trendPct != null && Number(p.trendPct) < 0)
         .sort((a, b) => Number(a.trendPct) - Number(b.trendPct))
         .slice(0, 8),
-    [fleetMix],
+    [mixedRows],
   );
 
   const rankedForSku = useMemo(() => {
@@ -1406,29 +1321,28 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         onSelectTop={() => setSkus(skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name))}
       />
 
-      {fleetQ.isError ? <p className="perfError">{(fleetQ.error as Error).message}</p> : null}
-      {fleetQ.data?.error ? <p className="perfError">{fleetQ.data.error}</p> : null}
+      {locNone ? <p className="perfMuted">Pick at least one location above (max {PERF_PRODUCTS_MAX_LOCATIONS}).</p> : null}
+      {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
+      {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
 
-      <section className="perfProductsBlock" aria-labelledby="perf-products-fleet">
-        <h4 id="perf-products-fleet" className="perfSectionTitle">
-          1. Fleet mix — all locations
+      <section className="perfProductsBlock" aria-labelledby="perf-products-selected">
+        <h4 id="perf-products-selected" className="perfSectionTitle">
+          1. Selected locations
         </h4>
         <p className="perfSectionHint">
-          {xAxisKind === 'hourly'
-            ? 'Single day — hours on the X-axis, one line per drink (fleet total).'
-            : 'Daily trajectory like Location — dates on the X-axis, one line per drink (fleet total).'}{' '}
+          Follows your Locations pick (max {PERF_PRODUCTS_MAX_LOCATIONS}).{' '}
+          {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}.{' '}
           {compareOn ? 'Dashed = prior. ' : ''}
-          Dotted = target pace ({targetUnit === 'cups' ? 'cups' : 'KD'}). Y-axis follows Target
-          unit.
+          Dotted = target pace ({targetUnit === 'cups' ? 'cups' : 'KD'}).
         </p>
-        {fleetQ.isLoading ? <p className="perfMuted">Loading fleet mix…</p> : null}
+        {compareQ.isLoading && ids.length > 0 ? <p className="perfMuted">Loading selected mix…</p> : null}
         <DateTrajectoryChart
-          days={fleetDays}
-          series={fleetTrajectorySeries}
+          days={selectedDays}
+          series={selectedTrajectorySeries}
           unit={chartUnit}
           onSeriesClick={toggleSku}
-          exportName="product-fleet-mix"
-          ariaLabel="Fleet product daily trajectory"
+          exportName="product-selected-trajectory"
+          ariaLabel="Selected locations product trajectory"
         />
         {compareOn ? (
           <div className="perfProductsTrendCols">
@@ -1444,18 +1358,19 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                       <div className="perfProductsTrendMeta">
                         <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
                         <span>
-                          {formatKwd(Number(p.prevRevenueKwd || 0))} → {formatKwd(Number(p.revenueKwd || 0))}
+                          {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
+                          {formatKwd(Number(p.revenueKwd || 0))}
                         </span>
                         <span className={trendClass(p.cupsTrendPct)}>
-                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))} cups{' '}
-                          ({trendText(p.cupsTrendPct)})
+                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
+                          cups ({trendText(p.cupsTrendPct)})
                         </span>
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="perfMuted">None up vs prior.</p>
+                <p className="perfMuted">None up vs prior for this selection.</p>
               )}
             </div>
             <div>
@@ -1470,18 +1385,19 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                       <div className="perfProductsTrendMeta">
                         <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
                         <span>
-                          {formatKwd(Number(p.prevRevenueKwd || 0))} → {formatKwd(Number(p.revenueKwd || 0))}
+                          {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
+                          {formatKwd(Number(p.revenueKwd || 0))}
                         </span>
                         <span className={trendClass(p.cupsTrendPct)}>
-                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))} cups{' '}
-                          ({trendText(p.cupsTrendPct)})
+                          {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
+                          cups ({trendText(p.cupsTrendPct)})
                         </span>
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="perfMuted">None down vs prior.</p>
+                <p className="perfMuted">None down vs prior for this selection.</p>
               )}
             </div>
           </div>
@@ -1490,33 +1406,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         )}
       </section>
 
-      {locNone ? <p className="perfMuted">Pick at least one location for selected-site graphs.</p> : null}
-      {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
-      {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
-
-      <section className="perfProductsBlock" aria-labelledby="perf-products-selected">
-        <h4 id="perf-products-selected" className="perfSectionTitle">
-          2. Selected locations
-        </h4>
-        {compareQ.isLoading && ids.length > 0 ? <p className="perfMuted">Loading selected mix…</p> : null}
-        <DateTrajectoryChart
-          days={selectedDays}
-          series={selectedTrajectorySeries}
-          unit={chartUnit}
-          onSeriesClick={toggleSku}
-          exportName="product-selected-trajectory"
-          ariaLabel="Selected locations daily product trajectory"
-        />
-        <p className="perfSectionHint">
-          {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}. One drink selected → one line
-          per location (dotted = that site’s product target). Several drinks → one line per
-          drink + dotted target pace.
-        </p>
-      </section>
-
       <section className="perfProductsBlock" aria-labelledby="perf-products-per-machine">
         <h4 id="perf-products-per-machine" className="perfSectionTitle">
-          3. Per location
+          2. Per location
         </h4>
         <p className="perfSectionHint">
           Same window, {xAxisKind === 'hourly' ? 'hourly' : 'daily'} trajectory per selected
@@ -1591,10 +1483,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
       <section className="perfProductsBlock" aria-labelledby="perf-products-toplow">
         <h4 id="perf-products-toplow" className="perfSectionTitle">
-          4. Top and lowest sites
+          3. Top and lowest sites
         </h4>
         <p className="perfSectionHint">
-          Whole fleet (ignores Locations pick). Select a drink to rank sites.
+          Whole fleet ranking for the drink you pick (Locations filter does not apply here).
         </p>
         {!skus.length ? (
           <p className="perfMuted">Select a drink above to see top and lowest locations.</p>
@@ -1642,11 +1534,10 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
       <section className="perfProductsBlock" aria-labelledby="perf-products-table">
         <h4 id="perf-products-table" className="perfSectionTitle">
-          5. Selected locations — detail table
+          4. Selected locations — detail table
         </h4>
         <p className="perfSectionHint">
-          Numbers behind chart 2. Targets are the dotted lines on graphs 1–3 (Target type +
-          unit above).
+          Numbers behind chart 1. Targets are dotted lines on graphs 1–2.
         </p>
         {detailTable}
       </section>
