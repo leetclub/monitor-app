@@ -15,7 +15,7 @@ Shipped UI has no “prototype” wording — wireframes are documentation only.
 | `/red-flags` | Red Flags | Compare presets; table + cards; toolbar **machine search** + **Risk sort**. **Live operator** — Task Manager name + attendance badge; **one tap** → schedule + icon-only contacts. **Last / tx** — 3-line stamp; highlight when no sales ≥4h. **Downtime** — Today mins + period + trend %; tap → projected loss (**5‑min grace**, peak bands). **Last clean** — last GC + next window / days left. **Credits sent** — tap → scrollable popup led by **est. lost revenue** (tests/refunds/unidentified) + WEB cashless breakdown. **Top / low drink** — highest/lowest SKU; tap → top 5 + lowest 5 names. Sales / Target / SX / Trend / QA; fleet bar Yest. full day / −2d. |
 | `/overall` | Overall | Workbook columns; toolbar **machine search** + **Risk sort**; **sortable headers**; **Operator Activity**; **Downtime** (Today mins · period · trend %; loss after 5‑min grace); **Last clean** next window / days left; **Last / tx** no-sales ≥4h highlight; **Attendance** from Task Manager; **Sales** daily-elapsed presets; … |
 | `/qa-visit` | QA Visit | **Standalone ops tab:** fleet overview with **date range** + **searchable machine dropdown** → machine workspace (filters carry over), KPI strip, trend, history, findings tabs, PDF. Separate from Red Flags cell popup. |
-| `/performance` | Performance | **Location \| Products** switch. **Location:** sales vs target graphs (unchanged). **Products:** time criteria (one duration vs compare), uncapped Locations with Graph A paged **8** sites (‹ ›), Products ≤8, Target type, Y-axis **Revenue \| Cups**. **A** = focus drink across sites + pace strip; **B** = products in selection (hidden when exactly 1 SKU) + rising/falling; detail table; **Export weekly report**. |
+| `/performance` | Performance | **Location \| Products** switch. **Location:** sales vs target graphs (unchanged). **Products:** time criteria (one duration vs compare), uncapped Locations with Graph A paged **8** sites (‹ ›), Products ≤8, Target type, Y-axis **Revenue \| Cups**. **A** = one focus drink across sites + pace; **B** = product mix at a **focus location** dropdown + rising/falling; **C** = teal heatmap (products × locations, period totals); detail table; **Export weekly report** → PDF. |
 | `/footfall` · `/v2/footfall` | Footfall | Same Targets graph stack as [target.theleetclub.com](https://target.theleetclub.com/): heatmap + hourly footfall/conversion/revenue/gap chart + trajectory. **User-selected Alert Period** drives report + live Achievement. Default **As measured** (camera only). **Mirror & adjust** opt-in for Target-style mirror + unique-ratio. Full commercial fleet listed even when Period cups are zero. Admin → Targets override daily KPIs. |
 | `/promo` · `/v2/promo` | Promo | **Campaign cups** by location: date range → daily achieved/remaining bars (default product **Americano Max**). Same `target_promo_*` tables as Targets site. Configure under **Admin → Promo** (not Admin → Targets). Swipe instruments still on Performance + Area owners / Promo admin. |
 | `/admin` → Targets | Admin · Targets | **Searchable** machine pick (single + bulk multi). Location target once (KD or cups); **bulk-apply location target** to many machines (products unchanged). Promote **1..N Vendon products** per location, each with its own target. Fleet table = **one row per location** (expand for products). Cached sales **insights** on hover-click. |
@@ -61,7 +61,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 ![6 Performance](docs/product-prototype/figures/wire-06-performance.svg)
 
-*Figure 6 — Performance Products: Graph A (focus drink × sites, paged) + Graph B (product mix) + Revenue/Cups Y-axis.*
+*Figure 6 — Performance Products: Graph A (one SKU × sites) + Graph B (multi-SKU × one site) + Graph C heatmap + PDF weekly export.*
 
 ![8 Promo](docs/product-prototype/figures/wire-08-promo.svg)
 
@@ -103,6 +103,8 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-20 | **Performance Products A/B/C + PDF weekly report:** Graph A = one focus product across sites; Graph B = multi-product at a focus location; Graph C teal heatmap (machines × products by sales). Export → PDF (YoY, findings, up/down, machines/products — no issues / opportunities / recommendations). Revenue excludes WEB cashless / remote credit. |
+| 2026-08-20 | **Sales revenue excludes remote credit:** Daily revenue cache + product hourly buckets skip WEB cashless vends so Products/report KD is customer sales only. |
 | 2026-08-20 | **Performance Products UX rewrite:** Uncapped machine pick; Graph A pages 8 sites (‹ ›) for focus drink + pace strip; Graph B = products across all selected sites (hide when 1 SKU); Y-axis Revenue\|Cups; time optgroups `single:*` / `compare:*`; dropped fleet mix / per-site cards / top-low. |
 | 2026-08-20 | **Performance Products drop fleet-wide mix chart:** Graphs follow Locations pick (≤8). Rising/falling use selected sites. Top/low still ranks the whole fleet for a chosen drink. |
 | 2026-08-20 | **Performance Products targets on same graph:** Dotted target pace lines overlay fleet / selected / per-site charts (no separate targets section). Cups \| Revenue still switches Y-axis + targets. |

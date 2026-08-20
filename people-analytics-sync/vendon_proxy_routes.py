@@ -1390,6 +1390,9 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
             hour_counts: Dict[int, int] = {}
             tz_kw = ZoneInfo("Asia/Kuwait")
             for v in vends:
+                # Real customer sales only — WEB cashless ≈ remote credit / operator activity.
+                if _is_web_cashless_vend(v):
+                    continue
                 try:
                     price = float(v.get("price") or 0)
                 except Exception:

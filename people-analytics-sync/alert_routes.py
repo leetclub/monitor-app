@@ -584,13 +584,17 @@ def _bucket_vends_by_hour_product(
     day_d: date,
     until_hour: Optional[int] = None,
 ) -> Dict[int, Dict[str, Dict[str, float]]]:
-    """Kuwait local hour → product → {revenueKwd, cups} for one calendar day."""
-    from vendon_proxy_routes import _stats_vend_product_fields
+    """Kuwait local hour → product → {revenueKwd, cups} for one calendar day.
+    Excludes WEB cashless (remote credit) so totals match customer sales.
+    """
+    from vendon_proxy_routes import _is_web_cashless_vend, _stats_vend_product_fields
 
     tz = ZoneInfo("Asia/Kuwait")
     out: Dict[int, Dict[str, Dict[str, float]]] = {}
     for v in vends or []:
         if not isinstance(v, dict):
+            continue
+        if _is_web_cashless_vend(v):
             continue
         ts = _vend_ts_seconds(v)
         if not ts:
@@ -4235,7 +4239,7 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v5:{preset_id}:{win_s}:{win_e}:"
+            f"perf:product-compare:v6:{preset_id}:{win_s}:{win_e}:"
             f"{prev_s}:{prev_e}:c{int(compare_on)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)

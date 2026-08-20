@@ -1745,3 +1745,34 @@ button.perfKpiClick:hover {
   font-size: 0.82rem;
   font-weight: 700;
 }
+
+.perfProductsFocusLoc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.perfProductsFocusLoc select {
+  min-width: 200px;
+  max-width: min(100%, 360px);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.perfProductsHeatmap {
+  min-height: 280px;
+  height: min(56vh, 520px);
+}
+
+.perfProductsHeatmap .chartExportWrap,
+.perfProductsBlock .perfProductsHeatmap {
+  width: 100%;
+}

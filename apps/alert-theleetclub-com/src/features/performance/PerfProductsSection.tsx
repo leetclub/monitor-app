@@ -6,7 +6,7 @@ import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
 import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
 import { SERIES_PALETTE, type MachineRow } from '@/features/performance/perfTypes';
-import { downloadWeeklyProductReport } from '@/features/performance/exportWeeklyProductReport';
+import { downloadWeeklyProductReportPdf } from '@/features/performance/exportWeeklyProductReportPdf';
 
 /** Sites drawn on Graph A per page (‹ ›). */
 export const PERF_PRODUCTS_GRAPH_PAGE = 8;
@@ -599,7 +599,7 @@ function SkuMultiDropdown({
       <p className="perfMachineFilterHint">
         {atCapHint
           ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `No filter = Graph B uses top ${PERF_PRODUCTS_MAX_SKUS} by KD; Graph A focuses the top drink.`}
+          : `No filter = Graph A focuses top drink; Graph B / heatmap use top ${PERF_PRODUCTS_MAX_SKUS} by KD.`}
       </p>
     </section>
   );
@@ -787,6 +787,142 @@ function DateTrajectoryChart({
   );
 }
 
+/** Graph C — product × location period totals (teal intensity). */
+function ProductHeatmapChart({
+  rows,
+  columns,
+  values,
+  unit,
+  exportName,
+}: {
+  rows: string[];
+  columns: string[];
+  /** [colIndex, rowIndex, value] */
+  values: Array<[number, number, number]>;
+  unit: 'kd' | 'cups';
+  exportName?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inst = useRef<echarts.ECharts | null>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const chart = echarts.init(ref.current);
+    inst.current = chart;
+    const onResize = () => chart.resize();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      chart.dispose();
+      inst.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const chart = inst.current;
+    if (!chart) return;
+    const theme = readTheme();
+    if (!rows.length || !columns.length) {
+      chart.clear();
+      return;
+    }
+    const maxV = Math.max(0, ...values.map((v) => v[2]));
+    const fmt = (v: number) => (unit === 'cups' ? String(Math.round(v)) : formatKwd(v));
+    chart.setOption(
+      {
+        backgroundColor: 'transparent',
+        tooltip: {
+          position: 'top',
+          formatter: (p: { data?: [number, number, number] }) => {
+            const d = p.data;
+            if (!d) return '';
+            const [ci, ri, val] = d;
+            return `<b>${rows[ri] || ''}</b><br/>${columns[ci] || ''}: ${fmt(val)}`;
+          },
+        },
+        grid: { left: 120, right: 48, top: 24, bottom: 72, containLabel: false },
+        xAxis: {
+          type: 'category',
+          data: columns,
+          splitArea: { show: true },
+          axisLabel: {
+            color: theme.axis,
+            fontSize: 10,
+            rotate: columns.length > 4 ? 28 : 0,
+            interval: 0,
+            width: 88,
+            overflow: 'truncate',
+          },
+        },
+        yAxis: {
+          type: 'category',
+          data: rows,
+          splitArea: { show: true },
+          axisLabel: {
+            color: theme.axis,
+            fontSize: 10,
+            width: 110,
+            overflow: 'truncate',
+          },
+        },
+        visualMap: {
+          min: 0,
+          max: maxV > 0 ? maxV : 1,
+          calculable: true,
+          orient: 'horizontal',
+          left: 'center',
+          bottom: 8,
+          inRange: {
+            color: ['#ecfdf5', '#99f6e4', '#2dd4bf', '#0f766e', '#134e4a'],
+          },
+          textStyle: { color: theme.muted, fontSize: 10 },
+          formatter: (v: number) => fmt(Number(v)),
+        },
+        series: [
+          {
+            type: 'heatmap',
+            data: values,
+            label: {
+              show: columns.length * rows.length <= 64,
+              fontSize: 9,
+              color: theme.text,
+              formatter: (p: { data: [number, number, number] }) => {
+                const v = p.data[2];
+                if (!(v > 0)) return '';
+                return unit === 'cups' ? String(Math.round(v)) : formatKwd(v);
+              },
+            },
+            emphasis: {
+              itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.25)' },
+            },
+          },
+        ],
+      },
+      true,
+    );
+  }, [rows, columns, values, unit]);
+
+  const onExport = useCallback(() => {
+    if (!inst.current || !exportName) return;
+    downloadChartPng(inst.current, chartFilename([exportName]));
+  }, [exportName]);
+
+  const chart = (
+    <div
+      ref={ref}
+      className="perfEchart perfEchartOverview perfProductsHeatmap"
+      role="img"
+      aria-label="Product by location heatmap"
+    />
+  );
+  if (!exportName) return chart;
+  return (
+    <ChartExportWrap onExport={onExport} label="PNG">
+      {chart}
+    </ChartExportWrap>
+  );
+}
+
 type Props = {
   machines: MachineRow[];
   selectedIds: string[];
@@ -806,6 +942,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const [targetType, setTargetType] = useState<TargetType>('both');
   const [yMetric, setYMetric] = useState<YMetric>('revenue');
   const [graphPage, setGraphPage] = useState(0);
+  const [focusLocId, setFocusLocId] = useState('');
   const touchX = useRef<number | null>(null);
 
   const locNone = !allSelected && selectedIds.length === 0;
@@ -924,14 +1061,38 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, []);
 
   const focusSku = skus[0] || skuCatalog[0]?.name || '';
-  const showGraphB = skus.length !== 1;
+  const focusSkuLabel =
+    skus.length > 1
+      ? `Focus product: ${focusSku} (first selected)`
+      : skus.length === 1
+        ? `Focus product: ${focusSku}`
+        : focusSku
+          ? `Focus product: ${focusSku} (top catalog)`
+          : 'Focus product: —';
+  /** Graph B: multi-product at one location — show whenever sites are selected. */
+  const showGraphB = !locNone && ids.length > 0;
   const graphBSkus = useMemo(() => {
-    if (skus.length >= 2) return skus;
+    if (skus.length >= 1) return skus;
     return skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name);
   }, [skus, skuCatalog]);
 
   const skuSet = useMemo(() => new Set(skus), [skus]);
   const multiLoc = ids.length > 1;
+
+  useEffect(() => {
+    if (!payloadMachines.length) {
+      setFocusLocId('');
+      return;
+    }
+    if (!payloadMachines.some((m) => m.machineId === focusLocId)) {
+      setFocusLocId(payloadMachines[0].machineId);
+    }
+  }, [payloadMachines, focusLocId]);
+
+  const focusMachine = useMemo(
+    () => payloadMachines.find((m) => m.machineId === focusLocId) || payloadMachines[0] || null,
+    [payloadMachines, focusLocId],
+  );
 
   const inLocationRows = useMemo(() => {
     if (!skus.length) return mixedRows;
@@ -1087,34 +1248,37 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     showMachineTargets,
   ]);
 
-  /** Graph B — products summed across all selected machines. */
+  /** Graph B — products at a single focus location. */
+  const graphBDays = useMemo(() => {
+    if (focusMachine?.days?.length) return focusMachine.days;
+    return selectedDays;
+  }, [focusMachine, selectedDays]);
+
   const graphBSeries = useMemo(() => {
     const series: TrajSeries[] = [];
-    if (!showGraphB || !graphBSkus.length || !selectedDays.length) return series;
-    const n = selectedDays.length;
+    if (!showGraphB || !graphBSkus.length || !graphBDays.length || !focusMachine) return series;
+    const n = graphBDays.length;
+    const machineDays = focusMachine.days?.length ? focusMachine.days : graphBDays;
+    const dayAt = (i: number) => machineDays[i] || graphBDays[i];
 
     for (const name of graphBSkus) {
-      let tgt = 0;
-      let hasTgt = false;
-      for (const m of payloadMachines) {
-        const cell = skuOnMachine(m, [name]);
-        if (yMetric === 'cups') {
-          if (cell.hasTarget) {
-            tgt += cell.target;
-            hasTgt = true;
-          }
-        } else if (cell.hasTargetRev) {
-          tgt += cell.targetRev;
-          hasTgt = true;
-        }
-      }
-      const hover: HoverPoint[] = selectedDays.map((d) => {
+      const cell = skuOnMachine(focusMachine, [name]);
+      const productTgt =
+        yMetric === 'cups'
+          ? cell.hasTarget
+            ? cell.target
+            : 0
+          : cell.hasTargetRev
+            ? cell.targetRev
+            : 0;
+      const hover: HoverPoint[] = graphBDays.map((_, i) => {
+        const d = dayAt(i);
         const kd = daySkuKwd(d, name);
         const cups = daySkuCups(d, name);
         const priorKd = compareOn ? daySkuPrevKwd(d, name) : null;
         const priorCups = compareOn ? daySkuPrevCups(d, name) : null;
         const actual = yMetric === 'cups' ? cups : kd;
-        const periodTgt = showProductTargets && hasTgt && tgt > 0 ? tgt : null;
+        const periodTgt = showProductTargets && productTgt > 0 ? productTgt : null;
         return {
           kd,
           cups,
@@ -1126,20 +1290,20 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       });
       series.push({
         name,
-        data: selectedDays.map((d) => daySkuValue(d, name, yMetric)),
+        data: graphBDays.map((_, i) => daySkuValue(dayAt(i), name, yMetric)),
         hover,
       });
       if (compareOn) {
         series.push({
           name: `Prior · ${name}`,
-          data: selectedDays.map((d) => daySkuPrevValue(d, name, yMetric)),
+          data: graphBDays.map((_, i) => daySkuPrevValue(dayAt(i), name, yMetric)),
           dashed: true,
         });
       }
-      if (showProductTargets && hasTgt && tgt > 0) {
+      if (showProductTargets && productTgt > 0) {
         series.push({
           name: `Target · ${name}`,
-          data: paceLine(tgt, n),
+          data: paceLine(productTgt, n),
           dotted: true,
         });
       }
@@ -1148,12 +1312,46 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   }, [
     showGraphB,
     graphBSkus,
-    selectedDays,
-    payloadMachines,
+    graphBDays,
+    focusMachine,
     yMetric,
     compareOn,
     showProductTargets,
   ]);
+
+  /** Graph C — heatmap columns/rows (period totals only). */
+  const heatColumns = useMemo(() => {
+    if (skus.length) return skus.slice(0, PERF_PRODUCTS_MAX_SKUS);
+    return skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name);
+  }, [skus, skuCatalog]);
+
+  const heatMatrix = useMemo(() => {
+    if (!payloadMachines.length || !heatColumns.length) {
+      return { rows: [] as string[], values: [] as Array<[number, number, number]> };
+    }
+    const scored = payloadMachines.map((m) => {
+      const byName = new Map(
+        (m.products || []).map((p) => [String(p.name || '').trim(), p] as const),
+      );
+      const cells = heatColumns.map((name) => {
+        const hit = byName.get(name);
+        return yMetric === 'cups' ? Number(hit?.cups || 0) : Number(hit?.revenueKwd || 0);
+      });
+      const total = cells.reduce((s, v) => s + v, 0);
+      return { machineName: m.machineName, cells, total };
+    });
+    scored.sort(
+      (a, b) => b.total - a.total || a.machineName.localeCompare(b.machineName),
+    );
+    const rows = scored.map((r) => r.machineName);
+    const values: Array<[number, number, number]> = [];
+    scored.forEach((r, ri) => {
+      r.cells.forEach((v, ci) => {
+        values.push([ci, ri, v]);
+      });
+    });
+    return { rows, values };
+  }, [payloadMachines, heatColumns, yMetric]);
 
   const paceStrip = useMemo(() => {
     if (!focusSku || !payloadMachines.length) return null;
@@ -1238,7 +1436,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   );
 
   const onExportReport = useCallback(() => {
-    downloadWeeklyProductReport({
+    downloadWeeklyProductReportPdf({
       periodLabel,
       priorLabel,
       windowStart: win?.start,
@@ -1374,7 +1572,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               </li>
               <li className={skus.length > 0 ? 'active' : undefined}>
                 <strong>3. Products</strong> — up to {PERF_PRODUCTS_MAX_SKUS}; Graph A focuses the
-                first pick.
+                first pick; B = one site mix; C = heatmap.
               </li>
             </ol>
           </aside>
@@ -1427,7 +1625,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             <option value="machine">Machine target</option>
             <option value="both">Both</option>
           </select>
-          <small>Dotted overlays on Graph A (and product targets on Graph B).</small>
+          <small>Dotted overlays on Graph A and B (product / machine targets).</small>
         </label>
       </div>
 
@@ -1537,7 +1735,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             A. {focusSku || 'Product'} across sites
           </h4>
           <p className="perfSectionHint">
-            Focus drink = first selected (or top catalog). Lines = machines on this page.{' '}
+            {focusSkuLabel}. Lines = machines on this page (one product only).{' '}
             {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}.{' '}
             {compareOn ? 'Dashed = prior. ' : ''}
             Dotted = target.
@@ -1612,22 +1810,36 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         <section className="perfProductsBlock" aria-labelledby="perf-products-graph-b">
           <div className="perfProductsBlockHead">
             <h4 id="perf-products-graph-b" className="perfSectionTitle">
-              B. Products in selection
+              B. Products at one location
             </h4>
             <p className="perfSectionHint">
               {skus.length === 0
                 ? `Top ${PERF_PRODUCTS_MAX_SKUS} drinks by KD`
-                : `${skus.length} selected drinks`}{' '}
-              · summed across all selected sites.
+                : `${skus.length} selected drink${skus.length === 1 ? '' : 's'}`}{' '}
+              · single focus location (not fleet sum).
             </p>
           </div>
+          <label className="perfProductsFocusLoc">
+            <span>Focus location</span>
+            <select
+              value={focusMachine?.machineId || ''}
+              onChange={(e) => setFocusLocId(e.target.value)}
+              aria-label="Focus location for Graph B"
+            >
+              {payloadMachines.map((m) => (
+                <option key={m.machineId} value={m.machineId}>
+                  {m.machineName}
+                </option>
+              ))}
+            </select>
+          </label>
           <DateTrajectoryChart
-            days={selectedDays}
+            days={graphBDays}
             series={graphBSeries}
             unit={chartUnit}
             onSeriesClick={toggleSku}
-            exportName="product-selection-mix"
-            ariaLabel="Products in selection trajectory"
+            exportName="product-at-location"
+            ariaLabel="Products at focus location"
           />
           {compareOn ? (
             <div className="perfProductsTrendCols">
@@ -1689,6 +1901,27 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           ) : (
             <p className="perfMuted">Rising / falling need a comparison period.</p>
           )}
+        </section>
+      ) : null}
+
+      {!locNone && heatColumns.length > 0 ? (
+        <section className="perfProductsBlock" aria-labelledby="perf-products-graph-c">
+          <div className="perfProductsBlockHead">
+            <h4 id="perf-products-graph-c" className="perfSectionTitle">
+              C. Heatmap — products × locations
+            </h4>
+            <p className="perfSectionHint">
+              Sorted by machine sales for the selected product set. Cell = period{' '}
+              {yMetric === 'cups' ? 'cups' : 'revenue KD'} (no compare).
+            </p>
+          </div>
+          <ProductHeatmapChart
+            rows={heatMatrix.rows}
+            columns={heatColumns}
+            values={heatMatrix.values}
+            unit={chartUnit}
+            exportName="product-location-heatmap"
+          />
         </section>
       ) : null}
 
