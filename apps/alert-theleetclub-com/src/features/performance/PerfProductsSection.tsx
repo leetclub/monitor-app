@@ -455,6 +455,7 @@ function SkuMultiDropdown({
   onClear,
   onSelectTop,
   onSelectLeast,
+  embedded,
 }: {
   options: { name: string; kd: number }[];
   selected: string[];
@@ -462,6 +463,8 @@ function SkuMultiDropdown({
   onClear: () => void;
   onSelectTop: () => void;
   onSelectLeast: () => void;
+  /** Nest inside a graph card toolbar (no outer panel chrome). */
+  embedded?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -473,7 +476,7 @@ function SkuMultiDropdown({
     ? selected.length === 1
       ? selected[0]
       : `${selected.length} of ${PERF_PRODUCTS_MAX_SKUS} drinks`
-    : 'Select drinks for Graph B & heatmap…';
+    : 'Select drinks…';
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -486,7 +489,6 @@ function SkuMultiDropdown({
     const onDoc = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    // Defer so the opening click does not immediately close the panel
     const t = window.setTimeout(() => document.addEventListener('click', onDoc), 0);
     return () => {
       window.clearTimeout(t);
@@ -495,124 +497,122 @@ function SkuMultiDropdown({
   }, [open]);
 
   return (
-    <section
-      className={`perfMachineFilter perfMachineFilterBar${open ? ' perfSkuDropdownOpen' : ''}`}
-      aria-label="Filter drinks"
+    <div
+      className={`perfProductsSkuPick${embedded ? ' perfProductsSkuPickEmbed' : ''}${open ? ' perfSkuDropdownOpen' : ''}`}
+      aria-label="Products for Graph B and heatmap"
     >
-      <div className="perfLocBarMain" ref={rootRef}>
-        <div className="perfLocBarLabel">
-          <h3 className="perfMachineFilterTitle">Products (B & C)</h3>
-          <span className="perfMachineFilterCount">
-            {selected.length}/{PERF_PRODUCTS_MAX_SKUS} max
+      <div className="perfProductsSkuPickMain" ref={rootRef}>
+        <div className="perfProductsField">
+          <span className="perfProductsFieldLabel">
+            Products
+            <em>
+              {selected.length}/{PERF_PRODUCTS_MAX_SKUS}
+            </em>
           </span>
-        </div>
-        <div className="perfLocSelect">
-          <button
-            type="button"
-            className={`perfLocSelectTrigger ${open ? 'open' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
-            aria-expanded={open}
-            aria-haspopup="listbox"
-          >
-            <span className="perfLocSelectSummary">{summary}</span>
-            <span className="perfLocSelectChevron" aria-hidden>
-              ▾
-            </span>
-          </button>
-          {open ? (
-            <div
-              className="perfLocDropdown"
-              role="listbox"
-              onClick={(e) => e.stopPropagation()}
+          <div className="perfLocSelect">
+            <button
+              type="button"
+              className={`perfLocSelectTrigger ${open ? 'open' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+              aria-expanded={open}
+              aria-haspopup="listbox"
             >
-              <div className="perfLocDropdownToolbar">
-                <input
-                  type="search"
-                  className="perfLocSearch"
-                  placeholder="Search drink…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  autoFocus
-                />
-                <div className="perfMachineFilterActions">
-                  <button
-                    type="button"
-                    className={`perfSegPill ${selected.length === 0 ? 'active' : ''}`}
-                    onClick={() => {
-                      onClear();
-                      setAtCapHint(false);
-                    }}
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    className="perfSegPill"
-                    onClick={() => {
-                      onSelectTop();
-                      setAtCapHint(false);
-                    }}
-                  >
-                    Top {PERF_PRODUCTS_MAX_SKUS}
-                  </button>
-                  <button
-                    type="button"
-                    className="perfSegPill"
-                    onClick={() => {
-                      onSelectLeast();
-                      setAtCapHint(false);
-                    }}
-                  >
-                    Least {PERF_PRODUCTS_MAX_SKUS}
-                  </button>
+              <span className="perfLocSelectSummary">{summary}</span>
+              <span className="perfLocSelectChevron" aria-hidden>
+                ▾
+              </span>
+            </button>
+            {open ? (
+              <div className="perfLocDropdown" role="listbox" onClick={(e) => e.stopPropagation()}>
+                <div className="perfLocDropdownToolbar">
+                  <input
+                    type="search"
+                    className="perfLocSearch"
+                    placeholder="Search drink…"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="perfMachineFilterActions">
+                    <button
+                      type="button"
+                      className={`perfSegPill ${selected.length === 0 ? 'active' : ''}`}
+                      onClick={() => {
+                        onClear();
+                        setAtCapHint(false);
+                      }}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      className="perfSegPill"
+                      onClick={() => {
+                        onSelectTop();
+                        setAtCapHint(false);
+                      }}
+                    >
+                      Top {PERF_PRODUCTS_MAX_SKUS}
+                    </button>
+                    <button
+                      type="button"
+                      className="perfSegPill"
+                      onClick={() => {
+                        onSelectLeast();
+                        setAtCapHint(false);
+                      }}
+                    >
+                      Least {PERF_PRODUCTS_MAX_SKUS}
+                    </button>
+                  </div>
+                </div>
+                <div className="perfLocDropdownList">
+                  {options.length === 0 ? (
+                    <p className="perfMuted">Pick locations first to load drinks.</p>
+                  ) : filtered.length === 0 ? (
+                    <p className="perfMuted">No matches.</p>
+                  ) : (
+                    filtered.map((o) => {
+                      const checked = selectedSet.has(o.name);
+                      return (
+                        <div
+                          key={o.name}
+                          role="option"
+                          aria-selected={checked}
+                          className={`perfLocRow ${checked ? 'perfLocRowSolo' : ''}`}
+                          onClick={() => {
+                            if (!checked && atCap) {
+                              setAtCapHint(true);
+                              return;
+                            }
+                            setAtCapHint(false);
+                            onToggle(o.name);
+                          }}
+                        >
+                          <span className="perfLocRowMain">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              readOnly
+                              tabIndex={-1}
+                              disabled={!checked && atCap}
+                            />
+                            <span className="perfLocRowName" title={o.name}>
+                              {o.name}
+                            </span>
+                          </span>
+                          <span className="perfSkuKd">{formatKwd(o.kd)}</span>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
-              <div className="perfLocDropdownList">
-                {options.length === 0 ? (
-                  <p className="perfMuted">Pick locations first to load drinks.</p>
-                ) : filtered.length === 0 ? (
-                  <p className="perfMuted">No matches.</p>
-                ) : (
-                  filtered.map((o) => {
-                    const checked = selectedSet.has(o.name);
-                    return (
-                      <div
-                        key={o.name}
-                        role="option"
-                        aria-selected={checked}
-                        className={`perfLocRow ${checked ? 'perfLocRowSolo' : ''}`}
-                        onClick={() => {
-                          if (!checked && atCap) {
-                            setAtCapHint(true);
-                            return;
-                          }
-                          setAtCapHint(false);
-                          onToggle(o.name);
-                        }}
-                      >
-                        <span className="perfLocRowMain">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            readOnly
-                            tabIndex={-1}
-                            disabled={!checked && atCap}
-                          />
-                          <span className="perfLocRowName" title={o.name}>
-                            {o.name}
-                          </span>
-                        </span>
-                        <span className="perfSkuKd">{formatKwd(o.kd)}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
         {selected.length > 0 ? (
           <div className="perfLocChips">
@@ -631,12 +631,12 @@ function SkuMultiDropdown({
           </div>
         ) : null}
       </div>
-      <p className="perfMachineFilterHint">
-        {atCapHint
-          ? `Maximum ${PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.`
-          : `Used by Graph B and the heatmap. Graph A has its own product picker. Helpers: Top / Least ${PERF_PRODUCTS_MAX_SKUS}.`}
-      </p>
-    </section>
+      {atCapHint ? (
+        <p className="perfProductsFieldHint warn">
+          Maximum {PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1713,219 +1713,204 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   return (
     <section className="perfProducts" aria-labelledby="perf-products-title">
       <header className="perfProductsHead">
-        <div>
-          <h3 id="perf-products-title" className="perfSectionTitle">
+        <div className="perfProductsHeadCopy">
+          <h3 id="perf-products-title" className="perfProductsTitle">
             Product performance
           </h3>
-          <aside className="perfProductsGuide" aria-label="How to use product performance">
-            <ol className="perfProductsGuideList">
-              <li className="active">
-                <strong>1. Time</strong> — one duration or compare two durations.
-              </li>
-              <li className={!locNone ? 'active' : undefined}>
-                <strong>2. Locations</strong> — any number; Graph A pages {PERF_PRODUCTS_GRAPH_PAGE}{' '}
-                sites at a time.
-              </li>
-              <li className={graphASku || skus.length > 0 ? 'active' : undefined}>
-                <strong>3. Products</strong> — Graph A: pick one drink; B &amp; C: pick up to{' '}
-                {PERF_PRODUCTS_MAX_SKUS} (Top / Least helpers).
-              </li>
-            </ol>
-          </aside>
-          {windowHint ? <p className="perfSectionHint">{windowHint}</p> : null}
+          <p className="perfProductsLead">
+            Locations above · A = one drink × sites · B &amp; C = drinks you pick · Y-axis ={' '}
+            {yMetric === 'cups' ? 'cups' : 'revenue KD'}
+          </p>
+          {windowHint ? <p className="perfProductsWindow">{windowHint}</p> : null}
         </div>
         <button type="button" className="perfSegPill perfSegPillEmphasis" onClick={onExportReport}>
           Export weekly report
         </button>
       </header>
 
-      <div className="perfProductsCriteria" aria-label="Product criteria">
-        <label className="perfProductsCriteriaField">
-          <span>Time criteria</span>
-          <select
-            value={timeCriteria}
-            onChange={(e) => setTimeCriteria(e.target.value as TimeCriteria)}
-            aria-label="Time criteria"
-          >
-            <optgroup label="One duration (no comparison)">
-              {SINGLE_OPTIONS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Compare two durations">
-              {COMPARE_OPTIONS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-          <small>
-            {timeCriteria.startsWith('single:')
-              ? 'No prior lines or rising/falling.'
-              : 'Dashed = prior period.'}{' '}
-            Dotted = target pace.
-          </small>
-        </label>
+      <div className="perfProductsWorkspace" aria-label="Workspace criteria">
+        <div className="perfProductsToolbar">
+          <label className="perfProductsField">
+            <span className="perfProductsFieldLabel">Time</span>
+            <select
+              value={timeCriteria}
+              onChange={(e) => setTimeCriteria(e.target.value as TimeCriteria)}
+              aria-label="Time criteria"
+            >
+              <optgroup label="One duration (no comparison)">
+                {SINGLE_OPTIONS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Compare two durations">
+                {COMPARE_OPTIONS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
 
-        <label className="perfProductsCriteriaField">
-          <span>Target type</span>
-          <select
-            value={targetType}
-            onChange={(e) => setTargetType(e.target.value as TargetType)}
-            aria-label="Target type"
-          >
-            <option value="product">Product target</option>
-            <option value="machine">Machine target</option>
-            <option value="both">Both</option>
-          </select>
-          <small>
-            A uses product targets only. B can overlay product lines and one machine target.
-          </small>
-        </label>
+          <label className="perfProductsField">
+            <span className="perfProductsFieldLabel">Target type</span>
+            <select
+              value={targetType}
+              onChange={(e) => setTargetType(e.target.value as TargetType)}
+              aria-label="Target type"
+            >
+              <option value="product">Product target</option>
+              <option value="machine">Machine target</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+
+          <div className="perfProductsField" role="group" aria-label="Y-axis metric">
+            <span className="perfProductsFieldLabel">Y-axis</span>
+            <div className="perfProductsMetricSeg">
+              <button
+                type="button"
+                className={`perfSegPill ${yMetric === 'revenue' ? 'active' : ''}`}
+                onClick={() => setYMetric('revenue')}
+              >
+                Revenue
+              </button>
+              <button
+                type="button"
+                className={`perfSegPill ${yMetric === 'cups' ? 'active' : ''}`}
+                onClick={() => setYMetric('cups')}
+              >
+                Cups
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {timeCriteria === 'compare:custom_vs_custom' ? (
+          <div className="perfProductsCustomRange">
+            <label>
+              Period A from
+              <input
+                type="date"
+                value={aStart}
+                max={aEnd || kuwaitIsoToday()}
+                onChange={(e) => setAStart(e.target.value)}
+              />
+            </label>
+            <label>
+              Period A to
+              <input
+                type="date"
+                value={aEnd}
+                min={aStart}
+                max={kuwaitIsoToday()}
+                onChange={(e) => setAEnd(e.target.value)}
+              />
+            </label>
+            <label>
+              Period B from
+              <input
+                type="date"
+                value={bStart}
+                max={bEnd || kuwaitIsoToday()}
+                onChange={(e) => setBStart(e.target.value)}
+              />
+            </label>
+            <label>
+              Period B to
+              <input
+                type="date"
+                value={bEnd}
+                min={bStart}
+                max={kuwaitIsoToday()}
+                onChange={(e) => setBEnd(e.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
+        {timeCriteria === 'single:custom' ? (
+          <div className="perfProductsCustomRange">
+            <label>
+              From
+              <input
+                type="date"
+                value={customStart}
+                max={customEnd || kuwaitIsoToday()}
+                onChange={(e) => setCustomStart(e.target.value)}
+              />
+            </label>
+            <label>
+              To
+              <input
+                type="date"
+                value={customEnd}
+                min={customStart}
+                max={kuwaitIsoToday()}
+                onChange={(e) => setCustomEnd(e.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {!compareOpts ? (
+          <p className="perfError">Fix the custom dates (from ≤ to) to load charts.</p>
+        ) : null}
+        {locNone ? <p className="perfMuted">Pick at least one location above.</p> : null}
+        {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
+        {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
       </div>
 
-      {timeCriteria === 'compare:custom_vs_custom' ? (
-        <div className="perfProductsCustomRange">
-          <label>
-            Period A from
-            <input
-              type="date"
-              value={aStart}
-              max={aEnd || kuwaitIsoToday()}
-              onChange={(e) => setAStart(e.target.value)}
-            />
+      <section className="perfProductsCard" aria-labelledby="perf-products-graph-a">
+        <header className="perfProductsCardHead">
+          <div className="perfProductsCardTitleRow">
+            <span className="perfProductsCardBadge" aria-hidden>
+              A
+            </span>
+            <div>
+              <h4 id="perf-products-graph-a" className="perfProductsCardTitle">
+                {focusSku ? `${focusSku} across sites` : 'One product across sites'}
+              </h4>
+              <p className="perfProductsCardHint">
+                One drink · lines = sites on this page
+                {xAxisKind === 'hourly' ? ' · hours on X' : ' · dates on X'}
+                {compareOn ? ' · dashed = prior' : ''}
+                {showProductTargets ? ' · dotted = product target' : ''}
+              </p>
+            </div>
+          </div>
+        </header>
+        <div className="perfProductsCardToolbar">
+          <label className="perfProductsField perfProductsFieldGrow">
+            <span className="perfProductsFieldLabel">Product</span>
+            <select
+              value={graphASku}
+              onChange={(e) => setGraphASku(e.target.value)}
+              aria-label="Product for Graph A"
+              disabled={locNone || skuCatalog.length === 0}
+            >
+              <option value="">Select a product…</option>
+              {skuCatalog.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </label>
-          <label>
-            Period A to
-            <input
-              type="date"
-              value={aEnd}
-              min={aStart}
-              max={kuwaitIsoToday()}
-              onChange={(e) => setAEnd(e.target.value)}
-            />
-          </label>
-          <label>
-            Period B from
-            <input
-              type="date"
-              value={bStart}
-              max={bEnd || kuwaitIsoToday()}
-              onChange={(e) => setBStart(e.target.value)}
-            />
-          </label>
-          <label>
-            Period B to
-            <input
-              type="date"
-              value={bEnd}
-              min={bStart}
-              max={kuwaitIsoToday()}
-              onChange={(e) => setBEnd(e.target.value)}
-            />
-          </label>
+          {canPage && focusSku ? (
+            <div className="perfProductsPageMeta" aria-live="polite">
+              Page {graphPage + 1}/{pageCount} · sites{' '}
+              {graphPage * PERF_PRODUCTS_GRAPH_PAGE + 1}–
+              {graphPage * PERF_PRODUCTS_GRAPH_PAGE + pageMachines.length} of {payloadMachines.length}
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      {timeCriteria === 'single:custom' ? (
-        <div className="perfProductsCustomRange">
-          <label>
-            From
-            <input
-              type="date"
-              value={customStart}
-              max={customEnd || kuwaitIsoToday()}
-              onChange={(e) => setCustomStart(e.target.value)}
-            />
-          </label>
-          <label>
-            To
-            <input
-              type="date"
-              value={customEnd}
-              min={customStart}
-              max={kuwaitIsoToday()}
-              onChange={(e) => setCustomEnd(e.target.value)}
-            />
-          </label>
-          <p className="perfSectionHint">Single range — no prior comparison.</p>
-        </div>
-      ) : null}
-
-      {!compareOpts ? <p className="perfError">Fix the custom dates (from ≤ to) to load charts.</p> : null}
-
-      <SkuMultiDropdown
-        options={skuCatalog}
-        selected={skus}
-        onToggle={toggleSku}
-        onClear={() => setSkus([])}
-        onSelectTop={selectTopSkus}
-        onSelectLeast={selectLeastSkus}
-      />
-
-      {locNone ? <p className="perfMuted">Pick at least one location above.</p> : null}
-      {compareQ.isError ? <p className="perfError">{(compareQ.error as Error).message}</p> : null}
-      {compareQ.data?.error ? <p className="perfError">{compareQ.data.error}</p> : null}
-
-      <div className="perfProductsMetricBar" role="group" aria-label="Y-axis metric">
-        <span>Y-axis</span>
-        <button
-          type="button"
-          className={`perfSegPill ${yMetric === 'revenue' ? 'active' : ''}`}
-          onClick={() => setYMetric('revenue')}
-        >
-          Revenue
-        </button>
-        <button
-          type="button"
-          className={`perfSegPill ${yMetric === 'cups' ? 'active' : ''}`}
-          onClick={() => setYMetric('cups')}
-        >
-          Cups
-        </button>
-        <small>Axis scales to the plotted lines ({yMetric === 'cups' ? 'cups' : 'KD'}).</small>
-      </div>
-
-      <section className="perfProductsBlock" aria-labelledby="perf-products-graph-a">
-        <div className="perfProductsBlockHead">
-          <h4 id="perf-products-graph-a" className="perfSectionTitle">
-            A. {focusSku ? `${focusSku} across sites` : 'One product across sites'}
-          </h4>
-          <p className="perfSectionHint">
-            Pick the drink below. Lines = machines on this page.{' '}
-            {xAxisKind === 'hourly' ? 'Hours on X' : 'Dates on X'}.{' '}
-            {compareOn ? 'Dashed = prior. ' : ''}
-            Dotted = product target (machine targets stay on Graph B).
-          </p>
-        </div>
-        <label className="perfProductsFocusLoc">
-          <span>Product for Graph A</span>
-          <select
-            value={graphASku}
-            onChange={(e) => setGraphASku(e.target.value)}
-            aria-label="Product for Graph A"
-            disabled={locNone || skuCatalog.length === 0}
-          >
-            <option value="">Select a product…</option>
-            {skuCatalog.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
         {compareQ.isLoading && ids.length > 0 ? <p className="perfMuted">Loading selected mix…</p> : null}
         {!focusSku ? (
-          <p className="perfMuted">Select a product to draw Graph A.</p>
+          <p className="perfProductsEmpty">Select a product for this graph.</p>
         ) : (
           <>
-            <div className="perfGraphPageMeta" aria-live="polite">
-              {canPage
-                ? `Page ${graphPage + 1} / ${pageCount} · sites ${graphPage * PERF_PRODUCTS_GRAPH_PAGE + 1}–${graphPage * PERF_PRODUCTS_GRAPH_PAGE + pageMachines.length} of ${payloadMachines.length}`
-                : `${pageMachines.length} site${pageMachines.length === 1 ? '' : 's'} on graph`}
-            </div>
             <div
               className="perfGraphStage"
               onTouchStart={onGraphTouchStart}
@@ -1988,18 +1973,26 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       </section>
 
       {showGraphB ? (
-        <section className="perfProductsBlock" aria-labelledby="perf-products-graph-b">
-          <div className="perfProductsBlockHead">
-            <h4 id="perf-products-graph-b" className="perfSectionTitle">
-              B. Products at one location
-            </h4>
-            <p className="perfSectionHint">
-              Choose focus location and products (or Top / Least helpers above). Not a fleet sum.
-            </p>
-          </div>
-          <div className="perfProductsGraphBControls">
-            <label className="perfProductsFocusLoc">
-              <span>Focus location</span>
+        <section className="perfProductsCard" aria-labelledby="perf-products-graph-b">
+          <header className="perfProductsCardHead">
+            <div className="perfProductsCardTitleRow">
+              <span className="perfProductsCardBadge" aria-hidden>
+                B
+              </span>
+              <div>
+                <h4 id="perf-products-graph-b" className="perfProductsCardTitle">
+                  Products at one location
+                </h4>
+                <p className="perfProductsCardHint">
+                  Pick location + drinks below · Top / Least helpers · not a fleet sum
+                  {showMachineTargets ? ' · machine target overlays when set' : ''}
+                </p>
+              </div>
+            </div>
+          </header>
+          <div className="perfProductsCardToolbar perfProductsCardToolbarStack">
+            <label className="perfProductsField perfProductsFieldGrow">
+              <span className="perfProductsFieldLabel">Focus location</span>
               <select
                 value={focusLocId}
                 onChange={(e) => setFocusLocId(e.target.value)}
@@ -2013,22 +2006,20 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                 ))}
               </select>
             </label>
-            <div className="perfMachineFilterActions" aria-label="Product helpers for Graph B">
-              <button type="button" className="perfSegPill" onClick={selectTopSkus}>
-                Top {PERF_PRODUCTS_MAX_SKUS}
-              </button>
-              <button type="button" className="perfSegPill" onClick={selectLeastSkus}>
-                Least {PERF_PRODUCTS_MAX_SKUS}
-              </button>
-              <button type="button" className="perfSegPill" onClick={() => setSkus([])}>
-                Clear products
-              </button>
-            </div>
+            <SkuMultiDropdown
+              embedded
+              options={skuCatalog}
+              selected={skus}
+              onToggle={toggleSku}
+              onClear={() => setSkus([])}
+              onSelectTop={selectTopSkus}
+              onSelectLeast={selectLeastSkus}
+            />
           </div>
           {!graphBReady ? (
-            <p className="perfMuted">
+            <p className="perfProductsEmpty">
               {!focusLocId ? 'Select a focus location. ' : ''}
-              {!graphBSkus.length ? 'Select products (or use Top / Least).' : ''}
+              {!graphBSkus.length ? 'Select products (or Top / Least).' : ''}
             </p>
           ) : (
             <DateTrajectoryChart
@@ -2043,7 +2034,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           {compareOn ? (
             <div className="perfProductsTrendCols">
               <div>
-                <h5 className="perfProductsTrendHead">Rising (KD + cups)</h5>
+                <h5 className="perfProductsTrendHead">Rising</h5>
                 {rising.length ? (
                   <ul className="perfProductsTrendList perfProductsTrendDetailed">
                     {rising.map((p) => (
@@ -2066,11 +2057,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                     ))}
                   </ul>
                 ) : (
-                  <p className="perfMuted">None up vs prior for this selection.</p>
+                  <p className="perfMuted">None up vs prior.</p>
                 )}
               </div>
               <div>
-                <h5 className="perfProductsTrendHead">Falling (KD + cups)</h5>
+                <h5 className="perfProductsTrendHead">Falling</h5>
                 {falling.length ? (
                   <ul className="perfProductsTrendList perfProductsTrendDetailed">
                     {falling.map((p) => (
@@ -2093,7 +2084,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                     ))}
                   </ul>
                 ) : (
-                  <p className="perfMuted">None down vs prior for this selection.</p>
+                  <p className="perfMuted">None down vs prior.</p>
                 )}
               </div>
             </div>
@@ -2104,18 +2095,30 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       ) : null}
 
       {!locNone ? (
-        <section className="perfProductsBlock" aria-labelledby="perf-products-graph-c">
-          <div className="perfProductsBlockHead">
-            <h4 id="perf-products-graph-c" className="perfSectionTitle">
-              C. Heatmap — products × locations
-            </h4>
-            <p className="perfSectionHint">
-              Select products above. Sorted by machine sales for the selected set. Cell = period{' '}
-              {yMetric === 'cups' ? 'cups' : 'revenue KD'}. Hover a cell for detail + trend.
-            </p>
-          </div>
+        <section className="perfProductsCard" aria-labelledby="perf-products-graph-c">
+          <header className="perfProductsCardHead">
+            <div className="perfProductsCardTitleRow">
+              <span className="perfProductsCardBadge" aria-hidden>
+                C
+              </span>
+              <div>
+                <h4 id="perf-products-graph-c" className="perfProductsCardTitle">
+                  Heatmap — products × locations
+                </h4>
+                <p className="perfProductsCardHint">
+                  Uses products from Graph B · cell = period{' '}
+                  {yMetric === 'cups' ? 'cups' : 'revenue KD'} · hover for trend
+                </p>
+              </div>
+            </div>
+            {skus.length > 0 ? (
+              <div className="perfProductsCardMeta">
+                {skus.length} drink{skus.length === 1 ? '' : 's'} · sorted by site sales
+              </div>
+            ) : null}
+          </header>
           {heatColumns.length === 0 ? (
-            <p className="perfMuted">Select products (or Top / Least) to draw the heatmap.</p>
+            <p className="perfProductsEmpty">Select products in Graph B to draw the heatmap.</p>
           ) : (
             <ProductHeatmapChart
               rows={heatMatrix.rows}
@@ -2129,11 +2132,20 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         </section>
       ) : null}
 
-      <section className="perfProductsBlock" aria-labelledby="perf-products-table">
-        <h4 id="perf-products-table" className="perfSectionTitle">
-          Detail table
-        </h4>
-        <p className="perfSectionHint">Numbers behind the charts. Click a drink row to toggle filter.</p>
+      <section className="perfProductsCard" aria-labelledby="perf-products-table">
+        <header className="perfProductsCardHead">
+          <div className="perfProductsCardTitleRow">
+            <span className="perfProductsCardBadge muted" aria-hidden>
+              #
+            </span>
+            <div>
+              <h4 id="perf-products-table" className="perfProductsCardTitle">
+                Detail table
+              </h4>
+              <p className="perfProductsCardHint">Click a drink row to toggle the B/C filter.</p>
+            </div>
+          </div>
+        </header>
         {detailTable}
       </section>
     </section>
