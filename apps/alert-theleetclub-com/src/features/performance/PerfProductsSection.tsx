@@ -959,32 +959,25 @@ function DateTrajectoryChart({
       setAxisTip(null);
     };
 
-    chart.on(
-      'mouseover',
-      (params: {
-        componentType?: string;
-        seriesName?: string;
-        name?: string;
-        event?: { offsetX?: number; offsetY?: number };
-      }) => {
-        if (params.componentType === 'legend') {
-          const full = String(params.name || '');
-          focusPair(full);
-          const wrap = wrapRef.current;
-          if (wrap && full) {
-            const x = params.event?.offsetX ?? wrap.clientWidth / 2;
-            const y = params.event?.offsetY ?? 24;
-            setAxisTip({ text: full, x, y });
-          }
-          return;
+    chart.on('mouseover', (params: echarts.ECElementEvent) => {
+      if (params.componentType === 'legend') {
+        const full = String(params.name || '');
+        focusPair(full);
+        const wrap = wrapRef.current;
+        if (wrap && full) {
+          const ev = params.event as { offsetX?: number; offsetY?: number } | undefined;
+          const x = ev?.offsetX ?? wrap.clientWidth / 2;
+          const y = ev?.offsetY ?? 24;
+          setAxisTip({ text: full, x, y });
         }
-        if (params.componentType === 'series') {
-          focusPair(String(params.seriesName || ''));
-          setAxisTip(null);
-        }
-      },
-    );
-    chart.on('mouseout', (params: { componentType?: string }) => {
+        return;
+      }
+      if (params.componentType === 'series') {
+        focusPair(String(params.seriesName || ''));
+        setAxisTip(null);
+      }
+    });
+    chart.on('mouseout', (params: echarts.ECElementEvent) => {
       if (params.componentType === 'legend' || params.componentType === 'series') {
         clearFocus();
       }
@@ -992,7 +985,7 @@ function DateTrajectoryChart({
     chart.on('globalout', clearFocus);
 
     if (onSeriesClick) {
-      chart.on('click', (params: { seriesName?: string }) => {
+      chart.on('click', (params: echarts.ECElementEvent) => {
         const name = String(params.seriesName || '').trim();
         if (!name || name.startsWith('Prior ·') || name.startsWith('Target ·')) return;
         onSeriesClick(name);
@@ -1232,26 +1225,20 @@ function ProductHeatmapChart({
       true,
     );
 
-    chart.on(
-      'mouseover',
-      (params: {
-        componentType?: string;
-        value?: string | number;
-        event?: { offsetX?: number; offsetY?: number };
-      }) => {
-        if (params.componentType !== 'xAxis' && params.componentType !== 'yAxis') return;
-        const full = String(params.value ?? '');
-        if (!full) return;
-        const wrap = wrapRef.current;
-        if (!wrap) return;
-        setAxisTip({
-          text: full,
-          x: params.event?.offsetX ?? wrap.clientWidth / 2,
-          y: params.event?.offsetY ?? 40,
-        });
-      },
-    );
-    chart.on('mouseout', (params: { componentType?: string }) => {
+    chart.on('mouseover', (params: echarts.ECElementEvent) => {
+      if (params.componentType !== 'xAxis' && params.componentType !== 'yAxis') return;
+      const full = String(params.value ?? '');
+      if (!full) return;
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const ev = params.event as { offsetX?: number; offsetY?: number } | undefined;
+      setAxisTip({
+        text: full,
+        x: ev?.offsetX ?? wrap.clientWidth / 2,
+        y: ev?.offsetY ?? 40,
+      });
+    });
+    chart.on('mouseout', (params: echarts.ECElementEvent) => {
       if (params.componentType === 'xAxis' || params.componentType === 'yAxis') {
         setAxisTip(null);
       }
