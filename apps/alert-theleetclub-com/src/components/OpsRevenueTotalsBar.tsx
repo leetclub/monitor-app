@@ -107,16 +107,41 @@ export function OpsRevenueTotalsBar({
   useEffect(() => {
     const el = barRef.current;
     if (!el) return;
+
     const apply = () => {
       const h = Math.ceil(el.getBoundingClientRect().height);
       document.documentElement.style.setProperty('--ops-revenue-bar-h', `${Math.max(h, 72)}px`);
+
+      // Match main content left edge so the bar never sits under the side nav
+      // (CSS media queries drift vs rail / expanded / drawer).
+      const main =
+        document.querySelector('.stitchShell .mainColumn') ||
+        document.querySelector('.appShell .mainColumn');
+      const left = main instanceof HTMLElement ? Math.max(0, Math.round(main.getBoundingClientRect().left)) : 0;
+      document.documentElement.style.setProperty('--ops-revenue-bar-left', `${left}px`);
+      el.style.left = `${left}px`;
     };
+
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
+    const main = document.querySelector('.stitchShell .mainColumn') || document.querySelector('.appShell .mainColumn');
+    if (main) ro.observe(main);
+    window.addEventListener('resize', apply);
+    const shell = document.querySelector('.stitchShell') || document.querySelector('.appShell');
+    let mo: MutationObserver | null = null;
+    if (shell) {
+      mo = new MutationObserver(apply);
+      mo.observe(shell, { attributes: true, attributeFilter: ['class'] });
+    }
+
     return () => {
       ro.disconnect();
+      mo?.disconnect();
+      window.removeEventListener('resize', apply);
       document.documentElement.style.removeProperty('--ops-revenue-bar-h');
+      document.documentElement.style.removeProperty('--ops-revenue-bar-left');
+      el.style.left = '';
     };
   }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);
 

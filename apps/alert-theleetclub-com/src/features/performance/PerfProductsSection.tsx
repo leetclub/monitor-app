@@ -1096,134 +1096,160 @@ function ProductHeatmapChart({
     }
     const maxV = Math.max(0, ...values.map((v) => v[2]));
     const fmt = (v: number) => (unit === 'cups' ? String(Math.round(v)) : formatKwd(v));
+    const cellFmt = (v: number) =>
+      unit === 'cups' ? String(Math.round(v)) : String(Math.round(v));
     const labelColorFor = (v: number) => {
       const t = maxV > 0 ? v / maxV : 0;
       return t >= 0.42 ? '#f8fafc' : '#0f172a';
     };
-    const leftPad = Math.min(160, Math.max(96, ...rows.map((r) => Math.min(r.length, 22) * 6.2)));
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: {
-          position: 'top',
-          confine: true,
-          extraCssText:
-            'max-width:280px;white-space:normal;line-height:1.35;padding:10px 12px;border-radius:10px;',
-          formatter: (p: {
-            data?: [number, number, number] | { value?: [number, number, number] };
-          }) => {
-            const raw = p.data;
-            const d = Array.isArray(raw) ? raw : raw?.value;
-            if (!d) return '';
-            const [ci, ri, val] = d;
-            const meta = cellMeta.get(`${ci},${ri}`);
-            const product = meta?.product || columns[ci] || '';
-            const machine = meta?.machine || rows[ri] || '';
-            const bits: string[] = [
-              `<div style="font-weight:700;margin-bottom:4px">${product}</div>`,
-              `<div style="opacity:0.85;margin-bottom:6px">${machine}</div>`,
-              `<div><b>${unit === 'cups' ? 'Cups' : 'Revenue'}:</b> ${fmt(val)}</div>`,
-            ];
-            if (meta) {
-              bits.push(
-                `<div>KD ${formatKwd(meta.revenueKwd)} · ${Math.round(meta.cups)} cups</div>`,
-              );
-              if (meta.prevRevenueKwd != null || meta.prevCups != null) {
+    const leftPad = Math.min(168, Math.max(100, ...rows.map((r) => Math.min(r.length, 22) * 6.4)));
+    const gridRight = 48;
+    const gridTop = 28;
+    const gridBottom = 84;
+
+    const applyLayout = () => {
+      const plotW = Math.max(48, chart.getWidth() - leftPad - gridRight);
+      const plotH = Math.max(48, chart.getHeight() - gridTop - gridBottom);
+      const cellW = plotW / Math.max(1, columns.length);
+      const cellH = plotH / Math.max(1, rows.length);
+      const cellMin = Math.min(cellW, cellH);
+      // Scale label to ~34% of the smaller cell edge; clamp for readability
+      const labelFont = Math.round(Math.min(22, Math.max(11, cellMin * 0.34)));
+      const axisFont = Math.round(Math.min(13, Math.max(10, cellMin * 0.22)));
+      const showCellLabels = cellMin >= 26;
+      chart.setOption(
+        {
+          backgroundColor: 'transparent',
+          tooltip: {
+            position: 'top',
+            confine: true,
+            extraCssText:
+              'max-width:280px;white-space:normal;line-height:1.35;padding:10px 12px;border-radius:10px;',
+            formatter: (p: {
+              data?: [number, number, number] | { value?: [number, number, number] };
+            }) => {
+              const raw = p.data;
+              const d = Array.isArray(raw) ? raw : raw?.value;
+              if (!d) return '';
+              const [ci, ri, val] = d;
+              const meta = cellMeta.get(`${ci},${ri}`);
+              const product = meta?.product || columns[ci] || '';
+              const machine = meta?.machine || rows[ri] || '';
+              const bits: string[] = [
+                `<div style="font-weight:700;margin-bottom:4px">${product}</div>`,
+                `<div style="opacity:0.85;margin-bottom:6px">${machine}</div>`,
+                `<div><b>${unit === 'cups' ? 'Cups' : 'Revenue'}:</b> ${fmt(val)}</div>`,
+              ];
+              if (meta) {
                 bits.push(
-                  `<div>Prior: ${formatKwd(Number(meta.prevRevenueKwd || 0))} · ${Math.round(Number(meta.prevCups || 0))} cups</div>`,
+                  `<div>KD ${formatKwd(meta.revenueKwd)} · ${Math.round(meta.cups)} cups</div>`,
+                );
+                if (meta.prevRevenueKwd != null || meta.prevCups != null) {
+                  bits.push(
+                    `<div>Prior: ${formatKwd(Number(meta.prevRevenueKwd || 0))} · ${Math.round(Number(meta.prevCups || 0))} cups</div>`,
+                  );
+                }
+                if (meta.trendPct != null && Number.isFinite(meta.trendPct)) {
+                  bits.push(`<div>Trend KD: ${formatSalesTrendPct(meta.trendPct)}</div>`);
+                }
+                if (meta.cupsTrendPct != null && Number.isFinite(meta.cupsTrendPct)) {
+                  bits.push(`<div>Trend cups: ${formatSalesTrendPct(meta.cupsTrendPct)}</div>`);
+                }
+                if (meta.yoyTrendPct != null && Number.isFinite(meta.yoyTrendPct)) {
+                  bits.push(`<div>YoY: ${formatSalesTrendPct(meta.yoyTrendPct)}</div>`);
+                }
+                const pct = unit === 'cups' ? meta.pctOfTarget : meta.pctOfRevenueTarget;
+                if (pct != null && Number.isFinite(pct)) {
+                  bits.push(`<div>${pct.toFixed(0)}% of product target</div>`);
+                }
+                bits.push(
+                  `<div style="margin-top:6px;opacity:0.9">${heatCellInsight(meta, unit)}</div>`,
                 );
               }
-              if (meta.trendPct != null && Number.isFinite(meta.trendPct)) {
-                bits.push(`<div>Trend KD: ${formatSalesTrendPct(meta.trendPct)}</div>`);
-              }
-              if (meta.cupsTrendPct != null && Number.isFinite(meta.cupsTrendPct)) {
-                bits.push(`<div>Trend cups: ${formatSalesTrendPct(meta.cupsTrendPct)}</div>`);
-              }
-              if (meta.yoyTrendPct != null && Number.isFinite(meta.yoyTrendPct)) {
-                bits.push(`<div>YoY: ${formatSalesTrendPct(meta.yoyTrendPct)}</div>`);
-              }
-              const pct = unit === 'cups' ? meta.pctOfTarget : meta.pctOfRevenueTarget;
-              if (pct != null && Number.isFinite(pct)) {
-                bits.push(`<div>${pct.toFixed(0)}% of product target</div>`);
-              }
-              bits.push(
-                `<div style="margin-top:6px;opacity:0.9">${heatCellInsight(meta, unit)}</div>`,
-              );
-            }
-            return bits.join('');
+              return bits.join('');
+            },
           },
-        },
-        grid: { left: leftPad, right: 48, top: 28, bottom: 80, containLabel: false },
-        xAxis: {
-          type: 'category',
-          data: columns,
-          triggerEvent: true,
-          splitArea: { show: true },
-          axisLabel: {
-            color: theme.axis,
-            fontSize: 10,
-            rotate: columns.length > 4 ? 32 : 0,
-            interval: 0,
-            formatter: (v: string) => midEllipsis(String(v), 14),
-          },
-        },
-        yAxis: {
-          type: 'category',
-          data: rows,
-          triggerEvent: true,
-          splitArea: { show: true },
-          axisLabel: {
-            color: theme.axis,
-            fontSize: 10,
-            formatter: (v: string) => midEllipsis(String(v), 18),
-          },
-        },
-        visualMap: {
-          min: 0,
-          max: maxV > 0 ? maxV : 1,
-          calculable: true,
-          orient: 'horizontal',
-          left: 'center',
-          bottom: 8,
-          inRange: {
-            color: ['#f1f5f9', '#94a3b8', '#64748b', '#0f766e', '#042f2e'],
-          },
-          textStyle: { color: theme.muted, fontSize: 10 },
-          formatter: (v: number) => fmt(Number(v)),
-        },
-        series: [
-          {
-            type: 'heatmap',
-            data: values.map((d) => ({
-              value: d,
-              label: { color: labelColorFor(d[2]) },
-            })),
-            label: {
-              show: columns.length * rows.length <= 64,
-              fontSize: 9,
+          grid: { left: leftPad, right: gridRight, top: gridTop, bottom: gridBottom, containLabel: false },
+          xAxis: {
+            type: 'category',
+            data: columns,
+            triggerEvent: true,
+            splitArea: { show: true },
+            axisLabel: {
+              color: theme.axis,
+              fontSize: axisFont,
               fontWeight: 600,
-              formatter: (p: {
-                data: [number, number, number] | { value: [number, number, number] };
-              }) => {
-                const raw = p.data;
-                const d = Array.isArray(raw) ? raw : raw.value;
-                const v = d[2];
-                if (!(v > 0)) return '';
-                return unit === 'cups' ? String(Math.round(v)) : formatKwd(v);
+              rotate: columns.length > 4 ? 32 : 0,
+              interval: 0,
+              formatter: (v: string) => midEllipsis(String(v), cellW < 56 ? 10 : 14),
+            },
+          },
+          yAxis: {
+            type: 'category',
+            data: rows,
+            triggerEvent: true,
+            splitArea: { show: true },
+            axisLabel: {
+              color: theme.axis,
+              fontSize: axisFont,
+              fontWeight: 600,
+              formatter: (v: string) => midEllipsis(String(v), cellH < 28 ? 12 : 18),
+            },
+          },
+          visualMap: {
+            min: 0,
+            max: maxV > 0 ? maxV : 1,
+            calculable: true,
+            orient: 'horizontal',
+            left: 'center',
+            bottom: 8,
+            inRange: {
+              color: ['#f1f5f9', '#94a3b8', '#64748b', '#0f766e', '#042f2e'],
+            },
+            textStyle: { color: theme.muted, fontSize: Math.max(10, axisFont - 1) },
+            formatter: (v: number) => fmt(Number(v)),
+          },
+          series: [
+            {
+              type: 'heatmap',
+              data: values.map((d) => ({
+                value: d,
+                label: { color: labelColorFor(d[2]), fontSize: labelFont },
+              })),
+              label: {
+                show: showCellLabels,
+                fontSize: labelFont,
+                fontWeight: 800,
+                formatter: (p: {
+                  data: [number, number, number] | { value: [number, number, number] };
+                }) => {
+                  const raw = p.data;
+                  const d = Array.isArray(raw) ? raw : raw.value;
+                  const v = d[2];
+                  if (!(v > 0)) return '';
+                  return cellFmt(v);
+                },
+              },
+              itemStyle: {
+                borderColor: 'rgba(15, 23, 42, 0.12)',
+                borderWidth: 1,
+              },
+              emphasis: {
+                itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.28)' },
               },
             },
-            itemStyle: {
-              borderColor: 'rgba(15, 23, 42, 0.12)',
-              borderWidth: 1,
-            },
-            emphasis: {
-              itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.28)' },
-            },
-          },
-        ],
-      },
-      true,
-    );
+          ],
+        },
+        true,
+      );
+    };
+
+    applyLayout();
+    const onResize = () => {
+      chart.resize();
+      applyLayout();
+    };
+    window.addEventListener('resize', onResize);
 
     chart.on('mouseover', (params: echarts.ECElementEvent) => {
       if (params.componentType !== 'xAxis' && params.componentType !== 'yAxis') return;
@@ -1244,6 +1270,13 @@ function ProductHeatmapChart({
       }
     });
     chart.on('globalout', () => setAxisTip(null));
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      chart.off('mouseover');
+      chart.off('mouseout');
+      chart.off('globalout');
+    };
   }, [rows, columns, values, cellMeta, unit]);
 
   const onExport = useCallback(() => {

@@ -12,9 +12,9 @@
 .opsRevenueTotalsBar {
   position: fixed;
   bottom: 0;
-  left: 0;
+  /* Set by JS from .mainColumn left — never under the side nav */
+  left: var(--ops-revenue-bar-left, 0px);
   right: 0;
-  /* Below sideNav (50) so nav stays clickable; left inset clears the rail */
   z-index: 44;
   box-sizing: border-box;
   border-top: 2px solid #6d4a45;
@@ -24,22 +24,21 @@
   overflow: visible;
 }
 
-/* Desktop expanded / rail — match stitch-shell mainColumn inset */
+/* Fallback if JS hasn’t run yet — mirror stitch-shell insets */
 @media (min-width: 1367px) {
   .stitchShell:not(.appShellNavDrawer) .opsRevenueTotalsBar {
-    left: var(--stitch-nav-w, var(--stitch-nav-w-expanded, 196px));
+    left: var(--ops-revenue-bar-left, var(--stitch-nav-w, var(--stitch-nav-w-expanded, 196px)));
   }
 }
 
-/* iPad / laptop with rail or drawer rail (≤1366) */
 @media (max-width: 1366px) {
   .stitchShell.appShellNavRail .opsRevenueTotalsBar,
   .stitchShell.appShellNavDrawer .opsRevenueTotalsBar {
-    left: var(--stitch-nav-w-rail, 64px);
+    left: var(--ops-revenue-bar-left, var(--stitch-nav-w-rail, 64px));
   }
 
   .stitchShell:not(.appShellNavRail):not(.appShellNavDrawer) .opsRevenueTotalsBar {
-    left: var(--stitch-nav-w-expanded, 196px);
+    left: var(--ops-revenue-bar-left, var(--stitch-nav-w-expanded, 196px));
   }
 }
 
