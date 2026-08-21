@@ -631,7 +631,7 @@ function SkuMultiDropdown({
           </div>
         </div>
         {selected.length > 0 ? (
-          <div className="perfLocChips">
+          <div className="perfLocChips perfLocChipsUnder" aria-label="Selected products">
             {selected.slice(0, 8).map((name) => (
               <button
                 key={name}
@@ -2235,7 +2235,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               </div>
             </div>
           </header>
-          <div className="perfProductsCardToolbar">
+          <div className="perfProductsCardToolbar perfProductsCardToolbarPair">
             <label className="perfProductsField perfProductsFieldGrow">
               <span className="perfProductsFieldLabel">Focus location</span>
               <select

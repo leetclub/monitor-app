@@ -213,26 +213,26 @@ export function PerfMachineFilter({
             </div>
           ) : null}
         </div>
-        {!allSelected && selectedRows.length > 0 ? (
-          <div className="perfLocChips">
-            {selectedRows.slice(0, 10).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                className="perfLocChip"
-                onClick={() => toggle(m.id)}
-                title={`Remove ${displayName(m)}`}
-              >
-                {displayName(m)}
-                <span aria-hidden>×</span>
-              </button>
-            ))}
-            {selectedRows.length > 10 ? (
-              <span className="perfLocChipMore">+{selectedRows.length - 10}</span>
-            ) : null}
-          </div>
-        ) : null}
       </div>
+      {!allSelected && selectedRows.length > 0 ? (
+        <div className="perfLocChips perfLocChipsUnder">
+          {selectedRows.slice(0, 10).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className="perfLocChip"
+              onClick={() => toggle(m.id)}
+              title={`Remove ${displayName(m)}`}
+            >
+              {displayName(m)}
+              <span aria-hidden>×</span>
+            </button>
+          ))}
+          {selectedRows.length > 10 ? (
+            <span className="perfLocChipMore">+{selectedRows.length - 10}</span>
+          ) : null}
+        </div>
+      ) : null}
       <p className="perfMachineFilterHint">
         {atCapHint && maxSelected != null ? (
           `Maximum ${maxSelected} locations. Uncheck one to add another.`

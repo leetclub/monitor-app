@@ -97,7 +97,7 @@
 .perfLocBarMain {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px 12px;
 }
 
@@ -114,9 +114,17 @@
   min-width: min(240px, 100%);
 }
 
-.perfMachineFilterBar .perfLocChips {
-  flex: 1 1 100%;
-  margin-top: 0;
+/* Selected chips always under the dropdown row — never beside it */
+.perfLocChipsUnder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.perfMachineFilterBar .perfLocChipsUnder {
+  margin-top: 8px;
 }
 
 .perfMachineFilterBar .perfMachineFilterHint {
@@ -1598,7 +1606,7 @@ button.perfKpiClick:hover {
 .perfProductsCardToolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 10px 14px;
   padding: 10px 12px;
   border-radius: 10px;
@@ -1611,10 +1619,25 @@ button.perfKpiClick:hover {
   align-items: stretch;
 }
 
-/* Graph B: location + products side-by-side (like Graph A product row) */
-.perfProductsCardToolbar:not(.perfProductsCardToolbarStack) {
-  flex-direction: row;
-  align-items: flex-end;
+/* Graph B: two equal columns, top-aligned so chips under Products don’t shift Location */
+.perfProductsCardToolbarPair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: start;
+}
+
+.perfProductsCardToolbarPair .perfProductsFieldGrow,
+.perfProductsCardToolbarPair .perfProductsSkuPickEmbed {
+  min-width: 0;
+  width: 100%;
+  flex: none;
+}
+
+@media (max-width: 720px) {
+  .perfProductsCardToolbarPair {
+    grid-template-columns: 1fr;
+  }
 }
 
 .perfProductsCardToolbar .perfProductsSkuPickEmbed {
@@ -1626,6 +1649,10 @@ button.perfKpiClick:hover {
 .perfProductsCardToolbar .perfProductsFieldGrow {
   flex: 1 1 200px;
   min-width: min(100%, 180px);
+}
+
+.perfProductsSkuPickMain .perfLocChipsUnder {
+  margin-top: 0;
 }
 
 .perfKpiInsightStats {
