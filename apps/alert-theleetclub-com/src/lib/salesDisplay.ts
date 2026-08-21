@@ -113,6 +113,12 @@ export function formatKwd(x: number): string {
   return `${x.toFixed(2)} KD`;
 }
 
+/** Whole KD for dense UI (fleet bar) — no fractions. */
+export function formatKwdWhole(x: number): string {
+  if (!Number.isFinite(x)) return '—';
+  return `${Math.round(x).toLocaleString('en-US')} KD`;
+}
+
 /** Same as formatKwd — kept for call sites that prefer the name. */
 export function formatKdCompact(x: number): string {
   return formatKwd(x);

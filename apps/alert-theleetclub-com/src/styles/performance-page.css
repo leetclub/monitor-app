@@ -1611,6 +1611,83 @@ button.perfKpiClick:hover {
   align-items: stretch;
 }
 
+/* Graph B: location + products side-by-side (like Graph A product row) */
+.perfProductsCardToolbar:not(.perfProductsCardToolbarStack) {
+  flex-direction: row;
+  align-items: flex-end;
+}
+
+.perfProductsCardToolbar .perfProductsSkuPickEmbed {
+  flex: 1 1 240px;
+  min-width: min(100%, 220px);
+  width: auto;
+}
+
+.perfProductsCardToolbar .perfProductsFieldGrow {
+  flex: 1 1 200px;
+  min-width: min(100%, 180px);
+}
+
+.perfKpiInsightStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 14px;
+  margin: 0 0 14px;
+}
+
+.perfKpiInsightStat {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel2);
+}
+
+.perfKpiInsightStat dt {
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.perfKpiInsightStat dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.perfKpiInsightList {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.perfChartAxisTip {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  max-width: min(280px, 80vw);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  background: rgba(8, 18, 28, 0.96);
+  color: #ecfeff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
 .perfProductsPageMeta {
   margin-left: auto;
   font-size: 0.72rem;

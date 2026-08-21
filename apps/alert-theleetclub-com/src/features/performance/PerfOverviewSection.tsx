@@ -120,13 +120,65 @@ function KpiBox({
         type="button"
         className={`perfKpi perfKpiWide ${cls} perfKpiClickable${action ? ' perfKpiAction' : ''}`}
         onClick={onClick}
-        title={title || 'Open breakdown (All / Top 5 / Lowest 5)'}
+        title={title || 'Open insights'}
       >
         {body}
       </button>
     );
   }
   return <div className={`perfKpi perfKpiWide ${cls}`}>{body}</div>;
+}
+
+function KpiInsightModal({
+  title,
+  subtitle,
+  explain,
+  stats,
+  onClose,
+}: {
+  title: string;
+  subtitle?: string;
+  explain: string[];
+  stats?: Array<{ label: string; value: string }>;
+  onClose: () => void;
+}) {
+  useAlertModal(onClose);
+  const backdrop = modalBackdropHandlers(onClose);
+  const panel = modalPanelHandlers();
+  return createPortal(
+    <div className="salesHistoryBackdrop" role="dialog" aria-modal="true" {...backdrop}>
+      <div className="salesHistoryModal perfGrowthModal" {...panel}>
+        <div className="salesHistoryHead">
+          <div>
+            <p className="salesHistoryEyebrow">Location insights</p>
+            <h2 className="salesHistoryTitle">{title}</h2>
+            {subtitle ? <p className="salesHistorySub">{subtitle}</p> : null}
+          </div>
+          <button type="button" className="salesHistoryClose" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <div className="salesHistoryBody">
+          {stats?.length ? (
+            <dl className="perfKpiInsightStats">
+              {stats.map((s) => (
+                <div key={s.label} className="perfKpiInsightStat">
+                  <dt>{s.label}</dt>
+                  <dd>{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <ul className="perfKpiInsightList">
+            {explain.map((line) => (
+              <li key={line.slice(0, 48)}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>,
+    getAlertModalPortal(),
+  );
 }
 
 function GraphMachinePickerModal({
@@ -296,6 +348,9 @@ export function PerfOverviewSection({
   const [view, setView] = useState<PerfViewMode>('all');
   const [combined, setCombined] = useState(false);
   const [growthModal, setGrowthModal] = useState<'prev' | 'yoy' | null>(null);
+  const [insightModal, setInsightModal] = useState<'deficit' | 'achievement' | 'ytd' | 'period' | null>(
+    null,
+  );
   const [page, setPage] = useState(0);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [customIds, setCustomIds] = useState<string[] | null>(null);
@@ -442,7 +497,13 @@ export function PerfOverviewSection({
           symbolSize: 7,
           lineStyle: { width: 2.4, color },
           itemStyle: { color },
-          emphasis: { focus: 'series', lineStyle: { width: 3.2 } },
+          emphasis: {
+            focus: 'series',
+            blurScope: 'coordinateSystem',
+            lineStyle: { width: 3.6, shadowBlur: 12, shadowColor: color },
+            itemStyle: { shadowBlur: 10, shadowColor: color },
+          },
+          blur: { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
           data: days.map((d) => Number(d.locationKwd) || 0),
         });
       });
@@ -738,6 +799,15 @@ export function PerfOverviewSection({
                 role="listitem"
                 className={`perfGraphLegendItem ${on ? 'active' : ''}`}
                 style={{ ['--series-color' as string]: color }}
+                onMouseEnter={() => {
+                  const c = chartInst.current;
+                  if (!c || !on) return;
+                  c.dispatchAction({ type: 'downplay' });
+                  c.dispatchAction({ type: 'highlight', seriesName: m.machineName });
+                }}
+                onMouseLeave={() => {
+                  chartInst.current?.dispatchAction({ type: 'downplay' });
+                }}
                 onClick={() =>
                   setHiddenIds((prev) => {
                     const next = new Set(prev);
@@ -746,7 +816,7 @@ export function PerfOverviewSection({
                     return next;
                   })
                 }
-                title={on ? 'Hide line' : 'Show line'}
+                title={on ? 'Hover to focus · click to hide' : 'Show line'}
               >
                 <span className="perfGraphLegendLine" aria-hidden />
                 <span className="perfGraphLegendName">{m.machineName}</span>
@@ -815,18 +885,18 @@ export function PerfOverviewSection({
               ? '—'
               : `${kpis.deficitKd >= 0 ? '+' : ''}${formatKwd(kpis.deficitKd)}`
           }
-          hint="Actual − target (period)"
+          hint="Tap for details"
           tone={deficitTone}
+          onClick={() => setInsightModal('deficit')}
+          title="How deficit is calculated"
         />
         <KpiBox
           label="Target achievement"
           value={kpis?.achievementRatePct != null ? `${kpis.achievementRatePct}%` : '—'}
-          hint={
-            kpis?.machinesWithTarget
-              ? `${kpis.machinesOnTarget ?? 0}/${kpis.machinesWithTarget} machines ≥ target`
-              : 'Machines hitting target'
-          }
+          hint="Tap for details"
           tone={achTone}
+          onClick={() => setInsightModal('achievement')}
+          title="How target achievement is calculated"
         />
         <KpiBox
           label="Growth vs prior period"
@@ -845,25 +915,124 @@ export function PerfOverviewSection({
         <KpiBox
           label="YTD vs last year"
           value={formatGrowthDeltaPct(ytdPct)}
-          hint={
-            ytdSlice
-              ? `${formatKwd(ytdSlice.periodKd)} vs ${formatKwd(ytdSlice.compareKd)}`
-              : 'Year to date'
-          }
+          hint="Tap for details"
           tone={ytdTone}
-          title={`This year YTD (${ytdWinThis}) vs last year (${ytdWinLast}). Growth = (this − last) ÷ last × 100.`}
+          onClick={() => setInsightModal('ytd')}
+          title={`This year YTD (${ytdWinThis}) vs last year (${ytdWinLast})`}
         />
         <KpiBox
           label="Period KD"
           value={kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—'}
-          hint={
-            kpis?.periodTargetKd != null
-              ? `Target ${formatKwd(kpis.periodTargetKd)}`
-              : `${seriesMachines.length} series shown`
-          }
+          hint="Tap for details"
           tone="neutral"
+          onClick={() => setInsightModal('period')}
+          title="Period sales vs target"
         />
       </div>
+
+      {insightModal === 'deficit' ? (
+        <KpiInsightModal
+          title="Deficit"
+          subtitle={windowLabel || undefined}
+          stats={[
+            {
+              label: 'Deficit',
+              value:
+                kpis?.deficitKd == null
+                  ? '—'
+                  : `${kpis.deficitKd >= 0 ? '+' : ''}${formatKwd(kpis.deficitKd)}`,
+            },
+            {
+              label: 'Period KD',
+              value: kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—',
+            },
+            {
+              label: 'Period target',
+              value: kpis?.periodTargetKd != null ? formatKwd(kpis.periodTargetKd) : '—',
+            },
+          ]}
+          explain={[
+            'Deficit = period actual KD − period target KD for the machines in scope.',
+            'Positive means above target (ahead). Negative means below target (short).',
+            'If no target is set for the window, the card shows —.',
+          ]}
+          onClose={() => setInsightModal(null)}
+        />
+      ) : null}
+      {insightModal === 'achievement' ? (
+        <KpiInsightModal
+          title="Target achievement"
+          subtitle={windowLabel || undefined}
+          stats={[
+            {
+              label: 'Share of machines on target',
+              value: kpis?.achievementRatePct != null ? `${kpis.achievementRatePct}%` : '—',
+            },
+            {
+              label: 'On target',
+              value:
+                kpis?.machinesWithTarget != null
+                  ? `${kpis.machinesOnTarget ?? 0} / ${kpis.machinesWithTarget}`
+                  : '—',
+            },
+          ]}
+          explain={[
+            'Counts machines that have a target in this window and finished at or above that target.',
+            'Achievement % = machines on target ÷ machines with a target × 100.',
+            'Machines without a target are excluded from the denominator.',
+          ]}
+          onClose={() => setInsightModal(null)}
+        />
+      ) : null}
+      {insightModal === 'ytd' ? (
+        <KpiInsightModal
+          title="YTD vs last year"
+          subtitle={`${ytdWinThis} vs ${ytdWinLast}`}
+          stats={[
+            {
+              label: 'This year YTD',
+              value: ytdSlice?.periodKd != null ? formatKwd(ytdSlice.periodKd) : '—',
+            },
+            {
+              label: 'Last year same dates',
+              value: ytdSlice?.compareKd != null ? formatKwd(ytdSlice.compareKd) : '—',
+            },
+            { label: 'Growth', value: formatGrowthDeltaPct(ytdPct) },
+          ]}
+          explain={[
+            'Calendar year-to-date through today (Kuwait) vs the same dates last year.',
+            'Growth = (this YTD − last YTD) ÷ last YTD × 100.',
+            'Index 100 = flat vs last year; above 100 = ahead; below 100 = behind.',
+          ]}
+          onClose={() => setInsightModal(null)}
+        />
+      ) : null}
+      {insightModal === 'period' ? (
+        <KpiInsightModal
+          title="Period KD"
+          subtitle={windowLabel || undefined}
+          stats={[
+            {
+              label: 'Actual',
+              value: kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—',
+            },
+            {
+              label: 'Target',
+              value: kpis?.periodTargetKd != null ? formatKwd(kpis.periodTargetKd) : '—',
+            },
+            {
+              label: 'Series on graph',
+              value: String(seriesMachines.length),
+            },
+          ]}
+          explain={[
+            'Period KD is total location sales for the selected time preset and machine scope.',
+            'Target is the sum of location targets for machines that have one in this window.',
+            'The graph above shows daily trajectory; this card is the period total.',
+          ]}
+          onClose={() => setInsightModal(null)}
+        />
+      ) : null}
 
       {growthModal === 'prev' && kpis?.growthVsPrev ? (
         <GrowthCompareModal

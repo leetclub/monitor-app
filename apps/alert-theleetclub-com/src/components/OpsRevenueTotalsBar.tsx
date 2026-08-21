@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { formatKwd, formatSalesTrendPct, resolveSalesTrendPct } from '@/lib/salesDisplay';
+import { formatKwdWhole, formatSalesTrendPct, resolveSalesTrendPct } from '@/lib/salesDisplay';
 import type { CompareMetricPair } from '@/lib/presetComparison';
 
 export type YesterdayOverallFleet = {
@@ -70,7 +70,7 @@ function PeriodMetric({
     >
       <span className="opsRevenueTotalsLabel">{label}</span>
       <span className={`opsRevenueTotalsVal${muted ? ' opsRevenueTotalsValMuted' : ''}`}>
-        {loading ? '…' : value != null ? formatKwd(value) : '—'}
+        {loading ? '…' : value != null ? formatKwdWhole(value) : '—'}
       </span>
     </div>
   );
@@ -97,7 +97,7 @@ export function OpsRevenueTotalsBar({
 }) {
   const barRef = useRef<HTMLElement | null>(null);
   const val = (n: number | null | undefined) =>
-    loading ? '…' : n != null ? formatKwd(n) : '—';
+    loading ? '…' : n != null ? formatKwdWhole(n) : '—';
   const trendPct = loading ? null : resolveSalesTrendPct(totals.trendPct, totals.primary, totals.baseline);
   const hasTrend = !loading && trendPct != null && Number.isFinite(trendPct);
   const up = hasTrend && trendPct >= 0;

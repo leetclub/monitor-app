@@ -657,6 +657,15 @@ function SkuMultiDropdown({
 }
 
 /** Location-style trajectory: calendar dates on X, one line per series. */
+function midEllipsis(name: string, max = 18): string {
+  const s = String(name || '').trim();
+  if (s.length <= max) return s;
+  const keep = max - 1;
+  const left = Math.ceil(keep * 0.55);
+  const right = Math.max(1, keep - left);
+  return `${s.slice(0, left)}…${s.slice(-right)}`;
+}
+
 function DateTrajectoryChart({
   days,
   series,
@@ -675,7 +684,9 @@ function DateTrajectoryChart({
   onSeriesClick?: (name: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const inst = useRef<echarts.ECharts | null>(null);
+  const [axisTip, setAxisTip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -699,6 +710,7 @@ function DateTrajectoryChart({
     chart.off('mouseover');
     chart.off('mouseout');
     chart.off('globalout');
+    setAxisTip(null);
     if (!days.length || !series.length) {
       chart.clear();
       return;
@@ -754,10 +766,7 @@ function DateTrajectoryChart({
       if (s.dotted) return '#94a3b8';
       return colorByBase.get(s.name) || SERIES_PALETTE[0];
     };
-    const truncateLabel = (name: string, max = 22) =>
-      name.length > max ? `${name.slice(0, max - 1)}…` : name;
-    // Keep a fixed legend band so Y-axis “KD” never sits under machine names.
-    const legendBand = compact ? 40 : 48;
+    const legendBand = compact ? 44 : 52;
     chart.setOption(
       {
         backgroundColor: 'transparent',
@@ -796,7 +805,9 @@ function DateTrajectoryChart({
                 ? day.date
                 : `${(day.weekday || '').slice(0, 3)} · ${day.date}`
               : labels[i] || '';
-            const lines = [`<div style="font-weight:800;margin-bottom:6px;color:${theme.tipText}">${head}</div>`];
+            const lines = [
+              `<div style="font-weight:800;margin-bottom:6px;color:${theme.tipText}">${head}</div>`,
+            ];
             for (const p of arr) {
               if (p.value == null || !Number.isFinite(Number(p.value))) continue;
               const s = byName.get(String(p.seriesName || ''));
@@ -832,18 +843,21 @@ function DateTrajectoryChart({
           top: 2,
           left: 8,
           right: 8,
-          height: legendBand - 4,
+          height: legendBand - 6,
           data: series.map((s) => s.name),
-          formatter: (name: string) => truncateLabel(name),
+          formatter: (name: string) => midEllipsis(name, compact ? 16 : 20),
           textStyle: { color: theme.muted, fontSize: 10 },
           pageTextStyle: { color: theme.muted },
           pageIconColor: theme.muted,
-          tooltip: { show: true },
+          tooltip: {
+            show: true,
+            formatter: (p: { name?: string }) => String(p.name || ''),
+          },
         },
         grid: {
           left: 12,
           right: 16,
-          top: legendBand + 8,
+          top: legendBand + 6,
           bottom: compact ? 40 : 48,
           containLabel: true,
         },
@@ -899,19 +913,20 @@ function DateTrajectoryChart({
               type: s.dotted ? 'dotted' : s.dashed ? 'dashed' : 'solid',
               opacity: s.dotted ? 0.85 : 1,
             },
+            // Pairing is handled manually so main + prior glow together
             emphasis: {
-              focus: 'series',
-              blurScope: 'coordinateSystem',
+              focus: 'none',
               scale: true,
               lineStyle: {
-                width: isMain ? 3.6 : 3,
-                shadowBlur: 12,
+                width: isMain ? 3.8 : 3.2,
+                shadowBlur: 14,
                 shadowColor: color,
+                opacity: 1,
               },
               itemStyle: {
                 borderWidth: 2,
                 borderColor: '#fff',
-                shadowBlur: 10,
+                shadowBlur: 12,
                 shadowColor: color,
               },
             },
@@ -929,23 +944,46 @@ function DateTrajectoryChart({
       const names = pairNames(raw);
       if (!names.length) return;
       chart.dispatchAction({ type: 'downplay' });
+      // Blur everything else by highlighting only the pair
+      for (const n of seriesNames) {
+        if (!names.includes(n)) {
+          chart.dispatchAction({ type: 'downplay', seriesName: n });
+        }
+      }
       for (const n of names) {
         chart.dispatchAction({ type: 'highlight', seriesName: n });
       }
     };
     const clearFocus = () => {
       chart.dispatchAction({ type: 'downplay' });
+      setAxisTip(null);
     };
 
-    chart.on('mouseover', (params: { componentType?: string; seriesName?: string; name?: string }) => {
-      if (params.componentType === 'legend') {
-        focusPair(String(params.name || ''));
-        return;
-      }
-      if (params.componentType === 'series') {
-        focusPair(String(params.seriesName || ''));
-      }
-    });
+    chart.on(
+      'mouseover',
+      (params: {
+        componentType?: string;
+        seriesName?: string;
+        name?: string;
+        event?: { offsetX?: number; offsetY?: number };
+      }) => {
+        if (params.componentType === 'legend') {
+          const full = String(params.name || '');
+          focusPair(full);
+          const wrap = wrapRef.current;
+          if (wrap && full) {
+            const x = params.event?.offsetX ?? wrap.clientWidth / 2;
+            const y = params.event?.offsetY ?? 24;
+            setAxisTip({ text: full, x, y });
+          }
+          return;
+        }
+        if (params.componentType === 'series') {
+          focusPair(String(params.seriesName || ''));
+          setAxisTip(null);
+        }
+      },
+    );
     chart.on('mouseout', (params: { componentType?: string }) => {
       if (params.componentType === 'legend' || params.componentType === 'series') {
         clearFocus();
@@ -968,12 +1006,19 @@ function DateTrajectoryChart({
   }, [exportName]);
 
   const chart = (
-    <div
-      ref={ref}
-      className={`perfEchart ${compact ? 'perfEchartCompact' : 'perfEchartOverview'}`}
-      role="img"
-      aria-label={ariaLabel || 'Daily product trajectory'}
-    />
+    <div ref={wrapRef} className="perfChartWrap" style={{ position: 'relative' }}>
+      <div
+        ref={ref}
+        className={`perfEchart ${compact ? 'perfEchartCompact' : 'perfEchartOverview'}`}
+        role="img"
+        aria-label={ariaLabel || 'Daily product trajectory'}
+      />
+      {axisTip ? (
+        <div className="perfChartAxisTip" style={{ left: axisTip.x, top: axisTip.y }} role="tooltip">
+          {axisTip.text}
+        </div>
+      ) : null}
+    </div>
   );
   if (!exportName) return chart;
   return (
@@ -1027,7 +1072,9 @@ function ProductHeatmapChart({
   exportName?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const inst = useRef<echarts.ECharts | null>(null);
+  const [axisTip, setAxisTip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -1046,6 +1093,10 @@ function ProductHeatmapChart({
     const chart = inst.current;
     if (!chart) return;
     const theme = readTheme();
+    chart.off('mouseover');
+    chart.off('mouseout');
+    chart.off('globalout');
+    setAxisTip(null);
     if (!rows.length || !columns.length) {
       chart.clear();
       return;
@@ -1056,6 +1107,7 @@ function ProductHeatmapChart({
       const t = maxV > 0 ? v / maxV : 0;
       return t >= 0.42 ? '#f8fafc' : '#0f172a';
     };
+    const leftPad = Math.min(160, Math.max(96, ...rows.map((r) => Math.min(r.length, 22) * 6.2)));
     chart.setOption(
       {
         backgroundColor: 'transparent',
@@ -1097,8 +1149,7 @@ function ProductHeatmapChart({
               if (meta.yoyTrendPct != null && Number.isFinite(meta.yoyTrendPct)) {
                 bits.push(`<div>YoY: ${formatSalesTrendPct(meta.yoyTrendPct)}</div>`);
               }
-              const pct =
-                unit === 'cups' ? meta.pctOfTarget : meta.pctOfRevenueTarget;
+              const pct = unit === 'cups' ? meta.pctOfTarget : meta.pctOfRevenueTarget;
               if (pct != null && Number.isFinite(pct)) {
                 bits.push(`<div>${pct.toFixed(0)}% of product target</div>`);
               }
@@ -1109,29 +1160,29 @@ function ProductHeatmapChart({
             return bits.join('');
           },
         },
-        grid: { left: 120, right: 48, top: 24, bottom: 72, containLabel: false },
+        grid: { left: leftPad, right: 48, top: 28, bottom: 80, containLabel: false },
         xAxis: {
           type: 'category',
           data: columns,
+          triggerEvent: true,
           splitArea: { show: true },
           axisLabel: {
             color: theme.axis,
             fontSize: 10,
-            rotate: columns.length > 4 ? 28 : 0,
+            rotate: columns.length > 4 ? 32 : 0,
             interval: 0,
-            width: 88,
-            overflow: 'truncate',
+            formatter: (v: string) => midEllipsis(String(v), 14),
           },
         },
         yAxis: {
           type: 'category',
           data: rows,
+          triggerEvent: true,
           splitArea: { show: true },
           axisLabel: {
             color: theme.axis,
             fontSize: 10,
-            width: 110,
-            overflow: 'truncate',
+            formatter: (v: string) => midEllipsis(String(v), 18),
           },
         },
         visualMap: {
@@ -1142,7 +1193,6 @@ function ProductHeatmapChart({
           left: 'center',
           bottom: 8,
           inRange: {
-            // Warm slate → deep teal: mid cells stay readable with dark labels
             color: ['#f1f5f9', '#94a3b8', '#64748b', '#0f766e', '#042f2e'],
           },
           textStyle: { color: theme.muted, fontSize: 10 },
@@ -1181,6 +1231,32 @@ function ProductHeatmapChart({
       },
       true,
     );
+
+    chart.on(
+      'mouseover',
+      (params: {
+        componentType?: string;
+        value?: string | number;
+        event?: { offsetX?: number; offsetY?: number };
+      }) => {
+        if (params.componentType !== 'xAxis' && params.componentType !== 'yAxis') return;
+        const full = String(params.value ?? '');
+        if (!full) return;
+        const wrap = wrapRef.current;
+        if (!wrap) return;
+        setAxisTip({
+          text: full,
+          x: params.event?.offsetX ?? wrap.clientWidth / 2,
+          y: params.event?.offsetY ?? 40,
+        });
+      },
+    );
+    chart.on('mouseout', (params: { componentType?: string }) => {
+      if (params.componentType === 'xAxis' || params.componentType === 'yAxis') {
+        setAxisTip(null);
+      }
+    });
+    chart.on('globalout', () => setAxisTip(null));
   }, [rows, columns, values, cellMeta, unit]);
 
   const onExport = useCallback(() => {
@@ -1189,12 +1265,19 @@ function ProductHeatmapChart({
   }, [exportName]);
 
   const chart = (
-    <div
-      ref={ref}
-      className="perfEchart perfEchartOverview perfProductsHeatmap"
-      role="img"
-      aria-label="Product by location heatmap"
-    />
+    <div ref={wrapRef} className="perfChartWrap" style={{ position: 'relative' }}>
+      <div
+        ref={ref}
+        className="perfEchart perfEchartOverview perfProductsHeatmap"
+        role="img"
+        aria-label="Product by location heatmap"
+      />
+      {axisTip ? (
+        <div className="perfChartAxisTip" style={{ left: axisTip.x, top: axisTip.y }} role="tooltip">
+          {axisTip.text}
+        </div>
+      ) : null}
+    </div>
   );
   if (!exportName) return chart;
   return (
@@ -1470,7 +1553,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           : cell.hasTargetRev
             ? cell.targetRev
             : 0;
-      const periodTgt = showProductTargets && productTgt > 0 ? productTgt : null;
+      const periodTgt = productTgt > 0 ? productTgt : null;
       const hover: HoverPoint[] = selectedDays.map((_, i) => {
         const d = dayAt(i);
         const kd = daySkuKwd(d, focusSku);
@@ -1500,7 +1583,8 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           dashed: true,
         });
       }
-      if (showProductTargets && productTgt > 0) {
+      // Always show product target pace when configured (useful even if Target type = machine)
+      if (productTgt > 0) {
         series.push({
           name: `Target · ${m.machineName}`,
           data: paceLine(productTgt, n),
@@ -1509,7 +1593,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       }
     }
     return series;
-  }, [focusSku, pageMachines, selectedDays, yMetric, compareOn, showProductTargets]);
+  }, [focusSku, pageMachines, selectedDays, yMetric, compareOn]);
 
   /** Graph B — products at a single focus location. */
   const graphBDays = useMemo(() => {
@@ -2017,7 +2101,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                 One drink · lines = sites on this page
                 {xAxisKind === 'hourly' ? ' · hours on X' : ' · dates on X'}
                 {compareOn ? ' · dashed = prior' : ''}
-                {showProductTargets ? ' · dotted = product target' : ''}
+                {' · dotted = product target when set'}
               </p>
             </div>
           </div>
@@ -2131,7 +2215,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               </div>
             </div>
           </header>
-          <div className="perfProductsCardToolbar perfProductsCardToolbarStack">
+          <div className="perfProductsCardToolbar">
             <label className="perfProductsField perfProductsFieldGrow">
               <span className="perfProductsFieldLabel">Focus location</span>
               <select
