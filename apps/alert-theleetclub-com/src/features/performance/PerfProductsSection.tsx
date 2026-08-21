@@ -458,10 +458,6 @@ function paceLine(periodTarget: number, n: number): number[] {
   return Array.from({ length: n }, () => pace);
 }
 
-function formatHoverValue(metric: YMetric, v: number): string {
-  return metric === 'cups' ? String(Math.round(v)) : formatKwd(v);
-}
-
 function SkuMultiDropdown({
   options,
   selected,
