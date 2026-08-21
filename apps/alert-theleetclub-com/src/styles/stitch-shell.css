@@ -53,6 +53,10 @@
 }
 
 @media (max-width: 1366px) {
+  .stitchShell.appShellNavRail {
+    --stitch-nav-w: var(--stitch-nav-w-rail, 64px);
+  }
+
   .stitchShell .contentMain.appMain {
     padding: 12px 16px 20px;
   }

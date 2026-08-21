@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { formatKwdWhole, formatSalesTrendPct, resolveSalesTrendPct } from '@/lib/salesDisplay';
 import type { CompareMetricPair } from '@/lib/presetComparison';
 
@@ -25,6 +26,34 @@ function formatAsOfClock(asOfLocal: string): string {
   if (m) return `${m[1]} KWT`;
   if (/^\d{1,2}:\d{2}/.test(t)) return `${t.slice(0, 5)} KWT`;
   return t;
+}
+
+/** Viewport X where main content starts — never under the fixed side nav. */
+function resolveFleetBarLeft(): number {
+  const nav = document.querySelector('.appShell .sideNav') as HTMLElement | null;
+  const main = document.querySelector('.appShell .mainColumn') as HTMLElement | null;
+  const mainLeft = main?.getBoundingClientRect().left ?? 0;
+  const marginLeft = main ? parseFloat(getComputedStyle(main).marginLeft) || 0 : 0;
+  const navRight = nav?.getBoundingClientRect().right ?? 0;
+  const navFixed = Boolean(nav && getComputedStyle(nav).position === 'fixed');
+  const drawerOpen = Boolean(nav?.classList.contains('sideNavOpen'));
+  const rail =
+    document.querySelector('.appShell.appShellNavRail') != null ||
+    Boolean(nav?.classList.contains('sideNavRail'));
+
+  // Drawer open expands over content — keep the reserved rail inset, not overlay width.
+  if (drawerOpen && (marginLeft >= 8 || rail)) {
+    return Math.max(0, Math.round(marginLeft >= 8 ? marginLeft : 64));
+  }
+
+  let left = Math.max(mainLeft, marginLeft);
+
+  // Fixed nav with main starting under it (margin missing / flex collapse).
+  if (navFixed && navRight > 0 && left < navRight - 4) {
+    left = navRight;
+  }
+
+  return Math.max(0, Math.round(left));
 }
 
 function TrendText({
@@ -111,41 +140,47 @@ export function OpsRevenueTotalsBar({
     const apply = () => {
       const h = Math.ceil(el.getBoundingClientRect().height);
       document.documentElement.style.setProperty('--ops-revenue-bar-h', `${Math.max(h, 72)}px`);
-
-      // Match main content left edge so the bar never sits under the side nav
-      // (CSS media queries drift vs rail / expanded / drawer).
-      const main =
-        document.querySelector('.stitchShell .mainColumn') ||
-        document.querySelector('.appShell .mainColumn');
-      const left = main instanceof HTMLElement ? Math.max(0, Math.round(main.getBoundingClientRect().left)) : 0;
+      const left = resolveFleetBarLeft();
       document.documentElement.style.setProperty('--ops-revenue-bar-left', `${left}px`);
-      el.style.left = `${left}px`;
+      el.style.setProperty('left', `${left}px`, 'important');
+      el.style.setProperty('right', '0px', 'important');
+      el.style.setProperty('width', 'auto', 'important');
     };
 
     apply();
+    requestAnimationFrame(apply);
+
     const ro = new ResizeObserver(apply);
     ro.observe(el);
-    const main = document.querySelector('.stitchShell .mainColumn') || document.querySelector('.appShell .mainColumn');
+    const main = document.querySelector('.appShell .mainColumn');
+    const nav = document.querySelector('.appShell .sideNav');
     if (main) ro.observe(main);
+    if (nav) ro.observe(nav);
+
     window.addEventListener('resize', apply);
-    const shell = document.querySelector('.stitchShell') || document.querySelector('.appShell');
+    window.addEventListener('orientationchange', apply);
+
+    const shell = document.querySelector('.appShell');
     let mo: MutationObserver | null = null;
     if (shell) {
       mo = new MutationObserver(apply);
-      mo.observe(shell, { attributes: true, attributeFilter: ['class'] });
+      mo.observe(shell, { attributes: true, attributeFilter: ['class'], subtree: true });
     }
 
     return () => {
       ro.disconnect();
       mo?.disconnect();
       window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
       document.documentElement.style.removeProperty('--ops-revenue-bar-h');
       document.documentElement.style.removeProperty('--ops-revenue-bar-left');
-      el.style.left = '';
+      el.style.removeProperty('left');
+      el.style.removeProperty('right');
+      el.style.removeProperty('width');
     };
   }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);
 
-  return (
+  const bar = (
     <footer ref={barRef} className="opsRevenueTotalsBar" aria-label="Fleet revenue running total">
       <div className="opsRevenueTotalsInner">
         <div className="opsRevenueTotalsBrand">
@@ -269,4 +304,8 @@ export function OpsRevenueTotalsBar({
       </div>
     </footer>
   );
+
+  // Portal to body so fixed positioning is always viewport-relative (not trapped by page transforms).
+  if (typeof document === 'undefined') return bar;
+  return createPortal(bar, document.body);
 }
