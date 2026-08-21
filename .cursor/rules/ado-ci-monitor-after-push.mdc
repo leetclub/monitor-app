@@ -1,0 +1,37 @@
+---
+description: After git push / Azure sync that triggers CI for alert, monitoring-app-v2, or people-analytics-sync — poll ADO builds until green; fix failures and re-push.
+alwaysApply: true
+---
+
+# Monitor Azure DevOps CI after push
+
+After **`git push origin dev`** or an Azure mirror sync that triggers pipelines for **alert** / **monitoring-app-v2** / **people-analytics-sync**, **do not stop at “pushed.”** Poll builds until **completed + succeeded** (or blocked only by something only the user can fix).
+
+## Pipelines (org `leetclub`, project `Leet Monitor`)
+
+| Product folder | Pipeline | Definition ID |
+|----------------|----------|---------------|
+| `apps/alert-theleetclub-com/` | `alert-ci` | **3** |
+| `monitoring-app-v2/` | `monitoring-app-v2-ci` | **2** |
+| `people-analytics-sync/` | `people-analytics-api-ci` | **4** |
+
+Monitor **only** pipelines for products that changed in that push/sync batch.
+
+## How to poll (WSL bash — prefer over PowerShell)
+
+```bash
+cd /mnt/c/Users/mahdi/OneDrive/theleetclub/monitoring-app
+bash scripts/ado-latest-build-status.sh <definitionId>   # e.g. 3 for alert-ci
+```
+
+Auth is via `scripts/ado-curl-auth.sh` (PAT in `azure.txt`). Related helpers: `ado-build-timeline.sh`, `ado-list-build-logs.sh`, `ado-fetch-log.sh`, `ado-build-log-snippet.sh`.
+
+Poll every ~30–60s while `status` is `notStarted` / `inProgress`. Done when `status=completed` and `result=succeeded`.
+
+## On failure
+
+1. Pull timeline/logs for the failed build; identify the root cause.
+2. Fix in the monorepo, **commit**, run **`scripts/sync-changed-azure-repos.sh`** (or the matching `sync-to-azure-dev.sh`), then **`git push origin dev`**.
+3. Re-poll the affected definition(s) until green.
+
+Do **not** treat push alone as CI success. Prefer WSL bash + jq for ADO curl (avoid PowerShell quoting issues).

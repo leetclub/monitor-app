@@ -15,7 +15,7 @@ When this session touches infrastructure, CI/CD, secrets, or deployment-related 
 
 3. **Docker Hub variable group (optional):** If **`azure.txt`** token / **`ado_sync_dockerhub_var_group.py`** changed and you still use Library secrets for Docker, run `python3 scripts/ado_sync_dockerhub_var_group.py`.
 
-4. **Verification:** After rollout or CI-related fixes, **confirm** success (e.g. rollout status, pods Ready, or script exit 0) — do not assume green.
+4. **Verification:** After rollout or CI-related fixes, **confirm** success (e.g. rollout status, pods Ready, or script exit 0) — do not assume green. After pushes that trigger Azure CI for alert / v2 / people-api, **poll until succeeded** per **`ado-ci-monitor-after-push.mdc`**.
 
 5. **Secrets in chat:** Never paste PATs/tokens in replies; recommend rotation if they were exposed.
 

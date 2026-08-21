@@ -43,7 +43,7 @@ After commits that should go to GitHub and Azure:
 
 5. **Pipelines:** Azure **`dev`** is what **`azure-pipelines.yml`** triggers on in each Azure repo — **not** **`main`**.
 
-6. **Do not treat `git push origin dev` alone as “Azure / CI done”.** Conversely, **do not** skip **`git push origin dev`** after a successful Azure sync.
+6. **Do not treat `git push origin dev` alone as “Azure / CI done”.** After push/sync, **monitor ADO pipelines until green** — see **`ado-ci-monitor-after-push.mdc`**. Conversely, **do not** skip **`git push origin dev`** after a successful Azure sync.
 
 7. **Fallback (slow):** If **`sync-to-azure-dev.sh`** cannot be used, **`bash scripts/push-to-azure-repos.sh`** (`git subtree push`) is a last resort.
 
