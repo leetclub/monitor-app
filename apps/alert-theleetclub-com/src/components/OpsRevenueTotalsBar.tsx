@@ -95,7 +95,7 @@ export function OpsRevenueTotalsBar({
   loading?: boolean;
   salesFreshnessNote?: string | null;
 }) {
-  const barRef = useRef<HTMLFooterElement>(null);
+  const barRef = useRef<HTMLElement | null>(null);
   const val = (n: number | null | undefined) =>
     loading ? '…' : n != null ? formatKwd(n) : '—';
   const trendPct = loading ? null : resolveSalesTrendPct(totals.trendPct, totals.primary, totals.baseline);
