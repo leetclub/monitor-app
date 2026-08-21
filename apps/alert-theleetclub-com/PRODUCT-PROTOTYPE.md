@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-21 | **Fleet revenue bar responsive:** Wrap/stack on phone; MTD/YTD compact stacks; hide yest. cluster under 480px; taller safe padding. |
 | 2026-08-21 | **Location YTD card + Red Flags fleet MTD/YTD + Products chart polish:** Location KPI **YTD vs last year**; fleet bar **MTD / YTD** with trends and short `HH:MM KWT · just now` stamp; Products prior=same color dashed, horizontal axis tooltip, label overflow fixes, rising/falling motion panels. |
 | 2026-08-20 | **Performance Products layout polish:** Workspace bar (Time / Target / Y-axis) + per-graph cards; controls nested under A/B; shared B→C products; tighter type scale and muted labels. |
 | 2026-08-20 | **Performance Products selection + heatmap UX:** Graph A requires an explicit product (no silent top-SKU title). Graph B requires focus location + products; Top/Least helpers kept. Target type “Both” no longer dumps machine KD onto Graph A (product targets only there; machine target on B). Y-axis scales to actual lines. Heatmap contrast + cell popup (KD/cups, prior, trend, short insight). |
