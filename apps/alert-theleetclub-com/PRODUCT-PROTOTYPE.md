@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-21 | **Fleet bar vs side nav (real fix):** Side nav stops above the fleet strip; bar is full-width `left:0` (no more under-nav overlap). |
 | 2026-08-21 | **Fleet bar under-nav fix:** Portal to `document.body`; left = clear of fixed side nav (`!important`); drawer keeps rail inset. |
 | 2026-08-21 | **Fleet bar left sync + heatmap dynamic labels:** Fleet bar left tracks `.mainColumn` (fixes under-nav); heatmap cell font scales with cell size. |
 | 2026-08-21 | **Fleet bar + Location insights + Products polish:** Fleet KD rounded (no fractions), readable shrink + iPad, left inset clears side nav; Location KPI cards all open insight popups; paired main/prior glow; Graph A product targets always when set; Graph B toolbar side-by-side; mid-ellipsis axis/legend + full name on hover. |

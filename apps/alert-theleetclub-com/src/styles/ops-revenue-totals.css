@@ -12,18 +12,31 @@
 .opsRevenueTotalsBar {
   position: fixed;
   bottom: 0;
-  /* JS sets left !important from side nav / mainColumn — start clear of rail */
-  left: var(--ops-revenue-bar-left, var(--stitch-nav-w, var(--stitch-nav-w-rail, 64px)));
+  left: 0;
   right: 0;
-  /* Below sideNav (50–100) so nav stays clickable; left inset must clear nav */
-  z-index: 44;
+  /* Above page content; side nav is shortened so it never covers this strip */
+  z-index: 60;
   box-sizing: border-box;
   border-top: 2px solid #6d4a45;
   background: linear-gradient(180deg, rgba(18, 22, 30, 0.98) 0%, rgba(8, 10, 14, 0.99) 100%);
   backdrop-filter: blur(10px);
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
   overflow: visible;
+  width: 100%;
   max-width: 100vw;
+}
+
+/*
+ * Side nav must stop ABOVE the fleet bar (screenshot bug: nav sat on top of bar).
+ * Uses body.hasOpsRevenueBar set by OpsRevenueTotalsBar.
+ */
+body.hasOpsRevenueBar .appShell .sideNav,
+body.hasOpsRevenueBar .stitchShell .sideNav {
+  bottom: var(--ops-revenue-bar-h, 110px) !important;
+  height: auto !important;
+  max-height: calc(100dvh - var(--ops-revenue-bar-h, 110px) - var(--safe-bottom, 0px)) !important;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .opsRevenueTotalsInner {
