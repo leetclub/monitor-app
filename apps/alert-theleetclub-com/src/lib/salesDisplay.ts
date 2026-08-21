@@ -36,6 +36,16 @@ export type DailySalesElapsedResponse = {
   fleetTodayKwd?: number;
   /** Fleet sum — yesterday same elapsed clock. */
   fleetYesterdaySameElapsedKwd?: number;
+  /** Fleet month-to-date (cache through yesterday + today elapsed). */
+  fleetMtdKwd?: number;
+  /** Last month same calendar days. */
+  fleetLastMtdKwd?: number;
+  fleetMtdTrendPct?: number | null;
+  /** Fleet year-to-date. */
+  fleetYtdKwd?: number;
+  /** Last year same dates YTD. */
+  fleetLastYtdKwd?: number;
+  fleetYtdTrendPct?: number | null;
   error?: string;
   fromCache?: boolean;
   stale?: boolean;

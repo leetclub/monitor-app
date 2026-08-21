@@ -10,11 +10,79 @@ export type YesterdayOverallFleet = {
   trendVsDayBeforePct: number | null;
 };
 
+export type PeriodCompareFleet = {
+  primary: number | null;
+  baseline: number | null;
+  trendPct: number | null;
+  primaryLabel: string;
+  baselineLabel: string;
+};
+
+function formatAsOfClock(asOfLocal: string): string {
+  const t = String(asOfLocal || '').trim();
+  const m = t.match(/T(\d{1,2}:\d{2})/);
+  if (m) return `${m[1]} KWT`;
+  if (/^\d{1,2}:\d{2}/.test(t)) return `${t.slice(0, 5)} KWT`;
+  return t;
+}
+
+function PeriodMetric({
+  label,
+  value,
+  muted,
+  loading,
+}: {
+  label: string;
+  value: number | null | undefined;
+  muted?: boolean;
+  loading?: boolean;
+}) {
+  return (
+    <div className="opsRevenueTotalsMetric">
+      <span className="opsRevenueTotalsLabel">{label}</span>
+      <span className={`opsRevenueTotalsVal${muted ? ' opsRevenueTotalsValMuted' : ''}`}>
+        {loading ? '…' : value != null ? formatKwd(value) : '—'}
+      </span>
+    </div>
+  );
+}
+
+function TrendMetric({
+  label,
+  trendPct,
+  loading,
+  title,
+}: {
+  label: string;
+  trendPct: number | null | undefined;
+  loading?: boolean;
+  title?: string;
+}) {
+  const has = !loading && trendPct != null && Number.isFinite(trendPct);
+  const up = has && (trendPct as number) >= 0;
+  const down = has && (trendPct as number) < 0;
+  return (
+    <div className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap" title={title}>
+      <span className="opsRevenueTotalsLabel">{label}</span>
+      {has ? (
+        <span className={`opsRevenueTotalsTrend ${up ? 'alertSalesUp' : down ? 'alertSalesDown' : ''}`}>
+          {up ? '▲ ' : '▼ '}
+          {formatSalesTrendPct(trendPct as number)}
+        </span>
+      ) : (
+        <span className="opsRevenueTotalsTrend opsRevenueTotalsTrendMuted">—</span>
+      )}
+    </div>
+  );
+}
+
 export function OpsRevenueTotalsBar({
   totals,
   machineCount,
   asOfLocal,
   yesterdayOverall,
+  monthToDate,
+  yearToDate,
   loading,
   salesFreshnessNote,
 }: {
@@ -23,9 +91,13 @@ export function OpsRevenueTotalsBar({
   asOfLocal?: string | null;
   /** Full-calendar yesterday + −2d fleet totals (today_vs_yesterday preset). */
   yesterdayOverall?: YesterdayOverallFleet | null;
+  /** This month to date vs last month same days. */
+  monthToDate?: PeriodCompareFleet | null;
+  /** Year to date vs last year same dates. */
+  yearToDate?: PeriodCompareFleet | null;
   /** Wait for elapsed sales API — avoids misleading partial totals on load. */
   loading?: boolean;
-  /** Cache / refresh hint for sales totals (updates ~1 min). */
+  /** Short age only, e.g. "just now" — avoid long refresh copy. */
   salesFreshnessNote?: string | null;
 }) {
   const val = (n: number | null | undefined) =>
@@ -103,10 +175,50 @@ export function OpsRevenueTotalsBar({
               </div>
             </>
           ) : null}
+          {monthToDate ? (
+            <>
+              <div className="opsRevenueTotalsMetric opsRevenueTotalsMetricDivider" title="Month to date through today">
+                <span className="opsRevenueTotalsLabel">{monthToDate.primaryLabel}</span>
+                <span className="opsRevenueTotalsVal">{val(monthToDate.primary)}</span>
+              </div>
+              <PeriodMetric
+                label={monthToDate.baselineLabel}
+                value={monthToDate.baseline}
+                muted
+                loading={loading}
+              />
+              <TrendMetric
+                label="MTD Δ"
+                trendPct={monthToDate.trendPct}
+                loading={loading}
+                title="This month to date vs last month same days"
+              />
+            </>
+          ) : null}
+          {yearToDate ? (
+            <>
+              <div className="opsRevenueTotalsMetric opsRevenueTotalsMetricDivider" title="Year to date through today">
+                <span className="opsRevenueTotalsLabel">{yearToDate.primaryLabel}</span>
+                <span className="opsRevenueTotalsVal">{val(yearToDate.primary)}</span>
+              </div>
+              <PeriodMetric
+                label={yearToDate.baselineLabel}
+                value={yearToDate.baseline}
+                muted
+                loading={loading}
+              />
+              <TrendMetric
+                label="YTD Δ"
+                trendPct={yearToDate.trendPct}
+                loading={loading}
+                title="Year to date vs last year same dates"
+              />
+            </>
+          ) : null}
         </div>
         {asOfLocal || salesFreshnessNote ? (
           <span className="opsRevenueTotalsAsOf">
-            {asOfLocal ? `through ${asOfLocal.replace('T', ' ')} KWT` : null}
+            {asOfLocal ? formatAsOfClock(asOfLocal) : null}
             {asOfLocal && salesFreshnessNote ? ' · ' : null}
             {salesFreshnessNote ? (
               <span className="opsRevenueTotalsFreshness" title={salesFreshnessNote}>

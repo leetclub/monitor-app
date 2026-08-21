@@ -278,9 +278,23 @@ function readTheme() {
         (document.documentElement.getAttribute('data-theme') !== 'pro' &&
           document.documentElement.getAttribute('data-mode') !== 'light');
   if (!dark) {
-    return { text: '#0f172a', muted: '#64748b', grid: 'rgba(15, 23, 42, 0.08)', axis: '#94a3b8' };
+    return {
+      text: '#0f172a',
+      muted: '#64748b',
+      grid: 'rgba(15, 23, 42, 0.08)',
+      axis: '#94a3b8',
+      cross: '#64748b',
+      tipBg: 'rgba(248, 250, 252, 0.96)',
+    };
   }
-  return { text: '#e2e8f0', muted: '#94a3b8', grid: 'rgba(148, 163, 184, 0.12)', axis: '#64748b' };
+  return {
+    text: '#e2e8f0',
+    muted: '#94a3b8',
+    grid: 'rgba(148, 163, 184, 0.12)',
+    axis: '#64748b',
+    cross: '#94a3b8',
+    tipBg: 'rgba(15, 23, 42, 0.94)',
+  };
 }
 
 function trendFrom(period: number, prior: number): number | null {
@@ -708,13 +722,40 @@ function DateTrajectoryChart({
       yMax = hi + pad;
       if (yMax <= yMin) yMax = yMin + (unit === 'cups' ? 4 : 0.5);
     }
+    // Pair prior (dashed) with the same color as the solid main line.
+    const colorByBase = new Map<string, string>();
+    let colorIdx = 0;
+    for (const s of series) {
+      if (s.dashed || s.dotted) continue;
+      colorByBase.set(s.name, SERIES_PALETTE[colorIdx % SERIES_PALETTE.length]);
+      colorIdx += 1;
+    }
+    const colorFor = (s: TrajSeries): string => {
+      if (s.dashed && s.name.startsWith('Prior · ')) {
+        const base = s.name.slice('Prior · '.length);
+        return colorByBase.get(base) || SERIES_PALETTE[0];
+      }
+      if (s.dotted) return '#94a3b8';
+      return colorByBase.get(s.name) || SERIES_PALETTE[0];
+    };
+    const truncateLabel = (name: string, max = 22) =>
+      name.length > max ? `${name.slice(0, max - 1)}…` : name;
     chart.setOption(
       {
-        color: SERIES_PALETTE,
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'axis',
-          axisPointer: { type: 'line', lineStyle: { type: 'dashed' } },
+          confine: true,
+          appendToBody: true,
+          axisPointer: {
+            type: 'line',
+            lineStyle: { color: theme.cross || theme.axis, type: 'dashed' },
+            label: { show: false },
+          },
+          backgroundColor: theme.tipBg || 'rgba(15, 23, 42, 0.94)',
+          borderWidth: 0,
+          padding: [10, 12],
+          textStyle: { color: '#e8f4fc', fontSize: 12 },
           formatter: (params: unknown) => {
             const arr = params as {
               seriesName?: string;
@@ -736,41 +777,49 @@ function DateTrajectoryChart({
               const s = byName.get(String(p.seriesName || ''));
               const h = s?.hover?.[i];
               const name = String(p.seriesName || '');
+              const tipBits: string[] = [
+                `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span>`,
+                `<b>${name}</b>: ${fmt(Number(p.value))}`,
+              ];
               if (h) {
-                const bits: string[] = [
-                  `<b>${name}</b>: ${formatHoverValue(unit === 'cups' ? 'cups' : 'revenue', Number(p.value))}`,
-                ];
-                bits.push(`KD ${formatKwd(h.kd)} · ${Math.round(h.cups)} cups`);
+                tipBits.push(` · KD ${formatKwd(h.kd)} · ${Math.round(h.cups)} cups`);
                 if (h.priorKd != null || h.priorCups != null) {
-                  bits.push(
-                    `Prior: ${formatKwd(Number(h.priorKd || 0))} · ${Math.round(Number(h.priorCups || 0))} cups`,
+                  tipBits.push(
+                    ` · Prior ${formatKwd(Number(h.priorKd || 0))} / ${Math.round(Number(h.priorCups || 0))} cups`,
                   );
                 }
                 if (h.target != null && Number(h.target) > 0) {
-                  const tgtLabel = unit === 'cups' ? `${Math.round(h.target)} cups` : formatKwd(h.target);
-                  bits.push(`Period target: ${tgtLabel}`);
+                  const tgtLabel =
+                    unit === 'cups' ? `${Math.round(h.target)} cups` : formatKwd(h.target);
+                  tipBits.push(` · Target ${tgtLabel}`);
                   if (h.pctOfTarget != null && Number.isFinite(h.pctOfTarget)) {
-                    bits.push(`${h.pctOfTarget.toFixed(0)}% of target`);
+                    tipBits.push(` (${h.pctOfTarget.toFixed(0)}%)`);
                   }
                 }
-                lines.push(
-                  `<div style="margin-bottom:4px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span>${bits.join('<br/>')}</div>`,
-                );
-              } else {
-                lines.push(
-                  `<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span><b>${name}</b>: ${fmt(Number(p.value))}</div>`,
-                );
               }
+              lines.push(`<div style="margin-bottom:3px">${tipBits.join('')}</div>`);
             }
             return lines.join('');
           },
         },
         legend: {
           type: 'scroll',
+          top: 0,
+          left: 0,
+          right: 0,
           data: series.map((s) => s.name),
-          textStyle: { color: theme.muted, fontSize: 11 },
+          formatter: (name: string) => truncateLabel(name),
+          textStyle: { color: theme.muted, fontSize: 10 },
+          pageTextStyle: { color: theme.muted },
+          pageIconColor: theme.muted,
         },
-        grid: { left: 56, right: 52, top: 40, bottom: compact ? 48 : 56, containLabel: false },
+        grid: {
+          left: 12,
+          right: 16,
+          top: 36,
+          bottom: compact ? 40 : 48,
+          containLabel: true,
+        },
         xAxis: {
           type: 'category',
           data: labels,
@@ -781,34 +830,47 @@ function DateTrajectoryChart({
             hideOverlap: true,
             showMinLabel: true,
             showMaxLabel: true,
-            alignMinLabel: 'left',
-            alignMaxLabel: 'right',
+            rotate: labels.length > 10 ? 28 : 0,
+            width: 56,
+            overflow: 'truncate',
           },
         },
         yAxis: {
           type: 'value',
           name: unit === 'cups' ? 'Cups' : 'KD',
+          nameTextStyle: { color: theme.muted, fontSize: 10, padding: [0, 0, 0, 8] },
           scale: true,
           min: yMin,
           max: yMax,
-          axisLabel: { color: theme.axis, formatter: (v: number) => fmt(v) },
+          axisLabel: {
+            color: theme.axis,
+            fontSize: 10,
+            formatter: (v: number) => fmt(v),
+            width: 56,
+            overflow: 'truncate',
+          },
           splitLine: { lineStyle: { color: theme.grid } },
         },
-        series: series.map((s) => ({
-          name: s.name,
-          type: 'line',
-          data: s.data,
-          smooth: s.dotted ? false : 0.25,
-          showSymbol: days.length <= 14 && !s.dotted,
-          symbol: 'circle',
-          symbolSize: compact ? 5 : 7,
-          clip: !s.dotted,
-          lineStyle: {
-            width: s.dotted ? 2 : 2.4,
-            type: s.dotted ? 'dotted' : s.dashed ? 'dashed' : 'solid',
-            opacity: s.dotted ? 0.85 : 1,
-          },
-        })),
+        series: series.map((s) => {
+          const color = colorFor(s);
+          return {
+            name: s.name,
+            type: 'line',
+            data: s.data,
+            smooth: s.dotted ? false : 0.25,
+            showSymbol: days.length <= 14 && !s.dotted,
+            symbol: 'circle',
+            symbolSize: compact ? 5 : 7,
+            clip: !s.dotted,
+            itemStyle: { color },
+            lineStyle: {
+              color,
+              width: s.dotted ? 2 : s.dashed ? 2 : 2.4,
+              type: s.dotted ? 'dotted' : s.dashed ? 'dashed' : 'solid',
+              opacity: s.dotted ? 0.85 : 1,
+            },
+          };
+        }),
       },
       true,
     );
@@ -2033,24 +2095,38 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           )}
           {compareOn ? (
             <div className="perfProductsTrendCols">
-              <div>
-                <h5 className="perfProductsTrendHead">Rising</h5>
+              <div className="perfProductsTrendPanel perfProductsTrendPanel--up">
+                <h5 className="perfProductsTrendHead">
+                  <span className="perfProductsTrendIcon" aria-hidden>
+                    ▲
+                  </span>
+                  Rising
+                </h5>
                 {rising.length ? (
                   <ul className="perfProductsTrendList perfProductsTrendDetailed">
-                    {rising.map((p) => (
-                      <li key={p.name}>
+                    {rising.map((p, idx) => (
+                      <li
+                        key={p.name}
+                        className="perfProductsTrendItem"
+                        style={{ animationDelay: `${Math.min(idx, 8) * 45}ms` }}
+                      >
                         <button type="button" onClick={() => toggleSku(p.name)}>
                           {p.name}
                         </button>
                         <div className="perfProductsTrendMeta">
-                          <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
+                          <strong className={trendClass(p.trendPct)}>{trendText(p.trendPct)}</strong>
                           <span>
-                            {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
-                            {formatKwd(Number(p.revenueKwd || 0))}
+                            <b>{formatKwd(Number(p.revenueKwd || 0))}</b>
+                            <span className="perfProductsTrendFrom">
+                              {' '}
+                              from {formatKwd(Number(p.prevRevenueKwd || 0))}
+                            </span>
                           </span>
                           <span className={trendClass(p.cupsTrendPct)}>
-                            {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
-                            cups ({trendText(p.cupsTrendPct)})
+                            <b>
+                              {Math.round(Number(p.cups || 0))} cups
+                            </b>{' '}
+                            ({trendText(p.cupsTrendPct)})
                           </span>
                         </div>
                       </li>
@@ -2060,24 +2136,38 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                   <p className="perfMuted">None up vs prior.</p>
                 )}
               </div>
-              <div>
-                <h5 className="perfProductsTrendHead">Falling</h5>
+              <div className="perfProductsTrendPanel perfProductsTrendPanel--down">
+                <h5 className="perfProductsTrendHead">
+                  <span className="perfProductsTrendIcon" aria-hidden>
+                    ▼
+                  </span>
+                  Falling
+                </h5>
                 {falling.length ? (
                   <ul className="perfProductsTrendList perfProductsTrendDetailed">
-                    {falling.map((p) => (
-                      <li key={p.name}>
+                    {falling.map((p, idx) => (
+                      <li
+                        key={p.name}
+                        className="perfProductsTrendItem"
+                        style={{ animationDelay: `${Math.min(idx, 8) * 45}ms` }}
+                      >
                         <button type="button" onClick={() => toggleSku(p.name)}>
                           {p.name}
                         </button>
                         <div className="perfProductsTrendMeta">
-                          <span className={trendClass(p.trendPct)}>{trendText(p.trendPct)} KD</span>
+                          <strong className={trendClass(p.trendPct)}>{trendText(p.trendPct)}</strong>
                           <span>
-                            {formatKwd(Number(p.prevRevenueKwd || 0))} →{' '}
-                            {formatKwd(Number(p.revenueKwd || 0))}
+                            <b>{formatKwd(Number(p.revenueKwd || 0))}</b>
+                            <span className="perfProductsTrendFrom">
+                              {' '}
+                              from {formatKwd(Number(p.prevRevenueKwd || 0))}
+                            </span>
                           </span>
                           <span className={trendClass(p.cupsTrendPct)}>
-                            {Math.round(Number(p.prevCups || 0))} → {Math.round(Number(p.cups || 0))}{' '}
-                            cups ({trendText(p.cupsTrendPct)})
+                            <b>
+                              {Math.round(Number(p.cups || 0))} cups
+                            </b>{' '}
+                            ({trendText(p.cupsTrendPct)})
                           </span>
                         </div>
                       </li>

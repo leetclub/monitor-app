@@ -43,7 +43,7 @@ import {
 import { GoCheckWorkflowModal } from '@/components/GoCheckWorkflowModal';
 import { DowntimeDetailModal } from '@/components/DowntimeDetailModal';
 import { ProductExtremesModal } from '@/components/ProductExtremesModal';
-import { freshnessNotice } from '@/lib/dataFreshness';
+import { formatAgeShort } from '@/lib/dataFreshness';
 import {
   aggregateFleetSalesForPreset,
   applyApiFleetElapsedTotals,
@@ -1833,12 +1833,34 @@ export function RedFlagsPage({
           asOfLocal={dailySalesQ.data?.asOfLocal}
           salesFreshnessNote={
             dailySalesQ.isFetched
-              ? freshnessNotice('minute', dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal, {
-                  fetching: dailySalesQ.isFetching,
-                })
+              ? formatAgeShort(
+                  dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal,
+                ) || (dailySalesQ.isFetching ? 'updating…' : null)
               : null
           }
           yesterdayOverall={fleetYesterdayOverall}
+          monthToDate={
+            dailySalesQ.data
+              ? {
+                  primary: dailySalesQ.data.fleetMtdKwd ?? null,
+                  baseline: dailySalesQ.data.fleetLastMtdKwd ?? null,
+                  trendPct: dailySalesQ.data.fleetMtdTrendPct ?? null,
+                  primaryLabel: 'MTD',
+                  baselineLabel: 'Last MTD',
+                }
+              : null
+          }
+          yearToDate={
+            dailySalesQ.data
+              ? {
+                  primary: dailySalesQ.data.fleetYtdKwd ?? null,
+                  baseline: dailySalesQ.data.fleetLastYtdKwd ?? null,
+                  trendPct: dailySalesQ.data.fleetYtdTrendPct ?? null,
+                  primaryLabel: 'YTD',
+                  baselineLabel: 'LY YTD',
+                }
+              : null
+          }
         />
       ) : null;
 

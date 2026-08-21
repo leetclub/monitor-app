@@ -49,6 +49,20 @@ export function rebuildFleetKpis(machines: FleetMachine[], base?: FleetKpis | nu
   const hit = withTgt.filter(
     (m) => (Number(m.totalLocationKwd) || 0) >= (Number(m.periodTargetKd) || 0),
   ).length;
+  const ytdThis = bySales.reduce((s, m) => s + (Number(m.ytdLocationKwd) || 0), 0);
+  const ytdLy = bySales.reduce((s, m) => s + (Number(m.ytdLyLocationKwd) || 0), 0);
+  const ytdCompare =
+    bySales.some((m) => m.ytdLocationKwd != null || m.ytdLyLocationKwd != null)
+      ? {
+          ratePct: ytdLy > 0 ? Math.round((ytdThis / ytdLy) * 1000) / 10 : null,
+          periodKd: Math.round(ytdThis * 10000) / 10000,
+          compareKd: Math.round(ytdLy * 10000) / 10000,
+          thisStart: base?.ytdCompare?.thisStart,
+          thisEnd: base?.ytdCompare?.thisEnd,
+          lastStart: base?.ytdCompare?.lastStart,
+          lastEnd: base?.ytdCompare?.lastEnd,
+        }
+      : base?.ytdCompare ?? null;
   return {
     ...(base || {}),
     periodActualKd: Math.round(periodActual * 10000) / 10000,
@@ -63,5 +77,6 @@ export function rebuildFleetKpis(machines: FleetMachine[], base?: FleetKpis | nu
     yoyPeriodActualKd: growthVsYoy.all?.compareKd ?? null,
     growthVsPrev,
     growthVsYoy,
+    ytdCompare,
   };
 }

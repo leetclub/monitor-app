@@ -18,7 +18,7 @@ import {
   NO_SALES_ALERT_HOURS,
 } from '@/lib/fleetOpsTools';
 import { fetchCleaningWorkflowMapBatched, fetchMachineAttendanceMapBatched } from '@/lib/leetWorkflowApi';
-import { freshnessNotice } from '@/lib/dataFreshness';
+import { formatAgeShort } from '@/lib/dataFreshness';
 import { safeText } from '@/lib/safeText';
 import type { RedAlertRow } from '@/features/redflags/redAlertTypes';
 import {
@@ -1186,12 +1186,34 @@ export function OverallPage({
         asOfLocal={dailySalesQ.data?.asOfLocal}
         salesFreshnessNote={
           dailySalesQ.isFetched
-            ? freshnessNotice('minute', dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal, {
-                fetching: dailySalesQ.isFetching,
-              })
+            ? formatAgeShort(
+                dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal,
+              ) || (dailySalesQ.isFetching ? 'updating…' : null)
             : null
         }
         yesterdayOverall={fleetYesterdayOverall}
+        monthToDate={
+          dailySalesQ.data
+            ? {
+                primary: dailySalesQ.data.fleetMtdKwd ?? null,
+                baseline: dailySalesQ.data.fleetLastMtdKwd ?? null,
+                trendPct: dailySalesQ.data.fleetMtdTrendPct ?? null,
+                primaryLabel: 'MTD',
+                baselineLabel: 'Last MTD',
+              }
+            : null
+        }
+        yearToDate={
+          dailySalesQ.data
+            ? {
+                primary: dailySalesQ.data.fleetYtdKwd ?? null,
+                baseline: dailySalesQ.data.fleetLastYtdKwd ?? null,
+                trendPct: dailySalesQ.data.fleetYtdTrendPct ?? null,
+                primaryLabel: 'YTD',
+                baselineLabel: 'LY YTD',
+              }
+            : null
+        }
       />
     ) : null;
 

@@ -1323,6 +1323,57 @@ def _refresh_daily_sales_elapsed_cache_internal(
         4,
     )
 
+    # Fleet MTD / YTD from revenue cache (completed days) + today's elapsed.
+    import calendar as _cal
+
+    def _safe_day(y: int, m: int, d: int) -> date:
+        return date(y, m, min(d, _cal.monthrange(y, m)[1]))
+
+    mtd_start = date(today.year, today.month, 1)
+    if today.month == 1:
+        last_mtd_start = date(today.year - 1, 12, 1)
+    else:
+        last_mtd_start = date(today.year, today.month - 1, 1)
+    last_mtd_end = _safe_day(last_mtd_start.year, last_mtd_start.month, today.day)
+    ytd_start = date(today.year, 1, 1)
+    last_ytd_start = date(today.year - 1, 1, 1)
+    last_ytd_end = _safe_day(today.year - 1, today.month, today.day)
+
+    def _fleet_sum_cache_db(db_sess, d0: date, d1: date) -> float:
+        if d0 > d1 or not allowed_list:
+            return 0.0
+        rows_sum = (
+            db_sess.query(func.sum(VendonDailyMachineRevenueCache.total_sales_kwd))
+            .filter(
+                VendonDailyMachineRevenueCache.machine_id.in_(allowed_list),
+                VendonDailyMachineRevenueCache.cache_date >= d0,
+                VendonDailyMachineRevenueCache.cache_date <= d1,
+            )
+            .scalar()
+        )
+        return float(rows_sum or 0)
+
+    rev_db2 = _pa_session()
+    try:
+        yday = yesterday
+        mtd_done = _fleet_sum_cache_db(rev_db2, mtd_start, yday) if mtd_start <= yday else 0.0
+        last_mtd = _fleet_sum_cache_db(rev_db2, last_mtd_start, last_mtd_end)
+        ytd_done = _fleet_sum_cache_db(rev_db2, ytd_start, yday) if ytd_start <= yday else 0.0
+        last_ytd = _fleet_sum_cache_db(rev_db2, last_ytd_start, last_ytd_end)
+    finally:
+        rev_db2.close()
+
+    fleet_mtd = round(mtd_done + fleet_today, 4)
+    fleet_last_mtd = round(last_mtd, 4)
+    fleet_ytd = round(ytd_done + fleet_today, 4)
+    fleet_last_ytd = round(last_ytd, 4)
+    fleet_mtd_trend = (
+        round(((fleet_mtd - fleet_last_mtd) / fleet_last_mtd) * 100.0, 2) if fleet_last_mtd > 0 else None
+    )
+    fleet_ytd_trend = (
+        round(((fleet_ytd - fleet_last_ytd) / fleet_last_ytd) * 100.0, 2) if fleet_last_ytd > 0 else None
+    )
+
     payload: Dict[str, Any] = {
         "timezone": "Asia/Kuwait",
         "today": today.isoformat(),
@@ -1335,6 +1386,12 @@ def _refresh_daily_sales_elapsed_cache_internal(
         "fleetYesterdayFullDayKwd": fleet_yest_full,
         "fleetDayBeforeFullDayKwd": fleet_day_before_full,
         "fleetYesterdaySameElapsedKwd": fleet_yest_elapsed,
+        "fleetMtdKwd": fleet_mtd,
+        "fleetLastMtdKwd": fleet_last_mtd,
+        "fleetMtdTrendPct": fleet_mtd_trend,
+        "fleetYtdKwd": fleet_ytd,
+        "fleetLastYtdKwd": fleet_last_ytd,
+        "fleetYtdTrendPct": fleet_ytd_trend,
         "allowedMachineIds": allowed_list,
         "byMachineId": out,
         "cacheBucket": cache_bucket,
@@ -2926,7 +2983,7 @@ def register_alert_routes(app) -> None:
         tz = ZoneInfo("Asia/Kuwait")
         now_local = datetime.now(tz)
         cache_bucket = now_local.replace(second=0, microsecond=0).isoformat()
-        cache_key = f"sales-elapsed:v3:{cache_bucket}"
+        cache_key = f"sales-elapsed:v4:{cache_bucket}"
         force_fresh = (request.args.get("fresh") or "").strip().lower() in ("1", "true", "yes")
         cached = _alert_cache_get(cache_key, _DAILY_SALES_ELAPSED_CACHE_SEC)
         if cached is not None and not force_fresh:
@@ -4825,7 +4882,7 @@ def register_alert_routes(app) -> None:
         fetch_hi = max(win_end, today)
 
         cache_key = (
-            f"perf:fleet:v7:{','.join(sorted(requested)) or 'auto'}:"
+            f"perf:fleet:v8:{','.join(sorted(requested)) or 'auto'}:"
             f"{preset_id}:{win_start}:{win_end}:p{int(include_products)}"
         )
         cached = _alert_cache_get(cache_key, 120)
@@ -5036,10 +5093,25 @@ def register_alert_routes(app) -> None:
             yoy_end = win_end - timedelta(days=365)
             yoy_kwd_by_mid = _sum_kwd_by_mid(yoy_start, yoy_end)
 
+            # Calendar YTD this year vs same span last year (independent of chart preset).
+            import calendar as _cal_ytd
+
+            def _safe_ymd(y: int, m: int, d: int) -> date:
+                return date(y, m, min(d, _cal_ytd.monthrange(y, m)[1]))
+
+            ytd_start = date(today.year, 1, 1)
+            ytd_end = today
+            ytd_ly_start = date(today.year - 1, 1, 1)
+            ytd_ly_end = _safe_ymd(today.year - 1, today.month, today.day)
+            ytd_kwd_by_mid = _sum_kwd_by_mid(ytd_start, ytd_end)
+            ytd_ly_kwd_by_mid = _sum_kwd_by_mid(ytd_ly_start, ytd_ly_end)
+
             for m in machines_out:
                 mid = str(m.get("machineId") or "").strip()
                 m["prevPeriodLocationKwd"] = round(prev_kwd_by_mid.get(mid, 0.0), 4)
                 m["yoyPeriodLocationKwd"] = round(yoy_kwd_by_mid.get(mid, 0.0), 4)
+                m["ytdLocationKwd"] = round(ytd_kwd_by_mid.get(mid, 0.0), 4)
+                m["ytdLyLocationKwd"] = round(ytd_ly_kwd_by_mid.get(mid, 0.0), 4)
                 cur = float(m.get("totalLocationKwd") or 0)
                 prev_m = float(m.get("prevPeriodLocationKwd") or 0)
                 yoy_m = float(m.get("yoyPeriodLocationKwd") or 0)
@@ -5047,6 +5119,19 @@ def register_alert_routes(app) -> None:
                     round((cur / prev_m) * 100, 1) if prev_m > 0 else None
                 )
                 m["yoyGrowthPct"] = round((cur / yoy_m) * 100, 1) if yoy_m > 0 else None
+
+            ytd_this = sum(float(m.get("ytdLocationKwd") or 0) for m in machines_out)
+            ytd_ly = sum(float(m.get("ytdLyLocationKwd") or 0) for m in machines_out)
+            ytd_rate = round((ytd_this / ytd_ly) * 100, 1) if ytd_ly > 0 else None
+            ytd_compare = {
+                "ratePct": ytd_rate,
+                "periodKd": round(ytd_this, 4),
+                "compareKd": round(ytd_ly, 4),
+                "thisStart": ytd_start.isoformat(),
+                "thisEnd": ytd_end.isoformat(),
+                "lastStart": ytd_ly_start.isoformat(),
+                "lastEnd": ytd_ly_end.isoformat(),
+            }
 
             def _growth_group(
                 rows: List[Dict[str, Any]],
@@ -5160,6 +5245,7 @@ def register_alert_routes(app) -> None:
                     "yoyPeriodActualKd": round(yoy_actual, 4),
                     "growthVsPrev": growth_prev,
                     "growthVsYoy": growth_yoy,
+                    "ytdCompare": ytd_compare,
                 },
             }
             _alert_cache_set(cache_key, body)

@@ -45,9 +45,21 @@ export type FleetMachine = {
   productSxPct?: number | null;
   prevPeriodLocationKwd?: number | null;
   yoyPeriodLocationKwd?: number | null;
+  ytdLocationKwd?: number | null;
+  ytdLyLocationKwd?: number | null;
   prevPeriodGrowthPct?: number | null;
   yoyGrowthPct?: number | null;
   days: PerfDay[];
+};
+
+export type YtdCompareSlice = {
+  ratePct?: number | null;
+  periodKd: number;
+  compareKd: number;
+  thisStart?: string;
+  thisEnd?: string;
+  lastStart?: string;
+  lastEnd?: string;
 };
 
 export type FleetKpis = {
@@ -63,6 +75,8 @@ export type FleetKpis = {
   yoyPeriodActualKd?: number | null;
   growthVsPrev?: Partial<Record<GrowthGroupKey, GrowthGroupSlice>>;
   growthVsYoy?: Partial<Record<GrowthGroupKey, GrowthGroupSlice>>;
+  /** Calendar YTD this year vs same dates last year. */
+  ytdCompare?: YtdCompareSlice | null;
 };
 
 export type PerfPreset =

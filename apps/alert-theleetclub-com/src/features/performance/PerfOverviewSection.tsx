@@ -355,6 +355,8 @@ export function PerfOverviewSection({
   const growthYoySlice = kpis?.growthVsYoy?.[growthKey] ?? kpis?.growthVsYoy?.all;
   const growthPrevPct = growthPrevSlice?.ratePct ?? kpis?.growthRatePct ?? null;
   const growthYoyPct = growthYoySlice?.ratePct ?? kpis?.yoyGrowthRatePct ?? null;
+  const ytdSlice = kpis?.ytdCompare;
+  const ytdPct = ytdSlice?.ratePct ?? null;
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -582,6 +584,7 @@ export function PerfOverviewSection({
   const growthTone =
     growthPrevPct == null ? 'neutral' : growthPrevPct >= 100 ? 'up' : 'down';
   const yoyTone = growthYoyPct == null ? 'neutral' : growthYoyPct >= 100 ? 'up' : 'down';
+  const ytdTone = ytdPct == null ? 'neutral' : ytdPct >= 100 ? 'up' : 'down';
   const achTone =
     kpis?.achievementRatePct == null
       ? 'neutral'
@@ -596,6 +599,14 @@ export function PerfOverviewSection({
   const yoyWin =
     windowMeta?.yoyStart && windowMeta?.yoyEnd
       ? `${windowMeta.yoyStart} → ${windowMeta.yoyEnd}`
+      : 'same dates last year';
+  const ytdWinThis =
+    ytdSlice?.thisStart && ytdSlice?.thisEnd
+      ? `${ytdSlice.thisStart} → ${ytdSlice.thisEnd}`
+      : 'Jan 1 → today';
+  const ytdWinLast =
+    ytdSlice?.lastStart && ytdSlice?.lastEnd
+      ? `${ytdSlice.lastStart} → ${ytdSlice.lastEnd}`
       : 'same dates last year';
 
   const growthScopeNote =
@@ -830,6 +841,17 @@ export function PerfOverviewSection({
           hint="Tap for details"
           tone={yoyTone}
           onClick={kpis?.growthVsYoy ? () => setGrowthModal('yoy') : undefined}
+        />
+        <KpiBox
+          label="YTD vs last year"
+          value={formatGrowthDeltaPct(ytdPct)}
+          hint={
+            ytdSlice
+              ? `${formatKwd(ytdSlice.periodKd)} vs ${formatKwd(ytdSlice.compareKd)}`
+              : 'Year to date'
+          }
+          tone={ytdTone}
+          title={`This year YTD (${ytdWinThis}) vs last year (${ytdWinLast}). Growth = (this − last) ÷ last × 100.`}
         />
         <KpiBox
           label="Period KD"
