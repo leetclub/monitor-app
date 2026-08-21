@@ -28,6 +28,25 @@ function formatAsOfClock(asOfLocal: string): string {
   return t;
 }
 
+/**
+ * Fleet bar must start at the side nav’s right edge — never under it, never over it.
+ * Drawer open overlays content: keep the reserved rail width (64), not the overlay width.
+ */
+function resolveFleetBarLeft(): number {
+  const nav = document.querySelector('.appShell .sideNav') as HTMLElement | null;
+  if (!nav) return 0;
+
+  const railPx = 64;
+  if (nav.classList.contains('sideNavOpen')) {
+    return railPx;
+  }
+
+  const rect = nav.getBoundingClientRect();
+  // Prefer measured right edge; fall back to width if left isn’t 0 (e.g. scrolled).
+  const left = rect.right > 0 ? rect.right : rect.width;
+  return Math.max(0, Math.round(left));
+}
+
 function TrendText({
   trendPct,
   loading,
@@ -111,22 +130,45 @@ export function OpsRevenueTotalsBar({
 
     const apply = () => {
       const h = Math.ceil(el.getBoundingClientRect().height);
-      const px = `${Math.max(h, 72)}px`;
-      document.documentElement.style.setProperty('--ops-revenue-bar-h', px);
-      // Mark body so CSS can shorten the side nav above this strip
-      document.body.classList.add('hasOpsRevenueBar');
+      document.documentElement.style.setProperty('--ops-revenue-bar-h', `${Math.max(h, 72)}px`);
+
+      const left = resolveFleetBarLeft();
+      document.documentElement.style.setProperty('--ops-revenue-bar-left', `${left}px`);
+      el.style.setProperty('left', `${left}px`, 'important');
+      el.style.setProperty('right', '0px', 'important');
+      el.style.setProperty('width', 'auto', 'important');
     };
 
     apply();
+    requestAnimationFrame(apply);
+
     const ro = new ResizeObserver(apply);
     ro.observe(el);
+    const nav = document.querySelector('.appShell .sideNav');
+    const main = document.querySelector('.appShell .mainColumn');
+    if (nav) ro.observe(nav);
+    if (main) ro.observe(main);
+
     window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+
+    const shell = document.querySelector('.appShell');
+    let mo: MutationObserver | null = null;
+    if (shell) {
+      mo = new MutationObserver(apply);
+      mo.observe(shell, { attributes: true, attributeFilter: ['class'], subtree: true });
+    }
 
     return () => {
       ro.disconnect();
+      mo?.disconnect();
       window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
       document.documentElement.style.removeProperty('--ops-revenue-bar-h');
-      document.body.classList.remove('hasOpsRevenueBar');
+      document.documentElement.style.removeProperty('--ops-revenue-bar-left');
+      el.style.removeProperty('left');
+      el.style.removeProperty('right');
+      el.style.removeProperty('width');
     };
   }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);
 
