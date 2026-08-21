@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-21 | **Products + fleet bar polish:** Rising/falling cups+Δ bolder with in-row motion; teal hover (clearer than white); legend hover glows main+prior lines; KD axis mid-side so it no longer overlaps legend; fleet bar full-size wrap, **no scroll**, ResizeObserver padding. |
 | 2026-08-21 | **Fleet revenue bar responsive:** Wrap/stack on phone; MTD/YTD compact stacks; hide yest. cluster under 480px; taller safe padding. |
 | 2026-08-21 | **Location YTD card + Red Flags fleet MTD/YTD + Products chart polish:** Location KPI **YTD vs last year**; fleet bar **MTD / YTD** with trends and short `HH:MM KWT · just now` stamp; Products prior=same color dashed, horizontal axis tooltip, label overflow fixes, rising/falling motion panels. |
 | 2026-08-20 | **Performance Products layout polish:** Workspace bar (Time / Target / Y-axis) + per-graph cards; controls nested under A/B; shared B→C products; tighter type scale and muted labels. |

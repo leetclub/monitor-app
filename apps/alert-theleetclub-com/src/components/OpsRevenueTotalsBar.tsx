@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { formatKwd, formatSalesTrendPct, resolveSalesTrendPct } from '@/lib/salesDisplay';
 import type { CompareMetricPair } from '@/lib/presetComparison';
 
@@ -47,39 +48,29 @@ function TrendText({
   );
 }
 
-/** Compact period cell: label, value, and Δ on one stack (saves width on small screens). */
-function PeriodStack({
+function PeriodMetric({
   label,
   value,
-  baselineLabel,
-  baseline,
-  trendPct,
+  muted,
   loading,
-  title,
   divider,
+  title,
 }: {
   label: string;
   value: number | null | undefined;
-  baselineLabel: string;
-  baseline: number | null | undefined;
-  trendPct: number | null | undefined;
+  muted?: boolean;
   loading?: boolean;
-  title?: string;
   divider?: boolean;
+  title?: string;
 }) {
   return (
     <div
-      className={`opsRevenueTotalsMetric opsRevenueTotalsPeriodStack${divider ? ' opsRevenueTotalsMetricDivider' : ''}`}
+      className={`opsRevenueTotalsMetric${divider ? ' opsRevenueTotalsMetricDivider' : ''}`}
       title={title}
     >
       <span className="opsRevenueTotalsLabel">{label}</span>
-      <span className="opsRevenueTotalsVal">{loading ? '…' : value != null ? formatKwd(value) : '—'}</span>
-      <span className="opsRevenueTotalsPeriodSub">
-        <TrendText trendPct={trendPct} loading={loading} />
-        <span className="opsRevenueTotalsBaselineChip">
-          {baselineLabel}{' '}
-          {loading ? '…' : baseline != null ? formatKwd(baseline) : '—'}
-        </span>
+      <span className={`opsRevenueTotalsVal${muted ? ' opsRevenueTotalsValMuted' : ''}`}>
+        {loading ? '…' : value != null ? formatKwd(value) : '—'}
       </span>
     </div>
   );
@@ -98,28 +89,39 @@ export function OpsRevenueTotalsBar({
   totals: CompareMetricPair;
   machineCount: number;
   asOfLocal?: string | null;
-  /** Full-calendar yesterday + −2d fleet totals (today_vs_yesterday preset). */
   yesterdayOverall?: YesterdayOverallFleet | null;
-  /** This month to date vs last month same days. */
   monthToDate?: PeriodCompareFleet | null;
-  /** Year to date vs last year same dates. */
   yearToDate?: PeriodCompareFleet | null;
-  /** Wait for elapsed sales API — avoids misleading partial totals on load. */
   loading?: boolean;
-  /** Short age only, e.g. "just now" — avoid long refresh copy. */
   salesFreshnessNote?: string | null;
 }) {
+  const barRef = useRef<HTMLFooterElement>(null);
   const val = (n: number | null | undefined) =>
     loading ? '…' : n != null ? formatKwd(n) : '—';
   const trendPct = loading ? null : resolveSalesTrendPct(totals.trendPct, totals.primary, totals.baseline);
   const hasTrend = !loading && trendPct != null && Number.isFinite(trendPct);
   const up = hasTrend && trendPct >= 0;
   const down = hasTrend && trendPct < 0;
-
   const yoTrend = loading ? null : yesterdayOverall?.trendVsDayBeforePct;
 
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const apply = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--ops-revenue-bar-h', `${Math.max(h, 72)}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--ops-revenue-bar-h');
+    };
+  }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);
+
   return (
-    <footer className="opsRevenueTotalsBar" aria-label="Fleet revenue running total">
+    <footer ref={barRef} className="opsRevenueTotalsBar" aria-label="Fleet revenue running total">
       <div className="opsRevenueTotalsInner">
         <div className="opsRevenueTotalsBrand">
           <span className="opsRevenueTotalsEyebrow">Fleet revenue</span>
@@ -158,22 +160,21 @@ export function OpsRevenueTotalsBar({
 
           {yesterdayOverall ? (
             <div className="opsRevenueTotalsGroup opsRevenueTotalsGroup--secondary" aria-label="Yesterday full day">
-              <div
-                className="opsRevenueTotalsMetric opsRevenueTotalsMetricDivider"
+              <PeriodMetric
+                divider
+                label="Yest. full day"
+                value={yesterdayOverall.kwd}
+                muted
+                loading={loading}
                 title="Completed Kuwait calendar day yesterday — fleet total from revenue cache"
-              >
-                <span className="opsRevenueTotalsLabel">Yest. full</span>
-                <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">{val(yesterdayOverall.kwd)}</span>
-              </div>
-              <div
-                className="opsRevenueTotalsMetric"
+              />
+              <PeriodMetric
+                label="−2d full day"
+                value={yesterdayOverall.dayBeforeKwd}
+                muted
+                loading={loading}
                 title="Completed Kuwait calendar day before yesterday (−2d)"
-              >
-                <span className="opsRevenueTotalsLabel">−2d</span>
-                <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">
-                  {val(yesterdayOverall.dayBeforeKwd)}
-                </span>
-              </div>
+              />
               <div
                 className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap"
                 title="Percent change: full yesterday vs full −2d"
@@ -185,29 +186,47 @@ export function OpsRevenueTotalsBar({
           ) : null}
 
           {monthToDate ? (
-            <PeriodStack
-              divider
-              label={monthToDate.primaryLabel}
-              value={monthToDate.primary}
-              baselineLabel={monthToDate.baselineLabel}
-              baseline={monthToDate.baseline}
-              trendPct={monthToDate.trendPct}
-              loading={loading}
-              title="This month to date vs last month same days"
-            />
+            <div className="opsRevenueTotalsGroup" aria-label="Month to date">
+              <PeriodMetric
+                divider
+                label={monthToDate.primaryLabel}
+                value={monthToDate.primary}
+                loading={loading}
+                title="This month to date vs last month same days"
+              />
+              <PeriodMetric
+                label={monthToDate.baselineLabel}
+                value={monthToDate.baseline}
+                muted
+                loading={loading}
+              />
+              <div className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap" title="MTD change">
+                <span className="opsRevenueTotalsLabel">MTD Δ</span>
+                <TrendText trendPct={monthToDate.trendPct} loading={loading} />
+              </div>
+            </div>
           ) : null}
 
           {yearToDate ? (
-            <PeriodStack
-              divider
-              label={yearToDate.primaryLabel}
-              value={yearToDate.primary}
-              baselineLabel={yearToDate.baselineLabel}
-              baseline={yearToDate.baseline}
-              trendPct={yearToDate.trendPct}
-              loading={loading}
-              title="Year to date vs last year same dates"
-            />
+            <div className="opsRevenueTotalsGroup" aria-label="Year to date">
+              <PeriodMetric
+                divider
+                label={yearToDate.primaryLabel}
+                value={yearToDate.primary}
+                loading={loading}
+                title="Year to date vs last year same dates"
+              />
+              <PeriodMetric
+                label={yearToDate.baselineLabel}
+                value={yearToDate.baseline}
+                muted
+                loading={loading}
+              />
+              <div className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap" title="YTD change">
+                <span className="opsRevenueTotalsLabel">YTD Δ</span>
+                <TrendText trendPct={yearToDate.trendPct} loading={loading} />
+              </div>
+            </div>
           ) : null}
         </div>
 

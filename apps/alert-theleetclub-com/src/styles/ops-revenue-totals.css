@@ -1,10 +1,8 @@
-/* Fixed fleet revenue total — follows compare preset; sits above bottom safe area */
+/* Fixed fleet revenue total — wraps on all sizes, never scrolls */
 
 :root {
-  --ops-revenue-bar-h: 88px;
-  --ops-revenue-pad-y: 10px;
-  --ops-revenue-label-h: 16px;
-  --ops-revenue-value-h: 1.35rem;
+  --ops-revenue-bar-h: 104px;
+  --ops-revenue-pad-y: 12px;
 }
 
 .stitchShell .contentMain.appMain {
@@ -16,7 +14,6 @@
   bottom: 0;
   right: 0;
   z-index: 45;
-  min-height: var(--ops-revenue-bar-h);
   box-sizing: border-box;
   border-top: 2px solid #6d4a45;
   background: linear-gradient(180deg, rgba(18, 22, 30, 0.98) 0%, rgba(8, 10, 14, 0.99) 100%);
@@ -49,10 +46,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  min-height: var(--ops-revenue-bar-h);
-  padding: var(--ops-revenue-pad-y) 14px;
-  padding-right: max(14px, env(safe-area-inset-right));
+  gap: 10px 24px;
+  padding: var(--ops-revenue-pad-y) 20px;
+  padding-right: max(20px, env(safe-area-inset-right));
   padding-bottom: max(var(--ops-revenue-pad-y), env(safe-area-inset-bottom, 0px));
   min-width: 0;
   box-sizing: border-box;
@@ -62,15 +58,15 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
-  flex-shrink: 0;
+  gap: 4px;
+  flex: 0 0 auto;
   min-width: 0;
-  padding-right: 4px;
+  padding-right: 8px;
 }
 
 .opsRevenueTotalsEyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -81,7 +77,7 @@
 
 .opsRevenueTotalsCount {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: #94a3b8;
   white-space: nowrap;
@@ -91,7 +87,7 @@
 .opsRevenueTotalsAsOfMobile {
   display: none;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   color: #94a3b8;
   line-height: 1.2;
@@ -101,17 +97,18 @@
 .opsRevenueTotalsMetrics {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
-  gap: 8px 14px;
-  flex: 1 1 220px;
+  align-items: center;
+  gap: 10px 22px;
+  flex: 1 1 280px;
   min-width: 0;
+  overflow: visible;
 }
 
 .opsRevenueTotalsGroup {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
+  gap: 10px 20px;
   min-width: 0;
 }
 
@@ -120,67 +117,28 @@
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 6px;
+  flex: 0 0 auto;
   min-width: 0;
-  padding-top: 1px;
-}
-
-.opsRevenueTotalsPeriodStack {
-  min-width: 5.5rem;
-  max-width: 9.5rem;
-}
-
-.opsRevenueTotalsPeriodSub {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-}
-
-.opsRevenueTotalsBaselineChip {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  color: #94a3b8;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .opsRevenueTotalsTrendWrap {
-  min-width: 4.25rem;
+  min-width: 4.5rem;
 }
 
 .opsRevenueTotalsLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  text-transform: none;
   color: #c9a8a3;
   line-height: 1.25;
   white-space: nowrap;
-  overflow: visible;
-}
-
-.opsRevenueTotalsSubLabel {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: #94a3b8;
-  line-height: 1.1;
-  white-space: nowrap;
-  margin-top: -4px;
 }
 
 .opsRevenueTotalsVal {
   font-family: var(--font-mono);
-  font-size: 1.02rem;
+  font-size: 1.28rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #f1f5f9;
@@ -189,19 +147,19 @@
 }
 
 .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
-  font-size: 1.12rem;
+  font-size: 1.48rem;
   color: #ffffff;
 }
 
 .opsRevenueTotalsValMuted {
   color: #cbd5e1;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 1.12rem;
 }
 
 .opsRevenueTotalsTrend {
   font-family: var(--font-mono);
-  font-size: 0.95rem;
+  font-size: 1.28rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
@@ -210,18 +168,17 @@
 
 .opsRevenueTotalsTrendMuted {
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
 
 .opsRevenueTotalsAsOf {
   margin-left: auto;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: #94a3b8;
   white-space: nowrap;
-  flex-shrink: 0;
-  display: none;
+  flex: 0 0 auto;
   line-height: 1.2;
 }
 
@@ -229,111 +186,30 @@
   color: #94a8b8;
 }
 
-@media (min-width: 1100px) {
-  .opsRevenueTotalsAsOf {
-    display: block;
-  }
-}
-
 .opsRevenueTotalsMetricDivider {
-  padding-left: 14px;
+  padding-left: 18px;
   margin-left: 2px;
   border-left: 2px solid rgba(109, 74, 69, 0.75);
 }
 
-/* Tablet+ */
-@media (min-width: 768px) {
-  :root {
-    --ops-revenue-bar-h: 108px;
-    --ops-revenue-pad-y: 12px;
-    --ops-revenue-value-h: 1.42rem;
-  }
-
-  .opsRevenueTotalsInner {
-    flex-wrap: nowrap;
-    padding-left: 20px;
-    padding-right: max(20px, env(safe-area-inset-right));
-    gap: 0 20px;
-  }
-
-  .opsRevenueTotalsBrand {
-    gap: 4px;
-    padding-right: 8px;
-  }
-
-  .opsRevenueTotalsEyebrow {
-    font-size: 11px;
-  }
-
-  .opsRevenueTotalsCount {
-    font-size: 11px;
-  }
-
-  .opsRevenueTotalsMetrics {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: visible;
-    scrollbar-width: thin;
-    gap: 0 18px;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .opsRevenueTotalsGroup {
-    flex-wrap: nowrap;
-    gap: 0 18px;
-  }
-
-  .opsRevenueTotalsMetric {
-    gap: 6px;
-  }
-
-  .opsRevenueTotalsLabel {
-    font-size: 11px;
-  }
-
-  .opsRevenueTotalsVal {
-    font-size: 1.2rem;
-  }
-
-  .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
-    font-size: 1.36rem;
-  }
-
-  .opsRevenueTotalsValMuted {
-    font-size: 1.08rem;
-  }
-
-  .opsRevenueTotalsTrend {
-    font-size: 1.15rem;
-  }
-
-  .opsRevenueTotalsTrendMuted {
-    font-size: 1.05rem;
-  }
-
+/* Mid widths still wrap — never scroll */
+@media (max-width: 1100px) {
   .opsRevenueTotalsAsOf {
-    font-size: 11px;
-  }
-
-  .opsRevenueTotalsMetricDivider {
-    padding-left: 18px;
-  }
-
-  .opsRevenueTotalsBaselineChip {
-    font-size: 10px;
+    flex-basis: 100%;
+    margin-left: 0;
+    order: 3;
   }
 }
 
-/* Phone / narrow — wrap into a readable multi-row bar */
 @media (max-width: 767px) {
   :root {
-    --ops-revenue-bar-h: 132px;
-    --ops-revenue-pad-y: 8px;
+    --ops-revenue-pad-y: 10px;
   }
 
   .opsRevenueTotalsInner {
-    align-items: flex-start;
-    gap: 6px 10px;
+    gap: 8px 14px;
+    padding-left: 14px;
+    padding-right: max(14px, env(safe-area-inset-right));
   }
 
   .opsRevenueTotalsCount {
@@ -345,68 +221,49 @@
   }
 
   .opsRevenueTotalsAsOf {
-    display: none !important;
-  }
-
-  .opsRevenueTotalsMetrics {
-    flex: 1 1 100%;
-    gap: 8px 10px;
-  }
-
-  .opsRevenueTotalsGroup {
-    gap: 6px 10px;
-  }
-
-  .opsRevenueTotalsGroup--secondary {
-    /* Keep yesterday strip but tighter */
-    opacity: 0.95;
-  }
-
-  .opsRevenueTotalsMetricDivider {
-    padding-left: 10px;
-    margin-left: 0;
-  }
-
-  .opsRevenueTotalsVal {
-    font-size: 0.92rem;
-  }
-
-  .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
-    font-size: 1.02rem;
-  }
-
-  .opsRevenueTotalsValMuted {
-    font-size: 0.88rem;
-  }
-
-  .opsRevenueTotalsTrend {
-    font-size: 0.88rem;
-  }
-
-  .opsRevenueTotalsPeriodStack {
-    min-width: 4.75rem;
-  }
-}
-
-@media (max-width: 480px) {
-  :root {
-    --ops-revenue-bar-h: 148px;
-  }
-
-  .opsRevenueTotalsEyebrow {
-    font-size: 9px;
-  }
-
-  .opsRevenueTotalsLabel {
-    font-size: 9px;
-  }
-
-  /* On very small phones, hide yesterday full-day cluster; MTD/YTD stay */
-  .opsRevenueTotalsGroup--secondary {
     display: none;
   }
 
   .opsRevenueTotalsMetrics {
-    gap: 8px 8px;
+    flex: 1 1 100%;
+    gap: 8px 14px;
+  }
+
+  .opsRevenueTotalsGroup {
+    gap: 8px 12px;
+  }
+
+  .opsRevenueTotalsMetricDivider {
+    padding-left: 12px;
+  }
+
+  .opsRevenueTotalsLabel {
+    font-size: 10px;
+  }
+
+  .opsRevenueTotalsVal {
+    font-size: 1.05rem;
+  }
+
+  .opsRevenueTotalsMetric--primary .opsRevenueTotalsVal {
+    font-size: 1.18rem;
+  }
+
+  .opsRevenueTotalsValMuted {
+    font-size: 0.98rem;
+  }
+
+  .opsRevenueTotalsTrend {
+    font-size: 1.05rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .opsRevenueTotalsEyebrow {
+    font-size: 10px;
+  }
+
+  .opsRevenueTotalsGroup--secondary {
+    display: none;
   }
 }

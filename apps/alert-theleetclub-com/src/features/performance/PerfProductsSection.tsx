@@ -283,8 +283,11 @@ function readTheme() {
       muted: '#64748b',
       grid: 'rgba(15, 23, 42, 0.08)',
       axis: '#94a3b8',
-      cross: '#64748b',
-      tipBg: 'rgba(248, 250, 252, 0.96)',
+      /** Teal reads clearer than white on light chart ink. */
+      cross: '#0f766e',
+      tipBg: 'rgba(255, 255, 255, 0.98)',
+      tipBorder: 'rgba(13, 148, 136, 0.55)',
+      tipText: '#0f172a',
     };
   }
   return {
@@ -292,8 +295,11 @@ function readTheme() {
     muted: '#94a3b8',
     grid: 'rgba(148, 163, 184, 0.12)',
     axis: '#64748b',
-    cross: '#94a3b8',
-    tipBg: 'rgba(15, 23, 42, 0.94)',
+    /** Cyan > white on dark plots — higher contrast against grid/lines. */
+    cross: '#2dd4bf',
+    tipBg: 'rgba(8, 18, 28, 0.96)',
+    tipBorder: 'rgba(45, 212, 191, 0.55)',
+    tipText: '#ecfeff',
   };
 }
 
@@ -690,6 +696,9 @@ function DateTrajectoryChart({
     const theme = readTheme();
     const fmt = unit === 'cups' ? (v: number) => String(Math.round(v)) : formatKwd;
     chart.off('click');
+    chart.off('mouseover');
+    chart.off('mouseout');
+    chart.off('globalout');
     if (!days.length || !series.length) {
       chart.clear();
       return;
@@ -702,6 +711,17 @@ function DateTrajectoryChart({
       return wd ? `${wd} ${md}` : md;
     });
     const byName = new Map(series.map((s) => [s.name, s]));
+    const seriesNames = new Set(series.map((s) => s.name));
+    const pairNames = (raw: string): string[] => {
+      const name = String(raw || '').trim();
+      if (!name || name.startsWith('Target ·')) return name ? [name] : [];
+      if (name.startsWith('Prior · ')) {
+        const base = name.slice('Prior · '.length);
+        return [name, base].filter((n) => seriesNames.has(n));
+      }
+      const prior = `Prior · ${name}`;
+      return [name, prior].filter((n) => seriesNames.has(n));
+    };
     // Scale Y to actual lines (skip dotted targets) so product series stay readable.
     const scaleVals = series
       .filter((s) => !s.dotted)
@@ -736,6 +756,8 @@ function DateTrajectoryChart({
     };
     const truncateLabel = (name: string, max = 22) =>
       name.length > max ? `${name.slice(0, max - 1)}…` : name;
+    // Keep a fixed legend band so Y-axis “KD” never sits under machine names.
+    const legendBand = compact ? 40 : 48;
     chart.setOption(
       {
         backgroundColor: 'transparent',
@@ -745,13 +767,20 @@ function DateTrajectoryChart({
           appendToBody: true,
           axisPointer: {
             type: 'line',
-            lineStyle: { color: theme.cross || theme.axis, type: 'dashed' },
+            lineStyle: {
+              color: theme.cross,
+              type: 'solid',
+              width: 1.5,
+              shadowBlur: 6,
+              shadowColor: theme.cross,
+            },
             label: { show: false },
           },
-          backgroundColor: theme.tipBg || 'rgba(15, 23, 42, 0.94)',
-          borderWidth: 0,
+          backgroundColor: theme.tipBg,
+          borderColor: theme.tipBorder,
+          borderWidth: 1,
           padding: [10, 12],
-          textStyle: { color: '#e8f4fc', fontSize: 12 },
+          textStyle: { color: theme.tipText, fontSize: 12, fontWeight: 600 },
           formatter: (params: unknown) => {
             const arr = params as {
               seriesName?: string;
@@ -767,14 +796,14 @@ function DateTrajectoryChart({
                 ? day.date
                 : `${(day.weekday || '').slice(0, 3)} · ${day.date}`
               : labels[i] || '';
-            const lines = [`<div style="font-weight:700;margin-bottom:6px">${head}</div>`];
+            const lines = [`<div style="font-weight:800;margin-bottom:6px;color:${theme.tipText}">${head}</div>`];
             for (const p of arr) {
               if (p.value == null || !Number.isFinite(Number(p.value))) continue;
               const s = byName.get(String(p.seriesName || ''));
               const h = s?.hover?.[i];
               const name = String(p.seriesName || '');
               const tipBits: string[] = [
-                `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span>`,
+                `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;box-shadow:0 0 0 1px ${theme.tipBorder}"></span>`,
                 `<b>${name}</b>: ${fmt(Number(p.value))}`,
               ];
               if (h) {
@@ -800,19 +829,21 @@ function DateTrajectoryChart({
         },
         legend: {
           type: 'scroll',
-          top: 0,
-          left: 0,
-          right: 0,
+          top: 2,
+          left: 8,
+          right: 8,
+          height: legendBand - 4,
           data: series.map((s) => s.name),
           formatter: (name: string) => truncateLabel(name),
           textStyle: { color: theme.muted, fontSize: 10 },
           pageTextStyle: { color: theme.muted },
           pageIconColor: theme.muted,
+          tooltip: { show: true },
         },
         grid: {
           left: 12,
           right: 16,
-          top: 36,
+          top: legendBand + 8,
           bottom: compact ? 40 : 48,
           containLabel: true,
         },
@@ -834,7 +865,9 @@ function DateTrajectoryChart({
         yAxis: {
           type: 'value',
           name: unit === 'cups' ? 'Cups' : 'KD',
-          nameTextStyle: { color: theme.muted, fontSize: 10, padding: [0, 0, 0, 8] },
+          nameLocation: 'middle',
+          nameGap: 52,
+          nameTextStyle: { color: theme.muted, fontSize: 11, fontWeight: 700 },
           scale: true,
           min: yMin,
           max: yMax,
@@ -849,6 +882,7 @@ function DateTrajectoryChart({
         },
         series: series.map((s) => {
           const color = colorFor(s);
+          const isMain = !s.dashed && !s.dotted;
           return {
             name: s.name,
             type: 'line',
@@ -865,11 +899,60 @@ function DateTrajectoryChart({
               type: s.dotted ? 'dotted' : s.dashed ? 'dashed' : 'solid',
               opacity: s.dotted ? 0.85 : 1,
             },
+            emphasis: {
+              focus: 'series',
+              blurScope: 'coordinateSystem',
+              scale: true,
+              lineStyle: {
+                width: isMain ? 3.6 : 3,
+                shadowBlur: 12,
+                shadowColor: color,
+              },
+              itemStyle: {
+                borderWidth: 2,
+                borderColor: '#fff',
+                shadowBlur: 10,
+                shadowColor: color,
+              },
+            },
+            blur: {
+              lineStyle: { opacity: 0.12 },
+              itemStyle: { opacity: 0.12 },
+            },
           };
         }),
       },
       true,
     );
+
+    const focusPair = (raw: string) => {
+      const names = pairNames(raw);
+      if (!names.length) return;
+      chart.dispatchAction({ type: 'downplay' });
+      for (const n of names) {
+        chart.dispatchAction({ type: 'highlight', seriesName: n });
+      }
+    };
+    const clearFocus = () => {
+      chart.dispatchAction({ type: 'downplay' });
+    };
+
+    chart.on('mouseover', (params: { componentType?: string; seriesName?: string; name?: string }) => {
+      if (params.componentType === 'legend') {
+        focusPair(String(params.name || ''));
+        return;
+      }
+      if (params.componentType === 'series') {
+        focusPair(String(params.seriesName || ''));
+      }
+    });
+    chart.on('mouseout', (params: { componentType?: string }) => {
+      if (params.componentType === 'legend' || params.componentType === 'series') {
+        clearFocus();
+      }
+    });
+    chart.on('globalout', clearFocus);
+
     if (onSeriesClick) {
       chart.on('click', (params: { seriesName?: string }) => {
         const name = String(params.seriesName || '').trim();
@@ -2118,11 +2201,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                               from {formatKwd(Number(p.prevRevenueKwd || 0))}
                             </span>
                           </span>
-                          <span className={trendClass(p.cupsTrendPct)}>
-                            <b>
+                          <span className={`perfProductsTrendCups ${trendClass(p.cupsTrendPct)}`}>
+                            <b className="perfProductsTrendCupsVal">
                               {Math.round(Number(p.cups || 0))} cups
                             </b>{' '}
-                            ({trendText(p.cupsTrendPct)})
+                            <b className="perfProductsTrendCupsPct">({trendText(p.cupsTrendPct)})</b>
                           </span>
                         </div>
                       </li>
@@ -2159,11 +2242,11 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                               from {formatKwd(Number(p.prevRevenueKwd || 0))}
                             </span>
                           </span>
-                          <span className={trendClass(p.cupsTrendPct)}>
-                            <b>
+                          <span className={`perfProductsTrendCups ${trendClass(p.cupsTrendPct)}`}>
+                            <b className="perfProductsTrendCupsVal">
                               {Math.round(Number(p.cups || 0))} cups
                             </b>{' '}
-                            ({trendText(p.cupsTrendPct)})
+                            <b className="perfProductsTrendCupsPct">({trendText(p.cupsTrendPct)})</b>
                           </span>
                         </div>
                       </li>

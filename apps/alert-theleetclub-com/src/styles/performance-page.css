@@ -2078,18 +2078,70 @@ button.perfKpiClick:hover {
 }
 
 .perfProductsTrendMeta strong {
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   font-weight: 800;
 }
 
 .perfProductsTrendMeta b {
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text);
 }
 
 .perfProductsTrendFrom {
   opacity: 0.75;
   font-weight: 500;
+}
+
+.perfProductsTrendCups {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  animation: perfTrendCupsPulse 1.6s ease-in-out infinite;
+}
+
+.perfProductsTrendPanel--up .perfProductsTrendCups {
+  background: rgba(34, 197, 94, 0.14);
+  animation-name: perfTrendCupsBounceUp;
+}
+
+.perfProductsTrendPanel--down .perfProductsTrendCups {
+  background: rgba(248, 113, 113, 0.14);
+  animation-name: perfTrendCupsBounceDown;
+}
+
+.perfProductsTrendCupsVal,
+.perfProductsTrendCupsPct {
+  font-weight: 900;
+  font-size: 0.86rem;
+  letter-spacing: 0.01em;
+}
+
+@keyframes perfTrendCupsBounceUp {
+  0%,
+  100% {
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateY(-2px);
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes perfTrendCupsBounceDown {
+  0%,
+  100% {
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateY(2px);
+    filter: brightness(1.12);
+  }
 }
 
 .perfProductsMachineGrid {
