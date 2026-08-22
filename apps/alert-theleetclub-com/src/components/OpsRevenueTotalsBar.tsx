@@ -189,15 +189,24 @@ export function OpsRevenueTotalsBar({
 
         <div className="opsRevenueTotalsMetrics">
           <div className="opsRevenueTotalsGroup" aria-label="Compare period">
-            <div className="opsRevenueTotalsMetric opsRevenueTotalsMetric--primary">
+            <div
+              className="opsRevenueTotalsMetric opsRevenueTotalsMetric--primary"
+              title={`${totals.primaryLabel}: fleet total revenue (KD) for the active compare preset. Customer sales only; excludes WEB cashless / remote credit.`}
+            >
               <span className="opsRevenueTotalsLabel">{totals.primaryLabel}</span>
               <span className="opsRevenueTotalsVal">{val(totals.primary)}</span>
             </div>
-            <div className="opsRevenueTotalsMetric">
+            <div
+              className="opsRevenueTotalsMetric"
+              title={`${totals.baselineLabel}: comparison baseline total (KD) for the same machines.`}
+            >
               <span className="opsRevenueTotalsLabel">{totals.baselineLabel}</span>
               <span className="opsRevenueTotalsVal opsRevenueTotalsValMuted">{val(totals.baseline)}</span>
             </div>
-            <div className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap">
+            <div
+              className="opsRevenueTotalsMetric opsRevenueTotalsTrendWrap"
+              title="Percent change between primary and baseline fleet totals."
+            >
               <span className="opsRevenueTotalsLabel">Change</span>
               {hasTrend ? (
                 <span className={`opsRevenueTotalsTrend ${up ? 'alertSalesUp' : down ? 'alertSalesDown' : ''}`}>

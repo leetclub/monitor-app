@@ -1474,6 +1474,7 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                     # Cups + KD mix for period rollups (Alert / Performance).
                     "productCounts": {str(k): int(v) for k, v in product_counts.items()},
                     "productSales": {str(k): round(float(v), 4) for k, v in product_sales.items()},
+                    "productSalesMeta": {"excludesWebCashless": True, "v": 2},
                     "peakHour": peak_hour,
                 },
                 created_at=datetime.utcnow(),

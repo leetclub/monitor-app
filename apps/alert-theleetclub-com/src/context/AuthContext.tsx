@@ -142,6 +142,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
+      const g = (window as { google?: { accounts?: { id?: { disableAutoSelect?: () => void } } } })
+        .google?.accounts?.id;
+      g?.disableAutoSelect?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      sessionStorage.setItem('leet-alert-signed-out', '1');
+    } catch {
+      /* ignore */
+    }
+    try {
       await fetchJson('/api/auth/logout', { method: 'POST' });
     } catch {
       /* ignore */

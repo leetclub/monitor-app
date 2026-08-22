@@ -1,10 +1,10 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as echarts from 'echarts';
 import { apiGet } from '@/lib/api';
 import { ChartExportWrap } from '@/components/ChartExportWrap';
 import { chartFilename, downloadChartPng } from '@/lib/chartExport';
-import { formatKwd, formatSalesTrendPct } from '@/lib/salesDisplay';
+import { formatKwd, formatSalesTrendHtml, formatSalesTrendPct, salesTrendFromToday } from '@/lib/salesDisplay';
 import { SERIES_PALETTE, type MachineRow } from '@/features/performance/perfTypes';
 import { downloadWeeklyProductReportPdf } from '@/features/performance/exportWeeklyProductReportPdf';
 
@@ -13,6 +13,28 @@ export const PERF_PRODUCTS_GRAPH_PAGE = 8;
 /** @deprecated Alias — machine selection is uncapped; paging uses GRAPH_PAGE. */
 export const PERF_PRODUCTS_MAX_LOCATIONS = PERF_PRODUCTS_GRAPH_PAGE;
 export const PERF_PRODUCTS_MAX_SKUS = 8;
+
+const PRODUCT_COL_TIPS = {
+  periodKd: (label: string) =>
+    `Total revenue (KD) for “${label}”. Sum of customer vends only — excludes WEB cashless / remote credit.`,
+  priorKd: (label: string) =>
+    `Total revenue (KD) for “${label}” in the prior comparison window. Customer sales only.`,
+  vsPrior: 'Percent change in revenue KD vs the prior period.',
+  cups: 'Total cups sold in the period (customer vends only; excludes remote credit).',
+  priorCups: 'Total cups sold in the prior comparison period.',
+  lyKd: 'Total revenue KD for the same calendar dates last year.',
+  yoy: 'Percent change in revenue KD vs same dates last year.',
+  drink: 'Product name from Vendon selection.',
+  location: 'Machine / site name.',
+} as const;
+
+function ThTip({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <th title={title} className="perfThTip">
+      {children}
+    </th>
+  );
+}
 
 type TimeCriteria =
   | 'single:today'
@@ -620,7 +642,9 @@ function SkuMultiDropdown({
                               {o.name}
                             </span>
                           </span>
-                          <span className="perfSkuKd">{formatKwd(o.kd)}</span>
+                          <span className="perfSkuKd" title={`Total revenue (KD) for this drink in the selected scope. Customer sales only.`}>
+                            {formatKwd(o.kd)}
+                          </span>
                         </div>
                       );
                     })
@@ -823,6 +847,24 @@ function DateTrajectoryChart({
                   tipBits.push(
                     ` · Prior ${formatKwd(Number(h.priorKd || 0))} / ${Math.round(Number(h.priorCups || 0))} cups`,
                   );
+                  const cur = unit === 'cups' ? Number(h.cups) : Number(h.kd);
+                  const prior =
+                    unit === 'cups' ? Number(h.priorCups || 0) : Number(h.priorKd || 0);
+                  const trend = salesTrendFromToday(cur, prior);
+                  if (trend != null && Number.isFinite(trend)) {
+                    tipBits.push(` · ${formatSalesTrendHtml(trend, 'vs prior')}`);
+                  }
+                } else if (i > 0 && s?.data) {
+                  const prevPt = Number(s.data[i - 1]);
+                  const curPt = Number(p.value);
+                  if (Number.isFinite(prevPt) && Number.isFinite(curPt)) {
+                    const dod = salesTrendFromToday(curPt, prevPt);
+                    if (dod != null && Number.isFinite(dod)) {
+                      tipBits.push(
+                        ` · ${formatSalesTrendHtml(dod, isHour ? 'vs prior hour' : 'vs prior day')}`,
+                      );
+                    }
+                  }
                 }
                 if (h.target != null && Number(h.target) > 0) {
                   const tgtLabel =
@@ -1150,13 +1192,13 @@ function ProductHeatmapChart({
                   );
                 }
                 if (meta.trendPct != null && Number.isFinite(meta.trendPct)) {
-                  bits.push(`<div>Trend KD: ${formatSalesTrendPct(meta.trendPct)}</div>`);
+                  bits.push(`<div>${formatSalesTrendHtml(meta.trendPct, 'Trend KD')}</div>`);
                 }
                 if (meta.cupsTrendPct != null && Number.isFinite(meta.cupsTrendPct)) {
-                  bits.push(`<div>Trend cups: ${formatSalesTrendPct(meta.cupsTrendPct)}</div>`);
+                  bits.push(`<div>${formatSalesTrendHtml(meta.cupsTrendPct, 'Trend cups')}</div>`);
                 }
                 if (meta.yoyTrendPct != null && Number.isFinite(meta.yoyTrendPct)) {
-                  bits.push(`<div>YoY: ${formatSalesTrendPct(meta.yoyTrendPct)}</div>`);
+                  bits.push(`<div>${formatSalesTrendHtml(meta.yoyTrendPct, 'YoY')}</div>`);
                 }
                 const pct = unit === 'cups' ? meta.pctOfTarget : meta.pctOfRevenueTarget;
                 if (pct != null && Number.isFinite(pct)) {
@@ -1426,10 +1468,20 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const mixedRows = useMemo(() => aggregateProducts(payloadMachines), [payloadMachines]);
   const fleetMix = useMemo(() => aggregateProducts(fleetMachinesNamed), [fleetMachinesNamed]);
 
+  const focusMachine = useMemo(
+    () => payloadMachines.find((m) => m.machineId === focusLocId) || null,
+    [payloadMachines, focusLocId],
+  );
+
   const skuCatalog = useMemo(() => {
-    const src = fleetMix.length ? fleetMix : mixedRows;
-    return src.map((p) => ({ name: p.name, kd: Number(p.revenueKwd || 0) }));
-  }, [fleetMix, mixedRows]);
+    if (locNone) return [];
+    if (focusMachine?.products?.length) {
+      return [...focusMachine.products]
+        .map((p) => ({ name: p.name, kd: Number(p.revenueKwd || 0) }))
+        .sort((a, b) => b.kd - a.kd || a.name.localeCompare(b.name));
+    }
+    return mixedRows.map((p) => ({ name: p.name, kd: Number(p.revenueKwd || 0) }));
+  }, [locNone, focusMachine, mixedRows]);
 
   useEffect(() => {
     if (!skuCatalog.length) return;
@@ -1473,11 +1525,6 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       setFocusLocId('');
     }
   }, [payloadMachines, focusLocId]);
-
-  const focusMachine = useMemo(
-    () => payloadMachines.find((m) => m.machineId === focusLocId) || null,
-    [payloadMachines, focusLocId],
-  );
 
   const inLocationRows = useMemo(() => {
     if (!skus.length) return mixedRows;
@@ -1857,14 +1904,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         <table className="perfProductsTable">
           <thead>
             <tr>
-              <th>Drink</th>
-              <th>{periodLabel} KD</th>
-              {compareOn ? <th>{priorLabel} KD</th> : null}
-              {compareOn ? <th>vs prior</th> : null}
-              <th>Cups</th>
-              {compareOn ? <th>Prior cups</th> : null}
-              <th>LY KD</th>
-              <th>YoY</th>
+              <ThTip title={PRODUCT_COL_TIPS.drink}>Drink</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.periodKd(periodLabel)}>{periodLabel} KD</ThTip>
+              {compareOn ? (
+                <ThTip title={PRODUCT_COL_TIPS.priorKd(priorLabel)}>{priorLabel} KD</ThTip>
+              ) : null}
+              {compareOn ? <ThTip title={PRODUCT_COL_TIPS.vsPrior}>vs prior</ThTip> : null}
+              <ThTip title={PRODUCT_COL_TIPS.cups}>Cups</ThTip>
+              {compareOn ? <ThTip title={PRODUCT_COL_TIPS.priorCups}>Prior cups</ThTip> : null}
+              <ThTip title={PRODUCT_COL_TIPS.lyKd}>LY KD</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.yoy}>YoY</ThTip>
             </tr>
           </thead>
           <tbody>
@@ -1904,14 +1953,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
         <table className="perfProductsTable">
           <thead>
             <tr>
-              <th>Location</th>
-              {tableSkus.length > 1 ? <th>Drink</th> : null}
-              <th>{periodLabel} KD</th>
-              {compareOn ? <th>{priorLabel} KD</th> : null}
-              {compareOn ? <th>vs prior</th> : null}
-              <th>Cups</th>
-              <th>LY KD</th>
-              <th>YoY</th>
+              <ThTip title={PRODUCT_COL_TIPS.location}>Location</ThTip>
+              {tableSkus.length > 1 ? <ThTip title={PRODUCT_COL_TIPS.drink}>Drink</ThTip> : null}
+              <ThTip title={PRODUCT_COL_TIPS.periodKd(periodLabel)}>{periodLabel} KD</ThTip>
+              {compareOn ? (
+                <ThTip title={PRODUCT_COL_TIPS.priorKd(priorLabel)}>{priorLabel} KD</ThTip>
+              ) : null}
+              {compareOn ? <ThTip title={PRODUCT_COL_TIPS.vsPrior}>vs prior</ThTip> : null}
+              <ThTip title={PRODUCT_COL_TIPS.cups}>Cups</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.lyKd}>LY KD</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.yoy}>YoY</ThTip>
             </tr>
           </thead>
           <tbody>

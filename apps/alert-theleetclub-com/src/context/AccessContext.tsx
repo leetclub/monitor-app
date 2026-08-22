@@ -66,7 +66,7 @@ export function AccessProvider({
     fullAccess,
     allowedEmailDomains,
     allowedSet,
-    isLoading: !!userEmail ? query.isLoading : false,
+    isLoading: !!userEmail && query.isLoading && !query.data,
     error: query.error as Error | null,
     refetch: () => void query.refetch(),
     canSeeTab,

@@ -283,7 +283,7 @@ function UserSessionControls() {
         className="topBarSignOut"
         onClick={async () => {
           await signOut();
-          navigate('/login', { replace: true });
+          navigate('/login', { replace: true, state: { signedOut: true } });
         }}
       >
         Sign out

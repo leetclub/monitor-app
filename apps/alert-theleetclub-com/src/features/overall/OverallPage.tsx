@@ -1182,7 +1182,7 @@ export function OverallPage({
       <OpsRevenueTotalsBar
         totals={fleetRevenueTotals}
         machineCount={fleetRevenueTotals.machineCount}
-        loading={fleetRevenueTotals.loading}
+          loading={fleetRevenueTotals.loading || dailySalesQ.isLoading || !dailySalesQ.isFetched}
         asOfLocal={dailySalesQ.data?.asOfLocal}
         salesFreshnessNote={
           dailySalesQ.isFetched

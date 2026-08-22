@@ -151,7 +151,7 @@ export function V2Shell() {
               className="v2SignOut"
               onClick={async () => {
                 await signOut();
-                navigate('/v2/login', { replace: true });
+                navigate('/v2/login', { replace: true, state: { signedOut: true } });
               }}
             >
               Sign out

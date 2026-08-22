@@ -166,7 +166,7 @@ def _vendon_revenue_cache_has_day(db: Session, day: date) -> bool:
 
 
 def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
-    """True when the day is missing or still lacks productSales (KD mix) for ranking."""
+    """True when the day is missing or still lacks customer-only productSales (KD mix)."""
     rows = (
         db.query(VendonDailyMachineRevenueCache.payload_json)
         .filter(VendonDailyMachineRevenueCache.cache_date == day)
@@ -176,19 +176,24 @@ def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
     if not rows:
         return True
     for (payload,) in rows:
+        if not isinstance(payload, dict):
+            continue
+        meta = payload.get("productSalesMeta")
+        has_fresh_meta = (
+            isinstance(meta, dict)
+            and meta.get("excludesWebCashless") is True
+            and int(meta.get("v") or 0) >= 2
+        )
+        ps = payload.get("productSales")
         if (
-            isinstance(payload, dict)
-            and isinstance(payload.get("productSales"), dict)
-            and payload.get("productSales")
+            has_fresh_meta
+            and isinstance(ps, dict)
+            and ps
         ):
             return False
         # Older enrich had cups only — still needs KD mix.
-        if (
-            isinstance(payload, dict)
-            and isinstance(payload.get("productCounts"), dict)
-            and payload.get("productCounts")
-            and not payload.get("productSales")
-        ):
+        pc = payload.get("productCounts")
+        if isinstance(pc, dict) and pc and not (isinstance(ps, dict) and ps):
             return True
     return True
 
@@ -3163,6 +3168,7 @@ def register_alert_routes(app) -> None:
                 continue
             payload = r.payload_json if isinstance(r.payload_json, dict) else {}
             ps = payload.get("productSales") if isinstance(payload.get("productSales"), dict) else None
+            pc = payload.get("productCounts") if isinstance(payload.get("productCounts"), dict) else None
             if ps:
                 for name_raw, kwd_raw in ps.items():
                     name = str(name_raw or "").strip()
@@ -3175,6 +3181,10 @@ def register_alert_routes(app) -> None:
                     if kwd <= 0:
                         continue
                     totals[name] = float(totals.get(name) or 0.0) + kwd
+                continue
+            # Have per-product counts but no KD mix — do not use legacy top/low revenue
+            # (those snapshots can include remote credit / WEB cashless).
+            if pc:
                 continue
             # Legacy: fold top/low revenueKwd or approximate from count (no price → skip KD).
             for key in ("topProducts", "lowProducts"):
@@ -4127,12 +4137,14 @@ def register_alert_routes(app) -> None:
                         from_ts, _ = _kuwait_day_bounds_utc(start_d.isoformat())
                         _, to_ts = _kuwait_day_bounds_utc(end_d.isoformat())
                         vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
-                        from vendon_proxy_routes import _stats_vend_product_fields
+                        from vendon_proxy_routes import _is_web_cashless_vend, _stats_vend_product_fields
 
                         live_s: Dict[str, float] = {}
                         live_c: Dict[str, int] = {}
                         for v in vends or []:
                             if not isinstance(v, dict):
+                                continue
+                            if _is_web_cashless_vend(v):
                                 continue
                             pn, _sel = _stats_vend_product_fields(v)
                             pn = (pn or "").strip()
@@ -4296,7 +4308,7 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v6:{preset_id}:{win_s}:{win_e}:"
+            f"perf:product-compare:v7:{preset_id}:{win_s}:{win_e}:"
             f"{prev_s}:{prev_e}:c{int(compare_on)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)
@@ -4390,6 +4402,38 @@ def register_alert_routes(app) -> None:
         finally:
             dash.close()
 
+        recent_cutoff = today - timedelta(days=62)
+        seed_d = win_s
+        while seed_d <= win_e:
+            if seed_d >= recent_cutoff:
+                _maybe_seed_vendon_revenue_cache(seed_d)
+            seed_d += timedelta(days=1)
+        if compare_on:
+            seed_d = prev_s
+            while seed_d <= prev_e:
+                if seed_d >= recent_cutoff:
+                    _maybe_seed_vendon_revenue_cache(seed_d)
+                seed_d += timedelta(days=1)
+
+        seed_db = _pa_session()
+        sync_days: List[date] = []
+        try:
+            scan = win_s
+            while scan <= win_e and len(sync_days) < 14:
+                if scan >= recent_cutoff and _vendon_revenue_cache_day_needs_product_mix(seed_db, scan):
+                    sync_days.append(scan)
+                scan += timedelta(days=1)
+        finally:
+            seed_db.close()
+        if sync_days:
+            from vendon_proxy_routes import _refresh_revenue_cache_single_day
+
+            for sd in sync_days:
+                try:
+                    _refresh_revenue_cache_single_day(sd.isoformat())
+                except Exception:
+                    logger.exception("product-compare sync revenue seed for %s", sd.isoformat())
+
         db = _pa_session()
         try:
             fetch_lo = min(win_s, prev_s, yoy_s)
@@ -4434,6 +4478,39 @@ def register_alert_routes(app) -> None:
                     logger.exception("product-compare hourly buckets")
                     granularity = "day"
 
+            def _live_product_sales_range(
+                mid: str, start_d: date, end_d: date
+            ) -> Tuple[Dict[str, float], Dict[str, int]]:
+                from vendon_proxy_routes import _is_web_cashless_vend, _stats_vend_product_fields
+
+                live_s: Dict[str, float] = {}
+                live_c: Dict[str, int] = {}
+                d = start_d
+                while d <= end_d:
+                    try:
+                        from_ts, _ = _kuwait_day_bounds_utc(d.isoformat())
+                        _, to_ts = _kuwait_day_bounds_utc(d.isoformat())
+                        vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
+                        for v in vends or []:
+                            if not isinstance(v, dict) or _is_web_cashless_vend(v):
+                                continue
+                            pn, _sel = _stats_vend_product_fields(v)
+                            pn = (pn or "").strip()
+                            if not pn:
+                                continue
+                            try:
+                                price = float(v.get("price") or 0)
+                            except (TypeError, ValueError):
+                                price = 0.0
+                            live_s[pn] = float(live_s.get(pn) or 0.0) + price
+                            live_c[pn] = int(live_c.get(pn) or 0) + 1
+                    except Exception:
+                        logger.exception(
+                            "product-compare live vends %s %s", mid, d.isoformat()
+                        )
+                    d += timedelta(days=1)
+                return live_s, live_c
+
             machines_out: List[Dict[str, Any]] = []
             for mid in requested:
                 mrows = by_mid.get(mid) or []
@@ -4451,6 +4528,18 @@ def register_alert_routes(app) -> None:
                     else {}
                 )
                 yoy_cups = _aggregate_product_counts_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
+                if not cur:
+                    live_s, live_c = _live_product_sales_range(mid, win_s, win_e)
+                    if live_s:
+                        cur = live_s
+                    if live_c:
+                        cups = live_c
+                if compare_on and not prev:
+                    live_prev, live_prev_c = _live_product_sales_range(mid, prev_s, prev_e)
+                    if live_prev:
+                        prev = live_prev
+                    if live_prev_c:
+                        prev_cups = live_prev_c
                 period_kd = round(sum(float(v or 0) for v in cur.values()), 4)
                 period_cups = int(sum(int(v or 0) for v in cups.values()))
                 prev_kd = round(sum(float(v or 0) for v in prev.values()), 4) if compare_on else None

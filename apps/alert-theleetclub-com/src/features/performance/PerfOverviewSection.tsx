@@ -881,9 +881,11 @@ export function PerfOverviewSection({
         <KpiBox
           label="Deficit"
           value={
-            kpis?.deficitKd == null
-              ? '—'
-              : `${kpis.deficitKd >= 0 ? '+' : ''}${formatKwd(kpis.deficitKd)}`
+            loading
+              ? '…'
+              : kpis?.deficitKd == null
+                ? '—'
+                : `${kpis.deficitKd >= 0 ? '+' : ''}${formatKwd(kpis.deficitKd)}`
           }
           hint="Tap for details"
           tone={deficitTone}
@@ -892,7 +894,7 @@ export function PerfOverviewSection({
         />
         <KpiBox
           label="Target achievement"
-          value={kpis?.achievementRatePct != null ? `${kpis.achievementRatePct}%` : '—'}
+          value={loading ? '…' : kpis?.achievementRatePct != null ? `${kpis.achievementRatePct}%` : '—'}
           hint="Tap for details"
           tone={achTone}
           onClick={() => setInsightModal('achievement')}
@@ -900,21 +902,21 @@ export function PerfOverviewSection({
         />
         <KpiBox
           label="Growth vs prior period"
-          value={formatGrowthDeltaPct(growthPrevPct)}
+          value={loading ? '…' : formatGrowthDeltaPct(growthPrevPct)}
           hint="Tap for details"
           tone={growthTone}
           onClick={kpis?.growthVsPrev ? () => setGrowthModal('prev') : undefined}
         />
         <KpiBox
           label="Growth vs same dates last year"
-          value={formatGrowthDeltaPct(growthYoyPct)}
+          value={loading ? '…' : formatGrowthDeltaPct(growthYoyPct)}
           hint="Tap for details"
           tone={yoyTone}
           onClick={kpis?.growthVsYoy ? () => setGrowthModal('yoy') : undefined}
         />
         <KpiBox
           label="YTD vs last year"
-          value={formatGrowthDeltaPct(ytdPct)}
+          value={loading ? '…' : formatGrowthDeltaPct(ytdPct)}
           hint="Tap for details"
           tone={ytdTone}
           onClick={() => setInsightModal('ytd')}
@@ -922,7 +924,7 @@ export function PerfOverviewSection({
         />
         <KpiBox
           label="Period KD"
-          value={kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—'}
+          value={loading ? '…' : kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—'}
           hint="Tap for details"
           tone="neutral"
           onClick={() => setInsightModal('period')}

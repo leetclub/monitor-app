@@ -1940,6 +1940,12 @@ button.perfKpiClick:hover {
   letter-spacing: 0.02em;
 }
 
+.perfProductsTable th.perfThTip {
+  cursor: help;
+  text-decoration: underline dotted rgba(148, 163, 184, 0.45);
+  text-underline-offset: 3px;
+}
+
 .perfProductsTable td:nth-child(n + 2) {
   font-family: var(--font-mono);
 }

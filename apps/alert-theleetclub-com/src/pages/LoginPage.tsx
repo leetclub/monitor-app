@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { getAlertRuntimeEnv } from '@/config/runtimeEnv';
 import { loadGsiScript } from '@/lib/gsi';
@@ -9,12 +9,22 @@ import { ColorModeToggle } from '@/components/ColorModeToggle';
 export function LoginPage() {
   const { user, loading, signIn, completeGoogleCredential } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const gsiRef = useRef<HTMLDivElement>(null);
+  const signedOut =
+    (location.state as { signedOut?: boolean } | null)?.signedOut === true ||
+    (typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('leet-alert-signed-out') === '1');
 
   const clientId = getAlertRuntimeEnv().GOOGLE_CLIENT_ID?.trim();
 
   useEffect(() => {
     if (!loading && user) {
+      try {
+        sessionStorage.removeItem('leet-alert-signed-out');
+      } catch {
+        /* ignore */
+      }
       navigate('/', { replace: true });
     }
   }, [loading, user, navigate]);
@@ -30,10 +40,15 @@ export function LoginPage() {
         gsi.initialize({
           client_id: clientId,
           callback: async (resp: { credential?: string }) => {
+            try {
+              sessionStorage.removeItem('leet-alert-signed-out');
+            } catch {
+              /* ignore */
+            }
             const ok = await completeGoogleCredential(String(resp?.credential || ''));
             if (ok) navigate('/', { replace: true });
           },
-          auto_select: true,
+          auto_select: !signedOut,
           use_fedcm_for_prompt: false,
         });
         gsi.renderButton(gsiRef.current, {
@@ -51,7 +66,7 @@ export function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [clientId, completeGoogleCredential, navigate, loading, user]);
+  }, [clientId, completeGoogleCredential, navigate, loading, user, signedOut]);
 
   if (loading) {
     return (

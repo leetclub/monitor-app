@@ -473,7 +473,7 @@ export function PerformancePage({
               onPresetChange={setPreset}
               windowLabel={windowLabel}
               windowMeta={win}
-              loading={fleetQ.isLoading}
+              loading={fleetQ.isLoading || fleetQ.isFetching || !fleetQ.isFetched}
               fleetRanking={fleetRanking}
               selectionLabel={selectionLabel}
               onOpenMachineProducts={(machineId, machineName) =>
