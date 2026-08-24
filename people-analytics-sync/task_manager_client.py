@@ -37,6 +37,99 @@ def weekday_key(d: date) -> str:
     return _WEEKDAY_KEYS[d.weekday()]
 
 
+def _parse_hhmm(raw: Any) -> Optional[int]:
+    """Return minutes from midnight for 'HH:MM' / 'H:MM' / 'HHMM'. None if unparsable."""
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            h = int(parts[0])
+            m = int(parts[1]) if len(parts) > 1 else 0
+            if 0 <= h <= 23 and 0 <= m <= 59:
+                return h * 60 + m
+        except (TypeError, ValueError):
+            return None
+        return None
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) in (3, 4):
+        try:
+            h = int(digits[:-2])
+            m = int(digits[-2:])
+            if 0 <= h <= 23 and 0 <= m <= 59:
+                return h * 60 + m
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def schedule_day_is_overnight(day: Dict[str, Any]) -> bool:
+    """True when weekday schedule to <= from (crosses midnight), e.g. 22:00 → 06:00."""
+    if not isinstance(day, dict) or day.get("off"):
+        return False
+    start = _parse_hhmm(day.get("from") or day.get("start"))
+    end = _parse_hhmm(day.get("to") or day.get("end"))
+    if start is None or end is None:
+        return False
+    return end <= start
+
+
+def shift_covers_now(day: Dict[str, Any], work_date: date, now_kwt: Optional[datetime] = None) -> bool:
+    """Whether Kuwait `now` falls inside the shift that started on `work_date`."""
+    if not isinstance(day, dict) or day.get("off"):
+        return False
+    start = _parse_hhmm(day.get("from") or day.get("start"))
+    end = _parse_hhmm(day.get("to") or day.get("end"))
+    if start is None or end is None:
+        # No clock bounds — treat as covering the calendar work date only.
+        now = now_kwt or datetime.now(_KWT)
+        return now.date() == work_date
+    now = now_kwt or datetime.now(_KWT)
+    start_dt = datetime(work_date.year, work_date.month, work_date.day, start // 60, start % 60, tzinfo=_KWT)
+    if end <= start:
+        end_day = work_date + timedelta(days=1)
+    else:
+        end_day = work_date
+    end_dt = datetime(end_day.year, end_day.month, end_day.day, end // 60, end % 60, tzinfo=_KWT)
+    return start_dt <= now < end_dt
+
+
+def resolve_operator_for_machine_now(
+    period_detail: Dict[str, Any],
+    machine_id: str,
+    now_kwt: Optional[datetime] = None,
+) -> Tuple[Optional[Dict[str, Any]], date]:
+    """
+    Pick the scheduled operator and Task Manager *work date* for attendance.
+
+    Night shifts cross midnight: after 00:00 the calendar day changes but punches
+    still belong to yesterday's work date. Prefer an overnight shift that still
+    covers now; else today's calendar schedule.
+    """
+    now = now_kwt or datetime.now(_KWT)
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+
+    y_es = find_operator_for_machine_on_date(period_detail, machine_id, yesterday)
+    if y_es:
+        y_day = (y_es.get("schedule") or {}).get(weekday_key(yesterday))
+        if isinstance(y_day, dict) and schedule_day_is_overnight(y_day) and shift_covers_now(y_day, yesterday, now):
+            return y_es, yesterday
+
+    t_es = find_operator_for_machine_on_date(period_detail, machine_id, today)
+    if t_es:
+        t_day = (t_es.get("schedule") or {}).get(weekday_key(today))
+        if isinstance(t_day, dict) and not t_day.get("off"):
+            # If today's shift has clock bounds and we're outside them, still return
+            # the calendar-day operator (pending/absent is correct for day shift).
+            return t_es, today
+        if t_es:
+            return t_es, today
+
+    return None, today
+
+
 def _headers() -> Dict[str, str]:
     return {"Accept": "application/json", "X-Api-Key": _API_KEY}
 

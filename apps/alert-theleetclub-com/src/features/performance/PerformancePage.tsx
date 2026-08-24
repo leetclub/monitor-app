@@ -79,14 +79,14 @@ function writeMachineParams(p: URLSearchParams, next: Set<string> | null) {
 function seedProductsSelection(
   source: Set<string> | null,
   machines: MachineRow[],
-  defaultCount: number,
+  _defaultCount: number,
 ): Set<string> {
   const allowed = new Set(machines.map((m) => m.id));
   if (source === null) {
-    return new Set(machines.slice(0, defaultCount).map((m) => m.id));
+    return new Set(machines.map((m) => m.id));
   }
   const kept = [...source].filter((id) => allowed.has(id));
-  if (!kept.length) return new Set(machines.slice(0, defaultCount).map((m) => m.id));
+  if (!kept.length) return new Set(machines.map((m) => m.id));
   return new Set(kept);
 }
 
@@ -432,7 +432,7 @@ export function PerformancePage({
             narrowFromAll={workspace === 'products'}
             hint={
               workspace === 'products'
-                ? `Select any number of locations. Product charts show ${PERF_PRODUCTS_GRAPH_PAGE} sites per page (‹ ›), like Location.`
+                ? `Select all locations if you want. Product charts show ${PERF_PRODUCTS_GRAPH_PAGE} sites (and drinks) per page (‹ ›).`
                 : undefined
             }
           />

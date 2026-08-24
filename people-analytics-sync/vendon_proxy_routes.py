@@ -1387,20 +1387,29 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
             total_tx = 0
             product_counts: Dict[str, int] = {}
             product_sales: Dict[str, float] = {}
+            product_counts_all: Dict[str, int] = {}
+            product_sales_all: Dict[str, float] = {}
             hour_counts: Dict[int, int] = {}
             tz_kw = ZoneInfo("Asia/Kuwait")
             for v in vends:
-                # Real customer sales only — WEB cashless ≈ remote credit / operator activity.
-                if _is_web_cashless_vend(v):
-                    continue
                 try:
                     price = float(v.get("price") or 0)
                 except Exception:
                     price = 0.0
+                try:
+                    prod_name, _sel = _stats_vend_product_fields(v)
+                except Exception:
+                    prod_name = ""
+                # All vends (incl. WEB cashless) for optional Alert toggle.
+                if prod_name:
+                    product_counts_all[prod_name] = int(product_counts_all.get(prod_name, 0)) + 1
+                    product_sales_all[prod_name] = float(product_sales_all.get(prod_name, 0.0)) + price
+                # Real customer sales only — WEB cashless ≈ remote credit / operator activity.
+                if _is_web_cashless_vend(v):
+                    continue
                 total_sales += price
                 total_tx += 1
                 try:
-                    prod_name, _sel = _stats_vend_product_fields(v)
                     if prod_name:
                         product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
                         product_sales[prod_name] = float(product_sales.get(prod_name, 0.0)) + price
@@ -1474,7 +1483,9 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
                     # Cups + KD mix for period rollups (Alert / Performance).
                     "productCounts": {str(k): int(v) for k, v in product_counts.items()},
                     "productSales": {str(k): round(float(v), 4) for k, v in product_sales.items()},
-                    "productSalesMeta": {"excludesWebCashless": True, "v": 2},
+                    "productCountsAll": {str(k): int(v) for k, v in product_counts_all.items()},
+                    "productSalesAll": {str(k): round(float(v), 4) for k, v in product_sales_all.items()},
+                    "productSalesMeta": {"excludesWebCashless": True, "v": 3},
                     "peakHour": peak_hour,
                 },
                 created_at=datetime.utcnow(),

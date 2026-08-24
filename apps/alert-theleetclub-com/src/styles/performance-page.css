@@ -579,6 +579,49 @@
   margin-top: 2px;
 }
 
+.perfFleetCombinedStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 28px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-soft, rgba(148, 163, 184, 0.25));
+  background: var(--panel2, rgba(15, 23, 42, 0.45));
+}
+
+.perfFleetCombinedStripItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.perfFleetCombinedStripLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #94a3b8);
+}
+
+.perfFleetCombinedStripItem strong {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text, #f1f5f9);
+}
+
+.perfFleetCombinedStripHint {
+  flex: 1 1 180px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted, #94a3b8);
+}
+
 .perfSegPillEmphasis {
   border-color: rgba(45, 212, 191, 0.45);
   color: var(--text);

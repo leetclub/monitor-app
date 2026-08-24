@@ -346,7 +346,7 @@ export function PerfOverviewSection({
   onOpenMachineProducts?: (machineId: string, machineName: string) => void;
 }) {
   const [view, setView] = useState<PerfViewMode>('all');
-  const [combined, setCombined] = useState(false);
+  const [combined, setCombined] = useState(true);
   const [growthModal, setGrowthModal] = useState<'prev' | 'yoy' | null>(null);
   const [insightModal, setInsightModal] = useState<'deficit' | 'achievement' | 'ytd' | 'period' | null>(
     null,
@@ -439,13 +439,15 @@ export function PerfOverviewSection({
     const series: echarts.SeriesOption[] = [];
 
     if (combined) {
+      // Fleet-wide combined: all ranked machines (not only current graph page).
+      const pool = ranked.length ? ranked : seriesMachines;
       const totals: number[] = [];
       const tgtSum: (number | null)[] = [];
       for (let i = 0; i < dayCount; i++) {
         let sum = 0;
         let tSum = 0;
         let tN = 0;
-        for (const m of seriesMachines) {
+        for (const m of pool) {
           sum += Number(m.days?.[i]?.locationKwd) || 0;
           const t = Number(m.days?.[i]?.locationTargetKd);
           if (Number.isFinite(t) && t > 0) {
@@ -457,7 +459,7 @@ export function PerfOverviewSection({
         tgtSum.push(tN ? Math.round(tSum * 100) / 100 : null);
       }
       series.push({
-        name: 'Combined sales',
+        name: `Combined sales (${pool.length})`,
         type: 'line',
         smooth: 0.25,
         showSymbol: dayCount <= 10,
@@ -629,7 +631,7 @@ export function PerfOverviewSection({
       { notMerge: true },
     );
     chart.resize();
-  }, [seriesMachines, labels, combined, aggregateDays]);
+  }, [seriesMachines, labels, combined, aggregateDays, ranked]);
 
   const onExport = useCallback(() => {
     const c = chartInst.current;
@@ -723,6 +725,39 @@ export function PerfOverviewSection({
         <ChartExportButton onExport={onExport} label="Download Performance Trajectory as PNG" />
       </header>
 
+      <div className="perfFleetCombinedStrip" aria-label="Fleet combined period totals">
+        <div className="perfFleetCombinedStripItem">
+          <span className="perfFleetCombinedStripLabel">Fleet period KD</span>
+          <strong>
+            {loading ? '…' : kpis?.periodActualKd != null ? formatKwd(kpis.periodActualKd) : '—'}
+          </strong>
+        </div>
+        <div className="perfFleetCombinedStripItem">
+          <span className="perfFleetCombinedStripLabel">Fleet target</span>
+          <strong>
+            {loading ? '…' : kpis?.periodTargetKd != null ? formatKwd(kpis.periodTargetKd) : '—'}
+          </strong>
+        </div>
+        <div className="perfFleetCombinedStripItem">
+          <span className="perfFleetCombinedStripLabel">Achievement</span>
+          <strong>
+            {loading
+              ? '…'
+              : kpis?.achievementRatePct != null
+                ? `${kpis.achievementRatePct}%`
+                : '—'}
+          </strong>
+        </div>
+        <div className="perfFleetCombinedStripItem">
+          <span className="perfFleetCombinedStripLabel">Machines</span>
+          <strong>{machines.length}</strong>
+        </div>
+        <p className="perfFleetCombinedStripHint">
+          Combined totals for all machines in this selection · period preset below (WTD / last week /
+          …)
+        </p>
+      </div>
+
       <div className="perfToolbarRow">
         <div className="perfModePills" role="group" aria-label="Machine view">
           {fleetRanking ? (
@@ -748,8 +783,9 @@ export function PerfOverviewSection({
             type="button"
             className={`perfSegPill ${combined ? 'active' : ''}`}
             onClick={() => setCombined((c) => !c)}
+            title="One line = sum of all machines in the current selection (fleet-wide)"
           >
-            {combined ? 'Combined line on' : 'Combined line'}
+            {combined ? 'Fleet combined on' : 'Fleet combined'}
           </button>
           <button
             type="button"

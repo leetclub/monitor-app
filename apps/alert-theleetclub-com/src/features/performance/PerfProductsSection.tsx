@@ -8,19 +8,27 @@ import { formatKwd, formatSalesTrendHtml, formatSalesTrendPct, salesTrendFromTod
 import { SERIES_PALETTE, type MachineRow } from '@/features/performance/perfTypes';
 import { downloadWeeklyProductReportPdf } from '@/features/performance/exportWeeklyProductReportPdf';
 
-/** Sites drawn on Graph A per page (‹ ›). */
+/** Sites drawn on Graph A / drinks on Graph B+heatmap per page (‹ ›). */
 export const PERF_PRODUCTS_GRAPH_PAGE = 8;
 /** @deprecated Alias — machine selection is uncapped; paging uses GRAPH_PAGE. */
 export const PERF_PRODUCTS_MAX_LOCATIONS = PERF_PRODUCTS_GRAPH_PAGE;
-export const PERF_PRODUCTS_MAX_SKUS = 8;
+/** Soft page size for Top/Least helpers and graph paging — selection is uncapped. */
+export const PERF_PRODUCTS_SKU_PAGE = PERF_PRODUCTS_GRAPH_PAGE;
+/** @deprecated Use PERF_PRODUCTS_SKU_PAGE — selection is no longer capped. */
+export const PERF_PRODUCTS_MAX_SKUS = PERF_PRODUCTS_SKU_PAGE;
 
 const PRODUCT_COL_TIPS = {
-  periodKd: (label: string) =>
-    `Total revenue (KD) for “${label}”. Sum of customer vends only — excludes WEB cashless / remote credit.`,
+  periodKd: (label: string, includeCashless?: boolean) =>
+    includeCashless
+      ? `Total revenue (KD) for “${label}”, including WEB cashless / remote credit.`
+      : `Total revenue (KD) for “${label}”. Sum of customer vends only — excludes WEB cashless / remote credit.`,
   priorKd: (label: string) =>
-    `Total revenue (KD) for “${label}” in the prior comparison window. Customer sales only.`,
+    `Total revenue (KD) for “${label}” in the prior comparison window.`,
   vsPrior: 'Percent change in revenue KD vs the prior period.',
-  cups: 'Total cups sold in the period (customer vends only; excludes remote credit).',
+  cups: (includeCashless?: boolean) =>
+    includeCashless
+      ? 'Total cups sold in the period (includes WEB cashless).'
+      : 'Total cups sold in the period (customer vends only; excludes remote credit).',
   priorCups: 'Total cups sold in the prior comparison period.',
   lyKd: 'Total revenue KD for the same calendar dates last year.',
   yoy: 'Percent change in revenue KD vs same dates last year.',
@@ -180,6 +188,8 @@ type CompareOpts = {
   aEnd?: string;
   bStart?: string;
   bEnd?: string;
+  /** When true, include WEB cashless / remote credit in product KD. */
+  includeWebCashless?: boolean;
 };
 
 function productComparePath(ids: string[], opts: CompareOpts): string {
@@ -198,6 +208,7 @@ function productComparePath(ids: string[], opts: CompareOpts): string {
     qs.set('preset', opts.preset);
     if (opts.compare === false) qs.set('compare', '0');
   }
+  if (opts.includeWebCashless) qs.set('includeWebCashless', '1');
   return `/api/alert/performance/product-compare?${qs.toString()}`;
 }
 
@@ -493,6 +504,7 @@ function SkuMultiDropdown({
   onClear,
   onSelectTop,
   onSelectLeast,
+  onSelectAll,
   embedded,
 }: {
   options: { name: string; kd: number }[];
@@ -501,25 +513,26 @@ function SkuMultiDropdown({
   onClear: () => void;
   onSelectTop: () => void;
   onSelectLeast: () => void;
+  onSelectAll: () => void;
   /** Nest inside a graph card toolbar (no outer panel chrome). */
   embedded?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [atCapHint, setAtCapHint] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const atCap = selected.length >= PERF_PRODUCTS_MAX_SKUS;
   const summary = selected.length
     ? selected.length === 1
       ? selected[0]
-      : `${selected.length} of ${PERF_PRODUCTS_MAX_SKUS} drinks`
+      : selected.length === options.length && options.length > 0
+        ? `All ${options.length} drinks`
+        : `${selected.length} drinks`
     : 'Select drinks…';
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return options.slice(0, 80);
-    return options.filter((o) => o.name.toLowerCase().includes(needle)).slice(0, 80);
+    if (!needle) return options.slice(0, 120);
+    return options.filter((o) => o.name.toLowerCase().includes(needle)).slice(0, 120);
   }, [options, q]);
 
   useEffect(() => {
@@ -544,7 +557,7 @@ function SkuMultiDropdown({
           <span className="perfProductsFieldLabel">
             Products
             <em>
-              {selected.length}/{PERF_PRODUCTS_MAX_SKUS}
+              {selected.length}/{options.length || '—'}
             </em>
           </span>
           <div className="perfLocSelect">
@@ -578,32 +591,18 @@ function SkuMultiDropdown({
                     <button
                       type="button"
                       className={`perfSegPill ${selected.length === 0 ? 'active' : ''}`}
-                      onClick={() => {
-                        onClear();
-                        setAtCapHint(false);
-                      }}
+                      onClick={() => onClear()}
                     >
                       Clear
                     </button>
-                    <button
-                      type="button"
-                      className="perfSegPill"
-                      onClick={() => {
-                        onSelectTop();
-                        setAtCapHint(false);
-                      }}
-                    >
-                      Top {PERF_PRODUCTS_MAX_SKUS}
+                    <button type="button" className="perfSegPill" onClick={() => onSelectAll()}>
+                      Select all
                     </button>
-                    <button
-                      type="button"
-                      className="perfSegPill"
-                      onClick={() => {
-                        onSelectLeast();
-                        setAtCapHint(false);
-                      }}
-                    >
-                      Least {PERF_PRODUCTS_MAX_SKUS}
+                    <button type="button" className="perfSegPill" onClick={() => onSelectTop()}>
+                      Top {PERF_PRODUCTS_SKU_PAGE}
+                    </button>
+                    <button type="button" className="perfSegPill" onClick={() => onSelectLeast()}>
+                      Least {PERF_PRODUCTS_SKU_PAGE}
                     </button>
                   </div>
                 </div>
@@ -621,28 +620,18 @@ function SkuMultiDropdown({
                           role="option"
                           aria-selected={checked}
                           className={`perfLocRow ${checked ? 'perfLocRowSolo' : ''}`}
-                          onClick={() => {
-                            if (!checked && atCap) {
-                              setAtCapHint(true);
-                              return;
-                            }
-                            setAtCapHint(false);
-                            onToggle(o.name);
-                          }}
+                          onClick={() => onToggle(o.name)}
                         >
                           <span className="perfLocRowMain">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              readOnly
-                              tabIndex={-1}
-                              disabled={!checked && atCap}
-                            />
+                            <input type="checkbox" checked={checked} readOnly tabIndex={-1} />
                             <span className="perfLocRowName" title={o.name}>
                               {o.name}
                             </span>
                           </span>
-                          <span className="perfSkuKd" title={`Total revenue (KD) for this drink in the selected scope. Customer sales only.`}>
+                          <span
+                            className="perfSkuKd"
+                            title="Total revenue (KD) for this drink in the selected scope."
+                          >
                             {formatKwd(o.kd)}
                           </span>
                         </div>
@@ -656,7 +645,7 @@ function SkuMultiDropdown({
         </div>
         {selected.length > 0 ? (
           <div className="perfLocChips perfLocChipsUnder" aria-label="Selected products">
-            {selected.slice(0, 8).map((name) => (
+            {selected.slice(0, 16).map((name) => (
               <button
                 key={name}
                 type="button"
@@ -668,14 +657,12 @@ function SkuMultiDropdown({
                 <span aria-hidden>×</span>
               </button>
             ))}
+            {selected.length > 16 ? (
+              <span className="perfMuted">+{selected.length - 16} more</span>
+            ) : null}
           </div>
         ) : null}
       </div>
-      {atCapHint ? (
-        <p className="perfProductsFieldHint warn">
-          Maximum {PERF_PRODUCTS_MAX_SKUS} drinks. Uncheck one to add another.
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -1368,7 +1355,9 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const [graphASku, setGraphASku] = useState('');
   const [targetType, setTargetType] = useState<TargetType>('product');
   const [yMetric, setYMetric] = useState<YMetric>('revenue');
+  const [includeCashless, setIncludeCashless] = useState(false);
   const [graphPage, setGraphPage] = useState(0);
+  const [skuPage, setSkuPage] = useState(0);
   const [focusLocId, setFocusLocId] = useState('');
   const touchX = useRef<number | null>(null);
 
@@ -1383,30 +1372,32 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
   const compareOpts = useMemo((): CompareOpts | null => {
     const [kind, key] = timeCriteria.split(':') as ['single' | 'compare', string];
+    const cash = includeCashless ? { includeWebCashless: true as const } : {};
     if (timeCriteria === 'compare:custom_vs_custom') {
       if (!(aStart && aEnd && bStart && bEnd && aStart <= aEnd && bStart <= bEnd)) return null;
-      return { preset: 'custom_vs_custom', aStart, aEnd, bStart, bEnd };
+      return { preset: 'custom_vs_custom', aStart, aEnd, bStart, bEnd, ...cash };
     }
     if (timeCriteria === 'single:custom') {
       if (!(customStart && customEnd && customStart <= customEnd)) return null;
-      return { preset: 'custom_single', start: customStart, end: customEnd, compare: false };
+      return { preset: 'custom_single', start: customStart, end: customEnd, compare: false, ...cash };
     }
     if (kind === 'single') {
       // today/yesterday/etc.: API accepts preset + compare=0 (no prior series / trends).
-      return { preset: key, compare: false };
+      return { preset: key, compare: false, ...cash };
     }
-    return { preset: key };
-  }, [timeCriteria, aStart, aEnd, bStart, bEnd, customStart, customEnd]);
+    return { preset: key, ...cash };
+  }, [timeCriteria, aStart, aEnd, bStart, bEnd, customStart, customEnd, includeCashless]);
 
   const compareOptsKey = useMemo(() => {
     if (!compareOpts) return 'invalid';
+    const cash = compareOpts.includeWebCashless ? ':web1' : ':web0';
     if (compareOpts.aStart) {
-      return `cvsc:${compareOpts.aStart}:${compareOpts.aEnd}:${compareOpts.bStart}:${compareOpts.bEnd}`;
+      return `cvsc:${compareOpts.aStart}:${compareOpts.aEnd}:${compareOpts.bStart}:${compareOpts.bEnd}${cash}`;
     }
     if (compareOpts.start) {
-      return `c:${compareOpts.start}:${compareOpts.end}:cmp${compareOpts.compare === false ? 0 : 1}`;
+      return `c:${compareOpts.start}:${compareOpts.end}:cmp${compareOpts.compare === false ? 0 : 1}${cash}`;
     }
-    return `p:${compareOpts.preset}:cmp${compareOpts.compare === false ? 0 : 1}`;
+    return `p:${compareOpts.preset}:cmp${compareOpts.compare === false ? 0 : 1}${cash}`;
   }, [compareOpts]);
 
   const compareQ = useQuery({
@@ -1493,25 +1484,35 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const toggleSku = useCallback((name: string) => {
     setSkus((prev) => {
       if (prev.includes(name)) return prev.filter((x) => x !== name);
-      if (prev.length >= PERF_PRODUCTS_MAX_SKUS) return prev;
       return [...prev, name];
     });
   }, []);
 
   const selectTopSkus = useCallback(() => {
-    setSkus(skuCatalog.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name));
+    setSkus(skuCatalog.slice(0, PERF_PRODUCTS_SKU_PAGE).map((s) => s.name));
+    setSkuPage(0);
   }, [skuCatalog]);
 
   const selectLeastSkus = useCallback(() => {
     const sorted = [...skuCatalog].sort((a, b) => a.kd - b.kd || a.name.localeCompare(b.name));
-    setSkus(sorted.slice(0, PERF_PRODUCTS_MAX_SKUS).map((s) => s.name));
+    setSkus(sorted.slice(0, PERF_PRODUCTS_SKU_PAGE).map((s) => s.name));
+    setSkuPage(0);
+  }, [skuCatalog]);
+
+  const selectAllSkus = useCallback(() => {
+    setSkus(skuCatalog.map((s) => s.name));
+    setSkuPage(0);
   }, [skuCatalog]);
 
   const focusSku = graphASku;
   /** Graph B needs an explicit location + product picks. */
   const showGraphB = !locNone && ids.length > 0;
-  const graphBSkus = skus;
-  const graphBReady = Boolean(focusLocId && graphBSkus.length > 0);
+  const skuPageCount = Math.max(1, Math.ceil(skus.length / PERF_PRODUCTS_SKU_PAGE));
+  const graphBSkus = useMemo(() => {
+    const start = skuPage * PERF_PRODUCTS_SKU_PAGE;
+    return skus.slice(start, start + PERF_PRODUCTS_SKU_PAGE);
+  }, [skus, skuPage]);
+  const graphBReady = Boolean(focusLocId && skus.length > 0);
 
   const skuSet = useMemo(() => new Set(skus), [skus]);
   const multiLoc = ids.length > 1;
@@ -1571,11 +1572,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
   useEffect(() => {
     setGraphPage(0);
+    setSkuPage(0);
   }, [idsKey, compareOptsKey]);
 
   useEffect(() => {
     setGraphPage((p) => Math.min(p, Math.max(0, pageCount - 1)));
   }, [pageCount]);
+
+  useEffect(() => {
+    setSkuPage((p) => Math.min(p, Math.max(0, skuPageCount - 1)));
+  }, [skuPageCount]);
 
   const pageMachines = useMemo(() => {
     const start = graphPage * PERF_PRODUCTS_GRAPH_PAGE;
@@ -1749,7 +1755,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   ]);
 
   /** Graph C — heatmap columns/rows (period totals only). */
-  const heatColumns = useMemo(() => skus.slice(0, PERF_PRODUCTS_MAX_SKUS), [skus]);
+  const heatColumns = useMemo(() => graphBSkus, [graphBSkus]);
 
   const heatMatrix = useMemo(() => {
     if (!payloadMachines.length || !heatColumns.length) {
@@ -1905,12 +1911,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
           <thead>
             <tr>
               <ThTip title={PRODUCT_COL_TIPS.drink}>Drink</ThTip>
-              <ThTip title={PRODUCT_COL_TIPS.periodKd(periodLabel)}>{periodLabel} KD</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.periodKd(periodLabel, includeCashless)}>
+                {periodLabel} KD
+              </ThTip>
               {compareOn ? (
                 <ThTip title={PRODUCT_COL_TIPS.priorKd(priorLabel)}>{priorLabel} KD</ThTip>
               ) : null}
               {compareOn ? <ThTip title={PRODUCT_COL_TIPS.vsPrior}>vs prior</ThTip> : null}
-              <ThTip title={PRODUCT_COL_TIPS.cups}>Cups</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.cups(includeCashless)}>Cups</ThTip>
               {compareOn ? <ThTip title={PRODUCT_COL_TIPS.priorCups}>Prior cups</ThTip> : null}
               <ThTip title={PRODUCT_COL_TIPS.lyKd}>LY KD</ThTip>
               <ThTip title={PRODUCT_COL_TIPS.yoy}>YoY</ThTip>
@@ -1955,12 +1963,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             <tr>
               <ThTip title={PRODUCT_COL_TIPS.location}>Location</ThTip>
               {tableSkus.length > 1 ? <ThTip title={PRODUCT_COL_TIPS.drink}>Drink</ThTip> : null}
-              <ThTip title={PRODUCT_COL_TIPS.periodKd(periodLabel)}>{periodLabel} KD</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.periodKd(periodLabel, includeCashless)}>
+                {periodLabel} KD
+              </ThTip>
               {compareOn ? (
                 <ThTip title={PRODUCT_COL_TIPS.priorKd(priorLabel)}>{priorLabel} KD</ThTip>
               ) : null}
               {compareOn ? <ThTip title={PRODUCT_COL_TIPS.vsPrior}>vs prior</ThTip> : null}
-              <ThTip title={PRODUCT_COL_TIPS.cups}>Cups</ThTip>
+              <ThTip title={PRODUCT_COL_TIPS.cups(includeCashless)}>Cups</ThTip>
               <ThTip title={PRODUCT_COL_TIPS.lyKd}>LY KD</ThTip>
               <ThTip title={PRODUCT_COL_TIPS.yoy}>YoY</ThTip>
             </tr>
@@ -1972,7 +1982,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               </tr>
             ) : !tableSkus.length ? (
               <tr>
-                <td colSpan={8}>Pick a drink in Products (max {PERF_PRODUCTS_MAX_SKUS}).</td>
+                <td colSpan={8}>Pick drinks in Products (Select all, Top, or Least).</td>
               </tr>
             ) : (
               [...acrossByLocation]
@@ -2079,6 +2089,28 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                 onClick={() => setYMetric('cups')}
               >
                 Cups
+              </button>
+            </div>
+          </div>
+
+          <div className="perfProductsField" role="group" aria-label="Cashless revenue">
+            <span className="perfProductsFieldLabel">Cashless</span>
+            <div className="perfProductsMetricSeg">
+              <button
+                type="button"
+                className={`perfSegPill ${!includeCashless ? 'active' : ''}`}
+                onClick={() => setIncludeCashless(false)}
+                title="Customer sales only — exclude WEB cashless / remote credit"
+              >
+                Customer only
+              </button>
+              <button
+                type="button"
+                className={`perfSegPill ${includeCashless ? 'active' : ''}`}
+                onClick={() => setIncludeCashless(true)}
+                title="Include WEB cashless / remote credit in KD and cups"
+              >
+                Include cashless
               </button>
             </div>
           </div>
@@ -2310,22 +2342,47 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               onClear={() => setSkus([])}
               onSelectTop={selectTopSkus}
               onSelectLeast={selectLeastSkus}
+              onSelectAll={selectAllSkus}
             />
           </div>
           {!graphBReady ? (
             <p className="perfProductsEmpty">
               {!focusLocId ? 'Select a focus location. ' : ''}
-              {!graphBSkus.length ? 'Select products (or Top / Least).' : ''}
+              {!skus.length ? 'Select products (Select all / Top / Least).' : ''}
             </p>
           ) : (
-            <DateTrajectoryChart
-              days={graphBDays}
-              series={graphBSeries}
-              unit={chartUnit}
-              onSeriesClick={toggleSku}
-              exportName="product-at-location"
-              ariaLabel="Products at focus location"
-            />
+            <>
+              {skus.length > PERF_PRODUCTS_SKU_PAGE ? (
+                <div className="perfGraphPageMeta" aria-live="polite">
+                  Drinks page {skuPage + 1} / {skuPageCount} · {graphBSkus.length} of {skus.length}{' '}
+                  selected ·{' '}
+                  <button
+                    type="button"
+                    className="perfSegPill"
+                    disabled={skuPage <= 0}
+                    onClick={() => setSkuPage((p) => Math.max(0, p - 1))}
+                  >
+                    ‹
+                  </button>{' '}
+                  <button
+                    type="button"
+                    className="perfSegPill"
+                    disabled={skuPage >= skuPageCount - 1}
+                    onClick={() => setSkuPage((p) => Math.min(skuPageCount - 1, p + 1))}
+                  >
+                    ›
+                  </button>
+                </div>
+              ) : null}
+              <DateTrajectoryChart
+                days={graphBDays}
+                series={graphBSeries}
+                unit={chartUnit}
+                onSeriesClick={toggleSku}
+                exportName="product-at-location"
+                ariaLabel="Products at focus location"
+              />
+            </>
           )}
           {compareOn ? (
             <div className="perfProductsTrendCols">

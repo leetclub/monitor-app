@@ -24,6 +24,48 @@ def _dash_session():
     return _dash_session_factory()
 
 
+def _machine_ids_scheduled_active(period_detail: Dict[str, Any], now_kwt=None) -> List[str]:
+    """Machines with an active (or calendar-today) schedule, including overnight still running."""
+    from datetime import timedelta
+
+    from task_manager_client import kuwait_today, resolve_operator_for_machine_now, weekday_key
+
+    today = kuwait_today()
+    yesterday = today - timedelta(days=1)
+    ids: set[str] = set()
+
+    def _collect(on_date) -> None:
+        day_key = weekday_key(on_date)
+        for es in period_detail.get("employee_schedules") or []:
+            if not isinstance(es, dict):
+                continue
+            day = (es.get("schedule") or {}).get(day_key)
+            if not isinstance(day, dict) or day.get("off"):
+                continue
+            machines = day.get("vendon_machines") or []
+            if not isinstance(machines, list):
+                machines = []
+            top_vm = es.get("vendon_machine")
+            if isinstance(top_vm, dict):
+                machines = list(machines) + [top_vm]
+            for m in machines:
+                if not isinstance(m, dict):
+                    continue
+                for key in ("vendon_id", "id"):
+                    vid = str(m.get(key) or "").strip()
+                    if vid:
+                        ids.add(vid)
+
+    _collect(today)
+    _collect(yesterday)
+    active: List[str] = []
+    for mid in sorted(ids):
+        es, _wd = resolve_operator_for_machine_now(period_detail, mid, now_kwt)
+        if es:
+            active.append(mid)
+    return active
+
+
 def _machine_ids_scheduled_today(period_detail: Dict[str, Any], on_date) -> List[str]:
     from task_manager_client import weekday_key
 
@@ -64,11 +106,10 @@ def compute_workflow_attendance_payload() -> Dict[str, Any]:
     from leet_workflow_lib import workflow_configured, _not_configured, _with_configured
     from task_manager_client import (
         attendance_pill,
-        find_operator_for_machine_on_date,
         get_active_schedule_period,
         get_schedule_period_detail,
         get_user_attendance_day,
-        kuwait_today,
+        resolve_operator_for_machine_now,
     )
 
     if not workflow_configured():
@@ -82,13 +123,12 @@ def compute_workflow_attendance_payload() -> Dict[str, Any]:
     if derr or not detail:
         return _with_configured({"error": derr or "schedule period detail unavailable", "byMachineId": {}})
 
-    today = kuwait_today()
-    machine_ids = _machine_ids_scheduled_today(detail, today)
+    machine_ids = _machine_ids_scheduled_active(detail)
     by_machine: Dict[str, Any] = {}
-    user_cache: Dict[int, Dict[str, Any]] = {}
+    user_cache: Dict[str, Dict[str, Any]] = {}
 
     for mid in machine_ids:
-        es = find_operator_for_machine_on_date(detail, mid, today)
+        es, work_date = resolve_operator_for_machine_now(detail, mid)
         if not es:
             by_machine[mid] = _not_scheduled_row()
             continue
@@ -96,13 +136,14 @@ def compute_workflow_attendance_payload() -> Dict[str, Any]:
         uid = user.get("id")
         operator_name = user.get("name") or user.get("email")
         if uid is None:
-            by_machine[mid] = {"operatorName": operator_name, "pill": None}
+            by_machine[mid] = {"operatorName": operator_name, "pill": None, "workDate": work_date.isoformat()}
             continue
         uid_int = int(uid)
-        if uid_int not in user_cache:
-            day_row, _ = get_user_attendance_day(uid_int, today)
-            user_cache[uid_int] = day_row or {}
-        day_row = user_cache[uid_int]
+        cache_key = f"{uid_int}:{work_date.isoformat()}"
+        if cache_key not in user_cache:
+            day_row, _ = get_user_attendance_day(uid_int, work_date)
+            user_cache[cache_key] = day_row or {}
+        day_row = user_cache[cache_key]
         status = day_row.get("attendance_status")
         state = day_row.get("state")
         pill = attendance_pill(status, day_row.get("lateness_deduction"), state)
@@ -113,6 +154,7 @@ def compute_workflow_attendance_payload() -> Dict[str, Any]:
             "state": state,
             "present": status == "present" or state in ("working", "break"),
             "pill": pill,
+            "workDate": work_date.isoformat(),
         }
 
     return _with_configured(

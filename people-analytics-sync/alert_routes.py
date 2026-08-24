@@ -182,7 +182,8 @@ def _vendon_revenue_cache_day_needs_product_mix(db: Session, day: date) -> bool:
         has_fresh_meta = (
             isinstance(meta, dict)
             and meta.get("excludesWebCashless") is True
-            and int(meta.get("v") or 0) >= 2
+            and int(meta.get("v") or 0) >= 3
+            and isinstance(payload.get("productSalesAll"), dict)
         )
         ps = payload.get("productSales")
         if (
@@ -3159,15 +3160,20 @@ def register_alert_routes(app) -> None:
         rows: List[VendonDailyMachineRevenueCache],
         start_incl: date,
         end_excl: date,
+        *,
+        include_web_cashless: bool = False,
     ) -> Dict[str, float]:
         """Sum product KD revenue in [start, end). Falls back to cups-only legacy payloads."""
         totals: Dict[str, float] = {}
+        sales_key = "productSalesAll" if include_web_cashless else "productSales"
         for r in rows:
             cd = r.cache_date
             if cd is None or cd < start_incl or cd >= end_excl:
                 continue
             payload = r.payload_json if isinstance(r.payload_json, dict) else {}
-            ps = payload.get("productSales") if isinstance(payload.get("productSales"), dict) else None
+            ps = payload.get(sales_key) if isinstance(payload.get(sales_key), dict) else None
+            if include_web_cashless and not ps:
+                ps = payload.get("productSales") if isinstance(payload.get("productSales"), dict) else None
             pc = payload.get("productCounts") if isinstance(payload.get("productCounts"), dict) else None
             if ps:
                 for name_raw, kwd_raw in ps.items():
@@ -3221,14 +3227,19 @@ def register_alert_routes(app) -> None:
         rows: List[VendonDailyMachineRevenueCache],
         start_incl: date,
         end_excl: date,
+        *,
+        include_web_cashless: bool = False,
     ) -> Dict[str, int]:
         totals: Dict[str, int] = {}
+        counts_key = "productCountsAll" if include_web_cashless else "productCounts"
         for r in rows:
             cd = r.cache_date
             if cd is None or cd < start_incl or cd >= end_excl:
                 continue
             payload = r.payload_json if isinstance(r.payload_json, dict) else {}
-            pc = payload.get("productCounts") if isinstance(payload.get("productCounts"), dict) else None
+            pc = payload.get(counts_key) if isinstance(payload.get(counts_key), dict) else None
+            if include_web_cashless and not pc:
+                pc = payload.get("productCounts") if isinstance(payload.get("productCounts"), dict) else None
             if not pc:
                 # Legacy cache: fold top/low lists (or singles) so RF / Performance still get names.
                 for key in ("topProducts", "lowProducts"):
@@ -4236,6 +4247,8 @@ def register_alert_routes(app) -> None:
         preset = (request.args.get("preset") or "today").strip().lower()
         compare_raw = (request.args.get("compare") or "1").strip().lower()
         compare_on = compare_raw not in ("0", "false", "no", "off")
+        include_web_raw = (request.args.get("includeWebCashless") or request.args.get("include_web_cashless") or "0").strip().lower()
+        include_web = include_web_raw in ("1", "true", "yes", "on")
         from alert_targets_lib import daily_yardstick, products_from_lmc_row, resolve_perf_window
         import hashlib
 
@@ -4308,8 +4321,8 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v7:{preset_id}:{win_s}:{win_e}:"
-            f"{prev_s}:{prev_e}:c{int(compare_on)}:{id_sig}"
+            f"perf:product-compare:v8:{preset_id}:{win_s}:{win_e}:"
+            f"{prev_s}:{prev_e}:c{int(compare_on)}:w{int(include_web)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)
         if cached is not None:
@@ -4492,7 +4505,9 @@ def register_alert_routes(app) -> None:
                         _, to_ts = _kuwait_day_bounds_utc(d.isoformat())
                         vends, _err = _fetch_vends_machine_day(mid, from_ts, to_ts)
                         for v in vends or []:
-                            if not isinstance(v, dict) or _is_web_cashless_vend(v):
+                            if not isinstance(v, dict):
+                                continue
+                            if not include_web and _is_web_cashless_vend(v):
                                 continue
                             pn, _sel = _stats_vend_product_fields(v)
                             pn = (pn or "").strip()
@@ -4514,20 +4529,32 @@ def register_alert_routes(app) -> None:
             machines_out: List[Dict[str, Any]] = []
             for mid in requested:
                 mrows = by_mid.get(mid) or []
-                cur = _aggregate_product_sales_in_range(mrows, win_s, win_e + timedelta(days=1))
+                cur = _aggregate_product_sales_in_range(
+                    mrows, win_s, win_e + timedelta(days=1), include_web_cashless=include_web
+                )
                 prev = (
-                    _aggregate_product_sales_in_range(mrows, prev_s, prev_e + timedelta(days=1))
+                    _aggregate_product_sales_in_range(
+                        mrows, prev_s, prev_e + timedelta(days=1), include_web_cashless=include_web
+                    )
                     if compare_on
                     else {}
                 )
-                yoy = _aggregate_product_sales_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
-                cups = _aggregate_product_counts_in_range(mrows, win_s, win_e + timedelta(days=1))
+                yoy = _aggregate_product_sales_in_range(
+                    mrows, yoy_s, yoy_e + timedelta(days=1), include_web_cashless=include_web
+                )
+                cups = _aggregate_product_counts_in_range(
+                    mrows, win_s, win_e + timedelta(days=1), include_web_cashless=include_web
+                )
                 prev_cups = (
-                    _aggregate_product_counts_in_range(mrows, prev_s, prev_e + timedelta(days=1))
+                    _aggregate_product_counts_in_range(
+                        mrows, prev_s, prev_e + timedelta(days=1), include_web_cashless=include_web
+                    )
                     if compare_on
                     else {}
                 )
-                yoy_cups = _aggregate_product_counts_in_range(mrows, yoy_s, yoy_e + timedelta(days=1))
+                yoy_cups = _aggregate_product_counts_in_range(
+                    mrows, yoy_s, yoy_e + timedelta(days=1), include_web_cashless=include_web
+                )
                 if not cur:
                     live_s, live_c = _live_product_sales_range(mid, win_s, win_e)
                     if live_s:
@@ -4614,8 +4641,12 @@ def register_alert_routes(app) -> None:
                     r = day_rows_by_date.get(cd)
                     if r is None:
                         return 0.0, 0, {}
-                    sales = _aggregate_product_sales_in_range([r], cd, cd + timedelta(days=1))
-                    counts = _aggregate_product_counts_in_range([r], cd, cd + timedelta(days=1))
+                    sales = _aggregate_product_sales_in_range(
+                        [r], cd, cd + timedelta(days=1), include_web_cashless=include_web
+                    )
+                    counts = _aggregate_product_counts_in_range(
+                        [r], cd, cd + timedelta(days=1), include_web_cashless=include_web
+                    )
                     mix: Dict[str, Dict[str, float]] = {}
                     for pname, kwd in sales.items():
                         mix[pname] = {

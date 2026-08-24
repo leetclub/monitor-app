@@ -76,11 +76,10 @@ def _operator_contact_fields(
 def _operator_schedule_from_task_manager(machine_id: str) -> Dict[str, Any]:
     from task_manager_client import (
         count_mtd_absent_late,
-        find_operator_for_machine_on_date,
         get_active_schedule_period,
         get_schedule_period_detail,
         get_user_attendance_day,
-        kuwait_today,
+        resolve_operator_for_machine_now,
     )
 
     period, err = get_active_schedule_period()
@@ -95,8 +94,7 @@ def _operator_schedule_from_task_manager(machine_id: str) -> Dict[str, Any]:
     if derr or not detail:
         return _with_configured({"error": derr or "schedule period detail unavailable"})
 
-    today = kuwait_today()
-    es = find_operator_for_machine_on_date(detail, machine_id, today)
+    es, work_date = resolve_operator_for_machine_now(detail, machine_id)
     if not es:
         return _with_configured(
             {
@@ -115,7 +113,7 @@ def _operator_schedule_from_task_manager(machine_id: str) -> Dict[str, Any]:
     operator_name = user.get("name") or user.get("email")
     tm_email = str(user.get("email") or "").strip() or None
     tm_phone = str(user.get("phone") or "").strip() or None
-    machine_label = _machine_label_for_entry(es, machine_id, today)
+    machine_label = _machine_label_for_entry(es, machine_id, work_date)
 
     if user_id is None:
         return _with_configured(
@@ -123,17 +121,19 @@ def _operator_schedule_from_task_manager(machine_id: str) -> Dict[str, Any]:
                 "operatorName": operator_name,
                 "machineInCharge": machine_label,
                 "schedulePeriodName": detail.get("name") or period.get("name"),
+                "workDate": work_date.isoformat(),
                 "error": "scheduled user missing id",
             }
         )
 
-    day_row, aerr = get_user_attendance_day(int(user_id), today)
+    day_row, aerr = get_user_attendance_day(int(user_id), work_date)
     if aerr or not day_row:
         return _with_configured(
             {
                 "operatorName": operator_name,
                 "machineInCharge": machine_label,
                 "schedulePeriodName": detail.get("name") or period.get("name"),
+                "workDate": work_date.isoformat(),
                 "error": aerr,
             }
         )
@@ -141,7 +141,7 @@ def _operator_schedule_from_task_manager(machine_id: str) -> Dict[str, Any]:
     status = day_row.get("attendance_status")
     state = day_row.get("state")
     present = status == "present" or state in ("working", "break")
-    absent_mtd, late_mtd = count_mtd_absent_late(int(user_id), today)
+    absent_mtd, late_mtd = count_mtd_absent_late(int(user_id), work_date)
     summary = day_row.get("summary") if isinstance(day_row.get("summary"), dict) else {}
 
     return _with_configured(
@@ -155,6 +155,7 @@ def _operator_schedule_from_task_manager(machine_id: str) -> Dict[str, Any]:
             "attendanceStatus": status,
             "attendanceStatusLabel": day_row.get("attendance_status_label"),
             "state": state,
+            "workDate": work_date.isoformat(),
             "todayClockIn": summary.get("clock_in_at"),
             "todayClockOut": summary.get("clock_out_at"),
             "positionType": es.get("position_type"),
@@ -209,15 +210,21 @@ def _build_attendance_map_for_ids(
 ) -> Dict[str, Any]:
     from task_manager_client import (
         attendance_pill,
-        find_operator_for_machine_on_date,
         get_user_attendance_day,
+        resolve_operator_for_machine_now,
     )
 
     by_machine: Dict[str, Any] = {}
-    user_cache: Dict[int, Dict[str, Any]] = {}
+    user_cache: Dict[str, Dict[str, Any]] = {}
 
     for mid in machine_ids:
-        es = find_operator_for_machine_on_date(period_detail, mid, on_date)
+        # Prefer nightshift-aware resolution; fall back to calendar on_date only if needed.
+        es, work_date = resolve_operator_for_machine_now(period_detail, mid)
+        if not es:
+            from task_manager_client import find_operator_for_machine_on_date
+
+            es = find_operator_for_machine_on_date(period_detail, mid, on_date)
+            work_date = on_date
         if not es:
             by_machine[mid] = _not_scheduled_attendance(mid, include_contact=include_contact)
             continue
@@ -230,13 +237,19 @@ def _build_attendance_map_for_ids(
             _operator_contact_fields(mid, operator_name, tm_email, tm_phone) if include_contact else {}
         )
         if uid is None:
-            by_machine[mid] = {"operatorName": contact.get("operatorName") or operator_name, "pill": None, **contact}
+            by_machine[mid] = {
+                "operatorName": contact.get("operatorName") or operator_name,
+                "pill": None,
+                "workDate": work_date.isoformat(),
+                **contact,
+            }
             continue
         uid_int = int(uid)
-        if uid_int not in user_cache:
-            day_row, _ = get_user_attendance_day(uid_int, on_date)
-            user_cache[uid_int] = day_row or {}
-        day_row = user_cache[uid_int]
+        cache_key = f"{uid_int}:{work_date.isoformat()}"
+        if cache_key not in user_cache:
+            day_row, _ = get_user_attendance_day(uid_int, work_date)
+            user_cache[cache_key] = day_row or {}
+        day_row = user_cache[cache_key]
         status = day_row.get("attendance_status")
         state = day_row.get("state")
         pill = attendance_pill(status, day_row.get("lateness_deduction"), state)
@@ -246,10 +259,10 @@ def _build_attendance_map_for_ids(
             "attendanceStatusLabel": day_row.get("attendance_status_label"),
             "state": state,
             "present": status == "present" or state in ("working", "break"),
+            "workDate": work_date.isoformat(),
             "pill": pill,
             **contact,
         }
-
     return by_machine
 
 
