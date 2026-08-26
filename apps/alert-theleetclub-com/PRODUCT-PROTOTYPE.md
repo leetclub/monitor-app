@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-26 | **QA Visit column blank:** Red Flags/Overall `/qa/summary` now uses a fast **45-day** SafetyCulture QC summary (cached) instead of a hung 180-day fleet scan that timed out and left every cell as —. |
 | 2026-08-24 | **Sheet batch:** Products select-all locations/drinks (graph page 8); cashless Customer/Include toggle; Location fleet combined strip + fleet-wide combined line; nightshift attendance uses TM work date across midnight. |
 | 2026-08-22 | **Products UX + fleet bar + auth:** Column hovers explain totals vs averages; product KD excludes remote credit (API re-seed + live vends filter); Graph B Top/Least scoped to focus location; fleet revenue bar stays horizontal with scroll on iPad; sign-out disables Google auto-select; fewer zero flashes on refresh. |
 | 2026-08-21 | **Products hover + weekly PDF:** Chart/heatmap hover shows green/red up/down trend; PDF text sanitized (no letter-spacing glitches from Unicode); iPad opens report in a **new tab** instead of replacing Alert. |

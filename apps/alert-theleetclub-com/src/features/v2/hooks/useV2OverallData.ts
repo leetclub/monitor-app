@@ -191,6 +191,12 @@ export function useV2OverallData(compare?: CompareSelection) {
     queryKey: ['alert-qa-summary', 'v2-ov'],
     queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
     staleTime: 60_000,
+    refetchInterval: (query) => {
+      const d = query.state.data as QaSummaryResponse | undefined;
+      if (d?.partial || d?.warning) return 20_000;
+      if (!d?.latestByMachine || !Object.keys(d.latestByMachine).length) return 30_000;
+      return 5 * 60_000;
+    },
   });
   const liveQ = useQuery({
     queryKey: ['live-dashboard-snapshot', 'v2-ov'],

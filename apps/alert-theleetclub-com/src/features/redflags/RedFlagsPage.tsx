@@ -783,8 +783,13 @@ export function RedFlagsPage({
     queryKey: ['alert-qa-summary'],
     queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
     enabled: q.isFetched,
-    staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: (query) => {
+      const d = query.state.data as QaSummaryResponse | undefined;
+      if (d?.partial || d?.warning) return 20_000;
+      if (!d?.latestByMachine || !Object.keys(d.latestByMachine).length) return 30_000;
+      return 5 * 60_000;
+    },
   });
 
   const qaFindingsQ = useQuery({
@@ -1702,7 +1707,11 @@ export function RedFlagsPage({
                       qaVisit,
                       techVisit,
                       qaFindings,
-                      qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
+                      qaLoading:
+                        qaSummaryQ.isLoading ||
+                        qaFindingsQ.isLoading ||
+                        (qaSummaryQ.isFetching &&
+                          !(qaSummaryQ.data?.latestByMachine && Object.keys(qaSummaryQ.data.latestByMachine).length)),
                       // Findings Slack errors must not blank QA/Tech visit cells.
                       qaError: qaSummaryQ.data?.error || null,
                       goUrl,

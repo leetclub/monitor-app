@@ -301,6 +301,12 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
     queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
     enabled: snapQ.isFetched,
     staleTime: 60_000,
+    refetchInterval: (query) => {
+      const d = query.state.data as QaSummaryResponse | undefined;
+      if (d?.partial || d?.warning) return 20_000;
+      if (!d?.latestByMachine || !Object.keys(d.latestByMachine).length) return 30_000;
+      return 5 * 60_000;
+    },
   });
 
   const dailyIncidentsQ = useQuery({

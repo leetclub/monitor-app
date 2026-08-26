@@ -421,8 +421,13 @@ export function OverallPage({
   const qaSummaryQ = useQuery({
     queryKey: ['alert-qa-summary'],
     queryFn: () => apiGet<QaSummaryResponse>('/api/alert/qa/summary'),
-    staleTime: 30 * 60_000,
-    refetchInterval: 30 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: (query) => {
+      const d = query.state.data as QaSummaryResponse | undefined;
+      if (d?.partial || d?.warning) return 20_000;
+      if (!d?.latestByMachine || !Object.keys(d.latestByMachine).length) return 30_000;
+      return 5 * 60_000;
+    },
   });
 
   const qaFindingsQ = useQuery({
@@ -1127,7 +1132,11 @@ export function OverallPage({
                   qaVisit,
                   techVisit,
                   qaFindings,
-                  qaLoading: qaSummaryQ.isLoading || qaFindingsQ.isLoading,
+                  qaLoading:
+                    qaSummaryQ.isLoading ||
+                    qaFindingsQ.isLoading ||
+                    (qaSummaryQ.isFetching &&
+                      !(qaSummaryQ.data?.latestByMachine && Object.keys(qaSummaryQ.data.latestByMachine).length)),
                   // Findings Slack errors must not blank QA/Tech visit cells.
                   qaError: qaSummaryQ.data?.error || null,
                   operatorActivity: operatorActivityQ.data?.byMachineId?.[m.id] ?? null,

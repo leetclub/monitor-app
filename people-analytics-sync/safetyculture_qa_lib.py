@@ -40,6 +40,12 @@ _WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "2"))
 _AUDIT_BATCH = max(8, int(os.environ.get("SAFETY_CULTURE_QA_AUDIT_BATCH", "32")))
 # Always fully process audits modified in this recent window (no per-chunk truncate).
 _RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "21"))
+# Red Flags column summary — short window so the API answers before gateway timeout.
+_SUMMARY_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_SUMMARY_DAYS", "45"))
+_SUMMARY_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_SUMMARY_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_SUMMARY_CACHE_SEC", "120"))
+_SUMMARY_LOCK = __import__("threading").Lock()
+_SUMMARY_BUILDING = False
 # Short modified_at windows for the recent org-traffic band — SC search may ignore order/limit.
 _RECENT_CHUNK_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_CHUNK_DAYS", "5"))
 _DEFAULT_CHUNK_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_CHUNK_DAYS", "28"))
@@ -972,6 +978,7 @@ def clear_qa_caches() -> None:
     _MACHINE_AUDITS_CACHE.clear()
     _FLEET_CACHE.clear()
     _QC_ROWS_RANGE_CACHE.clear()
+    _SUMMARY_CACHE.clear()
 
 
 def qa_visits_payload(*, refresh: bool = False, include_tech: bool = True) -> Dict[str, Any]:
@@ -1691,13 +1698,16 @@ def latest_qc_by_machine_map(
     *,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    max_days: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Latest QC visit per machine (chunked SC scan, cached by date range)."""
     names = sorted({str(n).strip() for n in machine_names if str(n).strip()})
     if not names:
         return {"byMachine": {}, "total": 0, "error": "machineNames required"}
 
-    start, end = _resolve_qc_date_range(date_from=date_from, date_to=date_to)
+    start, end = _resolve_qc_date_range(
+        date_from=date_from, date_to=date_to, max_days=max_days
+    )
     rows, audits_searched, audits_processed, search_err = _get_qc_rows_in_range_cached(start, end)
     by_machine = _latest_qc_by_machine_names(names, rows)
     out: Dict[str, Any] = {
@@ -1716,6 +1726,85 @@ def latest_qc_by_machine_map(
         audits_processed=audits_processed,
     )
     return out
+
+
+def qa_alert_column_summary(machine_names: List[str]) -> Dict[str, Any]:
+    """
+    Fast payload for Red Flags / Overall QA Visit column.
+
+    Uses a short QC window only (no tech fleet pass). Returns a stale cache
+    immediately if another request is already scanning SafetyCulture.
+    """
+    global _SUMMARY_BUILDING
+    names = sorted({str(n).strip() for n in machine_names if str(n).strip()})
+    cache_key = f"alert_col|v1|{_SUMMARY_MAX_DAYS}|{len(names)}"
+    hit = _SUMMARY_CACHE.get(cache_key)
+    now = time.time()
+    if hit and (now - hit[0]) < _SUMMARY_CACHE_SEC:
+        return hit[1]
+
+    acquired = _SUMMARY_LOCK.acquire(blocking=False)
+    if not acquired:
+        if hit:
+            stale = dict(hit[1])
+            stale["partial"] = True
+            stale["warning"] = stale.get("warning") or "QA scan in progress — showing last result"
+            return stale
+        return {
+            "source": "safetyculture",
+            "count": 0,
+            "byLocationKey": {},
+            "visits": [],
+            "latestByMachine": {},
+            "partial": True,
+            "warning": "QA scan in progress — refresh shortly",
+            "locationsWithQc": 0,
+        }
+
+    try:
+        _SUMMARY_BUILDING = True
+        latest = latest_qc_by_machine_map(names, max_days=_SUMMARY_MAX_DAYS)
+        by_machine = dict(latest.get("byMachine") or {})
+        by_loc: Dict[str, Dict[str, Any]] = {}
+        visits: List[Dict[str, Any]] = []
+        for mname, row in by_machine.items():
+            if not isinstance(row, dict):
+                continue
+            enriched = {
+                **row,
+                "location": row.get("location") or mname,
+            }
+            for key in (_norm_key(mname), _norm_key(str(enriched.get("location") or ""))):
+                if key:
+                    by_loc[key] = enriched
+            visits.append(enriched)
+
+        out: Dict[str, Any] = {
+            "source": latest.get("source") or "safetyculture",
+            "count": len(by_machine),
+            "countTech": 0,
+            "byLocationKey": by_loc,
+            "byLocationKeyTech": {},
+            "visits": visits,
+            "visitsTech": [],
+            "latestByMachine": by_machine,
+            "latestByMachineDateFrom": latest.get("dateFrom"),
+            "latestByMachineDateTo": latest.get("dateTo"),
+            "auditsSearched": latest.get("auditsSearched"),
+            "auditsProcessed": latest.get("auditsProcessed"),
+            "locationsWithQc": len(by_machine),
+            "locationsWithTech": 0,
+            "totalVisits": len(visits),
+            "partial": bool(latest.get("partial")),
+            "warning": latest.get("warning"),
+            "error": latest.get("error") if not by_machine else None,
+            "summaryDays": _SUMMARY_MAX_DAYS,
+        }
+        _SUMMARY_CACHE[cache_key] = (time.time(), out)
+        return out
+    finally:
+        _SUMMARY_BUILDING = False
+        _SUMMARY_LOCK.release()
 
 
 def fleet_qc_visits_in_range(

@@ -257,6 +257,10 @@ spec:
           value: "32"
         - name: SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS
           value: "1000"
+        - name: SAFETY_CULTURE_QA_SUMMARY_DAYS
+          value: "45"
+        - name: SAFETY_CULTURE_QA_SUMMARY_CACHE_SEC
+          value: "120"
         resources:
           requests:
             memory: "512Mi"
