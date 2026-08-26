@@ -29,6 +29,6 @@
 
     <rect class="box" x="12" y="200" width="760" height="72" rx="4"/>
     <text x="20" y="220" class="label" font-size="8px">stitchOpsTable � history + PDF</text>
-    <text x="20" y="252" class="hint" font-size="8px">Selected row ? findings tabs (Admin / SC / Report) � Download PDF</text>
+    <text x="20" y="252" class="hint" font-size="8px">Findings: Admin / SC / Report · Issue frequency (repeat ×N) · PDF</text>
   </g>
 </svg>

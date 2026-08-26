@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
+import { QaIssueFrequencySection } from '@/components/QaIssueFrequencySection';
 import {
   buildQaSummarySlides,
   QaVisitSummaryCarousel,
@@ -14,6 +15,7 @@ import {
   type QaMachineAuditRow,
 } from '@/lib/leetWorkflowApi';
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
+import { buildQaIssueFrequency } from '@/lib/qaIssueFrequency';
 import { parseBulletLines } from '@/lib/qaManualSummary';
 import { canonicalQaMachineLabel, scLocationSubtitle } from '@/lib/qaMachineDisplay';
 import { qaScoreDisplay, type QaVisitRow } from '@/lib/qaVisitDisplay';
@@ -85,6 +87,8 @@ export function QaVisitModal({
   });
 
   const audits = auditsQ.data?.audits ?? [];
+
+  const issueFrequency = useMemo(() => buildQaIssueFrequency(audits), [audits]);
 
   const selectedAudit = useMemo(() => {
     if (selectedAuditId) {
@@ -339,6 +343,16 @@ export function QaVisitModal({
         ) : null}
 
         <QaVisitSummaryCarousel slides={slides} machineKey={`${machineName}-${activeAuditId}`} />
+
+        <QaIssueFrequencySection
+          rows={issueFrequency}
+          loading={auditsQ.isLoading}
+          dateFrom={auditsQ.data?.dateFrom || dateFrom}
+          dateTo={auditsQ.data?.dateTo || dateTo}
+          inspectionCount={audits.length}
+          selectedAuditId={activeAuditId}
+          onSelectAudit={(id) => setSelectedAuditId(id)}
+        />
 
         {activeAuditId ? (
           <button
