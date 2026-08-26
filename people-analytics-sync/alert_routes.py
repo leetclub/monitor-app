@@ -1616,7 +1616,10 @@ def register_alert_routes(app) -> None:
             latest_payload = latest_qc_by_machine_map(machine_names)
             latest_map = dict(latest_payload.get("byMachine") or {})
 
-        payload = qa_visits_payload(refresh=False)
+        # Fleet Red Flags / Overall only need QC for the QA Visit column.
+        # Skip the second tech audit pass here — it previously OOM-killed the API pod.
+        # Tech Visit cells still open via per-machine modal when empty.
+        payload = qa_visits_payload(refresh=False, include_tech=False)
 
         db = _dash_session()
         try:
@@ -5256,15 +5259,22 @@ def register_alert_routes(app) -> None:
             def _growth_group(
                 rows: List[Dict[str, Any]],
                 compare_key: str,
+                fleet_period: float,
             ) -> Dict[str, Any]:
                 period = sum(float(m.get("totalLocationKwd") or 0) for m in rows)
                 compare = sum(float(m.get(compare_key) or 0) for m in rows)
                 rate = round((period / compare) * 100, 1) if compare > 0 else None
+                group_share = (
+                    round((period / fleet_period) * 100, 1) if fleet_period > 0 else None
+                )
                 details = []
                 for m in rows:
                     mid = str(m.get("machineId") or "")
                     cur = float(m.get("totalLocationKwd") or 0)
                     cmp_v = float(m.get(compare_key) or 0)
+                    row_share = (
+                        round((cur / fleet_period) * 100, 1) if fleet_period > 0 else None
+                    )
                     details.append(
                         {
                             "machineId": mid,
@@ -5272,6 +5282,7 @@ def register_alert_routes(app) -> None:
                             "periodKd": round(cur, 4),
                             "compareKd": round(cmp_v, 4),
                             "ratePct": round((cur / cmp_v) * 100, 1) if cmp_v > 0 else None,
+                            "shareOfFleetPct": row_share,
                         }
                     )
                 return {
@@ -5279,6 +5290,7 @@ def register_alert_routes(app) -> None:
                     "periodKd": round(period, 4),
                     "compareKd": round(compare, 4),
                     "machineCount": len(rows),
+                    "shareOfFleetPct": group_share,
                     "machines": details,
                 }
 
@@ -5290,18 +5302,25 @@ def register_alert_routes(app) -> None:
                 )
             )
             by_sales = list(machines_out)
+            fleet_period = sum(float(m.get("totalLocationKwd") or 0) for m in by_sales)
             top5 = by_sales[:5]
-            lowest5 = list(reversed(by_sales[-5:])) if by_sales else []
+            with_sales = [m for m in by_sales if float(m.get("totalLocationKwd") or 0) > 0]
+            if len(with_sales) <= 5:
+                lowest5: List[Dict[str, Any]] = []
+            else:
+                top_ids = {str(m.get("machineId") or "") for m in top5}
+                pool = [m for m in with_sales if str(m.get("machineId") or "") not in top_ids]
+                lowest5 = list(reversed(pool[-5:]))
 
             growth_prev = {
-                "all": _growth_group(by_sales, "prevPeriodLocationKwd"),
-                "top5": _growth_group(top5, "prevPeriodLocationKwd"),
-                "lowest5": _growth_group(lowest5, "prevPeriodLocationKwd"),
+                "all": _growth_group(by_sales, "prevPeriodLocationKwd", fleet_period),
+                "top5": _growth_group(top5, "prevPeriodLocationKwd", fleet_period),
+                "lowest5": _growth_group(lowest5, "prevPeriodLocationKwd", fleet_period),
             }
             growth_yoy = {
-                "all": _growth_group(by_sales, "yoyPeriodLocationKwd"),
-                "top5": _growth_group(top5, "yoyPeriodLocationKwd"),
-                "lowest5": _growth_group(lowest5, "yoyPeriodLocationKwd"),
+                "all": _growth_group(by_sales, "yoyPeriodLocationKwd", fleet_period),
+                "top5": _growth_group(top5, "yoyPeriodLocationKwd", fleet_period),
+                "lowest5": _growth_group(lowest5, "yoyPeriodLocationKwd", fleet_period),
             }
 
             aggregate_days = aggregate_fleet_days(machines_out)

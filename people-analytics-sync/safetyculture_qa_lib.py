@@ -34,8 +34,10 @@ _CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_CACHE_SEC", "90"))
 _SEARCH_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_DAYS", "180"))
 _MAX_AUDITS = int(os.environ.get("SAFETY_CULTURE_QA_MAX_AUDITS", "1500"))
 _MACHINE_AUDITS_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_CACHE_SEC", "90"))
-_MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS", "2000"))
-_WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "6"))
+_MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS", "1000"))
+# Keep low — full audit JSON × many workers OOMs the  people-api pod.
+_WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "2"))
+_AUDIT_BATCH = max(8, int(os.environ.get("SAFETY_CULTURE_QA_AUDIT_BATCH", "32")))
 # Always fully process audits modified in this recent window (no per-chunk truncate).
 _RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "21"))
 # Short modified_at windows for the recent org-traffic band — SC search may ignore order/limit.
@@ -499,6 +501,27 @@ def _is_qc_audit(audit: Dict[str, Any], role: str) -> bool:
     return any(x in text for x in ("qc", "quality control", "quality check", "quality audit"))
 
 
+def _process_audits_batched(audit_ids: List[str], now: datetime) -> List[Dict[str, Any]]:
+    """Fetch/process audits in small batches to avoid OOM from concurrent full audit JSON."""
+    out: List[Dict[str, Any]] = []
+    if not audit_ids:
+        return out
+    workers = max(1, _WORKERS)
+    batch = max(8, _AUDIT_BATCH)
+    for i in range(0, len(audit_ids), batch):
+        chunk = audit_ids[i : i + batch]
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_process_audit, aid, now): aid for aid in chunk}
+            for fut in as_completed(futures):
+                try:
+                    row = fut.result()
+                except Exception:
+                    continue
+                if row:
+                    out.append(row)
+    return out
+
+
 def _kuwait_year_month(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -532,25 +555,43 @@ def _build_visit_count_mtd(audit_ids: List[str], now: datetime) -> Dict[str, int
     if not audit_ids or not _API_TOKEN:
         return visit_count_mtd
     cap = audit_ids if _MAX_AUDITS <= 0 else audit_ids[: max(1, _MAX_AUDITS)]
-    with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
-        futures = {pool.submit(_process_audit, aid, now): aid for aid in cap}
-        for fut in as_completed(futures):
-            try:
-                row = fut.result()
-            except Exception:
-                continue
-            if not row or row.get("visitKind") != "qc":
-                continue
-            visit_dt_raw = row.get("lastVisitAt")
-            if not visit_dt_raw:
-                continue
-            try:
-                vdt = datetime.fromisoformat(str(visit_dt_raw).replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            if _visit_in_kuwait_month(vdt, now):
-                nk = _norm_key(row["location"])
-                visit_count_mtd[nk] = visit_count_mtd.get(nk, 0) + 1
+    for row in _process_audits_batched(cap, now):
+        if not row or row.get("visitKind") != "qc":
+            continue
+        visit_dt_raw = row.get("lastVisitAt")
+        if not visit_dt_raw:
+            continue
+        try:
+            vdt = datetime.fromisoformat(str(visit_dt_raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if _visit_in_kuwait_month(vdt, now):
+            nk = _norm_key(row["location"])
+            visit_count_mtd[nk] = visit_count_mtd.get(nk, 0) + 1
+    return visit_count_mtd
+
+
+def _visit_count_mtd_from_qc_rows(qc_rows: List[Dict[str, Any]], now: datetime) -> Dict[str, int]:
+    """Build MTD counts from already-processed QC rows (no second audit fetch)."""
+    visit_count_mtd: Dict[str, int] = {}
+    for row in qc_rows or []:
+        if not row or row.get("visitKind") != "qc":
+            continue
+        visit_dt_raw = row.get("lastVisitAt")
+        if not visit_dt_raw:
+            continue
+        try:
+            vdt = datetime.fromisoformat(str(visit_dt_raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if not _visit_in_kuwait_month(vdt, now):
+            continue
+        loc = str(row.get("location") or "").strip()
+        if not loc:
+            continue
+        nk = _norm_key(loc)
+        if nk:
+            visit_count_mtd[nk] = visit_count_mtd.get(nk, 0) + 1
     return visit_count_mtd
 
 
@@ -838,9 +879,9 @@ def _fetch_from_monitor_gas(
         return None
 
 
-def get_last_visit_tracking() -> Dict[str, Any]:
+def get_last_visit_tracking(*, include_tech: bool = True) -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
-    cache_key = "visits|v3"
+    cache_key = "visits|v4|tech" if include_tech else "visits|v4|qc"
     hit = _CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _CACHE_SEC:
         return hit[1]
@@ -858,42 +899,38 @@ def get_last_visit_tracking() -> Dict[str, Any]:
         qc_rows, audits_searched, audits_processed, search_err = _get_qc_rows_in_range_cached(start, end)
         audit_ids = [str(r.get("auditId") or "") for r in qc_rows if r.get("auditId")]
         if qc_rows or audits_searched:
-            visit_count_mtd = _build_visit_count_mtd(audit_ids, now) if audit_ids else {}
+            # Do not re-fetch every audit for MTD — rows already have location + visit time.
+            visit_count_mtd = _visit_count_mtd_from_qc_rows(qc_rows, now)
             visits_by_loc_qc: Dict[str, Dict[str, Any]] = {}
             visits_by_loc_tech: Dict[str, Dict[str, Any]] = {}
             for row in qc_rows:
                 if row.get("visitKind") == "qc":
                     _merge_visit_row(visits_by_loc_qc, row)
-            # Tech visits are not returned by _build_qc_rows_in_range — fetch recent audits for tech only.
-            mod_start, mod_end = _modified_search_window(start, end)
-            chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
-            tech_seen: set[str] = set(audit_ids)
-            recent_cut = now - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
-            per_chunk_cap = max(120, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks) or 1)))
-            for chunk_start, chunk_end in chunks:
-                chunk_ids, chunk_err = _search_audits(
-                    chunk_start.isoformat().replace("+00:00", "Z"),
-                    chunk_end.isoformat().replace("+00:00", "Z"),
-                )
-                if chunk_err and not chunk_ids:
-                    search_err = search_err or chunk_err
-                    continue
-                if chunk_end >= recent_cut or per_chunk_cap <= 0:
-                    cap = chunk_ids
-                else:
-                    cap = chunk_ids[:per_chunk_cap]
-                extra = [aid for aid in cap if aid and aid not in tech_seen]
-                for aid in extra:
-                    tech_seen.add(aid)
-                if not extra:
-                    continue
-                with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
-                    futures = {pool.submit(_process_audit, aid, now): aid for aid in extra}
-                    for fut in as_completed(futures):
-                        try:
-                            row = fut.result()
-                        except Exception:
-                            continue
+            # Tech visits are not returned by _build_qc_rows_in_range — optional second pass.
+            if include_tech:
+                mod_start, mod_end = _modified_search_window(start, end)
+                chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
+                tech_seen: set[str] = set(audit_ids)
+                recent_cut = now - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
+                per_chunk_cap = max(120, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks) or 1)))
+                for chunk_start, chunk_end in chunks:
+                    chunk_ids, chunk_err = _search_audits(
+                        chunk_start.isoformat().replace("+00:00", "Z"),
+                        chunk_end.isoformat().replace("+00:00", "Z"),
+                    )
+                    if chunk_err and not chunk_ids:
+                        search_err = search_err or chunk_err
+                        continue
+                    if chunk_end >= recent_cut or per_chunk_cap <= 0:
+                        cap = chunk_ids
+                    else:
+                        cap = chunk_ids[:per_chunk_cap]
+                    extra = [aid for aid in cap if aid and aid not in tech_seen]
+                    for aid in extra:
+                        tech_seen.add(aid)
+                    if not extra:
+                        continue
+                    for row in _process_audits_batched(extra, now):
                         if not row or row.get("visitKind") != "tech":
                             continue
                         _merge_visit_row(visits_by_loc_tech, row)
@@ -937,10 +974,10 @@ def clear_qa_caches() -> None:
     _QC_ROWS_RANGE_CACHE.clear()
 
 
-def qa_visits_payload(*, refresh: bool = False) -> Dict[str, Any]:
+def qa_visits_payload(*, refresh: bool = False, include_tech: bool = True) -> Dict[str, Any]:
     if refresh:
         clear_qa_caches()
-    return get_last_visit_tracking()
+    return get_last_visit_tracking(include_tech=include_tech)
 
 
 def qa_visit_for_machine_name(machine_name: str) -> Optional[Dict[str, Any]]:
@@ -1044,24 +1081,18 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
         else:
             cap = audit_ids[:per_chunk_cap]
         audits_processed += len(cap)
-        with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
-            futures = {pool.submit(_process_audit, aid, now): aid for aid in cap}
-            for fut in as_completed(futures):
-                try:
-                    row = fut.result()
-                except Exception:
-                    continue
-                if not row or row.get("visitKind") != "qc":
-                    continue
-                aid = str(row.get("auditId") or "")
-                if aid and aid in seen_audit_ids:
-                    continue
-                visit_dt = _parse_iso_dt(str(row.get("lastVisitAt") or ""))
-                if visit_dt and (visit_dt < start or visit_dt > end):
-                    continue
-                if aid:
-                    seen_audit_ids.add(aid)
-                rows.append(row)
+        for row in _process_audits_batched(cap, now):
+            if not row or row.get("visitKind") != "qc":
+                continue
+            aid = str(row.get("auditId") or "")
+            if aid and aid in seen_audit_ids:
+                continue
+            visit_dt = _parse_iso_dt(str(row.get("lastVisitAt") or ""))
+            if visit_dt and (visit_dt < start or visit_dt > end):
+                continue
+            if aid:
+                seen_audit_ids.add(aid)
+            rows.append(row)
 
     return rows, audits_searched, audits_processed, search_err
 
@@ -1586,32 +1617,26 @@ def list_qc_audits_for_machine(
         else:
             cap = audit_ids[:per_chunk_cap]
         audits_processed += len(cap)
-        with ThreadPoolExecutor(max_workers=max(1, _WORKERS)) as pool:
-            futures = {pool.submit(_process_audit, aid, now): aid for aid in cap}
-            for fut in as_completed(futures):
-                try:
-                    row = fut.result()
-                except Exception:
+        for row in _process_audits_batched(cap, now):
+            if not row or row.get("visitKind") != "qc":
+                continue
+            aid = str(row.get("auditId") or "")
+            if aid and aid in seen_audit_ids:
+                continue
+            visit_dt = _parse_iso_dt(str(row.get("lastVisitAt") or ""))
+            if visit_dt and (visit_dt < start or visit_dt > end):
+                continue
+            keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
+            score = _audit_match_score(machine, str(row.get("location") or ""), keys)
+            if score < _MIN_MACHINE_MATCH_SCORE:
+                continue
+            if loc_q and loc_q not in _norm_key(str(row.get("location") or "")):
+                loc_blob = " ".join([str(row.get("location") or "")] + [str(x) for x in (keys or [])])
+                if loc_q not in _norm_key(loc_blob):
                     continue
-                if not row or row.get("visitKind") != "qc":
-                    continue
-                aid = str(row.get("auditId") or "")
-                if aid and aid in seen_audit_ids:
-                    continue
-                visit_dt = _parse_iso_dt(str(row.get("lastVisitAt") or ""))
-                if visit_dt and (visit_dt < start or visit_dt > end):
-                    continue
-                keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
-                score = _audit_match_score(machine, str(row.get("location") or ""), keys)
-                if score < _MIN_MACHINE_MATCH_SCORE:
-                    continue
-                if loc_q and loc_q not in _norm_key(str(row.get("location") or "")):
-                    loc_blob = " ".join([str(row.get("location") or "")] + [str(x) for x in (keys or [])])
-                    if loc_q not in _norm_key(loc_blob):
-                        continue
-                if aid:
-                    seen_audit_ids.add(aid)
-                rows.append(row)
+            if aid:
+                seen_audit_ids.add(aid)
+            rows.append(row)
 
     if sort_key == "score":
         rows.sort(

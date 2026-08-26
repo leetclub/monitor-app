@@ -250,12 +250,19 @@ spec:
               optional: true
         - name: LEET_WORKFLOW_API_TIMEOUT_SEC
           value: "30"
+        # Cap SafetyCulture concurrency — unbounded workers previously OOMKilled this pod (768Mi).
+        - name: SAFETY_CULTURE_QA_WORKERS
+          value: "2"
+        - name: SAFETY_CULTURE_QA_AUDIT_BATCH
+          value: "32"
+        - name: SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS
+          value: "1000"
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
           limits:
-            memory: "768Mi"
+            memory: "2Gi"
             # Performance fleet + background cache seeds pegged 1500m and starved /health probes.
             cpu: "2500m"
         startupProbe:
