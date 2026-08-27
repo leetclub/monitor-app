@@ -4,6 +4,9 @@ import { apiUrl } from '@/lib/gsi';
 async function fetchWithRetry(path: string, init: RequestInit, attempts = 3): Promise<Response> {
   let last: Response | null = null;
   for (let i = 0; i < attempts; i++) {
+    if (init.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
     const res = await fetch(apiUrl(path), init);
     last = res;
     if (res.ok || (res.status !== 503 && res.status !== 502)) {
@@ -16,8 +19,8 @@ async function fetchWithRetry(path: string, init: RequestInit, attempts = 3): Pr
   return last!;
 }
 
-export async function apiGet<T extends Json>(path: string): Promise<T> {
-  const res = await fetchWithRetry(path, { credentials: 'include' });
+export async function apiGet<T extends Json>(path: string, init?: { signal?: AbortSignal }): Promise<T> {
+  const res = await fetchWithRetry(path, { credentials: 'include', signal: init?.signal });
   if (!res.ok) {
     throw new Error(`GET ${path} failed (${res.status})`);
   }

@@ -192,6 +192,7 @@ export function fetchQaMachineAudits(input: {
   order?: 'asc' | 'desc';
   days?: number;
   refresh?: boolean;
+  signal?: AbortSignal;
 }): Promise<QaMachineAuditsPayload> {
   const name = String(input.machineName || '').trim();
   const params = new URLSearchParams({ machineName: name });
@@ -202,7 +203,9 @@ export function fetchQaMachineAudits(input: {
   if (input.order) params.set('order', input.order);
   if (input.days != null && Number.isFinite(input.days)) params.set('days', String(input.days));
   if (input.refresh) params.set('refresh', '1');
-  return apiGet<QaMachineAuditsPayload>(`/api/alert/qa/machine-audits?${params.toString()}`);
+  return apiGet<QaMachineAuditsPayload>(`/api/alert/qa/machine-audits?${params.toString()}`, {
+    signal: input.signal,
+  });
 }
 
 export function fetchQaManualSummaryAdmin(machineName: string): Promise<QaManualSummaryAdminPayload> {

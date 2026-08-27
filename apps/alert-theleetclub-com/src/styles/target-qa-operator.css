@@ -1746,6 +1746,22 @@ html[data-theme='pro'][data-mode='dark'] .operatorActivityMuted {
   line-height: 1.4;
 }
 
+.qaIssueFreqEmpty--err {
+  color: #fda4af;
+}
+
+.qaIssueFreqRetry {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fda4af;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .qaIssueFreqList {
   list-style: none;
   margin: 0;

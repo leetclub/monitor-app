@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatKuwaitDateTime } from '@/lib/formatKuwait';
 import {
   repeatedQaIssues,
@@ -9,7 +9,6 @@ function shortWhen(iso: string | null | undefined): string {
   if (!iso) return '—';
   const full = formatKuwaitDateTime(iso);
   if (full && full !== '—') {
-    // Drop year when crowded: "26 Aug 2026, 14:02" → keep as-is for clarity
     return full;
   }
   return iso.slice(0, 10);
@@ -22,25 +21,48 @@ function shortWhen(iso: string | null | undefined): string {
 export function QaIssueFrequencySection({
   rows,
   loading,
+  error,
+  provisional,
   dateFrom,
   dateTo,
   inspectionCount,
   onSelectAudit,
   selectedAuditId,
+  onRetry,
 }: {
   rows: QaIssueFrequencyRow[];
   loading?: boolean;
+  error?: string | null;
+  /** True when rows are from the latest visit only (history still loading / failed). */
+  provisional?: boolean;
   dateFrom?: string;
   dateTo?: string;
   inspectionCount: number;
   onSelectAudit?: (auditId: string) => void;
   selectedAuditId?: string;
+  onRetry?: () => void;
 }) {
   const repeated = repeatedQaIssues(rows);
   const onceOnly = rows.filter((r) => r.count === 1);
   const [expanded, setExpanded] = useState<string | null>(repeated[0]?.key ?? null);
+  const [slow, setSlow] = useState(false);
   const rangeLabel =
     dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : dateFrom || dateTo || 'selected range';
+
+  useEffect(() => {
+    setExpanded(repeated[0]?.key ?? null);
+  }, [repeated[0]?.key]);
+
+  useEffect(() => {
+    if (!loading) {
+      setSlow(false);
+      return;
+    }
+    const t = window.setTimeout(() => setSlow(true), 12_000);
+    return () => window.clearTimeout(t);
+  }, [loading]);
+
+  const historyReady = !loading && !error && !provisional;
 
   return (
     <section className="qaIssueFreq" aria-label="Issue frequency">
@@ -63,15 +85,51 @@ export function QaIssueFrequencySection({
         Tap a date to open that inspection above.
       </p>
 
-      {loading ? <p className="qaIssueFreqEmpty">Scanning inspection findings…</p> : null}
+      {loading ? (
+        <p className="qaIssueFreqEmpty">
+          {slow
+            ? 'SafetyCulture is slow — still loading inspection history for repeat counts…'
+            : provisional
+              ? 'Loading more inspections to count repeats…'
+              : 'Loading inspection history for issue frequency…'}
+          {onRetry && slow ? (
+            <>
+              {' '}
+              <button type="button" className="qaIssueFreqRetry" onClick={onRetry}>
+                Cancel wait / retry
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
-      {!loading && !rows.length ? (
+      {error && !loading ? (
+        <p className="qaIssueFreqEmpty qaIssueFreqEmpty--err">
+          Could not load inspection history ({error}). Issue frequency needs history across visits.
+          {onRetry ? (
+            <>
+              {' '}
+              <button type="button" className="qaIssueFreqRetry" onClick={onRetry}>
+                Retry
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      {provisional && rows.length > 0 && !error ? (
+        <p className="qaIssueFreqEmpty">
+          Showing the latest visit only until history finishes — repeats need 2+ inspections.
+        </p>
+      ) : null}
+
+      {!loading && !error && !rows.length ? (
         <p className="qaIssueFreqEmpty">
           No SafetyCulture key findings in this date range. Widen From/To or select another machine.
         </p>
       ) : null}
 
-      {!loading && rows.length > 0 && !repeated.length ? (
+      {historyReady && rows.length > 0 && !repeated.length ? (
         <p className="qaIssueFreqEmpty">
           {rows.length} finding{rows.length === 1 ? '' : 's'} appeared once — nothing repeated across
           visits yet. Widen the date range to catch older repeats.

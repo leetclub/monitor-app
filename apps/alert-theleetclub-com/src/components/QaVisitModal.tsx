@@ -21,9 +21,10 @@ import { canonicalQaMachineLabel, scLocationSubtitle } from '@/lib/qaMachineDisp
 import { qaScoreDisplay, type QaVisitRow } from '@/lib/qaVisitDisplay';
 import { getAlertModalPortal, modalBackdropHandlers, modalPanelHandlers, useAlertModal } from '@/lib/useAlertModal';
 
+/** Default popup window — 90d keeps issue-frequency / history scans from hanging on SC. */
 function defaultFromDate(): string {
   const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
+  d.setUTCDate(d.getUTCDate() - 90);
   return d.toISOString().slice(0, 10);
 }
 
@@ -72,23 +73,65 @@ export function QaVisitModal({
 
   const auditsQ = useQuery({
     queryKey: ['alert-qa-machine-audits', machineName, dateFrom, dateTo, locationQ, sort, order],
-    queryFn: () =>
-      fetchQaMachineAudits({
+    queryFn: ({ signal }) => {
+      const ctrl = new AbortController();
+      const onAbort = () => ctrl.abort();
+      signal.addEventListener('abort', onAbort);
+      const timer = window.setTimeout(() => ctrl.abort(), 120_000);
+      const fromMs = Date.parse(`${dateFrom}T00:00:00Z`);
+      const toMs = Date.parse(`${dateTo}T23:59:59Z`);
+      const spanDays =
+        Number.isFinite(fromMs) && Number.isFinite(toMs)
+          ? Math.min(365, Math.max(7, Math.ceil((toMs - fromMs) / 86_400_000) + 1))
+          : 90;
+      return fetchQaMachineAudits({
         machineName,
         from: dateFrom,
         to: dateTo,
         location: locationQ,
         sort,
         order,
-        days: 365,
-      }),
+        days: spanDays,
+        signal: ctrl.signal,
+      }).finally(() => {
+        window.clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+      });
+    },
     enabled: Boolean(machineName.trim()),
     staleTime: 5 * 60_000,
+    retry: 1,
+    retryDelay: 1500,
   });
 
   const audits = auditsQ.data?.audits ?? [];
+  const historyPending = auditsQ.isPending || (auditsQ.isFetching && audits.length === 0);
 
-  const issueFrequency = useMemo(() => buildQaIssueFrequency(audits), [audits]);
+  const issueFrequency = useMemo(() => {
+    if (audits.length) return buildQaIssueFrequency(audits);
+    // Provisional: latest visit only until history returns (avoids endless empty scan state)
+    if (visit.keyFindings?.length && (visit.auditId || visit.lastVisitAt || visit.lastVisitDate)) {
+      return buildQaIssueFrequency([visit as QaMachineAuditRow]);
+    }
+    return [];
+  }, [audits, visit]);
+
+  const auditsErrorMessage = (() => {
+    if (auditsQ.isError) {
+      const err = auditsQ.error;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return 'timed out waiting for SafetyCulture';
+      }
+      if (err instanceof Error) {
+        if (/abort/i.test(err.message) || err.name === 'AbortError') {
+          return 'timed out waiting for SafetyCulture';
+        }
+        return err.message;
+      }
+      return 'request failed';
+    }
+    return auditsQ.data?.error || null;
+  })();
 
   const selectedAudit = useMemo(() => {
     if (selectedAuditId) {
@@ -346,12 +389,15 @@ export function QaVisitModal({
 
         <QaIssueFrequencySection
           rows={issueFrequency}
-          loading={auditsQ.isLoading}
+          loading={historyPending}
+          provisional={!audits.length && issueFrequency.length > 0}
+          error={auditsErrorMessage}
           dateFrom={auditsQ.data?.dateFrom || dateFrom}
           dateTo={auditsQ.data?.dateTo || dateTo}
-          inspectionCount={audits.length}
+          inspectionCount={audits.length || (issueFrequency.length ? 1 : 0)}
           selectedAuditId={activeAuditId}
           onSelectAudit={(id) => setSelectedAuditId(id)}
+          onRetry={() => void auditsQ.refetch()}
         />
 
         {activeAuditId ? (
