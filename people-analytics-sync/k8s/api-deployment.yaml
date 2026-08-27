@@ -251,12 +251,17 @@ spec:
         - name: LEET_WORKFLOW_API_TIMEOUT_SEC
           value: "30"
         # Cap SafetyCulture concurrency — unbounded workers previously OOMKilled this pod (768Mi).
+        # 4 workers + batching is OK with 2Gi; shared QC range cache avoids re-fetch per machine popup.
         - name: SAFETY_CULTURE_QA_WORKERS
-          value: "2"
+          value: "4"
         - name: SAFETY_CULTURE_QA_AUDIT_BATCH
           value: "32"
         - name: SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS
           value: "1000"
+        - name: SAFETY_CULTURE_QA_FLEET_CACHE_SEC
+          value: "300"
+        - name: SAFETY_CULTURE_QA_ROW_CACHE_SEC
+          value: "600"
         - name: SAFETY_CULTURE_QA_SUMMARY_DAYS
           value: "45"
         - name: SAFETY_CULTURE_QA_SUMMARY_CACHE_SEC

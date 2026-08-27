@@ -35,9 +35,13 @@ _SEARCH_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_SEARCH_DAYS", "180"))
 _MAX_AUDITS = int(os.environ.get("SAFETY_CULTURE_QA_MAX_AUDITS", "1500"))
 _MACHINE_AUDITS_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_CACHE_SEC", "90"))
 _MACHINE_AUDITS_MAX_PROCESS = int(os.environ.get("SAFETY_CULTURE_QA_MACHINE_MAX_PROCESS", "1000"))
-# Keep low — full audit JSON × many workers OOMs the  people-api pod.
-_WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "2"))
+# Keep modest — full audit JSON × many workers can OOM; 4 is OK with 2Gi + batching.
+_WORKERS = int(os.environ.get("SAFETY_CULTURE_QA_WORKERS", "4"))
 _AUDIT_BATCH = max(8, int(os.environ.get("SAFETY_CULTURE_QA_AUDIT_BATCH", "32")))
+# Processed QC row reuse across overlapping date windows (exact row, not truncated).
+_PROCESSED_ROW_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_PROCESSED_ROW_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_ROW_CACHE_SEC", "600"))
+_QC_ROWS_LOCK = __import__("threading").Lock()
 # Always fully process audits modified in this recent window (no per-chunk truncate).
 _RECENT_FULL_SCAN_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_RECENT_FULL_DAYS", "21"))
 # Red Flags column summary — short window so the API answers before gateway timeout.
@@ -514,10 +518,21 @@ def _process_audits_batched(audit_ids: List[str], now: datetime) -> List[Dict[st
         return out
     workers = max(1, _WORKERS)
     batch = max(8, _AUDIT_BATCH)
+    now_ts = time.time()
+
+    def _one(aid: str) -> Optional[Dict[str, Any]]:
+        hit = _PROCESSED_ROW_CACHE.get(aid)
+        if hit and (now_ts - hit[0]) < _PROCESSED_ROW_CACHE_SEC:
+            return hit[1]
+        row = _process_audit(aid, now)
+        if row and row.get("auditId"):
+            _PROCESSED_ROW_CACHE[str(row.get("auditId"))] = (time.time(), row)
+        return row
+
     for i in range(0, len(audit_ids), batch):
         chunk = audit_ids[i : i + batch]
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_process_audit, aid, now): aid for aid in chunk}
+            futures = {pool.submit(_one, aid): aid for aid in chunk}
             for fut in as_completed(futures):
                 try:
                     row = fut.result()
@@ -979,6 +994,7 @@ def clear_qa_caches() -> None:
     _FLEET_CACHE.clear()
     _QC_ROWS_RANGE_CACHE.clear()
     _SUMMARY_CACHE.clear()
+    _PROCESSED_ROW_CACHE.clear()
 
 
 def qa_visits_payload(*, refresh: bool = False, include_tech: bool = True) -> Dict[str, Any]:
@@ -1053,7 +1069,12 @@ def _pick_visit_from_by_loc(
 
 
 def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    """Chunked SC scan for a date window → all QC audit rows in range (by conducted/completed time)."""
+    """
+    Chunked SC scan for a date window → all QC audit rows in range (by conducted/completed time).
+
+    Processes every searched audit id (no per-chunk truncate) so machine history / frequency
+    have no silent gaps. Shared via `_get_qc_rows_in_range_cached`.
+    """
     rows: List[Dict[str, Any]] = []
     seen_audit_ids: set[str] = set()
     audits_searched = 0
@@ -1067,12 +1088,6 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
     # Search by modified_at with padding; keep only visit_dt within [start, end].
     mod_start, mod_end = _modified_search_window(start, end)
     chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
-    per_chunk_cap = (
-        max(120, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks))))
-        if _MACHINE_AUDITS_MAX_PROCESS > 0
-        else 0
-    )
-    recent_cut = datetime.now(timezone.utc) - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
     for chunk_start, chunk_end in chunks:
         audit_ids, chunk_err = _search_audits(
             chunk_start.isoformat().replace("+00:00", "Z"),
@@ -1081,14 +1096,12 @@ def _build_qc_rows_in_range(start: datetime, end: datetime) -> Tuple[List[Dict[s
         if chunk_err and not audit_ids:
             search_err = search_err or chunk_err
             continue
+        if chunk_err and audit_ids:
+            search_err = search_err or chunk_err
         audits_searched += len(audit_ids)
-        # Never truncate audits that fall in the recent window (same-day / last N days).
-        if chunk_end >= recent_cut or per_chunk_cap <= 0:
-            cap = audit_ids
-        else:
-            cap = audit_ids[:per_chunk_cap]
-        audits_processed += len(cap)
-        for row in _process_audits_batched(cap, now):
+        # Exact coverage: process every id returned by search (no truncate).
+        audits_processed += len(audit_ids)
+        for row in _process_audits_batched(audit_ids, now):
             if not row or row.get("visitKind") != "qc":
                 continue
             aid = str(row.get("auditId") or "")
@@ -1543,8 +1556,10 @@ def list_qc_audits_for_machine(
 ) -> Dict[str, Any]:
     """
     List SafetyCulture QC audits for one Vendon machine (up to 1 year).
-    Searches in ~monthly chunks so dense recent org traffic cannot hide older audits.
-    Supports date range, location substring filter, and sort by date or score.
+
+    Uses the shared full-range QC row cache (one org scan per date window), then
+    filters to this machine — so opening several popups does not re-download
+    every inspection. Exact: no per-chunk truncate on the shared scan.
     """
     machine = (machine_name or "").strip()
     if not machine:
@@ -1574,7 +1589,7 @@ def list_qc_audits_for_machine(
     order_desc = (order or "desc").lower() != "asc"
     cache_key = "|".join(
         [
-            "v11",
+            "v12",
             machine.lower(),
             start.date().isoformat(),
             end.date().isoformat(),
@@ -1596,54 +1611,20 @@ def list_qc_audits_for_machine(
         }
         return out
 
-    mod_start, mod_end = _modified_search_window(start, end)
-    chunks = _iter_adaptive_search_chunks(mod_start, mod_end, now=now)
-    per_chunk_cap = (
-        max(250, int(_MACHINE_AUDITS_MAX_PROCESS // max(1, len(chunks))))
-        if _MACHINE_AUDITS_MAX_PROCESS > 0
-        else 0
-    )
+    qc_rows, audits_searched, audits_processed, search_err = _get_qc_rows_in_range_cached(start, end)
     rows: List[Dict[str, Any]] = []
-    seen_audit_ids: set[str] = set()
-    audits_searched = 0
-    audits_processed = 0
-    search_err: Optional[str] = None
-    recent_cut = now - timedelta(days=max(1, _RECENT_FULL_SCAN_DAYS))
-
-    for chunk_start, chunk_end in chunks:
-        audit_ids, chunk_err = _search_audits(
-            chunk_start.isoformat().replace("+00:00", "Z"),
-            chunk_end.isoformat().replace("+00:00", "Z"),
-        )
-        if chunk_err and not audit_ids:
-            search_err = chunk_err
+    for row in qc_rows:
+        if not isinstance(row, dict):
             continue
-        audits_searched += len(audit_ids)
-        if chunk_end >= recent_cut or per_chunk_cap <= 0:
-            cap = audit_ids
-        else:
-            cap = audit_ids[:per_chunk_cap]
-        audits_processed += len(cap)
-        for row in _process_audits_batched(cap, now):
-            if not row or row.get("visitKind") != "qc":
+        keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
+        score = _audit_match_score(machine, str(row.get("location") or ""), keys)
+        if score < _MIN_MACHINE_MATCH_SCORE:
+            continue
+        if loc_q and loc_q not in _norm_key(str(row.get("location") or "")):
+            loc_blob = " ".join([str(row.get("location") or "")] + [str(x) for x in (keys or [])])
+            if loc_q not in _norm_key(loc_blob):
                 continue
-            aid = str(row.get("auditId") or "")
-            if aid and aid in seen_audit_ids:
-                continue
-            visit_dt = _parse_iso_dt(str(row.get("lastVisitAt") or ""))
-            if visit_dt and (visit_dt < start or visit_dt > end):
-                continue
-            keys = row.get("locationKeys") if isinstance(row.get("locationKeys"), list) else None
-            score = _audit_match_score(machine, str(row.get("location") or ""), keys)
-            if score < _MIN_MACHINE_MATCH_SCORE:
-                continue
-            if loc_q and loc_q not in _norm_key(str(row.get("location") or "")):
-                loc_blob = " ".join([str(row.get("location") or "")] + [str(x) for x in (keys or [])])
-                if loc_q not in _norm_key(loc_blob):
-                    continue
-            if aid:
-                seen_audit_ids.add(aid)
-            rows.append(row)
+        rows.append(row)
 
     if sort_key == "score":
         rows.sort(
@@ -1664,33 +1645,44 @@ def list_qc_audits_for_machine(
         "dateTo": end.date().isoformat(),
         "trend": trend,
         "source": "safetyculture",
-        "chunks": len(chunks),
+        "fromSharedQcCache": True,
     }
-    if search_err and not rows:
+    out = _apply_qc_scan_status(
+        out,
+        search_err=search_err,
+        audits_searched=audits_searched,
+        audits_processed=audits_processed,
+    )
+    if search_err and not rows and not out.get("error"):
         out["error"] = search_err
-    elif audits_searched > audits_processed and not rows:
-        out["error"] = (
-            "SafetyCulture returned more inspections than we could scan in this range. "
-            "Narrow the date filter and try again."
-        )
     _MACHINE_AUDITS_CACHE[cache_key] = (time.time(), out)
     return out
 
 
 _FLEET_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _QC_ROWS_RANGE_CACHE: Dict[str, Tuple[float, Tuple[List[Dict[str, Any]], int, int, Optional[str]]]] = {}
-_FLEET_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_CACHE_SEC", "90"))
+_FLEET_CACHE_SEC = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_CACHE_SEC", "300"))
 _FLEET_MAX_DAYS = int(os.environ.get("SAFETY_CULTURE_QA_FLEET_MAX_DAYS", "180"))
 
 
 def _get_qc_rows_in_range_cached(start: datetime, end: datetime) -> Tuple[List[Dict[str, Any]], int, int, Optional[str]]:
-    cache_key = f"qc_rows|v8|{start.isoformat()}|{end.isoformat()}"
+    """
+    Singleflight + TTL cache of full QC rows for [start, end].
+
+    First caller runs the SC scan; concurrent callers wait on the lock and reuse
+    the same result (exact, no truncate).
+    """
+    cache_key = f"qc_rows|v9|{start.isoformat()}|{end.isoformat()}"
     hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
     if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
         return hit[1]
-    result = _build_qc_rows_in_range(start, end)
-    _QC_ROWS_RANGE_CACHE[cache_key] = (time.time(), result)
-    return result
+    with _QC_ROWS_LOCK:
+        hit = _QC_ROWS_RANGE_CACHE.get(cache_key)
+        if hit and (time.time() - hit[0]) < _FLEET_CACHE_SEC:
+            return hit[1]
+        result = _build_qc_rows_in_range(start, end)
+        _QC_ROWS_RANGE_CACHE[cache_key] = (time.time(), result)
+        return result
 
 
 def latest_qc_by_machine_map(

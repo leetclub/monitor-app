@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-27 | **QA history speed (exact, no gaps):** people-api shares one full QC scan per date window across machine popups (no per-chunk truncate); row cache + 4 workers. First open still does the SC scan; later machines/reopens in the same window are near-instant. |
 | 2026-08-27 | **QA issue frequency hang:** Popup default history **90 days** (was 1 year); client aborts slow SafetyCulture history after **120s** with Retry; show latest-visit findings while history loads instead of endless “Scanning…”. |
 | 2026-08-26 | **QA Visit popup — issue frequency:** Fourth section lists SafetyCulture findings that **repeat across inspections** in the selected From/To range (count, first/last seen, tap a date to select that audit). One-off findings stay under a collapsed “Seen once” list. |
 | 2026-08-26 | **QA Visit column blank:** Red Flags/Overall `/qa/summary` now uses a fast **45-day** SafetyCulture QC summary (cached) instead of a hung 180-day fleet scan that timed out and left every cell as —. |
