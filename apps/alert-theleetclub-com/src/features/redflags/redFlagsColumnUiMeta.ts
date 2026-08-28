@@ -11,6 +11,7 @@ export type RedFlagsColumnUiMeta = {
 
 export const RED_FLAGS_COLUMN_UI: Record<RedFlagsColumnKey, RedFlagsColumnUiMeta> = {
   vendingMachine: { abbr: 'Mchn', label: 'Machine', family: 'machine', pinned: true },
+  operatingHours: { abbr: 'Hrs', label: 'Op. hours', family: 'people' },
   alertType: { abbr: 'Alert', label: 'Alert type', family: 'alerts' },
   operator: { abbr: 'Op', label: 'Operator', family: 'people' },
   operatorActivity: { abbr: 'Door', label: 'Op. activity', family: 'people' },

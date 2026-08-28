@@ -5,6 +5,7 @@ import type { RedFlagsColumnKey } from '@/features/redflags/redFlagsWorkbookColu
 /** Every column uses main + sub (or spacer sub) so thead rows align on one baseline grid. */
 export const RED_FLAGS_TABLE_HEADERS: Record<RedFlagsColumnKey, HeaderDisplay> = {
   vendingMachine: { main: 'Vending', sub: 'machine' },
+  operatingHours: { main: 'Op.', sub: 'hours' },
   alertType: { main: 'Alert', sub: 'type' },
   operator: { main: 'Live', sub: 'operator' },
   operatorActivity: { main: 'Op.', sub: 'activity' },

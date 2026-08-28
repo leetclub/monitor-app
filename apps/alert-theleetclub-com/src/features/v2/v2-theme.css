@@ -16,7 +16,9 @@
   --v2-teal: #2dd4bf;
   --v2-teal-soft: rgba(45, 212, 191, 0.14);
   --v2-teal-glow: rgba(45, 212, 191, 0.35);
-  --v2-sidebar-w: 268px;
+  --v2-sidebar-w-expanded: 268px;
+  --v2-sidebar-w-rail: 76px;
+  --v2-sidebar-w: var(--v2-sidebar-w-expanded);
   --v2-gutter: clamp(14px, 2.2vw, 28px);
   --v2-font: 'DM Sans', system-ui, sans-serif;
   --v2-display: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
@@ -37,6 +39,10 @@
   overflow-x: clip;
   width: 100%;
   max-width: 100vw;
+}
+
+.v2AppRoot.v2NavCollapsed {
+  --v2-sidebar-w: var(--v2-sidebar-w-rail);
 }
 
 .v2AppRoot *,
@@ -65,6 +71,73 @@
   align-items: center;
   gap: 12px;
   padding: 4px 8px 16px;
+  position: relative;
+}
+
+.v2CollapseBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--v2-border);
+  border-radius: 10px;
+  background: rgba(15, 26, 44, 0.8);
+  color: var(--v2-muted);
+  cursor: pointer;
+}
+
+.v2CollapseBtn:hover {
+  color: var(--v2-teal);
+  border-color: rgba(45, 212, 191, 0.35);
+}
+
+.v2AppRoot.v2NavCollapsed .v2Brand {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 12px;
+}
+
+.v2AppRoot.v2NavCollapsed .v2Brand > div:not(.v2BrandMark) {
+  display: none;
+}
+
+.v2AppRoot.v2NavCollapsed .v2CollapseBtn {
+  margin-left: 0;
+}
+
+.v2AppRoot.v2NavCollapsed .v2NavSection,
+.v2AppRoot.v2NavCollapsed .v2NavText,
+.v2AppRoot.v2NavCollapsed .v2Online,
+.v2AppRoot.v2NavCollapsed .v2UserChip span,
+.v2AppRoot.v2NavCollapsed .v2ClassicLink {
+  display: none;
+}
+
+.v2AppRoot.v2NavCollapsed .v2NavLink {
+  justify-content: center;
+  align-items: center;
+  padding: 12px 8px;
+}
+
+.v2AppRoot.v2NavCollapsed .v2NavLink .navGlyph {
+  margin-top: 0;
+}
+
+.v2AppRoot.v2NavCollapsed .v2Sidebar {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.v2AppRoot.v2NavCollapsed .v2UserChip {
+  justify-content: center;
+}
+
+.v2AppRoot.v2NavCollapsed .v2SidebarFoot {
+  align-items: center;
 }
 
 .v2BrandMark {
@@ -485,6 +558,44 @@ a.v2NavLink.v2NavLinkActive {
 
   .v2MenuBtn {
     display: inline-flex;
+  }
+
+  /* Drawer mode: always show full labels; collapse is desktop-only */
+  .v2CollapseBtn {
+    display: none;
+  }
+
+  .v2AppRoot.v2NavCollapsed {
+    --v2-sidebar-w: var(--v2-sidebar-w-expanded);
+  }
+
+  .v2AppRoot.v2NavCollapsed .v2Brand {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 8px 16px;
+  }
+
+  .v2AppRoot.v2NavCollapsed .v2Brand > div:not(.v2BrandMark) {
+    display: block;
+  }
+
+  .v2AppRoot.v2NavCollapsed .v2NavSection,
+  .v2AppRoot.v2NavCollapsed .v2NavText,
+  .v2AppRoot.v2NavCollapsed .v2Online,
+  .v2AppRoot.v2NavCollapsed .v2UserChip span,
+  .v2AppRoot.v2NavCollapsed .v2ClassicLink {
+    display: revert;
+  }
+
+  .v2AppRoot.v2NavCollapsed .v2NavText {
+    display: flex;
+  }
+
+  .v2AppRoot.v2NavCollapsed .v2NavLink {
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 10px 12px;
   }
 
   .v2Sidebar {

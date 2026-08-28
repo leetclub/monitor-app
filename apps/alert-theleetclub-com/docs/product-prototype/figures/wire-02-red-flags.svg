@@ -56,6 +56,6 @@
     <text x="600" y="188" class="hint" font-size="7px">Below target</text>
     <text x="20" y="228" class="hint" font-size="8px">(more rows)</text>
     <text x="520" y="228" class="tiny">Swipe / drag · ◀ ▶ pan</text>
-    <text x="20" y="246" class="tiny">Toolbar: search + Risk sort. SX Loc · Last/tx (no-sales ≥4h) · Top/low drink · Downtime (loss after 5m grace) · Last clean (next/days left) · QA → PDF.</text>
+    <text x="20" y="246" class="tiny">Toolbar: search + Risk sort + Sales ↓ + Hide inactive. Op. hours · SX Loc · Last/tx (no-sales ≥4h) · Top/low drink · Downtime · Last clean · QA → PDF.</text>
   </g>
 </svg>

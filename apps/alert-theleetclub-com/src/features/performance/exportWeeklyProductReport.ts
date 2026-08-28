@@ -31,6 +31,8 @@ type Opts = {
   machines: WeeklyExportMachine[];
   focusProduct?: string | null;
   compare: boolean;
+  fleetPeriodKd?: number | null;
+  fleetYoyKd?: number | null;
 };
 
 function pct(cur: number, prev: number | null | undefined): number | string {
@@ -55,11 +57,19 @@ export function downloadWeeklyProductReport(opts: Opts) {
     machines,
     focusProduct,
     compare,
+    fleetPeriodKd,
+    fleetYoyKd,
   } = opts;
 
-  const totalRev = fleetProducts.reduce((s, p) => s + Number(p.revenueKwd || 0), 0);
+  const mixRev = fleetProducts.reduce((s, p) => s + Number(p.revenueKwd || 0), 0);
+  const mixYoy = fleetProducts.reduce((s, p) => s + Number(p.yoyRevenueKwd || 0), 0);
+  const totalRev =
+    fleetPeriodKd != null && Number.isFinite(Number(fleetPeriodKd)) ? Number(fleetPeriodKd) : mixRev;
   const totalPrev = fleetProducts.reduce((s, p) => s + Number(p.prevRevenueKwd || 0), 0);
-  const totalYoy = fleetProducts.reduce((s, p) => s + Number(p.yoyRevenueKwd || 0), 0);
+  const totalYoy =
+    fleetYoyKd != null && Number.isFinite(Number(fleetYoyKd)) && Number(fleetYoyKd) > 0
+      ? Number(fleetYoyKd)
+      : mixYoy;
   const totalCups = fleetProducts.reduce((s, p) => s + Number(p.cups || 0), 0);
   const totalPrevCups = fleetProducts.reduce((s, p) => s + Number(p.prevCups || 0), 0);
   const totalYoyCups = fleetProducts.reduce((s, p) => s + Number(p.yoyCups || 0), 0);

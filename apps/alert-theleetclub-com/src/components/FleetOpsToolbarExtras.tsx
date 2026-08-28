@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 /**
- * Compact search + risk-sort controls for StitchOpsPanel toolbar.
+ * Compact search + sort/filter controls for StitchOpsPanel toolbar.
  * Keeps styling local so shared stitch CSS stays untouched.
  */
 export function FleetOpsToolbarExtras({
@@ -9,14 +9,25 @@ export function FleetOpsToolbarExtras({
   onSearchChange,
   riskSort,
   onRiskSortChange,
+  salesSort = false,
+  onSalesSortChange,
+  hideInactive = false,
+  onHideInactiveChange,
   searchPlaceholder = 'Search machine…',
 }: {
   search: string;
   onSearchChange: (v: string) => void;
   riskSort: boolean;
   onRiskSortChange: (v: boolean) => void;
+  salesSort?: boolean;
+  onSalesSortChange?: (v: boolean) => void;
+  hideInactive?: boolean;
+  onHideInactiveChange?: (v: boolean) => void;
   searchPlaceholder?: string;
 }): ReactNode {
+  const toggleStyle = (on: boolean) =>
+    on ? { borderColor: '#c45c26', background: 'rgba(196, 92, 38, 0.22)', color: '#ffd4c2' } : undefined;
+
   return (
     <>
       <label className="fleetOpsSearch" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -47,14 +58,34 @@ export function FleetOpsToolbarExtras({
         aria-pressed={riskSort}
         title="Sort by highest operational risk (downtime, stale sales, cleaning overdue, alert reasons)"
         onClick={() => onRiskSortChange(!riskSort)}
-        style={
-          riskSort
-            ? { borderColor: '#c45c26', background: 'rgba(196, 92, 38, 0.22)', color: '#ffd4c2' }
-            : undefined
-        }
+        style={toggleStyle(riskSort)}
       >
         {riskSort ? 'Risk ↓' : 'Risk sort'}
       </button>
+      {onSalesSortChange ? (
+        <button
+          type="button"
+          className="stitchOpsRefresh stitchOpsRefreshCompact"
+          aria-pressed={salesSort}
+          title="Sort by highest period sales (compare preset primary KD)"
+          onClick={() => onSalesSortChange(!salesSort)}
+          style={toggleStyle(salesSort)}
+        >
+          {salesSort ? 'Sales ↓' : 'Sales sort'}
+        </button>
+      ) : null}
+      {onHideInactiveChange ? (
+        <button
+          type="button"
+          className="stitchOpsRefresh stitchOpsRefreshCompact"
+          aria-pressed={hideInactive}
+          title="Hide machines marked inactive in Alert Admin → Machines"
+          onClick={() => onHideInactiveChange(!hideInactive)}
+          style={toggleStyle(hideInactive)}
+        >
+          {hideInactive ? 'Active only' : 'Hide inactive'}
+        </button>
+      ) : null}
     </>
   );
 }

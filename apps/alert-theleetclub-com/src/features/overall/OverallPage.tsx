@@ -317,6 +317,8 @@ export function OverallPage({
   const [downtimeDetail, setDowntimeDetail] = useState<FleetRowBundle | null>(null);
   const [fleetSearch, setFleetSearch] = useState('');
   const [riskSort, setRiskSort] = useState(false);
+  const [salesSort, setSalesSort] = useState(false);
+  const [hideInactive, setHideInactive] = useState(false);
   const [columnSort, setColumnSort] = useState<ColumnSortState<OverallColumnKey>>({
     column: null,
     dir: null,
@@ -622,9 +624,44 @@ export function OverallPage({
     setColumnSort((prev) => cycleColumnSort(prev, key));
   }, []);
 
+  const vendonSalesLabels = useMemo(
+    () => ({
+      primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+      baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+    }),
+    [vendonSummaryQ.data?.labelA, vendonSummaryQ.data?.labelB],
+  );
+
   const sortedFleetMachines = useMemo(() => {
     const sorted = sortFleetMachines(fleetMachines, columnSort, overallSortCtx);
-    const filtered = sorted.filter((m) => machineMatchesSearch(fleetSearch, m));
+    let filtered = sorted.filter((m) => machineMatchesSearch(fleetSearch, m));
+    if (hideInactive) {
+      filtered = filtered.filter((m) => {
+        const prof = profileByMachineId.get(m.id);
+        return !(prof?.inactiveToday === true || prof?.is_active === false);
+      });
+    }
+    if (salesSort) {
+      return filtered.slice().sort((a, b) => {
+        const pairA = salesPairForPreset(
+          compare.preset,
+          salesElapsedForMachine(dailySalesQ.data, a.id, dailySalesQ.isSuccess),
+          compare,
+          vendonSummaryQ.data?.byMachineId?.[a.id],
+          vendonSalesLabels,
+        );
+        const pairB = salesPairForPreset(
+          compare.preset,
+          salesElapsedForMachine(dailySalesQ.data, b.id, dailySalesQ.isSuccess),
+          compare,
+          vendonSummaryQ.data?.byMachineId?.[b.id],
+          vendonSalesLabels,
+        );
+        const sa = pairA.primary != null && Number.isFinite(pairA.primary) ? Number(pairA.primary) : -1;
+        const sb = pairB.primary != null && Number.isFinite(pairB.primary) ? Number(pairB.primary) : -1;
+        return sb - sa;
+      });
+    }
     if (!riskSort) return filtered;
     const nowSec = Math.floor(Date.now() / 1000);
     return filtered.slice().sort((a, b) => {
@@ -657,19 +694,19 @@ export function OverallPage({
     columnSort,
     overallSortCtx,
     fleetSearch,
+    hideInactive,
+    profileByMachineId,
+    salesSort,
     riskSort,
+    compare,
+    dailySalesQ.data,
+    dailySalesQ.isSuccess,
+    vendonSummaryQ.data?.byMachineId,
+    vendonSalesLabels,
     snapshotByMachineId,
     vendonLastTxQ.data?.byMachineId,
     downtimeQ.data?.byMachineId,
   ]);
-
-  const vendonSalesLabels = useMemo(
-    () => ({
-      primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
-      baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
-    }),
-    [vendonSummaryQ.data?.labelA, vendonSummaryQ.data?.labelB],
-  );
 
   const fleetRevenueTotals = useMemo(() => {
     const ids = sortedFleetMachines.map((m) => m.id).filter(Boolean);
@@ -1298,7 +1335,17 @@ export function OverallPage({
               search={fleetSearch}
               onSearchChange={setFleetSearch}
               riskSort={riskSort}
-              onRiskSortChange={setRiskSort}
+              onRiskSortChange={(v) => {
+                setRiskSort(v);
+                if (v) setSalesSort(false);
+              }}
+              salesSort={salesSort}
+              onSalesSortChange={(v) => {
+                setSalesSort(v);
+                if (v) setRiskSort(false);
+              }}
+              hideInactive={hideInactive}
+              onHideInactiveChange={setHideInactive}
             />
             <span className="stitchOpsLive">
               <span className="stitchOpsLiveDot" aria-hidden />

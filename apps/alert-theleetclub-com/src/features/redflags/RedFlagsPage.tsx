@@ -375,6 +375,24 @@ function DetailModal({ view, onClose }: { view: DetailView; onClose: () => void 
   );
 }
 
+const RF_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+function redFlagsOperatingDaysLabel(raw: unknown): string {
+  if (!raw || typeof raw !== 'object') return '';
+  const o = raw as Record<string, unknown>;
+  const preset = String(o.preset || '').trim();
+  if (preset === 'all_week') return 'All week';
+  if (preset === 'weekends_off') return 'Weekends off';
+  if (preset === 'custom' && Array.isArray(o.days)) {
+    const days = (o.days as unknown[])
+      .map((n) => Number(n))
+      .filter((n) => Number.isFinite(n) && n >= 0 && n <= 6)
+      .map((n) => RF_DAY_LABELS[n] ?? String(n));
+    return days.length ? `Days: ${days.join(', ')}` : 'Days: custom';
+  }
+  return '';
+}
+
 export function RedFlagsPage({
   variant = 'classic',
 }: {
@@ -458,6 +476,8 @@ export function RedFlagsPage({
   const salesComparisonNote = useMemo(() => presetLabels(compare.preset).caption, [compare.preset]);
   const [fleetSearch, setFleetSearch] = useState('');
   const [riskSort, setRiskSort] = useState(false);
+  const [salesSort, setSalesSort] = useState(false);
+  const [hideInactive, setHideInactive] = useState(false);
   const [columnSort, setColumnSort] = useState<ColumnSortState<RedFlagsColumnKey>>({
     column: null,
     dir: null,
@@ -590,6 +610,9 @@ export function RedFlagsPage({
           machine_id?: string;
           machine_name?: string;
           location_owner?: string | null;
+          location_hours?: string | null;
+          timezone?: string | null;
+          operating_days?: unknown;
           is_active?: boolean;
           inactiveToday?: boolean;
           inactiveLabel?: string | null;
@@ -615,8 +638,12 @@ export function RedFlagsPage({
     const byId = new Map<string, string>();
     const byName = new Map<string, string>();
     const inactiveById = new Map<string, { inactive: boolean; label: string }>();
+    const hoursById = new Map<
+      string,
+      { locHours: string; operatingDaysLabel: string; timezoneLabel: string }
+    >();
     const rows = profilesQ.data?.rows;
-    if (!Array.isArray(rows)) return { byId, byName, inactiveById };
+    if (!Array.isArray(rows)) return { byId, byName, inactiveById, hoursById };
     for (const r of rows) {
       const id = String(r.machine_id ?? '').trim();
       const owner = String(r.location_owner ?? '').trim();
@@ -629,9 +656,14 @@ export function RedFlagsPage({
           inactive,
           label: String(r.inactiveLabel || (r.is_active === false ? 'Inactive' : 'Inactive today')).trim() || 'Inactive',
         });
+        hoursById.set(id, {
+          locHours: String(r.location_hours ?? '').trim(),
+          operatingDaysLabel: redFlagsOperatingDaysLabel(r.operating_days),
+          timezoneLabel: String(r.timezone ?? '').trim(),
+        });
       }
     }
-    return { byId, byName, inactiveById };
+    return { byId, byName, inactiveById, hoursById };
   }, [profilesQ.data?.rows]);
 
   function resolveAreaOwnerPerson(machId: string): string | null {
@@ -1106,12 +1138,45 @@ export function RedFlagsPage({
 
   const displayRanked = useMemo(() => {
     const sorted = sortRankedRedFlags(ranked, columnSort, redFlagsSortCtx);
-    const filtered = sorted.filter((d) =>
+    let filtered = sorted.filter((d) =>
       machineMatchesSearch(fleetSearch, {
         id: getMachineIdRaw(d.row),
         name: d.row.machineName,
       }),
     );
+    if (hideInactive) {
+      filtered = filtered.filter((d) => {
+        const id = String(getMachineIdRaw(d.row) || '');
+        return locationOwnerLookup.inactiveById.get(id)?.inactive !== true;
+      });
+    }
+    if (salesSort) {
+      const vendonLabels = {
+        primary: vendonSummaryQ.data?.labelA?.trim() || undefined,
+        baseline: vendonSummaryQ.data?.labelB?.trim() || undefined,
+      };
+      return filtered.slice().sort((a, b) => {
+        const idA = String(getMachineIdRaw(a.row) || '');
+        const idB = String(getMachineIdRaw(b.row) || '');
+        const pairA = salesPairForPreset(
+          compare.preset,
+          salesElapsedForMachine(dailySalesQ.data, idA, dailySalesQ.isSuccess),
+          compare,
+          vendonSummaryQ.data?.byMachineId?.[idA],
+          vendonLabels,
+        );
+        const pairB = salesPairForPreset(
+          compare.preset,
+          salesElapsedForMachine(dailySalesQ.data, idB, dailySalesQ.isSuccess),
+          compare,
+          vendonSummaryQ.data?.byMachineId?.[idB],
+          vendonLabels,
+        );
+        const sa = pairA.primary != null && Number.isFinite(pairA.primary) ? Number(pairA.primary) : -1;
+        const sb = pairB.primary != null && Number.isFinite(pairB.primary) ? Number(pairB.primary) : -1;
+        return sb - sa;
+      });
+    }
     if (!riskSort) return filtered;
     const nowSec = Math.floor(Date.now() / 1000);
     return filtered.slice().sort((a, b) => {
@@ -1144,7 +1209,16 @@ export function RedFlagsPage({
     columnSort,
     redFlagsSortCtx,
     fleetSearch,
+    hideInactive,
+    locationOwnerLookup.inactiveById,
+    salesSort,
     riskSort,
+    compare,
+    dailySalesQ.data,
+    dailySalesQ.isSuccess,
+    vendonSummaryQ.data?.byMachineId,
+    vendonSummaryQ.data?.labelA,
+    vendonSummaryQ.data?.labelB,
     vendonLastTxQ.data?.byMachineId,
     downtimeQ.data?.byMachineId,
   ]);
@@ -1726,6 +1800,9 @@ export function RedFlagsPage({
                       locationTagOwner: resolveLocationTagForRow(machId, String(row.machineName || machId)),
                       machineInactive: locationOwnerLookup.inactiveById.get(machId)?.inactive === true,
                       machineInactiveLabel: locationOwnerLookup.inactiveById.get(machId)?.label || 'Inactive',
+                      locHours: locationOwnerLookup.hoursById.get(machId)?.locHours || '',
+                      operatingDaysLabel: locationOwnerLookup.hoursById.get(machId)?.operatingDaysLabel || '',
+                      timezoneLabel: locationOwnerLookup.hoursById.get(machId)?.timezoneLabel || '',
                       workflowAttendance: workflowAttendanceQ.data?.byMachineId?.[machId],
                       workflowCleaning: workflowCleaningQ.data?.byMachineId?.[machId],
                       workflowConfigured: workflowAttendanceQ.data?.configured !== false,
@@ -2021,7 +2098,17 @@ export function RedFlagsPage({
               search={fleetSearch}
               onSearchChange={setFleetSearch}
               riskSort={riskSort}
-              onRiskSortChange={setRiskSort}
+              onRiskSortChange={(v) => {
+                setRiskSort(v);
+                if (v) setSalesSort(false);
+              }}
+              salesSort={salesSort}
+              onSalesSortChange={(v) => {
+                setSalesSort(v);
+                if (v) setRiskSort(false);
+              }}
+              hideInactive={hideInactive}
+              onHideInactiveChange={setHideInactive}
             />
             <span className="stitchOpsLive">
               <span className="stitchOpsLiveDot" aria-hidden />

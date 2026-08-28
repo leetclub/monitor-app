@@ -1,6 +1,7 @@
 /** Red Flags board columns (operator-facing). */
 export const RED_FLAGS_XLSX_ORDER = [
   'vendingMachine',
+  'operatingHours',
   'alertType',
   'operator',
   'operatorActivity',
@@ -34,6 +35,7 @@ export function redFlagsHeaderLabel(key: RedFlagsColumnKey): string {
 /** Compact thead labels — legacy; prefer redFlagsHeaderLabel. */
 export const RED_FLAGS_HEADER_SHORT: Record<RedFlagsColumnKey, string> = {
   vendingMachine: 'Machine',
+  operatingHours: 'Op. hours',
   alertType: 'Alert type',
   operator: 'Operator',
   operatorActivity: 'Op. activity',
@@ -69,6 +71,12 @@ export const RED_FLAGS_COLUMNS: Record<
   vendingMachine: {
     title: 'Vending Machine',
     sub: 'Name (Vendon) · ID · flags · last OFF event when distinct',
+  },
+  operatingHours: {
+    title: 'Operating hours',
+    sub: 'Admin location hours · days · owner',
+    placeholderNote:
+      'Hours and operating days from Alert Admin → Machines. Owner line uses Area owner / Admin location owner when set.',
   },
   alertType: {
     title: 'Alert Type',

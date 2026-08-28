@@ -127,6 +127,10 @@ export type RedFlagsRowBundle = {
   /** Admin Machines → inactive (still listed, shaded). */
   machineInactive?: boolean;
   machineInactiveLabel?: string | null;
+  /** Admin → Machines location hours / days (Overall parity). */
+  locHours?: string;
+  operatingDaysLabel?: string;
+  timezoneLabel?: string;
   workflowAttendance?: import('@/lib/leetWorkflowApi').MachineAttendanceSummary;
   workflowCleaning?: import('@/lib/leetWorkflowApi').CleaningWorkflowPayload | null;
   workflowConfigured?: boolean;
@@ -145,6 +149,8 @@ export function redFlagsHeaderClass(key: RedFlagsColumnKey): string {
   switch (key) {
     case 'vendingMachine':
       return `${styles.thMachine} opsStickyCol`;
+    case 'operatingHours':
+      return styles.thOp;
     case 'alertType':
       return styles.thAlert;
     case 'operator':
@@ -187,6 +193,8 @@ export function redFlagsBodyCellClass(key: RedFlagsColumnKey): string {
   switch (key) {
     case 'vendingMachine':
       return `${styles.td} opsStickyCol`;
+    case 'operatingHours':
+      return styles.td;
     case 'operatorActivity':
       return `${styles.td} ${styles.tdActivity}`;
     case 'dailySales':
@@ -237,6 +245,15 @@ export function renderRedFlagsHeaderCell(key: RedFlagsColumnKey, ctx: RedFlagsHe
           title={redFlagsHeaderTooltip('vendingMachine')}
           className={className}
           {...sortProps}
+        />
+      );
+    case 'operatingHours':
+      return (
+        <AlertTableHeader
+          key={key}
+          label={RED_FLAGS_TABLE_HEADERS.operatingHours}
+          title={redFlagsHeaderTooltip('operatingHours')}
+          className={className}
         />
       );
     case 'alertType':
@@ -464,6 +481,15 @@ export function renderRedFlagsHeaderCell(key: RedFlagsColumnKey, ctx: RedFlagsHe
 export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBundle): ReactNode {
   const { row, machId, d } = b;
   switch (key) {
+    case 'operatingHours':
+      return (
+        <div title={RED_FLAGS_COLUMNS.operatingHours.placeholderNote}>
+          <div>{b.locHours ? `${b.locHours} hrs` : <span className="opsCellMuted">—</span>}</div>
+          <div className="opsCellSub">{b.locationOwnerFull || b.areaOwnerName || b.locationTagOwner || '—'}</div>
+          {b.operatingDaysLabel ? <div className="opsCellSub">{b.operatingDaysLabel}</div> : null}
+          {b.timezoneLabel ? <div className="opsCellSub">TZ: {b.timezoneLabel}</div> : null}
+        </div>
+      );
     case 'vendingMachine':
       return (
         <>

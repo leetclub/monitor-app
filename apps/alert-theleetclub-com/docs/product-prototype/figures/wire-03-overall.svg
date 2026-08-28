@@ -25,7 +25,7 @@
 
     <rect class="boxMuted" x="12" y="52" width="760" height="52" rx="4"/>
     <text x="20" y="74" class="tiny">[ Compare preset row - same controls as Red Flags ]</text>
-    <text x="20" y="92" class="hint" font-size="8px">Toolbar: search + Risk sort. Fleet: Operator · Op. activity · Downtime (loss after 5m grace) · Last clean (next/days left) · Sales · same presets as Red Flags.</text>
+    <text x="20" y="92" class="hint" font-size="8px">Toolbar: search + Risk sort + Sales ↓ + Hide inactive. Fleet: Operator · Op. activity · Downtime · Last clean · Sales · Customer calls (stub).</text>
 
     <rect class="box" x="12" y="112" width="760" height="104" rx="4"/>
     <text x="20" y="136" class="label" font-size="9px">Machines</text>

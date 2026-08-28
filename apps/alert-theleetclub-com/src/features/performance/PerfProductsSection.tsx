@@ -127,6 +127,13 @@ type ProductComparePayload = {
   };
   machines?: ProductMachine[];
   days?: ProductDay[];
+  totals?: {
+    periodKd?: number | null;
+    prevKd?: number | null;
+    yoyKd?: number | null;
+    yoyKdFromProducts?: number | null;
+    note?: string;
+  };
 };
 
 type HoverPoint = {
@@ -227,10 +234,35 @@ async function fetchProductCompareBatched(
   );
   const first = parts.find((p) => !p.error) || parts[0] || {};
   const machines = parts.flatMap((p) => p.machines || []);
+  let periodKd = 0;
+  let prevKd = 0;
+  let yoyKd = 0;
+  let yoyFromProducts = 0;
+  let hasPrev = false;
+  for (const p of parts) {
+    const t = p.totals;
+    if (!t) continue;
+    if (t.periodKd != null && Number.isFinite(Number(t.periodKd))) periodKd += Number(t.periodKd);
+    if (t.prevKd != null && Number.isFinite(Number(t.prevKd))) {
+      prevKd += Number(t.prevKd);
+      hasPrev = true;
+    }
+    if (t.yoyKd != null && Number.isFinite(Number(t.yoyKd))) yoyKd += Number(t.yoyKd);
+    if (t.yoyKdFromProducts != null && Number.isFinite(Number(t.yoyKdFromProducts))) {
+      yoyFromProducts += Number(t.yoyKdFromProducts);
+    }
+  }
   return {
     ...first,
     machines,
     days: rollupDaysFromMachines(machines),
+    totals: {
+      periodKd: Math.round(periodKd * 10000) / 10000,
+      prevKd: hasPrev ? Math.round(prevKd * 10000) / 10000 : null,
+      yoyKd: Math.round(yoyKd * 10000) / 10000,
+      yoyKdFromProducts: Math.round(yoyFromProducts * 10000) / 10000,
+      note: first.totals?.note,
+    },
     error: parts.map((p) => p.error).find(Boolean),
   };
 }
@@ -1890,6 +1922,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   );
 
   const onExportReport = useCallback(() => {
+    const totals = fleetQ.data?.totals;
     downloadWeeklyProductReportPdf({
       periodLabel,
       priorLabel,
@@ -1899,8 +1932,19 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
       machines: fleetMachinesNamed,
       focusProduct: focusSku || null,
       compare: compareOn,
+      fleetPeriodKd: totals?.periodKd ?? null,
+      fleetYoyKd: totals?.yoyKd ?? null,
     });
-  }, [periodLabel, priorLabel, win, fleetMix, fleetMachinesNamed, focusSku, compareOn]);
+  }, [
+    periodLabel,
+    priorLabel,
+    win,
+    fleetMix,
+    fleetMachinesNamed,
+    focusSku,
+    compareOn,
+    fleetQ.data?.totals,
+  ]);
 
   const tableSkus = skus;
 

@@ -386,9 +386,16 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
   const profilesQ = useQuery({
     queryKey: ['alert-overall-admin-profiles', 'v2'],
     queryFn: () =>
-      apiGet<{ rows?: { machine_id?: string; machine_name?: string; location_owner?: string | null }[] }>(
-        '/api/alert/overall/admin-profiles',
-      ),
+      apiGet<{
+        rows?: {
+          machine_id?: string;
+          machine_name?: string;
+          location_owner?: string | null;
+          location_hours?: string | null;
+          timezone?: string | null;
+          operating_days?: unknown;
+        }[];
+      }>('/api/alert/overall/admin-profiles'),
     enabled: snapQ.isFetched,
     staleTime: 5 * 60_000,
   });
@@ -408,6 +415,17 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
       const id = String(r.machine_id || '').trim();
       const owner = String(r.location_owner || '').trim();
       if (id && owner) m.set(id, owner);
+    }
+    return m;
+  }, [profilesQ.data?.rows]);
+
+  const hoursById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of profilesQ.data?.rows || []) {
+      const id = String(r.machine_id || '').trim();
+      if (!id) continue;
+      const hrs = String(r.location_hours || '').trim();
+      m.set(id, hrs ? `${hrs} hrs` : '—');
     }
     return m;
   }, [profilesQ.data?.rows]);
@@ -524,6 +542,7 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
 
       const fields: Record<RedFlagsColumnKey, string> = {
         vendingMachine: name,
+        operatingHours: hoursById.get(id) || '—',
         alertType: String(reasons[reasons.length - 1] || '—').replace(/\s+/g, ' ').trim(),
         operator: opName,
         operatorActivity: act
@@ -809,6 +828,7 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
     qaQ.data,
     liveById,
     ownerById,
+    hoursById,
     dailyIncidentsQ.data,
     attendanceQ.data,
     cleaningQ.data,

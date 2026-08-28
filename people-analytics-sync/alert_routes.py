@@ -4317,7 +4317,7 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v8:{preset_id}:{win_s}:{win_e}:"
+            f"perf:product-compare:v9:{preset_id}:{win_s}:{win_e}:"
             f"{prev_s}:{prev_e}:c{int(compare_on)}:w{int(include_web)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)
@@ -4717,6 +4717,7 @@ def register_alert_routes(app) -> None:
                         "periodKd": period_kd,
                         "periodCups": period_cups,
                         "prevKd": prev_kd,
+                        "yoyKd": round(sum(float(v or 0) for v in yoy.values()), 4),
                         "locationTargetKd": loc_tgt,
                         "locationTargetCups": loc_tgt_cups,
                         "pctOfLocationTarget": loc_pct,
@@ -4725,6 +4726,47 @@ def register_alert_routes(app) -> None:
                         "days": days_out,
                     }
                 )
+
+            def _sum_total_sales_kwd(
+                rows: List[Any], start_incl: date, end_excl: date
+            ) -> float:
+                tot = 0.0
+                for r in rows:
+                    cd = getattr(r, "cache_date", None)
+                    if cd is None or cd < start_incl or cd >= end_excl:
+                        continue
+                    try:
+                        tot += float(getattr(r, "total_sales_kwd", 0) or 0)
+                    except (TypeError, ValueError):
+                        pass
+                return round(tot, 4)
+
+            for m in machines_out:
+                mid = str(m.get("machineId") or "")
+                mrows = by_mid.get(mid) or []
+                m["yoyKdFromCache"] = _sum_total_sales_kwd(
+                    mrows, yoy_s, yoy_e + timedelta(days=1)
+                )
+
+            # Authoritative fleet KD from daily revenue cache (customer sales; excludes WEB cashless).
+            # Product-mix YoY can undercount when LY mix payloads were never seeded.
+            fleet_period_kd_cache = 0.0
+            fleet_prev_kd_cache = 0.0
+            fleet_yoy_kd_cache = 0.0
+            for mid in requested:
+                mrows = by_mid.get(mid) or []
+                fleet_period_kd_cache += _sum_total_sales_kwd(mrows, win_s, win_e + timedelta(days=1))
+                if compare_on:
+                    fleet_prev_kd_cache += _sum_total_sales_kwd(
+                        mrows, prev_s, prev_e + timedelta(days=1)
+                    )
+                fleet_yoy_kd_cache += _sum_total_sales_kwd(mrows, yoy_s, yoy_e + timedelta(days=1))
+            fleet_period_kd_cache = round(fleet_period_kd_cache, 4)
+            fleet_prev_kd_cache = round(fleet_prev_kd_cache, 4) if compare_on else None
+            fleet_yoy_kd_cache = round(fleet_yoy_kd_cache, 4)
+            fleet_yoy_from_products = round(
+                sum(float(m.get("yoyKd") or 0) for m in machines_out), 4
+            )
 
             # Fleet-level daily rollup (same dates, products summed across requested machines).
             fleet_days: List[Dict[str, Any]] = []
@@ -4814,6 +4856,17 @@ def register_alert_routes(app) -> None:
                 "machineCount": len(machines_out),
                 "machines": machines_out,
                 "days": fleet_days,
+                "totals": {
+                    "periodKd": fleet_period_kd_cache,
+                    "prevKd": fleet_prev_kd_cache,
+                    "yoyKd": fleet_yoy_kd_cache,
+                    "yoyKdFromProducts": fleet_yoy_from_products,
+                    "note": (
+                        "periodKd/yoyKd are sum of daily customer sales cache "
+                        "(excludes WEB cashless). yoyKdFromProducts is SKU mix only "
+                        "and may undercount if last-year mix was not seeded."
+                    ),
+                },
             }
             _alert_cache_set(cache_key, body)
             return jsonify(body)

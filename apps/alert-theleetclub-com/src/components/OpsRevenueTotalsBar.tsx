@@ -29,22 +29,20 @@ function formatAsOfClock(asOfLocal: string): string {
 }
 
 /**
- * Fleet bar must start at the side nav’s right edge — never under it, never over it.
- * Drawer open overlays content: keep the reserved rail width (64), not the overlay width.
+ * Fleet revenue bar — full-width footer portaled to body.
+ * Side nav clears above it via --ops-revenue-bar-h (see ops-revenue-totals.css).
  */
-function resolveFleetBarLeft(): number {
-  const nav = document.querySelector('.appShell .sideNav') as HTMLElement | null;
-  if (!nav) return 0;
+function syncFleetBarChrome(barEl: HTMLElement) {
+  const h = Math.max(64, Math.ceil(barEl.getBoundingClientRect().height));
+  document.documentElement.style.setProperty('--ops-revenue-bar-h', `${h}px`);
+  document.body.classList.add('hasOpsFleetRevenueBar');
+  document.querySelector('.v2AppRoot')?.classList.add('hasOpsFleetRevenuePad');
+}
 
-  const railPx = 64;
-  if (nav.classList.contains('sideNavOpen')) {
-    return railPx;
-  }
-
-  const rect = nav.getBoundingClientRect();
-  // Prefer measured right edge; fall back to width if left isn’t 0 (e.g. scrolled).
-  const left = rect.right > 0 ? rect.right : rect.width;
-  return Math.max(0, Math.round(left));
+function clearFleetBarChrome() {
+  document.documentElement.style.setProperty('--ops-revenue-bar-h', '0px');
+  document.body.classList.remove('hasOpsFleetRevenueBar');
+  document.querySelector('.v2AppRoot')?.classList.remove('hasOpsFleetRevenuePad');
 }
 
 function TrendText({
@@ -128,47 +126,21 @@ export function OpsRevenueTotalsBar({
     const el = barRef.current;
     if (!el) return;
 
-    const apply = () => {
-      const h = Math.ceil(el.getBoundingClientRect().height);
-      document.documentElement.style.setProperty('--ops-revenue-bar-h', `${Math.max(h, 72)}px`);
-
-      const left = resolveFleetBarLeft();
-      document.documentElement.style.setProperty('--ops-revenue-bar-left', `${left}px`);
-      el.style.setProperty('left', `${left}px`, 'important');
-      el.style.setProperty('right', '0px', 'important');
-      el.style.setProperty('width', 'auto', 'important');
-    };
-
+    const apply = () => syncFleetBarChrome(el);
     apply();
     requestAnimationFrame(apply);
 
     const ro = new ResizeObserver(apply);
     ro.observe(el);
-    const nav = document.querySelector('.appShell .sideNav');
-    const main = document.querySelector('.appShell .mainColumn');
-    if (nav) ro.observe(nav);
-    if (main) ro.observe(main);
 
     window.addEventListener('resize', apply);
     window.addEventListener('orientationchange', apply);
 
-    const shell = document.querySelector('.appShell');
-    let mo: MutationObserver | null = null;
-    if (shell) {
-      mo = new MutationObserver(apply);
-      mo.observe(shell, { attributes: true, attributeFilter: ['class'], subtree: true });
-    }
-
     return () => {
       ro.disconnect();
-      mo?.disconnect();
       window.removeEventListener('resize', apply);
       window.removeEventListener('orientationchange', apply);
-      document.documentElement.style.removeProperty('--ops-revenue-bar-h');
-      document.documentElement.style.removeProperty('--ops-revenue-bar-left');
-      el.style.removeProperty('left');
-      el.style.removeProperty('right');
-      el.style.removeProperty('width');
+      clearFleetBarChrome();
     };
   }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);
 

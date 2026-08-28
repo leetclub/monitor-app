@@ -101,15 +101,21 @@ def resolve_operator_for_machine_now(
     now_kwt: Optional[datetime] = None,
 ) -> Tuple[Optional[Dict[str, Any]], date]:
     """
-    Pick the scheduled operator and Task Manager *work date* for attendance.
+    Pick the scheduled operator/driver and Task Manager *work date* for attendance.
 
-    Night shifts cross midnight: after 00:00 the calendar day changes but punches
-    still belong to yesterday's work date. Prefer an overnight shift that still
-    covers now; else today's calendar schedule.
+    Prefer today's shift when it covers *now* (morning handoff after overnight).
+    Otherwise keep overnight yesterday while that shift still covers now.
+    Else fall back to today's calendar schedule (even outside clock bounds).
     """
     now = now_kwt or datetime.now(_KWT)
     today = now.date()
     yesterday = today - timedelta(days=1)
+
+    t_es = find_operator_for_machine_on_date(period_detail, machine_id, today)
+    if t_es:
+        t_day = (t_es.get("schedule") or {}).get(weekday_key(today))
+        if isinstance(t_day, dict) and not t_day.get("off") and shift_covers_now(t_day, today, now):
+            return t_es, today
 
     y_es = find_operator_for_machine_on_date(period_detail, machine_id, yesterday)
     if y_es:
@@ -117,15 +123,11 @@ def resolve_operator_for_machine_now(
         if isinstance(y_day, dict) and schedule_day_is_overnight(y_day) and shift_covers_now(y_day, yesterday, now):
             return y_es, yesterday
 
-    t_es = find_operator_for_machine_on_date(period_detail, machine_id, today)
     if t_es:
         t_day = (t_es.get("schedule") or {}).get(weekday_key(today))
         if isinstance(t_day, dict) and not t_day.get("off"):
-            # If today's shift has clock bounds and we're outside them, still return
-            # the calendar-day operator (pending/absent is correct for day shift).
             return t_es, today
-        if t_es:
-            return t_es, today
+        return t_es, today
 
     return None, today
 
@@ -250,17 +252,28 @@ def machine_id_matches(entry: Dict[str, Any], machine_id: str) -> bool:
     return bool(name and name == mid.lower())
 
 
+# Schedule roles shown as the "live operator" for a machine (sheet #44).
+_SCHEDULE_LIVE_POSITIONS = frozenset({"operator", "route_driver", "deliver_driver"})
+
+
 def find_operator_for_machine_on_date(
     period_detail: Dict[str, Any],
     machine_id: str,
     on_date: Optional[date] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Return employee_schedule row whose weekday schedule lists this machine."""
+    """Return employee_schedule row whose weekday schedule lists this machine.
+
+    Prefer `operator`; otherwise allow route/deliver drivers. Office and other
+    position types are ignored so Schedule does not show non-ops staff.
+    """
     d = on_date or kuwait_today()
     day_key = weekday_key(d)
     best: Optional[Dict[str, Any]] = None
     for es in period_detail.get("employee_schedules") or []:
         if not isinstance(es, dict):
+            continue
+        pos = str(es.get("position_type") or "").strip()
+        if pos not in _SCHEDULE_LIVE_POSITIONS:
             continue
         day = (es.get("schedule") or {}).get(day_key)
         if not isinstance(day, dict) or day.get("off"):
@@ -274,7 +287,7 @@ def find_operator_for_machine_on_date(
         matched = any(isinstance(m, dict) and machine_id_matches(m, machine_id) for m in machines)
         if not matched:
             continue
-        if es.get("position_type") == "operator":
+        if pos == "operator":
             return es
         if best is None:
             best = es

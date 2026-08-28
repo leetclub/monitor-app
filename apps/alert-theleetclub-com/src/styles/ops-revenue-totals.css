@@ -1,23 +1,35 @@
-/* Fixed fleet revenue — single horizontal row + scroll on narrow viewports */
+/* Fixed fleet revenue — full-width footer; side nav stops above it (never covers the bar). */
 
 :root {
-  --ops-revenue-bar-h: 72px;
+  /* 0 until OpsRevenueTotalsBar mounts and measures */
+  --ops-revenue-bar-h: 0px;
   --ops-revenue-pad-y: 10px;
 }
 
-.stitchShell .contentMain.appMain {
-  padding-bottom: calc(18px + var(--ops-revenue-bar-h) + var(--safe-bottom, 0px));
+body.hasOpsFleetRevenueBar .stitchShell .sideNav,
+body.hasOpsFleetRevenueBar .stitchShell .sideNav.sideNavDrawer,
+body.hasOpsFleetRevenueBar .v2AppRoot .v2Sidebar {
+  /* Clear the fleet strip so the bar cannot sit under the left nav */
+  bottom: var(--ops-revenue-bar-h, 0px) !important;
+  height: auto !important;
+  max-height: calc(100dvh - var(--ops-revenue-bar-h, 0px)) !important;
+  max-height: calc(100vh - var(--ops-revenue-bar-h, 0px)) !important;
+}
+
+.stitchShell .contentMain.appMain,
+.v2AppRoot.hasOpsFleetRevenuePad .v2Content {
+  padding-bottom: calc(18px + var(--ops-revenue-bar-h, 0px) + var(--safe-bottom, 0px));
 }
 
 .opsRevenueTotalsBar {
   position: fixed;
+  left: 0 !important;
+  right: 0 !important;
   bottom: 0;
-  /* JS pins left to sideNav.getBoundingClientRect().right — CSS fallbacks below */
-  left: var(--ops-revenue-bar-left, var(--stitch-nav-w-expanded, 196px));
-  right: 0;
-  width: auto;
-  /* Below side nav (50+) so the bar never paints over the sidebar */
-  z-index: 44;
+  width: 100% !important;
+  max-width: 100vw;
+  /* Above content; side nav stops above this strip so it is never covered */
+  z-index: 60;
   box-sizing: border-box;
   border-top: 2px solid #6d4a45;
   background: linear-gradient(180deg, rgba(18, 22, 30, 0.98) 0%, rgba(8, 10, 14, 0.99) 100%);
@@ -25,19 +37,8 @@
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
   overflow-x: auto;
   overflow-y: hidden;
-  max-width: 100vw;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-}
-
-/* CSS fallbacks when JS hasn’t measured yet (bar is portaled to body → :has) */
-body:has(.appShell.appShellNavRail) .opsRevenueTotalsBar,
-body:has(.appShell.appShellNavDrawer) .opsRevenueTotalsBar {
-  left: var(--ops-revenue-bar-left, var(--stitch-nav-w-rail, 64px));
-}
-
-body:has(.appShell:not(.appShellNavRail):not(.appShellNavDrawer)) .opsRevenueTotalsBar {
-  left: var(--ops-revenue-bar-left, var(--stitch-nav-w-expanded, 196px));
 }
 
 .opsRevenueTotalsInner {
@@ -46,7 +47,8 @@ body:has(.appShell:not(.appShellNavRail):not(.appShellNavDrawer)) .opsRevenueTot
   align-items: center;
   gap: 10px 22px;
   padding: var(--ops-revenue-pad-y) 20px;
-  padding-right: max(20px, env(safe-area-inset-right));
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
   padding-bottom: max(var(--ops-revenue-pad-y), env(safe-area-inset-bottom, 0px));
   min-width: max-content;
   box-sizing: border-box;
@@ -195,13 +197,12 @@ body:has(.appShell:not(.appShellNavRail):not(.appShellNavDrawer)) .opsRevenueTot
 @media (min-width: 768px) and (max-width: 1180px) {
   :root {
     --ops-revenue-pad-y: 10px;
-    --ops-revenue-bar-h: 68px;
   }
 
   .opsRevenueTotalsInner {
     gap: 8px 14px;
-    padding-left: 14px;
-    padding-right: max(14px, env(safe-area-inset-right));
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
   }
 
   .opsRevenueTotalsMetrics {
@@ -240,13 +241,12 @@ body:has(.appShell:not(.appShellNavRail):not(.appShellNavDrawer)) .opsRevenueTot
 @media (max-width: 767px) {
   :root {
     --ops-revenue-pad-y: 8px;
-    --ops-revenue-bar-h: 64px;
   }
 
   .opsRevenueTotalsInner {
     gap: 6px 10px;
-    padding-left: 12px;
-    padding-right: max(12px, env(safe-area-inset-right));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
 
   .opsRevenueTotalsCount {

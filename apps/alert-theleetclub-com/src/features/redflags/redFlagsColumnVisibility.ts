@@ -9,7 +9,7 @@ export type RedFlagsColumnPreset = 'all' | 'sales' | 'alerts' | 'custom';
 export const RED_FLAGS_TOTAL_COLUMNS = RED_FLAGS_XLSX_ORDER.length;
 
 /** Bump when new workbook columns must appear for existing localStorage presets. */
-export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v2';
+export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v3';
 
 /** Machine column is always shown. */
 export const RED_FLAGS_PINNED_COLUMN: RedFlagsColumnKey = 'vendingMachine';
@@ -32,6 +32,7 @@ export const RED_FLAGS_PRESET_SALES: RedFlagsColumnKey[] = [
 
 export const RED_FLAGS_PRESET_ALERTS: RedFlagsColumnKey[] = [
   'vendingMachine',
+  'operatingHours',
   'alertType',
   'operator',
   'operatorActivity',
@@ -64,8 +65,8 @@ export const RED_FLAGS_COLUMN_GROUPS: Record<
   },
   people: {
     label: 'People',
-    help: 'Live operator contact and last WEB machine open (operator activity).',
-    keys: ['operator', 'operatorActivity'],
+    help: 'Operating hours (Admin), live operator contact, and last WEB machine open (operator activity).',
+    keys: ['operatingHours', 'operator', 'operatorActivity'],
   },
   alerts: {
     label: 'Alerts, trend & ops',

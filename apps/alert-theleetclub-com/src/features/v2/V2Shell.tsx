@@ -6,6 +6,8 @@ import { useAccess } from '@/context/AccessContext';
 import { V2_NAV, v2PageMeta } from '@/features/v2/v2Nav';
 import '@/features/v2/v2-theme.css';
 
+const V2_NAV_COLLAPSED_KEY = 'alert_v2_sidebar_collapsed';
+
 function kuwaitClockLabel(d: Date): string {
   try {
     return (
@@ -21,8 +23,17 @@ function kuwaitClockLabel(d: Date): string {
   }
 }
 
+function readCollapsedPref(): boolean {
+  try {
+    return localStorage.getItem(V2_NAV_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function V2Shell() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsedPref);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -48,8 +59,23 @@ export function V2Shell() {
     };
   }, [menuOpen]);
 
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(V2_NAV_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="v2AppRoot" data-alert-shell="v2">
+    <div
+      className={`v2AppRoot${collapsed ? ' v2NavCollapsed' : ''}`}
+      data-alert-shell="v2"
+    >
       {menuOpen ? (
         <button
           type="button"
@@ -72,6 +98,17 @@ export function V2Shell() {
             <p className="v2BrandName">Leet Alert</p>
             <p className="v2BrandSub">Fleet intelligence</p>
           </div>
+          <button
+            type="button"
+            className="v2CollapseBtn"
+            onClick={toggleCollapsed}
+            title={collapsed ? 'Expand menu' : 'Minimize menu'}
+            aria-label={collapsed ? 'Expand menu' : 'Minimize menu'}
+            aria-expanded={!collapsed}
+            aria-controls="alert-v2-sidebar"
+          >
+            <NavIcon name={collapsed ? 'panel_open' : 'panel_close'} />
+          </button>
         </div>
 
         <nav className="v2Nav" aria-label="Operations">
