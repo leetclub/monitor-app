@@ -14,6 +14,7 @@ export function FleetOpsToolbarExtras({
   hideInactive = false,
   onHideInactiveChange,
   searchPlaceholder = 'Search machine…',
+  showRiskSort = true,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
@@ -24,6 +25,7 @@ export function FleetOpsToolbarExtras({
   hideInactive?: boolean;
   onHideInactiveChange?: (v: boolean) => void;
   searchPlaceholder?: string;
+  showRiskSort?: boolean;
 }): ReactNode {
   const toggleStyle = (on: boolean) =>
     on ? { borderColor: '#c45c26', background: 'rgba(196, 92, 38, 0.22)', color: '#ffd4c2' } : undefined;
@@ -52,16 +54,18 @@ export function FleetOpsToolbarExtras({
           }}
         />
       </label>
-      <button
-        type="button"
-        className="stitchOpsRefresh stitchOpsRefreshCompact"
-        aria-pressed={riskSort}
-        title="Sort by highest operational risk (downtime, stale sales, cleaning overdue, alert reasons)"
-        onClick={() => onRiskSortChange(!riskSort)}
-        style={toggleStyle(riskSort)}
-      >
-        {riskSort ? 'Risk ↓' : 'Risk sort'}
-      </button>
+      {showRiskSort ? (
+        <button
+          type="button"
+          className="stitchOpsRefresh stitchOpsRefreshCompact"
+          aria-pressed={riskSort}
+          title="Sort by highest operational risk (downtime, stale sales, cleaning overdue, alert reasons)"
+          onClick={() => onRiskSortChange(!riskSort)}
+          style={toggleStyle(riskSort)}
+        >
+          {riskSort ? 'Risk ↓' : 'Risk sort'}
+        </button>
+      ) : null}
       {onSalesSortChange ? (
         <button
           type="button"

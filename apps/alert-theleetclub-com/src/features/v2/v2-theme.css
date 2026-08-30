@@ -1870,16 +1870,31 @@ a.v2NavLink.v2NavLinkActive {
 
 .v2Search input,
 .v2Select,
-.v2Field select {
+.v2Field select,
+.v2FilterBar select,
+.v2FilterBar input[type='date'],
+.v2FilterBar input[type='search'],
+.v2FilterBar .comparePickerRow select,
+.v2FilterBar .comparePickerRow input[type='date'],
+.v2AppRoot .comparePickerRow select,
+.v2AppRoot .comparePickerRow input[type='date'] {
   width: 100%;
   min-height: 42px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid var(--v2-border);
-  background: rgba(6, 13, 25, 0.65);
-  color: #e2e8f0;
+  border: 1px solid var(--v2-border, #334155);
+  background: #0b1220 !important;
+  background-color: #0b1220 !important;
+  color: #e2e8f0 !important;
   font: inherit;
   font-size: 0.9rem;
+  color-scheme: dark;
+}
+
+.v2AppRoot .comparePickerRow select option,
+.v2FilterBar select option {
+  background-color: #0b1220;
+  color: #e2e8f0;
 }
 
 .v2Select {

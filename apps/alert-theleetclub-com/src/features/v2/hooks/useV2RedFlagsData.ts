@@ -86,6 +86,9 @@ export type V2ExceptionRow = {
   machineName: string;
   severity: 'Critical' | 'Watch';
   isNew: boolean;
+  inactive?: boolean;
+  /** Compare preset primary sales KD — for toolbar sort. */
+  salesPrimaryKd?: number | null;
   fields: Record<RedFlagsColumnKey, string>;
   stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>>;
   reasons: string[];
@@ -394,6 +397,7 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
           location_hours?: string | null;
           timezone?: string | null;
           operating_days?: unknown;
+          inactiveToday?: boolean;
         }[];
       }>('/api/alert/overall/admin-profiles'),
     enabled: snapQ.isFetched,
@@ -426,6 +430,16 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
       if (!id) continue;
       const hrs = String(r.location_hours || '').trim();
       m.set(id, hrs ? `${hrs} hrs` : '—');
+    }
+    return m;
+  }, [profilesQ.data?.rows]);
+
+  const inactiveById = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const r of profilesQ.data?.rows || []) {
+      const id = String(r.machine_id || '').trim();
+      if (!id) continue;
+      m.set(id, (r as { inactiveToday?: boolean }).inactiveToday === true);
     }
     return m;
   }, [profilesQ.data?.rows]);
@@ -609,6 +623,16 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
         compareMode === 'sameWeekdayLw';
 
       const stacks: Partial<Record<RedFlagsColumnKey, V2MetricItem[]>> = {
+        operatingHours: [
+          {
+            label: 'Hours',
+            value: hoursById.get(id) || '—',
+            tone: 'muted',
+          },
+          ...(owner !== '—'
+            ? [{ label: 'Owner', value: owner.slice(0, 28), tone: 'muted' as V2MetricTone }]
+            : []),
+        ],
         topLowDrinks: [
           {
             label: 'Top',
@@ -793,6 +817,9 @@ export function useV2RedFlagsData(compare?: CompareSelection) {
         machineName: name,
         severity,
         isNew,
+        inactive: inactiveById.get(id) === true,
+        salesPrimaryKd:
+          today != null && Number.isFinite(Number(today)) ? Number(today) : null,
         fields,
         stacks,
         reasons,

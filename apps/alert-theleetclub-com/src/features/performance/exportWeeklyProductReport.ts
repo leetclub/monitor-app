@@ -83,6 +83,15 @@ export function downloadWeeklyProductReport(opts: Opts) {
     .sort((a, b) => Number(a.trendPct) - Number(b.trendPct))
     .slice(0, 5);
 
+  const topSelling = [...fleetProducts]
+    .filter((p) => Number(p.revenueKwd || 0) > 0)
+    .sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0) || a.name.localeCompare(b.name))
+    .slice(0, 5);
+  const lowSelling = [...fleetProducts]
+    .filter((p) => Number(p.revenueKwd || 0) > 0)
+    .sort((a, b) => Number(a.revenueKwd || 0) - Number(b.revenueKwd || 0) || a.name.localeCompare(b.name))
+    .slice(0, 5);
+
   const focus = (focusProduct || '').trim();
   const focusRows = focus
     ? machines
@@ -196,6 +205,34 @@ export function downloadWeeklyProductReport(opts: Opts) {
     compare ? num(totalPrevCups) : '',
     compare ? pct(totalCups, totalPrevCups) : '',
   );
+  blank();
+
+  push('Top 5 selling products (by period revenue KD)');
+  push('Product', `${periodLabel} Revenue`, `${priorLabel} Revenue`, 'WoW %', `${periodLabel} Cups`);
+  for (const p of topSelling) {
+    push(
+      p.name,
+      num(p.revenueKwd),
+      compare ? num(p.prevRevenueKwd) : '',
+      compare ? pct(Number(p.revenueKwd || 0), Number(p.prevRevenueKwd || 0)) : '',
+      num(p.cups),
+    );
+  }
+  if (!topSelling.length) push('(none)', '', '', '', '');
+  blank();
+
+  push('Lowest 5 selling products (by period revenue KD)');
+  push('Product', `${periodLabel} Revenue`, `${priorLabel} Revenue`, 'WoW %', `${periodLabel} Cups`);
+  for (const p of lowSelling) {
+    push(
+      p.name,
+      num(p.revenueKwd),
+      compare ? num(p.prevRevenueKwd) : '',
+      compare ? pct(Number(p.revenueKwd || 0), Number(p.prevRevenueKwd || 0)) : '',
+      num(p.cups),
+    );
+  }
+  if (!lowSelling.length) push('(none)', '', '', '', '');
   blank();
 
   push('Top 5 Products Increasing in Sales');

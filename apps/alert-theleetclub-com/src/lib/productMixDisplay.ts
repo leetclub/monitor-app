@@ -94,11 +94,7 @@ export function formatCupsN(n: number | null | undefined): string {
 /** Normalize API product row (revenue-first, with cups fallback for old payloads). */
 export function normalizeProductRow(p: Record<string, unknown> | MachineProductRow): MachineProductRow {
   const name = String((p as { name?: string }).name || '').trim();
-  const revenueKwd = Number(
-    (p as { revenueKwd?: number }).revenueKwd ??
-      (p as { cups?: number }).cups ??
-      0,
-  );
+  const revenueKwd = Number((p as { revenueKwd?: number }).revenueKwd ?? 0);
   const prevRevenueKwd =
     (p as { prevRevenueKwd?: number | null }).prevRevenueKwd ??
     (p as { prevCups?: number | null }).prevCups ??

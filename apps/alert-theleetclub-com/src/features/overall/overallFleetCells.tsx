@@ -251,7 +251,7 @@ function renderOverallColumn(
       return (
         <div title={[headerTooltip('operatingHours'), b.adminLocationOwner ? 'Owner: Admin profile.' : b.vendonTagOwner ? 'Owner: Vendon tag.' : '', b.adminMetaHintParts.join(' · ')].filter(Boolean).join(' ')}>
           <div>{b.locHours ? `${b.locHours} hrs` : <span className="opsCellMuted">—</span>}</div>
-          <div className="opsCellSub">{b.locationOwner || '—'}</div>
+          <div className="opsCellSub">{b.locationOwner ? `Owner: ${b.locationOwner}` : '—'}</div>
           {b.operatingDaysLabel ? <div className="opsCellSub">{b.operatingDaysLabel}</div> : null}
           {b.prof?.timezone ? <div className="opsCellSub">TZ: {String(b.prof.timezone)}</div> : null}
         </div>

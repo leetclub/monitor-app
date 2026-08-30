@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import { FleetOpsToolbarExtras } from '@/components/FleetOpsToolbarExtras';
 import { useV2CompareSelection } from '@/features/v2/hooks/useV2RedFlagsData';
 import { useV2OverallData, V2_OVERALL_COLUMNS } from '@/features/v2/hooks/useV2OverallData';
 import { V2DataTable } from '@/features/v2/V2DataTable';
@@ -19,15 +20,28 @@ export function V2OverallPage() {
   const data = useV2OverallData(compare);
   const [q, setQ] = useState('');
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [salesSort, setSalesSort] = useState(false);
+  const [hideInactive, setHideInactive] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return data.rows.filter((r) => {
+    let list = data.rows.filter((r) => {
       if (onlyFlagged && !r.flagged) return false;
+      if (hideInactive && r.inactive) return false;
       if (!needle) return true;
       return Object.values(r.fields).join(' ').toLowerCase().includes(needle);
     });
-  }, [data.rows, q, onlyFlagged]);
+    if (salesSort) {
+      list = list.slice().sort((a, b) => {
+        const sa =
+          a.salesPrimaryKd != null && Number.isFinite(a.salesPrimaryKd) ? a.salesPrimaryKd : -1;
+        const sb =
+          b.salesPrimaryKd != null && Number.isFinite(b.salesPrimaryKd) ? b.salesPrimaryKd : -1;
+        return sb - sa;
+      });
+    }
+    return list;
+  }, [data.rows, q, onlyFlagged, hideInactive, salesSort]);
 
   const tableRows = filtered.map((r) => {
     const cells: Record<string, ReactNode> = {};
@@ -96,14 +110,18 @@ export function V2OverallPage() {
         }
       >
         <div className="v2FilterBar">
-          <label className="v2Search">
-            <span className="srOnly">Search</span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search machine, operator, issue…"
-            />
-          </label>
+          <FleetOpsToolbarExtras
+            search={q}
+            onSearchChange={setQ}
+            riskSort={false}
+            onRiskSortChange={() => {}}
+            showRiskSort={false}
+            salesSort={salesSort}
+            onSalesSortChange={setSalesSort}
+            hideInactive={hideInactive}
+            onHideInactiveChange={setHideInactive}
+            searchPlaceholder="Search machine, operator, issue…"
+          />
           <label className="v2Check">
             <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
             Flagged only

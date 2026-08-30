@@ -1921,6 +1921,23 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     [mixedRows],
   );
 
+  const topSelling = useMemo(
+    () =>
+      fleetMix
+        .filter((p) => Number(p.revenueKwd || 0) > 0)
+        .sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0) || a.name.localeCompare(b.name))
+        .slice(0, 5),
+    [fleetMix],
+  );
+  const lowSelling = useMemo(
+    () =>
+      fleetMix
+        .filter((p) => Number(p.revenueKwd || 0) > 0)
+        .sort((a, b) => Number(a.revenueKwd || 0) - Number(b.revenueKwd || 0) || a.name.localeCompare(b.name))
+        .slice(0, 5),
+    [fleetMix],
+  );
+
   const onExportReport = useCallback(() => {
     const totals = fleetQ.data?.totals;
     downloadWeeklyProductReportPdf({
@@ -2428,9 +2445,56 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
               />
             </>
           )}
-          {compareOn ? (
-            <div className="perfProductsTrendCols">
-              <div className="perfProductsTrendPanel perfProductsTrendPanel--up">
+          <div className="perfProductsTrendCols">
+            <div className="perfProductsTrendPanel">
+              <h5 className="perfProductsTrendHead">Top selling (fleet · {periodLabel} KD)</h5>
+              {topSelling.length ? (
+                <ul className="perfProductsTrendList perfProductsTrendDetailed">
+                  {topSelling.map((p) => (
+                    <li key={p.name} className="perfProductsTrendItem">
+                      <span>{p.name}</span>
+                      <div className="perfProductsTrendMeta">
+                        <strong>{formatKwd(Number(p.revenueKwd || 0))}</strong>
+                        {compareOn && p.prevRevenueKwd != null ? (
+                          <span className="perfProductsTrendFrom">
+                            {' '}
+                            vs {formatKwd(Number(p.prevRevenueKwd || 0))}
+                          </span>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="perfMuted">No fleet product mix for this window yet.</p>
+              )}
+            </div>
+            <div className="perfProductsTrendPanel">
+              <h5 className="perfProductsTrendHead">Lowest selling (fleet · {periodLabel} KD)</h5>
+              {lowSelling.length ? (
+                <ul className="perfProductsTrendList perfProductsTrendDetailed">
+                  {lowSelling.map((p) => (
+                    <li key={p.name} className="perfProductsTrendItem">
+                      <span>{p.name}</span>
+                      <div className="perfProductsTrendMeta">
+                        <strong>{formatKwd(Number(p.revenueKwd || 0))}</strong>
+                        {compareOn && p.prevRevenueKwd != null ? (
+                          <span className="perfProductsTrendFrom">
+                            {' '}
+                            vs {formatKwd(Number(p.prevRevenueKwd || 0))}
+                          </span>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="perfMuted">No fleet product mix for this window yet.</p>
+              )}
+            </div>
+            {compareOn ? (
+              <>
+                <div className="perfProductsTrendPanel perfProductsTrendPanel--up">
                 <h5 className="perfProductsTrendHead">
                   <span className="perfProductsTrendIcon" aria-hidden>
                     ▲
@@ -2512,10 +2576,13 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                   <p className="perfMuted">None down vs prior.</p>
                 )}
               </div>
-            </div>
-          ) : (
-            <p className="perfMuted">Rising / falling need a comparison period.</p>
-          )}
+              </>
+            ) : (
+              <p className="perfMuted perfProductsTrendCompareHint">
+                Rising / falling need a comparison period.
+              </p>
+            )}
+          </div>
         </section>
       ) : null}
 

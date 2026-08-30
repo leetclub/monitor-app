@@ -93,6 +93,19 @@ html[data-theme='classic'][data-mode='light'] textarea {
   border-color: var(--border);
 }
 
+/* Stitch ops boards stay dark even in Classic light mode */
+html[data-theme='classic'][data-mode='light'] .stitchOpsPanel select,
+html[data-theme='classic'][data-mode='light'] .stitchOpsPanel input:not([type='checkbox']):not([type='radio']),
+html[data-theme='classic'][data-mode='light'] .stitchOpsControls select,
+html[data-theme='classic'][data-mode='light'] .stitchOpsControls input:not([type='checkbox']):not([type='radio']),
+html[data-theme='classic'][data-mode='light'] .comparePickerRow select,
+html[data-theme='classic'][data-mode='light'] .comparePickerRow input[type='date'] {
+  background: #252a32 !important;
+  background-color: #252a32 !important;
+  color: #dee2ec !important;
+  border-color: #5c5654 !important;
+}
+
 html[data-theme='classic'][data-mode='light'] table th {
   color: var(--muted);
   background: var(--panel2);

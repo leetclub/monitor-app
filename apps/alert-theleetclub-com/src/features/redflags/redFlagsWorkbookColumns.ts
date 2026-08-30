@@ -1,7 +1,7 @@
 /** Red Flags board columns (operator-facing). */
 export const RED_FLAGS_XLSX_ORDER = [
-  'vendingMachine',
   'operatingHours',
+  'vendingMachine',
   'alertType',
   'operator',
   'operatorActivity',

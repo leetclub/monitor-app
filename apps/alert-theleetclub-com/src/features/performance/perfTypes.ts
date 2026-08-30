@@ -21,6 +21,8 @@ export type GrowthMachineRow = {
   periodKd: number;
   compareKd: number;
   ratePct?: number | null;
+  /** Share of fleet period KD (this machine). */
+  shareOfFleetPct?: number | null;
 };
 
 export type GrowthGroupSlice = {
@@ -28,6 +30,8 @@ export type GrowthGroupSlice = {
   periodKd: number;
   compareKd: number;
   machineCount?: number;
+  /** Group period KD as % of full fleet period KD. */
+  shareOfFleetPct?: number | null;
   machines?: GrowthMachineRow[];
 };
 

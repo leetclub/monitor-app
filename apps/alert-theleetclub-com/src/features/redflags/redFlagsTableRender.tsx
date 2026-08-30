@@ -485,7 +485,11 @@ export function renderRedFlagsBodyCell(key: RedFlagsColumnKey, b: RedFlagsRowBun
       return (
         <div title={RED_FLAGS_COLUMNS.operatingHours.placeholderNote}>
           <div>{b.locHours ? `${b.locHours} hrs` : <span className="opsCellMuted">—</span>}</div>
-          <div className="opsCellSub">{b.locationOwnerFull || b.areaOwnerName || b.locationTagOwner || '—'}</div>
+          <div className="opsCellSub">
+            {b.locationOwnerFull || b.areaOwnerName || b.locationTagOwner
+              ? `Owner: ${b.locationOwnerFull || b.areaOwnerName || b.locationTagOwner}`
+              : '—'}
+          </div>
           {b.operatingDaysLabel ? <div className="opsCellSub">{b.operatingDaysLabel}</div> : null}
           {b.timezoneLabel ? <div className="opsCellSub">TZ: {b.timezoneLabel}</div> : null}
         </div>

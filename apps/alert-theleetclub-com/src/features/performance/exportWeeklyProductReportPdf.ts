@@ -261,6 +261,15 @@ export function downloadWeeklyProductReportPdf(opts: WeeklyPdfOpts) {
     .sort((a, b) => Number(a.trendPct) - Number(b.trendPct))
     .slice(0, 5);
 
+  const topSelling = [...fleetProducts]
+    .filter((p) => Number(p.revenueKwd || 0) > 0)
+    .sort((a, b) => Number(b.revenueKwd || 0) - Number(a.revenueKwd || 0) || a.name.localeCompare(b.name))
+    .slice(0, 5);
+  const lowSelling = [...fleetProducts]
+    .filter((p) => Number(p.revenueKwd || 0) > 0)
+    .sort((a, b) => Number(a.revenueKwd || 0) - Number(b.revenueKwd || 0) || a.name.localeCompare(b.name))
+    .slice(0, 5);
+
   const lowMachines = [...machines]
     .filter((m) => m.locationTargetKd != null && Number(m.locationTargetKd) > 0)
     .sort(
@@ -440,6 +449,44 @@ export function downloadWeeklyProductReportPdf(opts: WeeklyPdfOpts) {
       ],
     ],
     styles: { fontSize: 8, cellPadding: 2, font: 'helvetica', cellWidth: 'wrap' },
+    headStyles: { fillColor: [15, 118, 110], textColor: 255 },
+  });
+  y = tableEndY(doc) + 8;
+
+  sectionTitle('5b. Top / lowest selling (period KD)');
+  bodyText('Top 5 by revenue', 8);
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [['Product', `${periodLabel} Rev`, compare ? `${priorLabel} Rev` : 'Prior', 'WoW %', 'Cups']],
+    body: topSelling.length
+      ? topSelling.map((p) => [
+          pdfSafe(p.name),
+          kd(p.revenueKwd),
+          compare ? kd(p.prevRevenueKwd) : '-',
+          compare ? pctChange(Number(p.revenueKwd || 0), Number(p.prevRevenueKwd || 0)) : '-',
+          cups(p.cups),
+        ])
+      : [['(none)', '-', '-', '-', '-']],
+    styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', cellWidth: 'wrap' },
+    headStyles: { fillColor: [15, 118, 110], textColor: 255 },
+  });
+  y = tableEndY(doc) + 5;
+  bodyText('Lowest 5 by revenue', 8);
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [['Product', `${periodLabel} Rev`, compare ? `${priorLabel} Rev` : 'Prior', 'WoW %', 'Cups']],
+    body: lowSelling.length
+      ? lowSelling.map((p) => [
+          pdfSafe(p.name),
+          kd(p.revenueKwd),
+          compare ? kd(p.prevRevenueKwd) : '-',
+          compare ? pctChange(Number(p.revenueKwd || 0), Number(p.prevRevenueKwd || 0)) : '-',
+          cups(p.cups),
+        ])
+      : [['(none)', '-', '-', '-', '-']],
+    styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', cellWidth: 'wrap' },
     headStyles: { fillColor: [15, 118, 110], textColor: 255 },
   });
   y = tableEndY(doc) + 8;

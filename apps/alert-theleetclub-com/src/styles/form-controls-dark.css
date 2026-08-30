@@ -1,0 +1,71 @@
+/**
+ * Last-loaded override: fleet/ops/performance form controls stay dark.
+ * Native date/select chrome follows color-scheme — force dark here.
+ * Admin + login keep their own light chrome (excluded below).
+ */
+
+.stitchShell,
+.stitchOpsPanel,
+.stitchOpsControls,
+.opsPrepControls,
+.perfLayout,
+.perfProducts,
+.perfPage,
+.v2AppRoot,
+.comparePickerRow {
+  color-scheme: dark;
+}
+
+/* Anything that is not Admin / Login */
+.stitchShell select,
+.stitchShell input[type='date'],
+.stitchShell input[type='search'],
+.stitchShell input[type='text'],
+.stitchShell input[type='number'],
+.perfLayout select,
+.perfLayout input[type='date'],
+.perfLayout input[type='search'],
+.perfLayout input[type='text'],
+.perfProducts select,
+.perfProducts input[type='date'],
+.perfProducts input[type='search'],
+.perfProducts input[type='text'],
+.perfPage select,
+.perfPage input[type='date'],
+.v2AppRoot select,
+.v2AppRoot input[type='date'],
+.v2AppRoot input[type='search'],
+.v2AppRoot input[type='text'],
+.comparePickerRow select,
+.comparePickerRow input[type='date'] {
+  background: #1a1f27 !important;
+  background-color: #1a1f27 !important;
+  color: #e8edf5 !important;
+  border-color: #4b5563 !important;
+  color-scheme: dark !important;
+  -webkit-text-fill-color: #e8edf5;
+}
+
+.stitchShell select option,
+.perfLayout select option,
+.perfProducts select option,
+.perfPage select option,
+.v2AppRoot select option,
+.comparePickerRow select option {
+  background-color: #1a1f27;
+  color: #e8edf5;
+}
+
+/* Never override Admin or Login light forms */
+.adminAppRoot select,
+.adminAppRoot input,
+.adminAppRoot textarea,
+.loginShell select,
+.loginShell input,
+.loginShell textarea,
+.loginCard select,
+.loginCard input,
+.loginCard textarea {
+  color-scheme: light;
+  -webkit-text-fill-color: unset;
+}

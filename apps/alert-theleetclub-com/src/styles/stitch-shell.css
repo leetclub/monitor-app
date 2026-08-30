@@ -488,13 +488,51 @@
   background: var(--ops-surface-bg, #171c23);
 }
 
-.stitchOpsControls :global(.comparePickerRow) {
+.stitchOpsControls .comparePickerRow {
   gap: 10px 14px;
 }
 
-.stitchOpsControls :global(.comparePickerRow label) {
+.stitchOpsControls .comparePickerRow label {
   font-size: 12px;
   color: #ad8883;
+}
+
+/* Ops panels are always dark chrome — never inherit Pro/light white inputs */
+.stitchOpsPanel select,
+.stitchOpsPanel input[type='date'],
+.stitchOpsPanel input[type='search'],
+.stitchOpsPanel input[type='text'],
+.stitchOpsControls select,
+.stitchOpsControls input[type='date'],
+.opsPrepControls select,
+.opsPrepControls input[type='date'] {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #5c5654;
+  background-color: #252a32 !important;
+  color: #dee2ec !important;
+  font-size: 13px;
+  font-weight: 500;
+  color-scheme: dark;
+}
+
+.stitchOpsPanel select option,
+.stitchOpsControls select option,
+.opsPrepControls select option {
+  background-color: #252a32;
+  color: #dee2ec;
+}
+
+html[data-theme='pro'] .stitchOpsPanel select,
+html[data-theme='pro'] .stitchOpsPanel input[type='date'],
+html[data-theme='pro'] .stitchOpsPanel input[type='search'],
+html[data-theme='pro'] .stitchOpsPanel input[type='text'],
+html[data-theme='pro'] .stitchOpsControls select,
+html[data-theme='pro'] .stitchOpsControls input[type='date'] {
+  background-color: #252a32 !important;
+  color: #dee2ec !important;
+  border-color: #5c5654 !important;
 }
 
 .stitchOpsHint {

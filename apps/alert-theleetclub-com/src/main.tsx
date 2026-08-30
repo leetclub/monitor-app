@@ -22,6 +22,7 @@ import './styles/theme-pro.css';
 import './styles/color-modes.css';
 import './styles/performance-page.css';
 import './styles/promo-page.css';
+import './styles/form-controls-dark.css';
 
 bootAlertUiTheme();
 

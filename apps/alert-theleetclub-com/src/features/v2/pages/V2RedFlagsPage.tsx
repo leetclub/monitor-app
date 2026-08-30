@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ComparePresetPicker } from '@/components/ComparePresetPicker';
+import { FleetOpsToolbarExtras } from '@/components/FleetOpsToolbarExtras';
 import { ProductExtremesModal } from '@/components/ProductExtremesModal';
 import {
   useV2CompareSelection,
@@ -26,6 +27,8 @@ export function V2RedFlagsPage() {
   const data = useV2RedFlagsData(compare);
   const [q, setQ] = useState('');
   const [severity, setSeverity] = useState<SeverityFilter>('all');
+  const [salesSort, setSalesSort] = useState(false);
+  const [hideInactive, setHideInactive] = useState(false);
   const [drinksDetail, setDrinksDetail] = useState<{
     machineId: string;
     machineName: string;
@@ -37,13 +40,24 @@ export function V2RedFlagsPage() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return data.exceptions.filter((e) => {
+    let list = data.exceptions.filter((e) => {
       if (severity === 'critical' && e.severity !== 'Critical') return false;
       if (severity === 'watch' && e.severity !== 'Watch') return false;
+      if (hideInactive && e.inactive) return false;
       if (!needle) return true;
       return Object.values(e.fields).concat(e.reasons).join(' ').toLowerCase().includes(needle);
     });
-  }, [data.exceptions, q, severity]);
+    if (salesSort) {
+      list = list.slice().sort((a, b) => {
+        const sa =
+          a.salesPrimaryKd != null && Number.isFinite(a.salesPrimaryKd) ? a.salesPrimaryKd : -1;
+        const sb =
+          b.salesPrimaryKd != null && Number.isFinite(b.salesPrimaryKd) ? b.salesPrimaryKd : -1;
+        return sb - sa;
+      });
+    }
+    return list;
+  }, [data.exceptions, q, severity, hideInactive, salesSort]);
 
   const rows = filtered.map((e) => {
     const cells: Record<string, ReactNode> = {};
@@ -148,14 +162,18 @@ export function V2RedFlagsPage() {
         }
       >
         <div className="v2FilterBar">
-          <label className="v2Search">
-            <span className="srOnly">Search</span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search machine, operator, alert, location…"
-            />
-          </label>
+          <FleetOpsToolbarExtras
+            search={q}
+            onSearchChange={setQ}
+            riskSort={false}
+            onRiskSortChange={() => {}}
+            showRiskSort={false}
+            salesSort={salesSort}
+            onSalesSortChange={setSalesSort}
+            hideInactive={hideInactive}
+            onHideInactiveChange={setHideInactive}
+            searchPlaceholder="Search machine, operator, alert…"
+          />
           <select
             className="v2Select"
             value={severity}

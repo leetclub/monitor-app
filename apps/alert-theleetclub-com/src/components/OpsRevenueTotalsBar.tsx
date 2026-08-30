@@ -29,19 +29,44 @@ function formatAsOfClock(asOfLocal: string): string {
 }
 
 /**
- * Fleet revenue bar — full-width footer portaled to body.
- * Side nav clears above it via --ops-revenue-bar-h (see ops-revenue-totals.css).
+ * Fleet revenue bar — portaled to body; left edge aligns with sidebar right (nav stays full height).
  */
+function resolveFleetBarLeft(): number {
+  const v2Nav = document.querySelector('.v2AppRoot .v2Sidebar') as HTMLElement | null;
+  if (v2Nav) {
+    const rect = v2Nav.getBoundingClientRect();
+    if (rect.width > 0 && rect.right > 0) return Math.max(0, Math.round(rect.right));
+  }
+
+  const nav = document.querySelector('.appShell .sideNav') as HTMLElement | null;
+  if (!nav) return 0;
+
+  const railPx = 64;
+  if (nav.classList.contains('sideNavOpen')) {
+    return railPx;
+  }
+
+  const rect = nav.getBoundingClientRect();
+  const left = rect.right > 0 ? rect.right : rect.width;
+  return Math.max(0, Math.round(left));
+}
+
 function syncFleetBarChrome(barEl: HTMLElement) {
   const h = Math.max(64, Math.ceil(barEl.getBoundingClientRect().height));
   document.documentElement.style.setProperty('--ops-revenue-bar-h', `${h}px`);
-  document.body.classList.add('hasOpsFleetRevenueBar');
+
+  const left = resolveFleetBarLeft();
+  document.documentElement.style.setProperty('--ops-revenue-bar-left', `${left}px`);
+  barEl.style.setProperty('left', `${left}px`, 'important');
+  barEl.style.setProperty('right', '0px', 'important');
+  barEl.style.setProperty('width', 'auto', 'important');
+
   document.querySelector('.v2AppRoot')?.classList.add('hasOpsFleetRevenuePad');
 }
 
 function clearFleetBarChrome() {
   document.documentElement.style.setProperty('--ops-revenue-bar-h', '0px');
-  document.body.classList.remove('hasOpsFleetRevenueBar');
+  document.documentElement.style.removeProperty('--ops-revenue-bar-left');
   document.querySelector('.v2AppRoot')?.classList.remove('hasOpsFleetRevenuePad');
 }
 
@@ -132,14 +157,33 @@ export function OpsRevenueTotalsBar({
 
     const ro = new ResizeObserver(apply);
     ro.observe(el);
+    const nav = document.querySelector('.appShell .sideNav');
+    const v2Nav = document.querySelector('.v2AppRoot .v2Sidebar');
+    const main = document.querySelector('.appShell .mainColumn');
+    if (nav) ro.observe(nav);
+    if (v2Nav) ro.observe(v2Nav);
+    if (main) ro.observe(main);
 
     window.addEventListener('resize', apply);
     window.addEventListener('orientationchange', apply);
 
+    const shell = document.querySelector('.appShell');
+    const v2Root = document.querySelector('.v2AppRoot');
+    let mo: MutationObserver | null = null;
+    if (shell || v2Root) {
+      mo = new MutationObserver(apply);
+      if (shell) mo.observe(shell, { attributes: true, attributeFilter: ['class'], subtree: true });
+      if (v2Root) mo.observe(v2Root, { attributes: true, attributeFilter: ['class'], subtree: true });
+    }
+
     return () => {
       ro.disconnect();
+      mo?.disconnect();
       window.removeEventListener('resize', apply);
       window.removeEventListener('orientationchange', apply);
+      el.style.removeProperty('left');
+      el.style.removeProperty('right');
+      el.style.removeProperty('width');
       clearFleetBarChrome();
     };
   }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);

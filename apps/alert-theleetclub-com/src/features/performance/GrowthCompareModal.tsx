@@ -19,10 +19,10 @@ import type { GrowthGroupSlice, GrowthGroupKey, GrowthMachineRow } from '@/featu
 const GROUP_LABEL: Record<GrowthGroupKey, string> = {
   all: 'All machines',
   top5: 'Top 5 (by sales)',
-  lowest5: 'Lowest 5 (by sales)',
+  lowest5: 'Lowest 5 (by sales, excludes zero)',
 };
 
-type SortKey = 'machineName' | 'periodKd' | 'compareKd' | 'growth' | 'index';
+type SortKey = 'machineName' | 'periodKd' | 'compareKd' | 'growth' | 'index' | 'shareOfFleet';
 
 function rateTone(rate: number | null | undefined): string {
   if (rate == null || !Number.isFinite(rate)) return '';
@@ -85,6 +85,8 @@ function sortMachines(
         return compareNumbers(growthDeltaNum(a.ratePct), growthDeltaNum(b.ratePct), dir);
       case 'index':
         return compareNumbers(a.ratePct, b.ratePct, dir);
+      case 'shareOfFleet':
+        return compareNumbers(a.shareOfFleetPct, b.shareOfFleetPct, dir);
       default:
         return 0;
     }
@@ -194,6 +196,11 @@ export function GrowthCompareModal({
                     <span className={rateTone(g.ratePct)}>
                       {indexLabel} <strong>{g.ratePct != null ? `${g.ratePct}%` : '—'}</strong>
                     </span>
+                    {g.shareOfFleetPct != null ? (
+                      <span>
+                        Share of fleet <strong>{g.shareOfFleetPct}%</strong>
+                      </span>
+                    ) : null}
                   </div>
                 </header>
                 {rows.length ? (
@@ -206,6 +213,7 @@ export function GrowthCompareModal({
                           <SortTh label={compareLabel} col="compareKd" sort={sort} onSort={setSort} />
                           <SortTh label="Growth" col="growth" sort={sort} onSort={setSort} />
                           <SortTh label={indexLabel} col="index" sort={sort} onSort={setSort} />
+                          <SortTh label="% of fleet" col="shareOfFleet" sort={sort} onSort={setSort} />
                         </tr>
                       </thead>
                       <tbody>
@@ -228,6 +236,9 @@ export function GrowthCompareModal({
                               <td className={rateTone(row.ratePct)}>{growthDeltaPct(row.ratePct)}</td>
                               <td className={rateTone(row.ratePct)}>
                                 {row.ratePct != null ? `${row.ratePct}%` : '—'}
+                              </td>
+                              <td>
+                                {row.shareOfFleetPct != null ? `${row.shareOfFleetPct}%` : '—'}
                               </td>
                             </tr>
                           );

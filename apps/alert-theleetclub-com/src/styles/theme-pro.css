@@ -392,9 +392,13 @@ html[data-theme='pro'] .appShellPro .muted {
   color: #475569;
 }
 
-html[data-theme='pro'] .appShellPro input,
-html[data-theme='pro'] .appShellPro select,
-html[data-theme='pro'] .appShellPro textarea {
+/* Pro white form chrome — Admin + Login only (never fleet/ops/performance boards) */
+html[data-theme='pro'] .appShellPro .loginCard input,
+html[data-theme='pro'] .appShellPro .loginCard select,
+html[data-theme='pro'] .appShellPro .loginCard textarea,
+html[data-theme='pro'] .appShellPro .adminAppRoot input:not([type='checkbox']):not([type='radio']),
+html[data-theme='pro'] .appShellPro .adminAppRoot select,
+html[data-theme='pro'] .appShellPro .adminAppRoot textarea {
   background-color: #fff;
   color: #0f172a;
   border: 1px solid #cbd5e1;

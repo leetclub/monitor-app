@@ -683,6 +683,13 @@
   max-width: 11rem;
 }
 
+.perfGraphLegendShare {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .perfGraphStage {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) 40px;
@@ -1136,9 +1143,10 @@
   min-height: 36px;
   padding: 6px 10px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
+  border: 1px solid #4b5563;
+  background: #1a1f27;
+  color: #e8edf5;
+  color-scheme: dark;
 }
 
 .perfBackLink {
@@ -1532,19 +1540,30 @@ button.perfKpiClick:hover {
 }
 
 .perfProductsField select,
-.perfProductsField .perfLocSelectTrigger {
+.perfProductsField .perfLocSelectTrigger,
+.perfProductsCustomRange input[type='date'],
+.perfProductsToolbar select,
+.perfProductsToolbar input[type='date'] {
   width: 100%;
   box-sizing: border-box;
   appearance: none;
   font: inherit;
   font-size: 0.84rem;
   font-weight: 600;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--border-soft);
+  color: #e2e8f0 !important;
+  background: #111827 !important;
+  background-color: #111827 !important;
+  border: 1px solid #334155;
   border-radius: 9px;
   padding: 8px 10px;
   min-height: 38px;
+  color-scheme: dark;
+}
+
+.perfProductsField select option,
+.perfProductsToolbar select option {
+  background-color: #111827;
+  color: #e2e8f0;
 }
 
 .perfProductsField select:focus,
@@ -1869,11 +1888,12 @@ button.perfKpiClick:hover {
 .perfProductsCriteriaField select {
   font: inherit;
   font-weight: 600;
-  color: inherit;
-  background: var(--panel);
-  border: 1px solid var(--border-soft);
+  color: #e8edf5;
+  background: #1a1f27;
+  border: 1px solid #4b5563;
   border-radius: 8px;
   padding: 8px 10px;
+  color-scheme: dark;
 }
 
 .perfProductsCriteriaField small {
@@ -2070,12 +2090,14 @@ button.perfKpiClick:hover {
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--border-soft);
+  color: #e2e8f0 !important;
+  background: #111827 !important;
+  background-color: #111827 !important;
+  border: 1px solid #334155;
   border-radius: 9px;
   padding: 8px 10px;
   min-height: 38px;
+  color-scheme: dark;
 }
 
 .perfProductsTrendCols,
@@ -2332,10 +2354,11 @@ button.perfKpiClick:hover {
   max-width: min(100%, 360px);
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: var(--panel2);
-  color: var(--text);
+  border: 1px solid #4b5563;
+  background: #1a1f27;
+  color: #e8edf5;
   font-size: 0.85rem;
+  color-scheme: dark;
 }
 
 .perfProductsGraphBControls {

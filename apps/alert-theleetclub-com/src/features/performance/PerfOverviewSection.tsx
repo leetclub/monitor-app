@@ -20,6 +20,13 @@ import {
   type PerfPreset,
   type PerfViewMode,
 } from '@/features/performance/perfTypes';
+import {
+  pickLowest5,
+  pickTop5,
+  shareOfFleetPct,
+  sortMachinesBySales,
+  sumPeriodKd,
+} from '@/features/performance/fleetRanking';
 
 const PRESETS: { id: PerfPreset; label: string }[] = [
   { id: 'this_week', label: 'This week (WTD)' },
@@ -66,10 +73,6 @@ function dayLabel(d: PerfDay): string {
   const wd = (d.weekday || '').slice(0, 3);
   const md = d.date.slice(5);
   return wd ? `${wd} ${md}` : md;
-}
-
-function bySales(a: FleetMachine, b: FleetMachine) {
-  return b.totalLocationKwd - a.totalLocationKwd;
 }
 
 function viewToGrowthKey(view: PerfViewMode, fleetRanking: boolean): GrowthGroupKey {
@@ -200,7 +203,7 @@ function GraphMachinePickerModal({
   const panel = modalPanelHandlers();
   const [q, setQ] = useState('');
   const [pick, setPick] = useState<Set<string>>(() => new Set(selectedIds));
-  const ranked = useMemo(() => [...machines].sort(bySales), [machines]);
+  const ranked = useMemo(() => sortMachinesBySales(machines), [machines]);
   const rankById = useMemo(() => {
     const m = new Map<string, number>();
     ranked.forEach((row, i) => m.set(row.machineId, i + 1));
@@ -363,7 +366,9 @@ export function PerfOverviewSection({
     else setView((v) => (v === 'selected' ? 'all' : v));
   }, [fleetRanking]);
 
-  const ranked = useMemo(() => [...machines].sort(bySales), [machines]);
+  const ranked = useMemo(() => sortMachinesBySales(machines), [machines]);
+
+  const fleetTotalKd = kpis?.periodActualKd ?? sumPeriodKd(ranked);
 
   const pagePool = useMemo(() => {
     if (customIds?.length) {
@@ -374,11 +379,28 @@ export function PerfOverviewSection({
       const start = page * GRAPH_PAGE;
       return ranked.slice(start, start + GRAPH_PAGE);
     }
-    if (view === 'top5') return ranked.slice(0, 5);
-    if (view === 'lowest5') return [...ranked].reverse().slice(0, 5);
+    if (view === 'top5') return pickTop5(ranked);
+    if (view === 'lowest5') return pickLowest5(ranked);
     const start = page * GRAPH_PAGE;
     return ranked.slice(start, start + GRAPH_PAGE);
   }, [ranked, view, fleetRanking, page, customIds]);
+
+  /** Machines summed into the fleet-combined line (matches All / Top 5 / Lowest 5 / mix). */
+  const combinedPool = useMemo(() => {
+    if (customIds?.length) {
+      const map = new Map(ranked.map((m) => [m.machineId, m]));
+      return customIds.map((id) => map.get(id)).filter((m): m is FleetMachine => Boolean(m));
+    }
+    if (view === 'top5') return pickTop5(ranked);
+    if (view === 'lowest5') return pickLowest5(ranked);
+    return ranked;
+  }, [ranked, view, customIds]);
+
+  const groupSharePct = useMemo(() => {
+    if (!fleetTotalKd || fleetTotalKd <= 0) return null;
+    const groupKd = sumPeriodKd(combinedPool);
+    return shareOfFleetPct(groupKd, fleetTotalKd);
+  }, [combinedPool, fleetTotalKd]);
 
   const pageCount = useMemo(() => {
     if (customIds?.length) return 1;
@@ -439,8 +461,7 @@ export function PerfOverviewSection({
     const series: echarts.SeriesOption[] = [];
 
     if (combined) {
-      // Fleet-wide combined: all ranked machines (not only current graph page).
-      const pool = ranked.length ? ranked : seriesMachines;
+      const pool = combinedPool.length ? combinedPool : seriesMachines;
       const totals: number[] = [];
       const tgtSum: (number | null)[] = [];
       for (let i = 0; i < dayCount; i++) {
@@ -458,8 +479,16 @@ export function PerfOverviewSection({
         totals.push(Math.round(sum * 100) / 100);
         tgtSum.push(tN ? Math.round(tSum * 100) / 100 : null);
       }
+      const scopeLabel =
+        view === 'top5'
+          ? 'Top 5 combined'
+          : view === 'lowest5'
+            ? 'Lowest 5 combined'
+            : customIds?.length
+              ? `Mix (${pool.length})`
+              : `Combined sales (${pool.length})`;
       series.push({
-        name: `Combined sales (${pool.length})`,
+        name: scopeLabel,
         type: 'line',
         smooth: 0.25,
         showSymbol: dayCount <= 10,
@@ -631,7 +660,7 @@ export function PerfOverviewSection({
       { notMerge: true },
     );
     chart.resize();
-  }, [seriesMachines, labels, combined, aggregateDays, ranked]);
+  }, [seriesMachines, labels, combined, aggregateDays, combinedPool, view, customIds]);
 
   const onExport = useCallback(() => {
     const c = chartInst.current;
@@ -674,10 +703,10 @@ export function PerfOverviewSection({
 
   const growthScopeNote =
     growthKey === 'top5'
-      ? 'Figures below follow the Top 5 by period sales (switch All / Lowest 5 in the groups).'
+      ? 'Figures below follow the Top 5 by period sales. Each row shows % of fleet period KD.'
       : growthKey === 'lowest5'
-        ? 'Figures below follow the Lowest 5 by period sales (switch All / Top 5 in the groups).'
-        : 'Figures below follow all machines in the current selection (see All / Top 5 / Lowest 5 groups).';
+        ? 'Figures below follow the Lowest 5 by period sales (zero-sales machines excluded). Each row shows % of fleet period KD.'
+        : 'Figures below follow all machines in the current selection. Each row shows % of fleet period KD.';
 
   const canPage = !customIds?.length && view !== 'top5' && view !== 'lowest5' && pageCount > 1;
   const touchStartX = useRef<number | null>(null);
@@ -753,8 +782,15 @@ export function PerfOverviewSection({
           <strong>{machines.length}</strong>
         </div>
         <p className="perfFleetCombinedStripHint">
-          Combined totals for all machines in this selection · period preset below (WTD / last week /
-          …)
+          Combined totals for machines in the current view (All / Top 5 / Lowest 5 / mix) · period
+          preset below (WTD / last week / …)
+          {groupSharePct != null && (view === 'top5' || view === 'lowest5' || customIds?.length) ? (
+            <>
+              {' '}
+              · This group = <strong>{groupSharePct}%</strong> of fleet period KD (
+              {formatKwd(sumPeriodKd(combinedPool))} / {formatKwd(fleetTotalKd)})
+            </>
+          ) : null}
         </p>
       </div>
 
@@ -783,7 +819,7 @@ export function PerfOverviewSection({
             type="button"
             className={`perfSegPill ${combined ? 'active' : ''}`}
             onClick={() => setCombined((c) => !c)}
-            title="One line = sum of all machines in the current selection (fleet-wide)"
+            title="One line = sum of machines in the current view (All, Top 5, Lowest 5, or mix)"
           >
             {combined ? 'Fleet combined on' : 'Fleet combined'}
           </button>
@@ -816,8 +852,16 @@ export function PerfOverviewSection({
       </div>
 
       <div className="perfGraphPageMeta" aria-live="polite">
-        {customIds?.length
-          ? `Custom mix · ${pagePool.length} machines`
+        {view === 'lowest5' && !pagePool.length
+          ? 'Lowest 5 — no machines with period sales above zero (or fewer than 6 active locations).'
+          : customIds?.length
+          ? `Custom mix · ${pagePool.length} machines${
+              groupSharePct != null ? ` · ${groupSharePct}% of fleet period KD` : ''
+            }`
+          : view === 'top5' || view === 'lowest5'
+            ? `${pagePool.length} machines · ${
+                groupSharePct != null ? `${groupSharePct}% of fleet period KD` : ''
+              }`
           : canPage
             ? `Page ${page + 1} / ${pageCount} · ranks ${page * GRAPH_PAGE + 1}–${page * GRAPH_PAGE + pagePool.length} of ${ranked.length} · swipe or use side arrows`
             : `${pagePool.length} machines on graph`}
@@ -828,6 +872,8 @@ export function PerfOverviewSection({
           {pagePool.map((m, i) => {
             const on = !hiddenIds.has(m.machineId);
             const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
+            const kd = Number(m.totalLocationKwd) || 0;
+            const share = shareOfFleetPct(kd, fleetTotalKd);
             return (
               <button
                 key={m.machineId}
@@ -837,12 +883,12 @@ export function PerfOverviewSection({
                 style={{ ['--series-color' as string]: color }}
                 onMouseEnter={() => {
                   const c = chartInst.current;
-                  if (!c || !on) return;
+                  if (!c || !on || combined) return;
                   c.dispatchAction({ type: 'downplay' });
                   c.dispatchAction({ type: 'highlight', seriesName: m.machineName });
                 }}
                 onMouseLeave={() => {
-                  chartInst.current?.dispatchAction({ type: 'downplay' });
+                  if (!combined) chartInst.current?.dispatchAction({ type: 'downplay' });
                 }}
                 onClick={() =>
                   setHiddenIds((prev) => {
@@ -852,10 +898,19 @@ export function PerfOverviewSection({
                     return next;
                   })
                 }
-                title={on ? 'Hover to focus · click to hide' : 'Show line'}
+                title={
+                  share != null
+                    ? `${formatKwd(kd)} · ${share}% of fleet period KD`
+                    : on
+                      ? 'Hover to focus · click to hide'
+                      : 'Show line'
+                }
               >
                 <span className="perfGraphLegendLine" aria-hidden />
                 <span className="perfGraphLegendName">{m.machineName}</span>
+                {share != null ? (
+                  <span className="perfGraphLegendShare">{formatKwd(kd)} · {share}%</span>
+                ) : null}
               </button>
             );
           })}
@@ -1080,7 +1135,8 @@ export function PerfOverviewSection({
             growthScopeNote,
             'Growth (big number on the card) = (this period KD − prior KD) ÷ prior KD × 100. Example: −1.2% means sales are 1.2% below the prior window.',
             'Index (% of prior) = this period ÷ prior × 100. 100 = flat, above 100 = higher than prior, below 100 = lower.',
-            'Top 5 / Lowest 5 groups are ranked by this period’s sales KD, not by growth.',
+            'Top 5 / Lowest 5 groups are ranked by this period’s sales KD (Lowest 5 excludes zero-sales machines).',
+            'Share of fleet = machine or group period KD ÷ full fleet period KD × 100.',
           ]}
           compareLabel="Prior KD"
           indexLabel="% of prior"
@@ -1105,7 +1161,8 @@ export function PerfOverviewSection({
             'This is not full-year or YTD. It compares the selected date range to the same dates one year earlier.',
             'Growth (big number on the card) = (this period KD − then KD) ÷ then KD × 100. Example: +5% means sales are 5% above those same dates last year.',
             'Index (% of then) = this period ÷ then × 100. 100 = flat vs last year.',
-            'Top 5 / Lowest 5 groups are ranked by this period’s sales KD, not by growth.',
+            'Top 5 / Lowest 5 groups are ranked by this period’s sales KD (Lowest 5 excludes zero-sales machines).',
+            'Share of fleet = machine or group period KD ÷ full fleet period KD × 100.',
           ]}
           compareLabel="Then KD"
           indexLabel="% of then"

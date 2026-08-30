@@ -90,6 +90,8 @@ export type V2OverallRow = {
   id: string;
   name: string;
   flagged: boolean;
+  inactive?: boolean;
+  salesPrimaryKd?: number | null;
   fields: Record<OverallColumnKey, string>;
   stacks: Partial<Record<OverallColumnKey, V2MetricItem[]>>;
 };
@@ -219,6 +221,7 @@ export function useV2OverallData(compare?: CompareSelection) {
           operator_name?: string | null;
           location_hours?: string | null;
           location_owner?: string | null;
+          inactiveToday?: boolean;
         }>;
       }>('/api/alert/overall/admin-profiles'),
     staleTime: 5 * 60_000,
@@ -346,7 +349,10 @@ export function useV2OverallData(compare?: CompareSelection) {
   );
 
   const profById = useMemo(() => {
-    const m = new Map<string, { operator?: string; hours?: string; owner?: string }>();
+    const m = new Map<
+      string,
+      { operator?: string; hours?: string; owner?: string; inactive?: boolean }
+    >();
     for (const r of profilesQ.data?.rows || []) {
       const id = String(r.machine_id || '').trim();
       if (!id) continue;
@@ -354,6 +360,7 @@ export function useV2OverallData(compare?: CompareSelection) {
         operator: String(r.operator_name || '').trim() || undefined,
         hours: String(r.location_hours || '').trim() || undefined,
         owner: String(r.location_owner || '').trim() || undefined,
+        inactive: r.inactiveToday === true,
       });
     }
     return m;
@@ -659,7 +666,16 @@ export function useV2OverallData(compare?: CompareSelection) {
           : undefined,
       };
 
-      out.push({ id: m.id, name: m.name, flagged: flagged.has(m.id), fields, stacks });
+      out.push({
+        id: m.id,
+        name: m.name,
+        flagged: flagged.has(m.id),
+        inactive: prof?.inactive === true,
+        salesPrimaryKd:
+          today != null && Number.isFinite(Number(today)) ? Number(today) : null,
+        fields,
+        stacks,
+      });
     }
     return out;
   }, [

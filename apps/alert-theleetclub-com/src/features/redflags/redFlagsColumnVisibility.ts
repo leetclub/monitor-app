@@ -9,7 +9,7 @@ export type RedFlagsColumnPreset = 'all' | 'sales' | 'alerts' | 'custom';
 export const RED_FLAGS_TOTAL_COLUMNS = RED_FLAGS_XLSX_ORDER.length;
 
 /** Bump when new workbook columns must appear for existing localStorage presets. */
-export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v3';
+export const RED_FLAGS_COLUMNS_STORAGE_KEY = 'alert_redflags_column_preset_v4';
 
 /** Machine column is always shown. */
 export const RED_FLAGS_PINNED_COLUMN: RedFlagsColumnKey = 'vendingMachine';
@@ -18,6 +18,7 @@ export const RED_FLAGS_PINNED_COLUMN: RedFlagsColumnKey = 'vendingMachine';
 export const RED_FLAGS_ALWAYS_VISIBLE: RedFlagsColumnKey[] = ['topLowDrinks'];
 
 export const RED_FLAGS_PRESET_SALES: RedFlagsColumnKey[] = [
+  'operatingHours',
   'vendingMachine',
   'operator',
   'operatorActivity',
@@ -31,8 +32,8 @@ export const RED_FLAGS_PRESET_SALES: RedFlagsColumnKey[] = [
 ];
 
 export const RED_FLAGS_PRESET_ALERTS: RedFlagsColumnKey[] = [
-  'vendingMachine',
   'operatingHours',
+  'vendingMachine',
   'alertType',
   'operator',
   'operatorActivity',

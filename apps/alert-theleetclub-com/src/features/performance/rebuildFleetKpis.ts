@@ -4,8 +4,19 @@ import type {
   GrowthGroupKey,
   GrowthGroupSlice,
 } from '@/features/performance/perfTypes';
+import {
+  fleetPeriodKd,
+  pickLowest5,
+  pickTop5,
+  shareOfFleetPct,
+  sortMachinesBySales,
+} from '@/features/performance/fleetRanking';
 
-function growthGroup(rows: FleetMachine[], compareKey: 'prevPeriodLocationKwd' | 'yoyPeriodLocationKwd'): GrowthGroupSlice {
+function growthGroup(
+  rows: FleetMachine[],
+  compareKey: 'prevPeriodLocationKwd' | 'yoyPeriodLocationKwd',
+  fleetTotal: number,
+): GrowthGroupSlice {
   const period = rows.reduce((s, m) => s + (Number(m.totalLocationKwd) || 0), 0);
   const compare = rows.reduce((s, m) => s + (Number(m[compareKey]) || 0), 0);
   const ratePct = compare > 0 ? Math.round((period / compare) * 1000) / 10 : null;
@@ -14,6 +25,7 @@ function growthGroup(rows: FleetMachine[], compareKey: 'prevPeriodLocationKwd' |
     periodKd: Math.round(period * 10000) / 10000,
     compareKd: Math.round(compare * 10000) / 10000,
     machineCount: rows.length,
+    shareOfFleetPct: shareOfFleetPct(period, fleetTotal),
     machines: rows.map((m) => {
       const cur = Number(m.totalLocationKwd) || 0;
       const cmp = Number(m[compareKey]) || 0;
@@ -23,6 +35,7 @@ function growthGroup(rows: FleetMachine[], compareKey: 'prevPeriodLocationKwd' |
         periodKd: Math.round(cur * 10000) / 10000,
         compareKd: Math.round(cmp * 10000) / 10000,
         ratePct: cmp > 0 ? Math.round((cur / cmp) * 1000) / 10 : null,
+        shareOfFleetPct: shareOfFleetPct(cur, fleetTotal),
       };
     }),
   };
@@ -30,20 +43,19 @@ function growthGroup(rows: FleetMachine[], compareKey: 'prevPeriodLocationKwd' |
 
 /** Rebuild All / Top5 / Lowest5 growth KPIs after batch-merging fleet machines. */
 export function rebuildFleetKpis(machines: FleetMachine[], base?: FleetKpis | null): FleetKpis {
-  const bySales = [...machines].sort(
-    (a, b) => (b.totalLocationKwd || 0) - (a.totalLocationKwd || 0),
-  );
-  const top5 = bySales.slice(0, 5);
-  const lowest5 = [...bySales].reverse().slice(0, 5);
+  const bySales = sortMachinesBySales(machines);
+  const fleetTotal = fleetPeriodKd(bySales);
+  const top5 = pickTop5(bySales);
+  const lowest5 = pickLowest5(bySales);
   const keys: GrowthGroupKey[] = ['all', 'top5', 'lowest5'];
   const sets = { all: bySales, top5, lowest5 };
   const growthVsPrev: FleetKpis['growthVsPrev'] = {};
   const growthVsYoy: FleetKpis['growthVsYoy'] = {};
   for (const k of keys) {
-    growthVsPrev[k] = growthGroup(sets[k], 'prevPeriodLocationKwd');
-    growthVsYoy[k] = growthGroup(sets[k], 'yoyPeriodLocationKwd');
+    growthVsPrev[k] = growthGroup(sets[k], 'prevPeriodLocationKwd', fleetTotal);
+    growthVsYoy[k] = growthGroup(sets[k], 'yoyPeriodLocationKwd', fleetTotal);
   }
-  const periodActual = bySales.reduce((s, m) => s + (Number(m.totalLocationKwd) || 0), 0);
+  const periodActual = fleetTotal;
   const periodTarget = bySales.reduce((s, m) => s + (Number(m.periodTargetKd) || 0), 0);
   const withTgt = bySales.filter((m) => (Number(m.periodTargetKd) || 0) > 0);
   const hit = withTgt.filter(
