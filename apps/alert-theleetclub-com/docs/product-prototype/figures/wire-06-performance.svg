@@ -7,7 +7,7 @@
   <rect x="98" y="56" width="72" height="22" rx="11" fill="rgba(45,212,191,0.18)" stroke="#2dd4bf"/>
   <text x="110" y="71" fill="#e2e8f0" font-size="10" font-weight="600" font-family="Segoe UI, sans-serif">Products</text>
   <rect x="24" y="86" width="752" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
-  <text x="36" y="108" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Time ▾ · Target type ▾ · Y-axis Revenue | Cups</text>
+  <text x="36" y="108" fill="#e2e8f0" font-size="10" font-family="Segoe UI, sans-serif">Time ▾ · Target ▾ · Y-axis · Mix: Actual revenue | + WEB cashless</text>
   <rect x="24" y="132" width="752" height="118" rx="8" fill="#1e293b" stroke="#334155"/>
   <text x="36" y="152" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">A · Product ▾ in card · sites (‹ › page 8)</text>
   <polyline points="80,220 160,175 240,190 320,160 400,170 480,185 560,165 640,180" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>
@@ -32,6 +32,6 @@
   <rect x="408" y="372" width="368" height="72" rx="8" fill="#1e293b" stroke="#334155"/>
   <text x="420" y="396" fill="#cbd5e1" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">Detail table</text>
   <text x="420" y="420" fill="#94a3b8" font-size="9" font-family="Segoe UI, sans-serif">Drink · Period KD · Prior · Cups · YoY</text>
-  <text x="24" y="470" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Aligned cards · controls with their graph · no issues/recs in PDF</text>
-  <text x="24" y="492" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Footer note: revenue excludes WEB cashless / remote credit</text>
+  <text x="24" y="470" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Strip: Actual revenue + WEB cashless = Total income (mix bar)</text>
+  <text x="24" y="492" fill="#64748b" font-size="9" font-family="Segoe UI, sans-serif">Default charts = Actual; + WEB cashless adds remote-credit dispenses</text>
 </svg>

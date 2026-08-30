@@ -219,7 +219,7 @@ export function OpsRevenueTotalsBar({
     <footer ref={barRef} className="opsRevenueTotalsBar" aria-label="Fleet revenue running total">
       <div className="opsRevenueTotalsInner">
         <div className="opsRevenueTotalsBrand">
-          <span className="opsRevenueTotalsEyebrow">Fleet revenue</span>
+          <span className="opsRevenueTotalsEyebrow">Fleet actual revenue</span>
           <span className="opsRevenueTotalsCount">{machineCount} machines</span>
           {asOfLocal || salesFreshnessNote ? (
             <span className="opsRevenueTotalsAsOfMobile">
@@ -234,7 +234,7 @@ export function OpsRevenueTotalsBar({
           <div className="opsRevenueTotalsGroup" aria-label="Compare period">
             <div
               className="opsRevenueTotalsMetric opsRevenueTotalsMetric--primary"
-              title={`${totals.primaryLabel}: fleet total revenue (KD) for the active compare preset. Customer sales only; excludes WEB cashless / remote credit.`}
+              title={`${totals.primaryLabel}: fleet actual revenue (KD) for the active compare preset. Customer sales only — excludes WEB cashless / remote-credit dispenses.`}
             >
               <span className="opsRevenueTotalsLabel">{totals.primaryLabel}</span>
               <span className="opsRevenueTotalsVal">{val(totals.primary)}</span>

@@ -18,17 +18,17 @@ export const PERF_PRODUCTS_SKU_PAGE = PERF_PRODUCTS_GRAPH_PAGE;
 export const PERF_PRODUCTS_MAX_SKUS = PERF_PRODUCTS_SKU_PAGE;
 
 const PRODUCT_COL_TIPS = {
-  periodKd: (label: string, includeCashless?: boolean) =>
-    includeCashless
-      ? `Total revenue (KD) for “${label}”, including WEB cashless / remote credit.`
-      : `Total revenue (KD) for “${label}”. Sum of customer vends only — excludes WEB cashless / remote credit.`,
+  periodKd: (label: string, includeWebCashless?: boolean) =>
+    includeWebCashless
+      ? `Period KD for “${label}” including WEB cashless (remote-credit dispenses).`
+      : `Period KD for “${label}” — actual revenue (customer sales; excludes WEB cashless).`,
   priorKd: (label: string) =>
     `Total revenue (KD) for “${label}” in the prior comparison window.`,
   vsPrior: 'Percent change in revenue KD vs the prior period.',
-  cups: (includeCashless?: boolean) =>
-    includeCashless
-      ? 'Total cups sold in the period (includes WEB cashless).'
-      : 'Total cups sold in the period (customer vends only; excludes remote credit).',
+  cups: (includeWebCashless?: boolean) =>
+    includeWebCashless
+      ? 'Cups in the period including WEB cashless dispenses.'
+      : 'Cups in the period — actual (customer) vends only.',
   priorCups: 'Total cups sold in the prior comparison period.',
   lyKd: 'Total revenue KD for the same calendar dates last year.',
   yoy: 'Percent change in revenue KD vs same dates last year.',
@@ -132,6 +132,13 @@ type ProductComparePayload = {
     prevKd?: number | null;
     yoyKd?: number | null;
     yoyKdFromProducts?: number | null;
+    /** Customer sales (excludes WEB cashless). Same as periodKd. */
+    actualRevenueKd?: number | null;
+    /** Remote-credit dispenses (WEB cashless). */
+    webCashlessKd?: number | null;
+    /** actualRevenueKd + webCashlessKd. */
+    totalIncomeKd?: number | null;
+    includeWebCashless?: boolean;
     note?: string;
   };
 };
@@ -195,7 +202,7 @@ type CompareOpts = {
   aEnd?: string;
   bStart?: string;
   bEnd?: string;
-  /** When true, include WEB cashless / remote credit in product KD. */
+  /** When true, product mix KD includes WEB cashless (remote-credit dispenses). */
   includeWebCashless?: boolean;
 };
 
@@ -238,7 +245,11 @@ async function fetchProductCompareBatched(
   let prevKd = 0;
   let yoyKd = 0;
   let yoyFromProducts = 0;
+  let actualRevenueKd = 0;
+  let webCashlessKd = 0;
+  let totalIncomeKd = 0;
   let hasPrev = false;
+  let hasBreakdown = false;
   for (const p of parts) {
     const t = p.totals;
     if (!t) continue;
@@ -251,6 +262,23 @@ async function fetchProductCompareBatched(
     if (t.yoyKdFromProducts != null && Number.isFinite(Number(t.yoyKdFromProducts))) {
       yoyFromProducts += Number(t.yoyKdFromProducts);
     }
+    if (t.actualRevenueKd != null && Number.isFinite(Number(t.actualRevenueKd))) {
+      actualRevenueKd += Number(t.actualRevenueKd);
+      hasBreakdown = true;
+    }
+    if (t.webCashlessKd != null && Number.isFinite(Number(t.webCashlessKd))) {
+      webCashlessKd += Number(t.webCashlessKd);
+      hasBreakdown = true;
+    }
+    if (t.totalIncomeKd != null && Number.isFinite(Number(t.totalIncomeKd))) {
+      totalIncomeKd += Number(t.totalIncomeKd);
+      hasBreakdown = true;
+    }
+  }
+  if (!hasBreakdown) {
+    actualRevenueKd = periodKd;
+    totalIncomeKd = periodKd;
+    webCashlessKd = 0;
   }
   return {
     ...first,
@@ -261,6 +289,10 @@ async function fetchProductCompareBatched(
       prevKd: hasPrev ? Math.round(prevKd * 10000) / 10000 : null,
       yoyKd: Math.round(yoyKd * 10000) / 10000,
       yoyKdFromProducts: Math.round(yoyFromProducts * 10000) / 10000,
+      actualRevenueKd: Math.round(actualRevenueKd * 10000) / 10000,
+      webCashlessKd: Math.round(webCashlessKd * 10000) / 10000,
+      totalIncomeKd: Math.round(totalIncomeKd * 10000) / 10000,
+      includeWebCashless: first.totals?.includeWebCashless,
       note: first.totals?.note,
     },
     error: parts.map((p) => p.error).find(Boolean),
@@ -2154,28 +2186,108 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
             </div>
           </div>
 
-          <div className="perfProductsField" role="group" aria-label="Cashless revenue">
-            <span className="perfProductsFieldLabel">Cashless</span>
+          <div className="perfProductsField" role="group" aria-label="Product mix revenue basis">
+            <span className="perfProductsFieldLabel">Mix basis</span>
             <div className="perfProductsMetricSeg">
               <button
                 type="button"
                 className={`perfSegPill ${!includeCashless ? 'active' : ''}`}
                 onClick={() => setIncludeCashless(false)}
-                title="Customer sales only — exclude WEB cashless / remote credit"
+                title="Actual revenue — customer sales only (excludes WEB cashless / remote-credit dispenses)"
               >
-                Customer only
+                Actual revenue
               </button>
               <button
                 type="button"
                 className={`perfSegPill ${includeCashless ? 'active' : ''}`}
                 onClick={() => setIncludeCashless(true)}
-                title="Include WEB cashless / remote credit in KD and cups"
+                title="Include WEB cashless (remote-credit dispenses) in product KD and cups"
               >
-                Include cashless
+                + WEB cashless
               </button>
             </div>
           </div>
         </div>
+
+        {(() => {
+          const t = compareQ.data?.totals;
+          const actual =
+            t?.actualRevenueKd != null && Number.isFinite(Number(t.actualRevenueKd))
+              ? Number(t.actualRevenueKd)
+              : t?.periodKd != null && Number.isFinite(Number(t.periodKd))
+                ? Number(t.periodKd)
+                : null;
+          const web =
+            t?.webCashlessKd != null && Number.isFinite(Number(t.webCashlessKd))
+              ? Number(t.webCashlessKd)
+              : null;
+          const total =
+            t?.totalIncomeKd != null && Number.isFinite(Number(t.totalIncomeKd))
+              ? Number(t.totalIncomeKd)
+              : actual != null && web != null
+                ? actual + web
+                : actual;
+          const show = !locNone && (actual != null || web != null || total != null);
+          if (!show) return null;
+          const tot = total != null && total > 0 ? total : null;
+          const actualPct = tot != null && actual != null ? Math.round((actual / tot) * 1000) / 10 : null;
+          const webPct = tot != null && web != null ? Math.round((web / tot) * 1000) / 10 : null;
+          return (
+            <div className="perfRevBreakdown" aria-label="Revenue breakdown for selected locations">
+              <div className="perfRevBreakdownBrief">
+                <div className="perfRevBreakdownMetric" title="Customer sales — excludes WEB cashless">
+                  <span className="perfRevBreakdownLabel">Actual revenue</span>
+                  <span className="perfRevBreakdownVal">
+                    {compareQ.isLoading ? '…' : actual != null ? formatKwd(actual) : '—'}
+                  </span>
+                </div>
+                <span className="perfRevBreakdownOp" aria-hidden>
+                  +
+                </span>
+                <div
+                  className="perfRevBreakdownMetric"
+                  title="WEB cashless = remote-credit dispenses (credits are per machine; product is on the vend that follows)"
+                >
+                  <span className="perfRevBreakdownLabel">WEB cashless</span>
+                  <span className="perfRevBreakdownVal perfRevBreakdownValWeb">
+                    {compareQ.isLoading ? '…' : web != null ? formatKwd(web) : '—'}
+                  </span>
+                </div>
+                <span className="perfRevBreakdownOp" aria-hidden>
+                  =
+                </span>
+                <div className="perfRevBreakdownMetric" title="All Vendon vends in the window (actual + WEB cashless)">
+                  <span className="perfRevBreakdownLabel">Total income</span>
+                  <span className="perfRevBreakdownVal">
+                    {compareQ.isLoading ? '…' : total != null ? formatKwd(total) : '—'}
+                  </span>
+                </div>
+              </div>
+              <div
+                className="perfRevBreakdownBar"
+                role="img"
+                aria-label={
+                  actualPct != null && webPct != null
+                    ? `Actual ${actualPct}%, WEB cashless ${webPct}%`
+                    : 'Revenue mix bar'
+                }
+              >
+                <span
+                  className="perfRevBreakdownBarActual"
+                  style={{ width: `${actualPct != null ? actualPct : 100}%` }}
+                />
+                <span
+                  className="perfRevBreakdownBarWeb"
+                  style={{ width: `${webPct != null ? webPct : 0}%` }}
+                />
+              </div>
+              <p className="perfRevBreakdownHint">
+                Actual revenue = Total income − WEB cashless. Charts default to Actual; “+ WEB cashless”
+                adds remote-credit dispenses to the product mix (not the credit-send action itself).
+              </p>
+            </div>
+          );
+        })()}
 
         {timeCriteria === 'compare:custom_vs_custom' ? (
           <div className="perfProductsCustomRange">

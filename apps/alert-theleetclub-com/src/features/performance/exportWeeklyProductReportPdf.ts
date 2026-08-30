@@ -347,7 +347,8 @@ export function downloadWeeklyProductReportPdf(opts: WeeklyPdfOpts) {
     y += lines.length * 4.2 + 3;
   };
 
-  const footerNote = 'Revenue excludes WEB cashless / remote credit (customer sales only).';
+  const footerNote =
+    'Actual revenue = customer sales only (excludes WEB cashless / remote-credit dispenses).';
 
   const stampFooter = () => {
     const pageCount = doc.getNumberOfPages();

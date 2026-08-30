@@ -1508,6 +1508,87 @@ button.perfKpiClick:hover {
   align-items: end;
 }
 
+.perfRevBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--panel2) 88%, #0b5394 12%);
+}
+
+.perfRevBreakdownBrief {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+}
+
+.perfRevBreakdownMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 5.5rem;
+}
+
+.perfRevBreakdownLabel {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.perfRevBreakdownVal {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.perfRevBreakdownValWeb {
+  color: #6fa8dc;
+}
+
+.perfRevBreakdownOp {
+  align-self: flex-end;
+  padding-bottom: 0.15rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.perfRevBreakdownBar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 70%, #333 30%);
+}
+
+.perfRevBreakdownBarActual {
+  display: block;
+  height: 100%;
+  background: #57bb8a;
+  min-width: 0;
+}
+
+.perfRevBreakdownBarWeb {
+  display: block;
+  height: 100%;
+  background: #6fa8dc;
+  min-width: 0;
+}
+
+.perfRevBreakdownHint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .perfProductsField {
   display: flex;
   flex-direction: column;

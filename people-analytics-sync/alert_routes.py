@@ -4317,7 +4317,7 @@ def register_alert_routes(app) -> None:
 
         id_sig = hashlib.sha1(",".join(sorted(requested)).encode("utf-8")).hexdigest()[:16]
         cache_key = (
-            f"perf:product-compare:v9:{preset_id}:{win_s}:{win_e}:"
+            f"perf:product-compare:v10:{preset_id}:{win_s}:{win_e}:"
             f"{prev_s}:{prev_e}:c{int(compare_on)}:w{int(include_web)}:{id_sig}"
         )
         cached = _alert_cache_get(cache_key, 90)
@@ -4741,6 +4741,31 @@ def register_alert_routes(app) -> None:
                         pass
                 return round(tot, 4)
 
+            def _sum_payload_product_map(
+                rows: List[Any],
+                start_incl: date,
+                end_excl: date,
+                key: str,
+            ) -> float:
+                """Sum values in payload_json[key] product maps (e.g. productSalesAll)."""
+                tot = 0.0
+                for r in rows:
+                    cd = getattr(r, "cache_date", None)
+                    if cd is None or cd < start_incl or cd >= end_excl:
+                        continue
+                    payload = getattr(r, "payload_json", None)
+                    if not isinstance(payload, dict):
+                        continue
+                    ps = payload.get(key)
+                    if not isinstance(ps, dict):
+                        continue
+                    for v in ps.values():
+                        try:
+                            tot += float(v or 0)
+                        except (TypeError, ValueError):
+                            pass
+                return round(tot, 4)
+
             for m in machines_out:
                 mid = str(m.get("machineId") or "")
                 mrows = by_mid.get(mid) or []
@@ -4766,6 +4791,23 @@ def register_alert_routes(app) -> None:
             fleet_yoy_kd_cache = round(fleet_yoy_kd_cache, 4)
             fleet_yoy_from_products = round(
                 sum(float(m.get("yoyKd") or 0) for m in machines_out), 4
+            )
+
+            # Revenue basis breakdown (selection window):
+            # actual = customer sales cache; totalIncome = productSalesAll when present;
+            # webCashless = totalIncome − actual (remote-credit dispenses).
+            fleet_total_income = 0.0
+            for mid in requested:
+                mrows = by_mid.get(mid) or []
+                all_kd = _sum_payload_product_map(
+                    mrows, win_s, win_e + timedelta(days=1), "productSalesAll"
+                )
+                actual_kd = _sum_total_sales_kwd(mrows, win_s, win_e + timedelta(days=1))
+                # If All mix missing for some days, fall back so total ≥ actual.
+                fleet_total_income += max(all_kd, actual_kd)
+            fleet_total_income = round(fleet_total_income, 4)
+            fleet_web_cashless = round(
+                max(0.0, fleet_total_income - fleet_period_kd_cache), 4
             )
 
             # Fleet-level daily rollup (same dates, products summed across requested machines).
@@ -4861,10 +4903,15 @@ def register_alert_routes(app) -> None:
                     "prevKd": fleet_prev_kd_cache,
                     "yoyKd": fleet_yoy_kd_cache,
                     "yoyKdFromProducts": fleet_yoy_from_products,
+                    "actualRevenueKd": fleet_period_kd_cache,
+                    "webCashlessKd": fleet_web_cashless,
+                    "totalIncomeKd": fleet_total_income,
+                    "includeWebCashless": include_web,
                     "note": (
-                        "periodKd/yoyKd are sum of daily customer sales cache "
-                        "(excludes WEB cashless). yoyKdFromProducts is SKU mix only "
-                        "and may undercount if last-year mix was not seeded."
+                        "actualRevenueKd/periodKd = customer sales (excludes WEB cashless). "
+                        "webCashlessKd = remote-credit dispenses. "
+                        "totalIncomeKd = actual + WEB cashless. "
+                        "yoyKdFromProducts is SKU mix only and may undercount if LY mix was not seeded."
                     ),
                 },
             }
