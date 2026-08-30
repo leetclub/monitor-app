@@ -53,13 +53,31 @@ function resolveFleetBarLeft(): number {
 
 function syncFleetBarChrome(barEl: HTMLElement) {
   const h = Math.max(64, Math.ceil(barEl.getBoundingClientRect().height));
-  document.documentElement.style.setProperty('--ops-revenue-bar-h', `${h}px`);
-
   const left = resolveFleetBarLeft();
-  document.documentElement.style.setProperty('--ops-revenue-bar-left', `${left}px`);
-  barEl.style.setProperty('left', `${left}px`, 'important');
-  barEl.style.setProperty('right', '0px', 'important');
-  barEl.style.setProperty('width', 'auto', 'important');
+  const root = document.documentElement;
+
+  const prevH = root.style.getPropertyValue('--ops-revenue-bar-h').trim();
+  const nextH = `${h}px`;
+  if (prevH !== nextH) {
+    root.style.setProperty('--ops-revenue-bar-h', nextH);
+  }
+
+  const prevLeft = root.style.getPropertyValue('--ops-revenue-bar-left').trim();
+  const nextLeft = `${left}px`;
+  if (prevLeft !== nextLeft) {
+    root.style.setProperty('--ops-revenue-bar-left', nextLeft);
+  }
+
+  // Avoid layout thrash: only write inline styles when they actually change
+  if (barEl.style.getPropertyValue('left') !== nextLeft) {
+    barEl.style.setProperty('left', nextLeft, 'important');
+  }
+  if (barEl.style.getPropertyValue('right') !== '0px') {
+    barEl.style.setProperty('right', '0px', 'important');
+  }
+  if (barEl.style.getPropertyValue('width') !== 'auto') {
+    barEl.style.setProperty('width', 'auto', 'important');
+  }
 
   document.querySelector('.v2AppRoot')?.classList.add('hasOpsFleetRevenuePad');
 }
@@ -151,18 +169,25 @@ export function OpsRevenueTotalsBar({
     const el = barRef.current;
     if (!el) return;
 
-    const apply = () => syncFleetBarChrome(el);
+    let raf = 0;
+    const apply = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        syncFleetBarChrome(el);
+      });
+    };
+
     apply();
-    requestAnimationFrame(apply);
 
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     const nav = document.querySelector('.appShell .sideNav');
     const v2Nav = document.querySelector('.v2AppRoot .v2Sidebar');
-    const main = document.querySelector('.appShell .mainColumn');
+    // Do NOT observe .mainColumn — padding from --ops-revenue-bar-h resizes it and
+    // used to create an infinite ResizeObserver loop that froze all clicks.
     if (nav) ro.observe(nav);
     if (v2Nav) ro.observe(v2Nav);
-    if (main) ro.observe(main);
 
     window.addEventListener('resize', apply);
     window.addEventListener('orientationchange', apply);
@@ -172,11 +197,13 @@ export function OpsRevenueTotalsBar({
     let mo: MutationObserver | null = null;
     if (shell || v2Root) {
       mo = new MutationObserver(apply);
-      if (shell) mo.observe(shell, { attributes: true, attributeFilter: ['class'], subtree: true });
-      if (v2Root) mo.observe(v2Root, { attributes: true, attributeFilter: ['class'], subtree: true });
+      // Only watch the shell root class (rail/drawer), not the whole subtree.
+      if (shell) mo.observe(shell, { attributes: true, attributeFilter: ['class'] });
+      if (v2Root) mo.observe(v2Root, { attributes: true, attributeFilter: ['class'] });
     }
 
     return () => {
+      if (raf) window.cancelAnimationFrame(raf);
       ro.disconnect();
       mo?.disconnect();
       window.removeEventListener('resize', apply);

@@ -43,7 +43,6 @@
   color: #e8edf5 !important;
   border-color: #4b5563 !important;
   color-scheme: dark !important;
-  -webkit-text-fill-color: #e8edf5;
 }
 
 .stitchShell select option,
@@ -67,5 +66,21 @@
 .loginCard input,
 .loginCard textarea {
   color-scheme: light;
-  -webkit-text-fill-color: unset;
+}
+
+/* Keep Google Sign-In clickable and readable — never inherit dark ops overrides */
+.loginShell,
+.loginCard {
+  color-scheme: light;
+  pointer-events: auto;
+}
+
+.loginShell iframe,
+.loginShell div[id^='gsi_'],
+.loginShell .g_id_signin,
+.loginShell [data-g-id],
+#credential_picker_container,
+#g_a11y_announcement {
+  pointer-events: auto !important;
+  color-scheme: light !important;
 }
