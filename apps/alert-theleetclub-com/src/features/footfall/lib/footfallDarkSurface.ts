@@ -1,6 +1,4 @@
-/** v2 is always dark. Only explicit Light mode uses the white chart palette. */
+/** Footfall ops UI is always dark — never follow Pro/Light shell white panels. */
 export function footfallSurfaceIsDark(): boolean {
-  if (typeof document === 'undefined') return true;
-  if (document.querySelector('.v2AppRoot')) return true;
-  return document.documentElement.getAttribute('data-mode') !== 'light';
+  return true;
 }

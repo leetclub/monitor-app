@@ -10,7 +10,6 @@ import {
   FootfallViewModeProvider,
   type FootfallViewMode,
 } from '@/features/footfall/FootfallViewMode';
-import { useFootfallDarkSurface } from '@/features/footfall/NightChartContext';
 import {
   persistCompareSelection,
   readStoredCompareSelection,
@@ -34,7 +33,6 @@ export function FootfallPage() {
   /** Default: camera as measured — mirror/unique only via Mirror & adjust. */
   const [mode, setMode] = useState<FootfallViewMode>('raw');
   const [compare, setCompareState] = useState<CompareSelection>(() => initialFootfallCompare());
-  const darkMode = useFootfallDarkSurface();
 
   useEffect(() => {
     prefetchDefaultCache();
@@ -46,7 +44,7 @@ export function FootfallPage() {
   }, []);
 
   return (
-    <div className={darkMode ? 'alertFootfallRoot alertFootfallDark' : 'alertFootfallRoot'}>
+    <div className="alertFootfallRoot alertFootfallDark">
       <div className="ffAlertToolbar" role="toolbar" aria-label="Footfall controls">
         <div className="ffAlertMode" role="group" aria-label="Footfall numbers">
           <span className="ffAlertModeLabel">Footfall</span>

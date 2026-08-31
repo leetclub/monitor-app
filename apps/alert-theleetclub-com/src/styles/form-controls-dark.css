@@ -252,13 +252,19 @@ html[data-theme='pro'][data-mode='dark'] .proCompareChip {
   color: #e8edf5;
 }
 
-/* Classic / Pro light mode: restore light native chrome (don't force ops dark) */
+/* Classic / Pro light mode: restore light native chrome on shell chrome only —
+ * never force Promo / Footfall back to light (those tabs stay dark ops). */
 html[data-mode='light'] .stitchShell,
 html[data-mode='light'] .perfLayout,
 html[data-mode='light'] .perfProducts,
-html[data-mode='light'] .promoPage,
-html[data-mode='light'] .alertFootfallRoot,
 html[data-theme='classic'][data-mode='light'],
 html[data-theme='pro'][data-mode='light'] {
   color-scheme: light;
+}
+
+html[data-mode='light'] .promoPage,
+html[data-mode='light'] .alertFootfallRoot,
+html[data-mode='light'] .ffCompareBar,
+html[data-mode='light'] .ffAlertCompareRow {
+  color-scheme: dark;
 }

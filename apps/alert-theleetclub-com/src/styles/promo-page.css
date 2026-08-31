@@ -237,33 +237,7 @@ html[data-theme='classic'][data-mode='light'] .promoDateRow input {
   color: var(--text, #e2e8f0);
 }
 
-/* Light mode: keep readable surfaces without hardcoding white-on-white */
-html[data-mode='light'] .promoPage,
-html[data-theme='classic'][data-mode='light'] .promoPage {
-  --panel: #ffffff;
-  --panel2: #f8fafc;
-  --bg-elevated: #ffffff;
-  --border: #d6d3d1;
-  --border-soft: rgba(214, 211, 209, 0.9);
-  --text: #1c1917;
-  --muted: #78716c;
-  color: var(--text);
-}
-
-html[data-mode='light'] .promoState,
-html[data-theme='classic'][data-mode='light'] .promoState {
-  background: var(--panel2);
-  border-color: var(--border);
-  color: var(--text);
-}
-
-html[data-mode='light'] .promoLocCard,
-html[data-theme='classic'][data-mode='light'] .promoLocCard {
-  background: var(--panel);
-  border-color: var(--border);
-}
-
-html[data-mode='light'] .promoDayBarTrack,
-html[data-theme='classic'][data-mode='light'] .promoDayBarTrack {
-  background: var(--panel2);
-}
+/*
+ * Promo stays dark ops chrome even under Pro/Light shell.
+ * White panel restores made text harder to read — do not bring them back.
+ */

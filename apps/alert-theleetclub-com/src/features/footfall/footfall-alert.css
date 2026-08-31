@@ -550,41 +550,44 @@ html[data-mode='dark'] .alertFootfallRoot .ownersLoginBlock,
   border-color: var(--border) !important;
 }
 
-/* Light mode only — otherwise Footfall stays on dark ops surfaces */
-html[data-mode='light'] .alertFootfallRoot {
-  --panel: #ffffff;
-  --panel2: #f8fafc;
-  --bg-elevated: #ffffff;
-  --ff-page: #f4f1ec;
-  --card: #ffffff;
-  --card-soft: #f0ebe4;
-  --surface: #f8fafc;
-  --border: #d6d3d1;
-  --text: #1c1917;
-  --muted: #78716c;
+/*
+ * Footfall stays on dark ops surfaces even when the shell is Pro/Light.
+ * Do not reintroduce white toolbars/cards here — they wash out text.
+ */
+
+.alertFootfallRoot .periodCompareSection,
+.alertFootfallRoot .comparePeriodKpis,
+.alertFootfallRoot .periodCompareSectionOff {
+  background: #1a1f28;
+  color: #e2e2e9;
+  border-color: #30363d;
 }
 
-html[data-mode='light'] .ffAlertToolbar,
-html[data-mode='light'] .ffAlertCompareRow {
-  background: #ffffff;
-  border-color: #d6d3d1;
-  color: #1c1917;
+.alertFootfallRoot .comparePeriodTable,
+.alertFootfallRoot .metricsTable {
+  color: #e2e2e9;
 }
 
-html[data-mode='light'] .ffAlertModeBtn,
-html[data-mode='light'] .ffAlertSubTab {
-  background: #f8fafc;
-  border-color: #d6d3d1;
-  color: #1c1917;
+.alertFootfallRoot .comparePeriodTable th,
+.alertFootfallRoot .metricsTable th {
+  background: #121820 !important;
+  color: #c5cdd8 !important;
 }
 
-html[data-mode='light'] .ffAlertModeBtn.active,
-html[data-mode='light'] .ffAlertSubTab.active {
-  border-color: #c45c4a;
-  background: rgba(196, 92, 74, 0.12);
-  color: #9a3412;
+.alertFootfallRoot .comparePeriodTable td,
+.alertFootfallRoot .metricsTable td {
+  color: #e2e2e9 !important;
+  border-bottom-color: #30363d !important;
 }
 
-html[data-mode='light'] .ffAlertModeLabel {
-  color: #78716c;
+.alertFootfallRoot .sectionTitle,
+.alertFootfallRoot .subsectionTitle,
+.alertFootfallRoot .locTitle {
+  color: #e2e2e9 !important;
+}
+
+.alertFootfallRoot .hint,
+.alertFootfallRoot .chartHint,
+.alertFootfallRoot .ffCompareHint {
+  color: #ad8883 !important;
 }
