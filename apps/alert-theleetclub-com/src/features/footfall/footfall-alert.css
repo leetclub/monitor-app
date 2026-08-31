@@ -120,7 +120,7 @@
  * dark-on-dark text (navy / forest / brown on charcoal panels).
  */
 .v2AppRoot .alertFootfallRoot,
-html[data-mode='dark'] .alertFootfallRoot,
+.alertFootfallRoot,
 .alertFootfallDark {
   color-scheme: dark;
   --card: #1e1f25;
@@ -142,15 +142,15 @@ html[data-mode='dark'] .alertFootfallRoot,
 .v2AppRoot .alertFootfallRoot .fleetHeatmapSection,
 .v2AppRoot .alertFootfallRoot .trendChartPanel,
 .v2AppRoot .alertFootfallRoot .chartPanelNight,
-html[data-mode='dark'] .alertFootfallRoot .chartPanel,
-html[data-mode='dark'] .alertFootfallRoot .chartBox,
-html[data-mode='dark'] .alertFootfallRoot .targetsHeatmapChart,
-html[data-mode='dark'] .alertFootfallRoot .hourlyChart,
-html[data-mode='dark'] .alertFootfallRoot .hourlyChartBlock,
-html[data-mode='dark'] .alertFootfallRoot .targetsHeatmapBlock,
-html[data-mode='dark'] .alertFootfallRoot .fleetHeatmapSection,
-html[data-mode='dark'] .alertFootfallRoot .trendChartPanel,
-html[data-mode='dark'] .alertFootfallRoot .chartPanelNight,
+.alertFootfallRoot .chartPanel,
+.alertFootfallRoot .chartBox,
+.alertFootfallRoot .targetsHeatmapChart,
+.alertFootfallRoot .hourlyChart,
+.alertFootfallRoot .hourlyChartBlock,
+.alertFootfallRoot .targetsHeatmapBlock,
+.alertFootfallRoot .fleetHeatmapSection,
+.alertFootfallRoot .trendChartPanel,
+.alertFootfallRoot .chartPanelNight,
 .alertFootfallDark .chartPanel,
 .alertFootfallDark .chartBox,
 .alertFootfallDark .targetsHeatmapChart,
@@ -166,17 +166,17 @@ html[data-mode='dark'] .alertFootfallRoot .chartPanelNight,
 }
 
 .v2AppRoot .alertFootfallRoot canvas,
-html[data-mode='dark'] .alertFootfallRoot canvas,
+.alertFootfallRoot canvas,
 .alertFootfallDark canvas,
 .v2AppRoot .alertFootfallRoot div[_echarts_instance_],
-html[data-mode='dark'] .alertFootfallRoot div[_echarts_instance_],
+.alertFootfallRoot div[_echarts_instance_],
 .alertFootfallDark div[_echarts_instance_],
 .v2AppRoot .alertFootfallRoot .chartPanel > div,
 .v2AppRoot .alertFootfallRoot .chartBox > div,
 .v2AppRoot .alertFootfallRoot .hourlyChart > div,
-html[data-mode='dark'] .alertFootfallRoot .chartPanel > div,
-html[data-mode='dark'] .alertFootfallRoot .chartBox > div,
-html[data-mode='dark'] .alertFootfallRoot .hourlyChart > div,
+.alertFootfallRoot .chartPanel > div,
+.alertFootfallRoot .chartBox > div,
+.alertFootfallRoot .hourlyChart > div,
 .alertFootfallDark .chartPanel > div,
 .alertFootfallDark .chartBox > div,
 .alertFootfallDark .hourlyChart > div {
@@ -184,16 +184,16 @@ html[data-mode='dark'] .alertFootfallRoot .hourlyChart > div,
   background-color: #0a0e14 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .btnSecondary,
+.alertFootfallRoot .btnSecondary,
 .alertFootfallDark .btnSecondary {
   background: rgba(255, 255, 255, 0.04);
   color: #ffd4c2;
   border-color: var(--border);
 }
 
-html[data-mode='dark'] .alertFootfallRoot input,
-html[data-mode='dark'] .alertFootfallRoot select,
-html[data-mode='dark'] .alertFootfallRoot textarea,
+.alertFootfallRoot input,
+.alertFootfallRoot select,
+.alertFootfallRoot textarea,
 .alertFootfallDark input,
 .alertFootfallDark select,
 .alertFootfallDark textarea {
@@ -203,20 +203,20 @@ html[data-mode='dark'] .alertFootfallRoot textarea,
   color-scheme: dark;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .kpi,
-html[data-mode='dark'] .alertFootfallRoot .insightCard,
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCard,
-html[data-mode='dark'] .alertFootfallRoot .sidebar,
-html[data-mode='dark'] .alertFootfallRoot .detail,
-html[data-mode='dark'] .alertFootfallRoot .dateFilters,
-html[data-mode='dark'] .alertFootfallRoot .filterBar,
-html[data-mode='dark'] .alertFootfallRoot .ffTopBar,
-html[data-mode='dark'] .alertFootfallRoot .compareQuickBar,
-html[data-mode='dark'] .alertFootfallRoot .locCard,
-html[data-mode='dark'] .alertFootfallRoot .panelExportWrap,
-html[data-mode='dark'] .alertFootfallRoot .panelExportCapture,
-html[data-mode='dark'] .alertFootfallRoot .metricsTableWrap,
-html[data-mode='dark'] .alertFootfallRoot .insightsPanel,
+.alertFootfallRoot .kpi,
+.alertFootfallRoot .insightCard,
+.alertFootfallRoot .hourlyCaptureCard,
+.alertFootfallRoot .sidebar,
+.alertFootfallRoot .detail,
+.alertFootfallRoot .dateFilters,
+.alertFootfallRoot .filterBar,
+.alertFootfallRoot .ffTopBar,
+.alertFootfallRoot .compareQuickBar,
+.alertFootfallRoot .locCard,
+.alertFootfallRoot .panelExportWrap,
+.alertFootfallRoot .panelExportCapture,
+.alertFootfallRoot .metricsTableWrap,
+.alertFootfallRoot .insightsPanel,
 .alertFootfallDark .kpi,
 .alertFootfallDark .insightCard,
 .alertFootfallDark .hourlyCaptureCard,
@@ -239,26 +239,26 @@ html[data-mode='dark'] .alertFootfallRoot .insightsPanel,
   box-shadow: none !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .sectionFlyBarToggle,
+.alertFootfallRoot .sectionFlyBarToggle,
 .alertFootfallDark .sectionFlyBarToggle {
   background: var(--card-soft) !important;
   border-color: var(--border) !important;
   color: #ffd4c2 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .dayTable .avgRow,
+.alertFootfallRoot .dayTable .avgRow,
 .alertFootfallDark .dayTable .avgRow {
   background: rgba(46, 158, 90, 0.14) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .dayTable .cmpRow,
+.alertFootfallRoot .dayTable .cmpRow,
 .alertFootfallDark .dayTable .cmpRow {
   background: rgba(196, 92, 74, 0.12) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .metricsTable th,
-html[data-mode='dark'] .alertFootfallRoot .dayTable th,
-html[data-mode='dark'] .alertFootfallRoot .fleetTable th,
+.alertFootfallRoot .metricsTable th,
+.alertFootfallRoot .dayTable th,
+.alertFootfallRoot .fleetTable th,
 .alertFootfallDark .metricsTable th,
 .alertFootfallDark .dayTable th,
 .alertFootfallDark .fleetTable th {
@@ -267,9 +267,9 @@ html[data-mode='dark'] .alertFootfallRoot .fleetTable th,
   border-color: var(--border) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .metricsTable td,
-html[data-mode='dark'] .alertFootfallRoot .dayTable td,
-html[data-mode='dark'] .alertFootfallRoot .fleetTable td,
+.alertFootfallRoot .metricsTable td,
+.alertFootfallRoot .dayTable td,
+.alertFootfallRoot .fleetTable td,
 .alertFootfallDark .metricsTable td,
 .alertFootfallDark .dayTable td,
 .alertFootfallDark .fleetTable td {
@@ -277,8 +277,8 @@ html[data-mode='dark'] .alertFootfallRoot .fleetTable td,
   border-color: var(--border) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .dataQualityBanner,
-html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner,
+.alertFootfallRoot .dataQualityBanner,
+.alertFootfallRoot .hourlyGapBanner,
 .alertFootfallDark .dataQualityBanner,
 .alertFootfallDark .hourlyGapBanner {
   background: rgba(251, 191, 36, 0.12) !important;
@@ -286,8 +286,8 @@ html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner,
   color: #fde68a !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .kpi:hover,
-html[data-mode='dark'] .alertFootfallRoot .kpiAccent:hover,
+.alertFootfallRoot .kpi:hover,
+.alertFootfallRoot .kpiAccent:hover,
 .alertFootfallDark .kpi:hover,
 .alertFootfallDark .kpiAccent:hover {
   background: var(--card-soft) !important;
@@ -296,18 +296,18 @@ html[data-mode='dark'] .alertFootfallRoot .kpiAccent:hover,
   box-shadow: none !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locBtn.active,
+.alertFootfallRoot .locBtn.active,
 .alertFootfallDark .locBtn.active {
   background: rgba(196, 92, 74, 0.22) !important;
   color: var(--text) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locBtn.active .locName,
+.alertFootfallRoot .locBtn.active .locName,
 .alertFootfallDark .locBtn.active .locName {
   color: #ffd4c2 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .chartExportBtn,
+.alertFootfallRoot .chartExportBtn,
 .alertFootfallDark .chartExportBtn {
   background: rgba(18, 24, 32, 0.92) !important;
   color: #ffd4c2 !important;
@@ -315,8 +315,8 @@ html[data-mode='dark'] .alertFootfallRoot .chartExportBtn,
   box-shadow: none !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .explainerTable,
-html[data-mode='dark'] .alertFootfallRoot .explainerExample,
+.alertFootfallRoot .explainerTable,
+.alertFootfallRoot .explainerExample,
 .alertFootfallDark .explainerTable,
 .alertFootfallDark .explainerExample {
   background: rgba(18, 24, 32, 0.85) !important;
@@ -324,18 +324,18 @@ html[data-mode='dark'] .alertFootfallRoot .explainerExample,
   border-color: rgba(251, 191, 36, 0.35) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .explainerTable th,
-html[data-mode='dark'] .alertFootfallRoot .explainerTable td,
+.alertFootfallRoot .explainerTable th,
+.alertFootfallRoot .explainerTable td,
 .alertFootfallDark .explainerTable th,
 .alertFootfallDark .explainerTable td {
   color: var(--text) !important;
   border-color: var(--border) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .explainerToggle strong,
-html[data-mode='dark'] .alertFootfallRoot .explainerBody em,
-html[data-mode='dark'] .alertFootfallRoot .explainerWarn,
-html[data-mode='dark'] .alertFootfallRoot .sectionTitleNote,
+.alertFootfallRoot .explainerToggle strong,
+.alertFootfallRoot .explainerBody em,
+.alertFootfallRoot .explainerWarn,
+.alertFootfallRoot .sectionTitleNote,
 .alertFootfallDark .explainerToggle strong,
 .alertFootfallDark .explainerBody em,
 .alertFootfallDark .explainerWarn,
@@ -343,64 +343,64 @@ html[data-mode='dark'] .alertFootfallRoot .sectionTitleNote,
   color: #fdba74 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locSegPill-KU,
-html[data-mode='dark'] .alertFootfallRoot .areasSegPill-KU,
+.alertFootfallRoot .locSegPill-KU,
+.alertFootfallRoot .areasSegPill-KU,
 .alertFootfallDark .locSegPill-KU,
 .alertFootfallDark .areasSegPill-KU {
   background: rgba(96, 165, 250, 0.18) !important;
   color: #93c5fd !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locSegPill-MOH,
-html[data-mode='dark'] .alertFootfallRoot .areasSegPill-MOH,
+.alertFootfallRoot .locSegPill-MOH,
+.alertFootfallRoot .areasSegPill-MOH,
 .alertFootfallDark .locSegPill-MOH,
 .alertFootfallDark .areasSegPill-MOH {
   background: rgba(74, 222, 128, 0.14) !important;
   color: #86efac !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locSegPill-O2,
-html[data-mode='dark'] .alertFootfallRoot .areasSegPill-O2,
+.alertFootfallRoot .locSegPill-O2,
+.alertFootfallRoot .areasSegPill-O2,
 .alertFootfallDark .locSegPill-O2,
 .alertFootfallDark .areasSegPill-O2 {
   background: rgba(167, 139, 250, 0.18) !important;
   color: #c4b5fd !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locSegPill-OTHER,
-html[data-mode='dark'] .alertFootfallRoot .areasSegPill-OTHER,
+.alertFootfallRoot .locSegPill-OTHER,
+.alertFootfallRoot .areasSegPill-OTHER,
 .alertFootfallDark .locSegPill-OTHER,
 .alertFootfallDark .areasSegPill-OTHER {
   background: var(--card-soft) !important;
   color: #d4d4d8 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-achieved,
+.alertFootfallRoot .areasStatusBadge-achieved,
 .alertFootfallDark .areasStatusBadge-achieved {
   background: rgba(74, 222, 128, 0.16) !important;
   color: #86efac !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-on-track,
+.alertFootfallRoot .areasStatusBadge-on-track,
 .alertFootfallDark .areasStatusBadge-on-track {
   background: rgba(96, 165, 250, 0.16) !important;
   color: #93c5fd !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-at-risk,
+.alertFootfallRoot .areasStatusBadge-at-risk,
 .alertFootfallDark .areasStatusBadge-at-risk {
   background: rgba(251, 191, 36, 0.14) !important;
   color: #fde68a !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .areasStatusBadge-behind,
+.alertFootfallRoot .areasStatusBadge-behind,
 .alertFootfallDark .areasStatusBadge-behind {
   background: rgba(248, 113, 113, 0.16) !important;
   color: #fca5a5 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .periodContextBar,
-html[data-mode='dark'] .alertFootfallRoot .targetsPeriodBar,
+.alertFootfallRoot .periodContextBar,
+.alertFootfallRoot .targetsPeriodBar,
 .alertFootfallDark .periodContextBar,
 .alertFootfallDark .targetsPeriodBar {
   background: var(--card) !important;
@@ -409,17 +409,17 @@ html[data-mode='dark'] .alertFootfallRoot .targetsPeriodBar,
   box-shadow: none !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .targetsPeriodBar strong,
-html[data-mode='dark'] .alertFootfallRoot .periodContextLocation,
+.alertFootfallRoot .targetsPeriodBar strong,
+.alertFootfallRoot .periodContextLocation,
 .alertFootfallDark .targetsPeriodBar strong,
 .alertFootfallDark .periodContextLocation {
   color: #ffd4c2 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .periodContextTag,
-html[data-mode='dark'] .alertFootfallRoot .targetsPeriodTag,
-html[data-mode='dark'] .alertFootfallRoot .periodContextSub,
-html[data-mode='dark'] .alertFootfallRoot .targetsPeriodAlt,
+.alertFootfallRoot .periodContextTag,
+.alertFootfallRoot .targetsPeriodTag,
+.alertFootfallRoot .periodContextSub,
+.alertFootfallRoot .targetsPeriodAlt,
 .alertFootfallDark .periodContextTag,
 .alertFootfallDark .targetsPeriodTag,
 .alertFootfallDark .periodContextSub,
@@ -427,69 +427,69 @@ html[data-mode='dark'] .alertFootfallRoot .targetsPeriodAlt,
   color: var(--muted) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardWarn,
-html[data-mode='dark'] .alertFootfallRoot .hourlyGapBanner:not(.hourlyGapBannerOk),
+.alertFootfallRoot .hourlyCaptureCardWarn,
+.alertFootfallRoot .hourlyGapBanner:not(.hourlyGapBannerOk),
 .alertFootfallDark .hourlyCaptureCardWarn {
   background: rgba(196, 92, 74, 0.14) !important;
   border-color: rgba(196, 92, 74, 0.4) !important;
   color: #ffd4c2 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureValue,
+.alertFootfallRoot .hourlyCaptureValue,
 .alertFootfallDark .hourlyCaptureValue {
   color: inherit;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardWarn .hourlyCaptureValue,
+.alertFootfallRoot .hourlyCaptureCardWarn .hourlyCaptureValue,
 .alertFootfallDark .hourlyCaptureCardWarn .hourlyCaptureValue {
   color: #fca5a5 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardFootfall .hourlyCaptureValue,
+.alertFootfallRoot .hourlyCaptureCardFootfall .hourlyCaptureValue,
 .alertFootfallDark .hourlyCaptureCardFootfall .hourlyCaptureValue {
   color: #7dd3fc !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardSold .hourlyCaptureValue,
+.alertFootfallRoot .hourlyCaptureCardSold .hourlyCaptureValue,
 .alertFootfallDark .hourlyCaptureCardSold .hourlyCaptureValue {
   color: #86efac !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardTarget .hourlyCaptureValue,
+.alertFootfallRoot .hourlyCaptureCardTarget .hourlyCaptureValue,
 .alertFootfallDark .hourlyCaptureCardTarget .hourlyCaptureValue {
   color: #fdba74 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .hourlyCaptureCardRevenue .hourlyCaptureValue,
+.alertFootfallRoot .hourlyCaptureCardRevenue .hourlyCaptureValue,
 .alertFootfallDark .hourlyCaptureCardRevenue .hourlyCaptureValue {
   color: #fbbf24 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .weekTabActive,
+.alertFootfallRoot .weekTabActive,
 .alertFootfallDark .weekTabActive {
   background: rgba(196, 92, 74, 0.28) !important;
   border-color: #c45c4a !important;
   color: #ffd4c2 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .segmentTabCount,
+.alertFootfallRoot .segmentTabCount,
 .alertFootfallDark .segmentTabCount {
   background: rgba(196, 92, 74, 0.35) !important;
   color: #ffd4c2 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .segmentTabActive .segmentTabCount,
+.alertFootfallRoot .segmentTabActive .segmentTabCount,
 .alertFootfallDark .segmentTabActive .segmentTabCount {
   background: #c45c4a !important;
   color: #fff5f0 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .muted,
-html[data-mode='dark'] .alertFootfallRoot .filterMeta,
-html[data-mode='dark'] .alertFootfallRoot .filterBarHint,
-html[data-mode='dark'] .alertFootfallRoot .kpiHint,
-html[data-mode='dark'] .alertFootfallRoot .kpiLabel,
-html[data-mode='dark'] .alertFootfallRoot .subtitle,
+.alertFootfallRoot .muted,
+.alertFootfallRoot .filterMeta,
+.alertFootfallRoot .filterBarHint,
+.alertFootfallRoot .kpiHint,
+.alertFootfallRoot .kpiLabel,
+.alertFootfallRoot .subtitle,
 .alertFootfallDark .muted,
 .alertFootfallDark .filterMeta,
 .alertFootfallDark .filterBarHint,
@@ -499,11 +499,11 @@ html[data-mode='dark'] .alertFootfallRoot .subtitle,
   color: var(--muted) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .locName,
-html[data-mode='dark'] .alertFootfallRoot .kpiValue,
-html[data-mode='dark'] .alertFootfallRoot .metricValue,
-html[data-mode='dark'] .alertFootfallRoot .termKey,
-html[data-mode='dark'] .alertFootfallRoot .locTitle,
+.alertFootfallRoot .locName,
+.alertFootfallRoot .kpiValue,
+.alertFootfallRoot .metricValue,
+.alertFootfallRoot .termKey,
+.alertFootfallRoot .locTitle,
 .alertFootfallDark .locName,
 .alertFootfallDark .kpiValue,
 .alertFootfallDark .metricValue,
@@ -512,8 +512,8 @@ html[data-mode='dark'] .alertFootfallRoot .locTitle,
   color: var(--text);
 }
 
-html[data-mode='dark'] .alertFootfallRoot .salesLegendActual,
-html[data-mode='dark'] .alertFootfallRoot .targetsTrajectoryTodayBtn,
+.alertFootfallRoot .salesLegendActual,
+.alertFootfallRoot .targetsTrajectoryTodayBtn,
 .alertFootfallDark .salesLegendActual,
 .alertFootfallDark .targetsTrajectoryTodayBtn {
   color: #93c5fd !important;
@@ -521,30 +521,30 @@ html[data-mode='dark'] .alertFootfallRoot .targetsTrajectoryTodayBtn,
   background: var(--card) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .salesLegendProxyBench,
-html[data-mode='dark'] .alertFootfallRoot .salesLegendProxyNear,
-html[data-mode='dark'] .alertFootfallRoot .ownersLoginMissing,
+.alertFootfallRoot .salesLegendProxyBench,
+.alertFootfallRoot .salesLegendProxyNear,
+.alertFootfallRoot .ownersLoginMissing,
 .alertFootfallDark .salesLegendProxyBench,
 .alertFootfallDark .salesLegendProxyNear,
 .alertFootfallDark .ownersLoginMissing {
   color: #fdba74 !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .ownersLoginStatus,
-html[data-mode='dark'] .alertFootfallRoot .promoSwipeDelta,
+.alertFootfallRoot .ownersLoginStatus,
+.alertFootfallRoot .promoSwipeDelta,
 .alertFootfallDark .ownersLoginStatus,
 .alertFootfallDark .promoSwipeDelta {
   color: #86efac !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .areasAdminLoginNote,
+.alertFootfallRoot .areasAdminLoginNote,
 .alertFootfallDark .areasAdminLoginNote {
   color: #fde68a !important;
   background: rgba(251, 191, 36, 0.1) !important;
   border-color: rgba(251, 191, 36, 0.35) !important;
 }
 
-html[data-mode='dark'] .alertFootfallRoot .ownersLoginBlock,
+.alertFootfallRoot .ownersLoginBlock,
 .alertFootfallDark .ownersLoginBlock {
   background: var(--card-soft) !important;
   border-color: var(--border) !important;

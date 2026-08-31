@@ -103,7 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
-| 2026-08-31 | **Footfall/Promo always dark ops:** Removed Light-mode white panel restores that made Pro shells worse; Footfall charts/tables stay dark with readable text. |
+| 2026-08-31 | **Footfall/Promo always dark ops:** Dark surface CSS no longer gated on shell Dark mode; Pro Light white panel overrides skipped for Footfall/Promo; removed Light-mode white restores. |
 | 2026-08-31 | **Footfall Period vs Compare:** Report now loads Compare (B) dates; location detail shows **Period comparison** (totals Δ + daily/hourly charts). Compare bar hint points there. |
 | 2026-08-31 | **Footfall/Promo white panels:** Toolbar/cards no longer inherit Pro `--panel: #fff`. Local dark ops tokens + hardcoded `.ffAlertToolbar` / compare bar backgrounds. |
 | 2026-08-31 | **Promo + Footfall dark controls:** Date/select (including Footfall’s disabled Period dates) stay dark in Chrome/Safari; heatmap/charts use dark palette unless Light mode; Footfall `--surface` no longer falls through to a blank/light fill. |

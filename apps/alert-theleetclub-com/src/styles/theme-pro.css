@@ -392,8 +392,24 @@ html[data-theme='pro'] .appShellPro .adminCard {
   border-radius: 16px;
 }
 
+/* Footfall + Promo stay dark ops — never inherit Pro white panels */
+html[data-theme='pro'] .appShellPro .alertFootfallRoot,
+html[data-theme='pro'] .appShellPro .alertFootfallRoot .panel,
+html[data-theme='pro'] .appShellPro .promoPage,
+html[data-theme='pro'] .appShellPro .promoPage .panel,
+html[data-theme='pro'] .appShellPro .promoPage .adminCard {
+  background: #1a1f28;
+  border-color: #30363d;
+  color: #e2e2e9;
+}
+
 html[data-theme='pro'] .appShellPro .muted {
   color: #475569;
+}
+
+html[data-theme='pro'] .appShellPro .alertFootfallRoot .muted,
+html[data-theme='pro'] .appShellPro .promoPage .muted {
+  color: #ad8883;
 }
 
 /* Pro white form chrome — Admin + Login only (never fleet/ops/performance boards) */

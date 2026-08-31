@@ -137,11 +137,6 @@
   color-scheme: dark;
 }
 
-html[data-mode='light'] .promoDateRow input,
-html[data-theme='classic'][data-mode='light'] .promoDateRow input {
-  color-scheme: light;
-}
-
 .promoState {
   margin: 0 0 1rem;
   padding: 0.75rem 0.9rem;
