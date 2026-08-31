@@ -523,6 +523,44 @@ def _last_footfall_days_for_uidds(session: Session, uidds: List[str], count: int
     return sorted(out)
 
 
+def _footfall_days_for_period(
+    session: Session,
+    days_used: List[str],
+    uidds: Optional[List[str]] = None,
+    *,
+    fallback_days: Optional[List[str]] = None,
+    vl_cache: Optional[Dict[str, Dict[str, Dict[int, float]]]] = None,
+) -> Tuple[List[str], str]:
+    """Footfall dates may differ from Vendon sales dates when historical PA is missing."""
+    if not uidds:
+        # No camera: footfall is mirrored/projected — always use the sales week.
+        return list(days_used), "mirror_sales_calendar"
+    n = len(days_used)
+    if _db_has_footfall_for_uidds(session, uidds, days_used):
+        return days_used, "primary"
+    fb = list(fallback_days) if fallback_days else []
+    if fb and days_used != fb:
+        if _db_has_footfall_for_uidds(session, uidds, fb):
+            return fb, "fallback_footfall_db"
+    last_days = _last_footfall_days_for_uidds(session, uidds, n)
+    if last_days:
+        return last_days, "db_last_available"
+    probe = days_used if (not fb or days_used != fb) else fb
+    if vl_cache and any(
+        sum(
+            (vl_cache.get(d) or {}).get(uid, {}).get(h, 0)
+            for h in range(24)
+            for uid in uidds
+        )
+        > 0
+        for d in probe
+    ):
+        return days_used, "primary_videoloft"
+    if fb and days_used != fb:
+        return fb, "fallback_footfall_videoloft"
+    return days_used, "primary"
+
+
 def _collect_prefetch_uidds(
     machines: List[Dict[str, Any]],
     resolve_uidds_fn,
@@ -1830,12 +1868,19 @@ def _build_period_compare_bundle(
     fetch_vends_fn,
     vend_cache: Dict[Tuple[str, Tuple[str, ...]], Dict[int, List[Dict[str, float]]]],
     vl_cache: Optional[Dict[str, Dict[str, Dict[int, float]]]] = None,
+    fallback_days: Optional[List[str]] = None,
 ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """Hourly profile, period totals, and day-by-day rows for the compare week."""
     if not compare_days:
         return None, None, None
     vh2 = _get_cached_vh(machine_id, compare_days, fetch_vends_fn, vend_cache)
-    foot_days2, _ = _footfall_days_for_period(compare_days, uidds if uidds else None)
+    foot_days2, _ = _footfall_days_for_period(
+        session,
+        compare_days,
+        uidds if uidds else None,
+        fallback_days=fallback_days,
+        vl_cache=vl_cache,
+    )
     if uidds:
         fh2, _ = _hourly_footfall_by_uidds(session, uidds, foot_days2, vl_cache=vl_cache)
         cmp_h = _chart_hours_for_location(
@@ -2292,37 +2337,6 @@ def build_commercial_footfall_report(
     locations_out: List[Dict[str, Any]] = []
     included_ids: Set[str] = set()
 
-    def _footfall_days_for_period(
-        days_used: List[str], uidds: Optional[List[str]] = None
-    ) -> Tuple[List[str], str]:
-        """Footfall dates may differ from Vendon sales dates when historical PA is missing."""
-        if not uidds:
-            # No camera: footfall is mirrored/projected — always use the sales week.
-            return list(days_used), "mirror_sales_calendar"
-        n = len(days_used)
-        if uidds and _db_has_footfall_for_uidds(session, uidds, days_used):
-            return days_used, "primary"
-        if days_used != fallback_days:
-            if uidds and _db_has_footfall_for_uidds(session, uidds, fallback_days):
-                return fallback_days, "fallback_footfall_db"
-        if uidds:
-            last_days = _last_footfall_days_for_uidds(session, uidds, n)
-            if last_days:
-                return last_days, "db_last_available"
-        if vl_cache and uidds and any(
-            sum(
-                (vl_cache.get(d) or {}).get(uid, {}).get(h, 0)
-                for h in range(24)
-                for uid in uidds
-            )
-            > 0
-            for d in (days_used if days_used != fallback_days else fallback_days)
-        ):
-            return days_used, "primary_videoloft"
-        if days_used != fallback_days:
-            return fallback_days, "fallback_footfall_videoloft"
-        return days_used, "primary"
-
     def _resolve_sales_days(
         machine_id: str,
     ) -> Tuple[List[str], str, str, List[str], Dict[int, List[Dict[str, float]]]]:
@@ -2529,7 +2543,7 @@ def build_commercial_footfall_report(
                     map_src = "commercial_name_map"
         if not uidds:
             continue
-        foot_days, foot_period = _footfall_days_for_period(days, uidds)
+        foot_days, foot_period = _footfall_days_for_period(session, days, uidds, fallback_days=fallback_days, vl_cache=vl_cache)
         days, foot_days, vh, sales_kind, foot_period = _coerce_aligned_calendar(
             mid, uidds, days, foot_days, foot_period, vh, sales_kind
         )
@@ -2552,7 +2566,7 @@ def build_commercial_footfall_report(
         foot_meta["footfallDisplay"] = _footfall_display_meta("actual")
         ins = _insights(hours, mname)
         cmp_h, cmp_d, cmp_bd = _build_period_compare_bundle(
-            session, mid, uidds, compare_days_list, fetch_vends_fn, vend_cache, vl_cache
+            session, mid, uidds, compare_days_list, fetch_vends_fn, vend_cache, vl_cache, fallback_days
         )
         _append_location(
             _loc_payload(
@@ -2577,7 +2591,7 @@ def build_commercial_footfall_report(
             continue
         days, period_key, sales_kind, requested_sales, vh = _resolve_sales_days(mid)
         uidds_pre, _ = resolve_uidds_fn(mid, mname, days)
-        foot_days, foot_period = _footfall_days_for_period(days, uidds_pre or None)
+        foot_days, foot_period = _footfall_days_for_period(session, days, uidds_pre or None, fallback_days=fallback_days, vl_cache=vl_cache)
         days, foot_days, vh, sales_kind, foot_period = _coerce_aligned_calendar(
             mid, uidds_pre or None, days, foot_days, foot_period, vh, sales_kind
         )
@@ -2592,7 +2606,7 @@ def build_commercial_footfall_report(
             sdisp = _sales_display_meta(sales_kind, days, requested_sales)
             ins = _insights(hours, mname)
             cmp_h, cmp_d, cmp_bd = _build_period_compare_bundle(
-                session, mid, uidds_pre, compare_days_list, fetch_vends_fn, vend_cache, vl_cache
+                session, mid, uidds_pre, compare_days_list, fetch_vends_fn, vend_cache, vl_cache, fallback_days
             )
             _append_location(
                 _loc_payload(
@@ -2606,7 +2620,7 @@ def build_commercial_footfall_report(
             )
             continue
         uidds, map_src = resolve_uidds_fn(mid, mname, days)
-        foot_days, foot_period = _footfall_days_for_period(days, uidds if uidds else None)
+        foot_days, foot_period = _footfall_days_for_period(session, days, uidds if uidds else None, fallback_days=fallback_days, vl_cache=vl_cache)
         days, foot_days, vh, sales_kind, foot_period = _coerce_aligned_calendar(
             mid, uidds if uidds else None, days, foot_days, foot_period, vh, sales_kind
         )
@@ -2703,7 +2717,7 @@ def build_commercial_footfall_report(
             }
 
         cmp_h, cmp_d, cmp_bd = _build_period_compare_bundle(
-            session, mid, uidds if uidds else None, compare_days_list, fetch_vends_fn, vend_cache, vl_cache
+            session, mid, uidds if uidds else None, compare_days_list, fetch_vends_fn, vend_cache, vl_cache, fallback_days
         )
         _append_location(
             _loc_payload(
@@ -2741,7 +2755,7 @@ def build_commercial_footfall_report(
                 uidds = _uidds_from_mapping_entry(videoloft_cameras, {"cameraNames": frags})
                 if uidds:
                     map_src = "commercial_name_map"
-        foot_days, foot_period = _footfall_days_for_period(days, uidds if uidds else None)
+        foot_days, foot_period = _footfall_days_for_period(session, days, uidds if uidds else None, fallback_days=fallback_days, vl_cache=vl_cache)
         days, foot_days, vh, sales_kind, foot_period = _coerce_aligned_calendar(
             mid, uidds if uidds else None, days, foot_days, foot_period, vh, sales_kind
         )
@@ -2765,7 +2779,7 @@ def build_commercial_footfall_report(
         sdisp = _sales_display_meta(sales_kind, days, requested_sales)
         ins = _insights(hours, mname)
         cmp_h, cmp_d, cmp_bd = _build_period_compare_bundle(
-            session, mid, uidds if uidds else None, compare_days_list, fetch_vends_fn, vend_cache, vl_cache
+            session, mid, uidds if uidds else None, compare_days_list, fetch_vends_fn, vend_cache, vl_cache, fallback_days
         )
         _append_location(
             _loc_payload(
