@@ -64,14 +64,14 @@ export function ComparePeriodKpis({ location }: Props) {
       label="Download period comparison table as PNG"
     >
     <div className="comparePeriodKpis">
-      <h4 className="subsectionTitle">Period totals — Period vs Compare</h4>
+      <h4 className="subsectionTitle">Totals — Period A vs Period B</h4>
       <table className="metricsTable comparePeriodTable">
         <thead>
           <tr>
             <th>Metric</th>
-            <th>Period</th>
-            <th>Compare</th>
-            <th>Δ vs Compare</th>
+            <th>Period A</th>
+            <th>Period B</th>
+            <th>Δ vs Period B</th>
           </tr>
         </thead>
         <tbody>

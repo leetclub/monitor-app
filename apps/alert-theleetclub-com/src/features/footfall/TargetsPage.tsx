@@ -41,6 +41,7 @@ export function TargetsPage({ compare }: Props) {
     liveSalesYmd,
     adminTargetsByMachine,
     periodLabel,
+    periodALabel,
   } = useTargetsData(segmentId, compare);
 
   const todaySales = selected
@@ -162,7 +163,7 @@ export function TargetsPage({ compare }: Props) {
                     }
                     todaySalesLoading={todaySalesLoading}
                     salesYmd={liveSalesYmd}
-                    periodTitle={periodLabel}
+                    periodTitle={periodALabel}
                     hideDateLabels={hideDateLabels}
                     adminTarget={adminTarget}
                   />

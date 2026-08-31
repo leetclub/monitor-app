@@ -321,6 +321,10 @@ export function TargetKpiSection({
   return (
     <div className="targetsKpiSection">
       <h3 className="targetsSectionTitle">{periodTitle}</h3>
+      <p className="hint targetsKpiPeriodHint">
+        KPI cards = <strong>Period A</strong> only. Scroll to <strong>Period A vs Period B</strong>{' '}
+        for the comparison table and charts.
+      </p>
       {copy.isNone ? (
         <p className="targetsZeroFootfallNote" role="status">
           No camera and no same-segment peer — footfall targets are zero. Sales and WEB

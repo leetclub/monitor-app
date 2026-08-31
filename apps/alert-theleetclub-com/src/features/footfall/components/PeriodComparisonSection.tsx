@@ -9,22 +9,29 @@ type Props = {
   showPeriodCompare: boolean;
 };
 
+function rangeLabel(dates: string[] | null | undefined): string {
+  if (!dates?.length) return '—';
+  const first = dates[0];
+  const last = dates.at(-1) ?? first;
+  return first === last ? first : `${first}→${last}`;
+}
+
 export function PeriodComparisonSection({ location, showPeriodCompare }: Props) {
   if (!showPeriodCompare) {
     return (
       <section className="periodCompareSection periodCompareSectionOff">
-        <h3 className="sectionTitle">Period comparison (Period vs Compare)</h3>
+        <h3 className="sectionTitle">Period A vs Period B</h3>
         <p className="hint chartHint">
-          Comparison data is still loading or missing for this location. Confirm the{' '}
-          <strong>Period</strong> and <strong>Compare</strong> dates in the bar above, then wait for
-          the report to finish (or Retry).
+          Comparison data is still loading or missing for this location. Confirm{' '}
+          <strong>Period A</strong> and <strong>Period B</strong> in the bar above, then wait for the
+          report to finish (or Retry).
         </p>
         <ul className="periodCompareList">
           <li>
-            <strong>Totals table</strong> — Period vs Compare (footfall, cups, revenue, conversion)
+            <strong>Totals table</strong> — Period A vs Period B (footfall, cups, revenue, conversion)
           </li>
           <li>
-            <strong>Daily chart</strong> — day-by-day Period vs Compare
+            <strong>Daily chart</strong> — day-by-day Period A vs Period B
           </li>
           <li>
             <strong>Hourly chart</strong> — same hours, both windows
@@ -41,16 +48,10 @@ export function PeriodComparisonSection({ location, showPeriodCompare }: Props) 
 
   return (
     <section className="periodCompareSection" id="ff-period-comparison">
-      <h3 className="sectionTitle">Period comparison (Period vs Compare)</h3>
+      <h3 className="sectionTitle">Period A vs Period B</h3>
       <p className="hint chartHint">
-        Comparing <strong>Period</strong>{' '}
-        <strong>
-          {location.periodDates[0]}–{location.periodDates.at(-1)}
-        </strong>{' '}
-        vs <strong>Compare</strong>{' '}
-        <strong>
-          {location.comparePeriodDates?.[0]}–{location.comparePeriodDates?.at(-1)}
-        </strong>
+        <strong>Period A</strong> {rangeLabel(location.periodDates)} · <strong>Period B</strong>{' '}
+        {rangeLabel(location.comparePeriodDates)}
       </p>
 
       <ComparePeriodKpis location={location} />
@@ -64,20 +65,22 @@ export function PeriodComparisonSection({ location, showPeriodCompare }: Props) 
 
       {hasDaily ? (
         <>
-          <h4 className="subsectionTitle">Daily — Period vs Compare</h4>
+          <h4 className="subsectionTitle">Daily — Period A vs Period B</h4>
           <DailyPeriodCompareChart location={location} />
         </>
       ) : primaryDayRows === 0 && compareDayRows === 0 ? (
-        <p className="hint">No aligned daily rows for this location (split sales/camera weeks — see tables below).</p>
+        <p className="hint">
+          No aligned daily rows for this location (split sales/camera weeks — see tables below).
+        </p>
       ) : null}
 
       {hasHourly ? (
         <>
-          <h4 className="subsectionTitle">Hourly — Period vs Compare</h4>
+          <h4 className="subsectionTitle">Hourly — Period A vs Period B</h4>
           <PeriodCompareChart location={location} />
         </>
       ) : (
-        <p className="hint">No hourly compare data for this location.</p>
+        <p className="hint">No hourly Period B data for this location.</p>
       )}
     </section>
   );

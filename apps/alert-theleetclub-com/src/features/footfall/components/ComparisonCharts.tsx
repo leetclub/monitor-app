@@ -162,8 +162,8 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
     chart.setOption({
       backgroundColor: chrome.backgroundColor,
       title: {
-        text: 'Period comparison — footfall & cups',
-        subtext: `Primary ${location.periodDates[0]}–${location.periodDates.at(-1)} vs Compare ${cmpDates[0]}–${cmpDates.at(-1)}`,
+        text: 'Period A vs Period B — footfall & cups',
+        subtext: `Period A ${location.periodDates[0]}–${location.periodDates.at(-1)} vs Period B ${cmpDates[0]}–${cmpDates.at(-1)}`,
         left: 'center',
         textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
         subtextStyle: { fontSize: 10, color: chrome.muted },
@@ -178,19 +178,19 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
       ],
       series: [
         {
-          name: 'Footfall (primary)',
+          name: 'Footfall (Period A)',
           type: 'bar',
           data: location.hours.map((h) => h.footfall),
           itemStyle: { color: 'rgba(94,184,232,0.75)' },
         },
         {
-          name: 'Footfall (compare)',
+          name: 'Footfall (Period B)',
           type: 'bar',
           data: cmp.map((h) => h.footfall),
           itemStyle: { color: 'rgba(94,184,232,0.35)' },
         },
         {
-          name: 'Cups (primary)',
+          name: 'Cups (Period A)',
           type: 'line',
           yAxisIndex: 1,
           smooth: true,
@@ -198,7 +198,7 @@ export function PeriodCompareChart({ location }: { location: LocationReport }) {
           lineStyle: { color: '#2e9e5a', width: 2 },
         },
         {
-          name: 'Cups (compare)',
+          name: 'Cups (Period B)',
           type: 'line',
           yAxisIndex: 1,
           smooth: true,
@@ -358,8 +358,8 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
     chart.setOption({
       backgroundColor: chrome.backgroundColor,
       title: {
-        text: 'Period comparison — day by day',
-        subtext: `Primary ${primaryDates[0]}–${primaryDates.at(-1)} vs Compare ${cmpDates[0]}–${cmpDates.at(-1)} (aligned Sun–Thu)`,
+        text: 'Period A vs Period B — day by day',
+        subtext: `Period A ${primaryDates[0]}–${primaryDates.at(-1)} vs Period B ${cmpDates[0]}–${cmpDates.at(-1)} (aligned Sun–Thu)`,
         left: 'center',
         textStyle: { fontSize: 14, fontWeight: 600, color: chrome.titleColor },
         subtextStyle: { fontSize: 10, color: chrome.muted },
@@ -373,8 +373,8 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
           if (!s) return '';
           return [
             `<strong>${s.label}</strong>`,
-            s.primaryDate ? `Primary ${s.primaryDate}` : '',
-            s.compareDate ? `Compare ${s.compareDate}` : '',
+            s.primaryDate ? `Period A ${s.primaryDate}` : '',
+            s.compareDate ? `Period B ${s.compareDate}` : '',
             ...arr.map((p) => `${p.seriesName}: <b>${p.value ?? 0}</b>`),
           ]
             .filter(Boolean)
@@ -393,33 +393,33 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
       ],
       series: [
         {
-          name: 'Footfall (primary)',
+          name: 'Footfall (Period A)',
           type: 'bar',
           data: slots.map((s) => s.primary?.footfall ?? 0),
           itemStyle: { color: 'rgba(94,184,232,0.85)' },
         },
         {
-          name: 'Footfall (compare)',
+          name: 'Footfall (Period B)',
           type: 'bar',
           data: slots.map((s) => s.compare?.footfall ?? 0),
           itemStyle: { color: 'rgba(94,184,232,0.35)' },
         },
         {
-          name: 'Cups (primary)',
+          name: 'Cups (Period A)',
           type: 'line',
           smooth: true,
           data: slots.map((s) => s.primary?.cups ?? 0),
           lineStyle: { color: '#2e9e5a', width: 2 },
         },
         {
-          name: 'Cups (compare)',
+          name: 'Cups (Period B)',
           type: 'line',
           smooth: true,
           data: slots.map((s) => s.compare?.cups ?? 0),
           lineStyle: { color: '#2e9e5a', type: 'dashed', width: 2 },
         },
         {
-          name: 'Conv % (primary)',
+          name: 'Conv % (Period A)',
           type: 'line',
           yAxisIndex: 1,
           smooth: true,
@@ -427,7 +427,7 @@ export function DailyPeriodCompareChart({ location }: { location: LocationReport
           lineStyle: { color: '#1e4fd6', width: 2 },
         },
         {
-          name: 'Conv % (compare)',
+          name: 'Conv % (Period B)',
           type: 'line',
           yAxisIndex: 1,
           smooth: true,

@@ -54,7 +54,7 @@ function inclusivePeriodFromCompare(compare: CompareSelection): {
 }
 
 /**
- * Commercial-footfall report follows Period (A) and Compare (B) from Alert presets.
+ * Commercial-footfall report follows Period A and Period B from Alert presets.
  * calendar_days skips May fallback on the server.
  */
 export function compareSelectionToReportQuery(compare: CompareSelection): ReportQuery {
@@ -77,7 +77,7 @@ export function compareSelectionToReportQuery(compare: CompareSelection): Report
   };
 }
 
-/** Same inclusive Period window for live Vendon Achievement / Daily Target. */
+/** Same inclusive Period A window for live Vendon Achievement / Daily Target. */
 export function compareSelectionToLiveSalesRange(compare: CompareSelection): {
   startDate: string;
   endDate: string;
@@ -85,6 +85,14 @@ export function compareSelectionToLiveSalesRange(compare: CompareSelection): {
   return inclusivePeriodFromCompare(compare);
 }
 
+/** KPI / heatmap focus window — Period A only (not A vs B). */
+export function comparePeriodALabel(compare: CompareSelection): string {
+  const q = inclusivePeriodFromCompare(compare);
+  if (q.startDate === q.endDate) return `Period A · ${q.startDate}`;
+  return `Period A · ${q.startDate}→${q.endDate}`;
+}
+
+/** Sidebar / context: Period A … vs Period B … */
 export function comparePeriodShortLabel(compare: CompareSelection): string {
   const labels = presetLabels(compare.preset);
   const q = inclusivePeriodFromCompare(compare);

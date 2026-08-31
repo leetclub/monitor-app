@@ -13,7 +13,7 @@ const LABELS: Record<ComparePresetId, string> = {
   today_vs_same_day_last_week: 'Today VS Same Day Last Week',
   wtd_vs_last_week: 'WTD VS Last Week',
   mtd_vs_mtd: 'Month to date VS prior MTD',
-  custom_vs_custom: 'Custom period VS Custom compare',
+  custom_vs_custom: 'Custom Period A VS Custom Period B',
 };
 
 /** UI shows inclusive calendar days; Alert storage stays half-open [start, endExclusive). */
@@ -27,15 +27,14 @@ type Props = {
 };
 
 /**
- * Footfall date bar — same presets as Red Flags, but labeled Period / Compare
- * (not A/B) and date inputs show inclusive ends.
+ * Footfall date bar — Period A (main) vs Period B (baseline), inclusive ends.
  */
 export function FootfallCompareBar({ value, onChange }: Props) {
-  const period = useMemo(
+  const periodA = useMemo(
     () => halfOpenToInclusive(value.a.start, value.a.end),
     [value.a.start, value.a.end],
   );
-  const compare = useMemo(
+  const periodB = useMemo(
     () => halfOpenToInclusive(value.b.start, value.b.end),
     [value.b.start, value.b.end],
   );
@@ -63,60 +62,60 @@ export function FootfallCompareBar({ value, onChange }: Props) {
         </label>
 
         <label className="ffCompareField">
-          <span className="ffCompareLabel">Period start</span>
+          <span className="ffCompareLabel">Period A start</span>
           <input
             type="date"
-            value={period.startDate}
+            value={periodA.startDate}
             disabled={!custom}
             onChange={(e) => {
-              const next = inclusiveToHalfOpen(e.target.value, period.endDate);
+              const next = inclusiveToHalfOpen(e.target.value, periodA.endDate);
               onChange({ ...value, a: next });
             }}
           />
         </label>
         <label className="ffCompareField">
-          <span className="ffCompareLabel">Period end</span>
+          <span className="ffCompareLabel">Period A end</span>
           <input
             type="date"
-            value={period.endDate}
+            value={periodA.endDate}
             disabled={!custom}
             onChange={(e) => {
-              const next = inclusiveToHalfOpen(period.startDate, e.target.value);
+              const next = inclusiveToHalfOpen(periodA.startDate, e.target.value);
               onChange({ ...value, a: next });
             }}
           />
         </label>
 
         <label className="ffCompareField">
-          <span className="ffCompareLabel">Compare start</span>
+          <span className="ffCompareLabel">Period B start</span>
           <input
             type="date"
-            value={compare.startDate}
+            value={periodB.startDate}
             disabled={!custom}
             onChange={(e) => {
-              const next = inclusiveToHalfOpen(e.target.value, compare.endDate);
+              const next = inclusiveToHalfOpen(e.target.value, periodB.endDate);
               onChange({ ...value, b: next });
             }}
           />
         </label>
         <label className="ffCompareField">
-          <span className="ffCompareLabel">Compare end</span>
+          <span className="ffCompareLabel">Period B end</span>
           <input
             type="date"
-            value={compare.endDate}
+            value={periodB.endDate}
             disabled={!custom}
             onChange={(e) => {
-              const next = inclusiveToHalfOpen(compare.startDate, e.target.value);
+              const next = inclusiveToHalfOpen(periodB.startDate, e.target.value);
               onChange({ ...value, b: next });
             }}
           />
         </label>
       </div>
       <p className="ffCompareHint">
-        <strong>Period</strong> is the main window (heatmap, KPIs, charts). <strong>Compare</strong> is
-        the baseline. After a location is selected, scroll to{' '}
-        <strong>Period comparison (Period vs Compare)</strong> for totals Δ plus daily/hourly charts.
-        Dates are inclusive. Achievement / Daily Target use live Vendon for Period.
+        <strong>Period A</strong> drives the heatmap and KPI cards. <strong>Period B</strong> is the
+        baseline. After you pick a location, scroll to <strong>Period A vs Period B</strong> for
+        totals Δ and daily/hourly charts. Dates are inclusive. Achievement / Daily Target use live
+        Vendon for Period A.
       </p>
     </div>
   );

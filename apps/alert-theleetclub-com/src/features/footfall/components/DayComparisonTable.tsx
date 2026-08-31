@@ -152,16 +152,16 @@ function AlignedCompareDaysTable({ location }: { location: LocationReport }) {
 
   return (
     <>
-      <h4 className="dayTableTitle">Day-by-day — primary vs compare (Sun–Thu aligned)</h4>
+      <h4 className="dayTableTitle">Day-by-day — Period A vs Period B (Sun–Thu aligned)</h4>
       <table className="metricsTable dayTable compareAlignedTable">
         <thead>
           <tr>
             <th>Day</th>
-            <th>Primary date</th>
+            <th>Period A date</th>
             <th>Detections</th>
             <th>Cups</th>
             <th>Conv %</th>
-            <th>Compare date</th>
+            <th>Period B date</th>
             <th>Detections</th>
             <th>Cups</th>
             <th>Conv %</th>
@@ -229,7 +229,7 @@ export function DayComparisonTable({ location, enableCompare }: Props) {
 
         {mergedRows.length > 0 ? (
           <DayTable
-            title={`Primary week — ${mergedRows[0]?.date ?? location.periodDates[0]} … ${mergedRows.at(-1)?.date ?? location.periodDates.at(-1)}`}
+            title={`Period A — ${mergedRows[0]?.date ?? location.periodDates[0]} … ${mergedRows.at(-1)?.date ?? location.periodDates.at(-1)}`}
             rows={mergedRows}
             avgFootfall={totalFootfall}
             avgCups={totalCups}

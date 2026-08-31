@@ -20,6 +20,7 @@ import { kuwaitBusinessContext } from '@/features/footfall/lib/kuwaitBusinessDay
 import { resolveTodaySales, type TodaySalesRow } from '@/features/footfall/lib/todaySales';
 import { targetsBenchmarkPctForSegment } from '@/features/footfall/lib/targetsBenchmark';
 import {
+  comparePeriodALabel,
   comparePeriodShortLabel,
   compareSelectionToLiveSalesRange,
   compareSelectionToReportQuery,
@@ -46,6 +47,7 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
 
   const reportQ = useMemo(() => compareSelectionToReportQuery(compare), [compare]);
   const periodLabel = useMemo(() => comparePeriodShortLabel(compare), [compare]);
+  const periodALabel = useMemo(() => comparePeriodALabel(compare), [compare]);
   const liveRange = useMemo(() => compareSelectionToLiveSalesRange(compare), [compare]);
   const liveIsSingleDay = liveRange.startDate === liveRange.endDate;
 
@@ -291,6 +293,7 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
     liveSalesYmd: liveIsSingleDay ? liveRange.startDate : business.salesYmd,
     livePeriodLabel: periodLabel,
     adminTargetsByMachine,
+    periodALabel,
     periodLabel,
     refreshNext,
   };
