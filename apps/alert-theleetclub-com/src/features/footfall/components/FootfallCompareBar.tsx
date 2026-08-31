@@ -113,9 +113,10 @@ export function FootfallCompareBar({ value, onChange }: Props) {
         </label>
       </div>
       <p className="ffCompareHint">
-        <strong>Period</strong> drives footfall KPIs, heatmap, and charts for the dates you pick.
-        <strong> Compare</strong> is the prior window (same idea as Red Flags). Dates are inclusive.
-        Achievement / Daily Target use live Vendon for that Period.
+        <strong>Period</strong> is the main window (heatmap, KPIs, charts). <strong>Compare</strong> is
+        the baseline. After a location is selected, scroll to{' '}
+        <strong>Period comparison (Period vs Compare)</strong> for totals Δ plus daily/hourly charts.
+        Dates are inclusive. Achievement / Daily Target use live Vendon for Period.
       </p>
     </div>
   );

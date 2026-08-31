@@ -54,15 +54,25 @@ function inclusivePeriodFromCompare(compare: CompareSelection): {
 }
 
 /**
- * Heavy commercial-footfall report follows the user's Period dates (Alert presets /
- * custom). Primary only + calendar_days (skips May fallback on the server).
+ * Commercial-footfall report follows Period (A) and Compare (B) from Alert presets.
+ * calendar_days skips May fallback on the server.
  */
 export function compareSelectionToReportQuery(compare: CompareSelection): ReportQuery {
   const primary = inclusivePeriodFromCompare(compare);
+  let baseline = halfOpenToInclusive(compare.b.start, compare.b.end);
+  if (
+    compare.preset === 'today_vs_yesterday' ||
+    compare.preset === 'today_vs_same_day_last_week' ||
+    compare.preset === 'yesterday_vs_day_before'
+  ) {
+    baseline = snapWeekendSingleDay(baseline.startDate, baseline.endDate);
+  }
   return {
     startDate: primary.startDate,
     endDate: primary.endDate,
-    enableCompare: false,
+    enableCompare: true,
+    compareStartDate: baseline.startDate,
+    compareEndDate: baseline.endDate,
     calendarDays: true,
   };
 }
@@ -78,10 +88,11 @@ export function compareSelectionToLiveSalesRange(compare: CompareSelection): {
 export function comparePeriodShortLabel(compare: CompareSelection): string {
   const labels = presetLabels(compare.preset);
   const q = inclusivePeriodFromCompare(compare);
-  if (q.startDate === q.endDate) {
-    return `${labels.primary} · ${q.startDate}`;
+  const b = halfOpenToInclusive(compare.b.start, compare.b.end);
+  if (q.startDate === q.endDate && b.startDate === b.endDate) {
+    return `${labels.primary} ${q.startDate} vs ${labels.baseline} ${b.startDate}`;
   }
-  return `${labels.primary} · ${q.startDate} → ${q.endDate}`;
+  return `${labels.primary} ${q.startDate}→${q.endDate} vs ${labels.baseline} ${b.startDate}→${b.endDate}`;
 }
 
 export const liveSalesPeriodLabel = comparePeriodShortLabel;

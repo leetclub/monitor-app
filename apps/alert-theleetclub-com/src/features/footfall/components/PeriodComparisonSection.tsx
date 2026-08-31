@@ -13,17 +13,21 @@ export function PeriodComparisonSection({ location, showPeriodCompare }: Props) 
   if (!showPeriodCompare) {
     return (
       <section className="periodCompareSection periodCompareSectionOff">
-        <h3 className="sectionTitle">Period comparison (daily &amp; hourly)</h3>
+        <h3 className="sectionTitle">Period comparison (Period vs Compare)</h3>
         <p className="hint chartHint">
-          Use the <strong>Compare</strong> bar at the bottom of the page (or date filters above): pick a week, drag a
-          chip, or click <strong>−1 wk</strong>.
+          Comparison data is still loading or missing for this location. Confirm the{' '}
+          <strong>Period</strong> and <strong>Compare</strong> dates in the bar above, then wait for
+          the report to finish (or Retry).
         </p>
         <ul className="periodCompareList">
           <li>
-            <strong>Day-by-day</strong> — primary week vs compare week (Sun–Thu aligned)
+            <strong>Totals table</strong> — Period vs Compare (footfall, cups, revenue, conversion)
           </li>
           <li>
-            <strong>Hour-by-hour</strong> — same hours, both weeks
+            <strong>Daily chart</strong> — day-by-day Period vs Compare
+          </li>
+          <li>
+            <strong>Hourly chart</strong> — same hours, both windows
           </li>
         </ul>
       </section>
@@ -36,25 +40,31 @@ export function PeriodComparisonSection({ location, showPeriodCompare }: Props) 
   const primaryDayRows = alignedDayRows(location.daysBreakdown).length;
 
   return (
-    <section className="periodCompareSection">
-      <h3 className="sectionTitle">Period comparison (daily &amp; hourly)</h3>
+    <section className="periodCompareSection" id="ff-period-comparison">
+      <h3 className="sectionTitle">Period comparison (Period vs Compare)</h3>
       <p className="hint chartHint">
-        Comparing <strong>{location.periodDates[0]}–{location.periodDates.at(-1)}</strong> vs{' '}
-        <strong>{location.comparePeriodDates?.[0]}–{location.comparePeriodDates?.at(-1)}</strong>
+        Comparing <strong>Period</strong>{' '}
+        <strong>
+          {location.periodDates[0]}–{location.periodDates.at(-1)}
+        </strong>{' '}
+        vs <strong>Compare</strong>{' '}
+        <strong>
+          {location.comparePeriodDates?.[0]}–{location.comparePeriodDates?.at(-1)}
+        </strong>
       </p>
 
       <ComparePeriodKpis location={location} />
 
       {!hasDaily && hasHourly ? (
         <p className="hint chartHint chartHintWarn">
-          Daily comparison is not in this cached report yet — click <strong>Rebuild report</strong> after enabling
-          compare. Hourly comparison below is still available.
+          Daily comparison is not in this cached report yet — first compare load can take longer.
+          Hourly comparison below is still available.
         </p>
       ) : null}
 
       {hasDaily ? (
         <>
-          <h4 className="subsectionTitle">Daily — primary vs compare week</h4>
+          <h4 className="subsectionTitle">Daily — Period vs Compare</h4>
           <DailyPeriodCompareChart location={location} />
         </>
       ) : primaryDayRows === 0 && compareDayRows === 0 ? (
@@ -63,7 +73,7 @@ export function PeriodComparisonSection({ location, showPeriodCompare }: Props) 
 
       {hasHourly ? (
         <>
-          <h4 className="subsectionTitle">Hourly — primary vs compare week</h4>
+          <h4 className="subsectionTitle">Hourly — Period vs Compare</h4>
           <PeriodCompareChart location={location} />
         </>
       ) : (

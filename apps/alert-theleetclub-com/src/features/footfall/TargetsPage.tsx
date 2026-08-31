@@ -7,6 +7,7 @@ import { TargetKpiSection } from '@/features/footfall/components/targets/TargetK
 import { TargetsGraphSection } from '@/features/footfall/components/targets/TargetsGraphSection';
 import { TrajectorySection } from '@/features/footfall/components/targets/TrajectorySection';
 import { DataQualityBanner } from '@/features/footfall/components/DataQualityBanner';
+import { PeriodComparisonSection } from '@/features/footfall/components/PeriodComparisonSection';
 import { isTargetOnlySite } from '@/features/footfall/lib/appSite';
 import { useTargetsData } from '@/features/footfall/lib/useTargetsData';
 import type { SegmentId } from '@/features/footfall/lib/segments';
@@ -164,6 +165,14 @@ export function TargetsPage({ compare }: Props) {
                     periodTitle={periodLabel}
                     hideDateLabels={hideDateLabels}
                     adminTarget={adminTarget}
+                  />
+                  <PeriodComparisonSection
+                    location={selected}
+                    showPeriodCompare={Boolean(
+                      selected.comparePeriodDates?.length ||
+                        selected.compareDaily ||
+                        (selected.compareHours?.length && selected.comparePeriodDates?.length),
+                    )}
                   />
                   <TargetsGraphSection location={selected} />
                   <TrajectorySection

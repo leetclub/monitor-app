@@ -54,8 +54,10 @@ export function useTargetsData(segmentId: SegmentId, compare: CompareSelection) 
       'targets-report',
       reportQ.startDate,
       reportQ.endDate,
+      reportQ.compareStartDate ?? '',
+      reportQ.compareEndDate ?? '',
+      reportQ.enableCompare ? 'cmp' : 'primary',
       reportQ.calendarDays ? 'cal' : 'biz',
-      'primary-only',
     ],
     queryFn: async () => {
       setLoadStatus('Loading report…');
