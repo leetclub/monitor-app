@@ -3,14 +3,12 @@
   --ff-page: var(--bg, #111318);
   --card: var(--panel, #1e1f25);
   --card-soft: var(--surface-container-high, #282a2f);
-  --border: var(--border, #30363d);
-  --text: var(--text, #e2e2e9);
-  --muted: var(--muted, #ad8883);
+  --surface: var(--panel2, var(--panel, #1a1b21));
   --accent: #c45c4a;
   --accent2: #2e9e5a;
   --warn: #c0392b;
   --radius: 10px;
-  color: var(--text);
+  color: var(--text, #e2e2e9);
   background: transparent;
   max-width: 1600px;
   margin: 0 auto;

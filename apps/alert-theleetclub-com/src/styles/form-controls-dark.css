@@ -172,10 +172,92 @@ html[data-theme='pro'][data-mode='dark'] .proCompareChip {
   color-scheme: light !important;
 }
 
+/*
+ * Promo + Footfall: native date/select (incl. disabled Period dates) stay dark.
+ * Chrome/Safari paint disabled date fields white unless we override opacity + fill.
+ */
+.promoPage,
+.alertFootfallRoot,
+.ffCompareBar,
+.ffCompareField,
+.ffAlertCompareRow {
+  color-scheme: dark;
+}
+
+.promoPage input[type='date'],
+.promoPage input[type='datetime-local'],
+.promoPage select,
+.alertFootfallRoot select,
+.alertFootfallRoot input[type='date'],
+.alertFootfallRoot input[type='datetime-local'],
+.alertFootfallRoot input[type='search'],
+.alertFootfallRoot input[type='text'],
+.ffCompareField select,
+.ffCompareField input[type='date'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #1a1f27 !important;
+  background-color: #1a1f27 !important;
+  color: #e8edf5 !important;
+  -webkit-text-fill-color: #e8edf5 !important;
+  border-color: #4b5563 !important;
+  color-scheme: dark !important;
+  opacity: 1 !important;
+  caret-color: #e8edf5;
+}
+
+.promoPage input[type='date']:disabled,
+.alertFootfallRoot input[type='date']:disabled,
+.ffCompareField input[type='date']:disabled,
+.alertFootfallRoot select:disabled {
+  opacity: 1 !important;
+  background: #151a22 !important;
+  background-color: #151a22 !important;
+  color: #c5cdd8 !important;
+  -webkit-text-fill-color: #c5cdd8 !important;
+  color-scheme: dark !important;
+}
+
+.promoPage input[type='date']::-webkit-datetime-edit,
+.promoPage input[type='date']::-webkit-datetime-edit-fields-wrapper,
+.promoPage input[type='date']::-webkit-datetime-edit-text,
+.promoPage input[type='date']::-webkit-datetime-edit-month-field,
+.promoPage input[type='date']::-webkit-datetime-edit-day-field,
+.promoPage input[type='date']::-webkit-datetime-edit-year-field,
+.alertFootfallRoot input[type='date']::-webkit-datetime-edit,
+.alertFootfallRoot input[type='date']::-webkit-datetime-edit-fields-wrapper,
+.alertFootfallRoot input[type='date']::-webkit-datetime-edit-text,
+.alertFootfallRoot input[type='date']::-webkit-datetime-edit-month-field,
+.alertFootfallRoot input[type='date']::-webkit-datetime-edit-day-field,
+.alertFootfallRoot input[type='date']::-webkit-datetime-edit-year-field,
+.ffCompareField input[type='date']::-webkit-datetime-edit,
+.ffCompareField input[type='date']::-webkit-datetime-edit-fields-wrapper {
+  color: #e8edf5 !important;
+  background: transparent !important;
+  -webkit-text-fill-color: #e8edf5 !important;
+}
+
+.promoPage input[type='date']::-webkit-calendar-picker-indicator,
+.alertFootfallRoot input[type='date']::-webkit-calendar-picker-indicator,
+.ffCompareField input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.15);
+  opacity: 0.9;
+  cursor: pointer;
+}
+
+.promoPage select option,
+.alertFootfallRoot select option,
+.ffCompareField select option {
+  background-color: #1a1f27;
+  color: #e8edf5;
+}
+
 /* Classic / Pro light mode: restore light native chrome (don't force ops dark) */
 html[data-mode='light'] .stitchShell,
 html[data-mode='light'] .perfLayout,
 html[data-mode='light'] .perfProducts,
+html[data-mode='light'] .promoPage,
+html[data-mode='light'] .alertFootfallRoot,
 html[data-theme='classic'][data-mode='light'],
 html[data-theme='pro'][data-mode='light'] {
   color-scheme: light;
