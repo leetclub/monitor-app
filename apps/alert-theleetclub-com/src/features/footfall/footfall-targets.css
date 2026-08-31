@@ -1,14 +1,24 @@
 /* Alert Footfall tab — Targets UI themed for Alert shell */
 .alertFootfallRoot{
-  --ff-page: var(--bg, #111318);
-  --card: var(--panel, #1e1f25);
-  --card-soft: var(--surface-container-high, #282a2f);
-  --surface: var(--panel2, var(--panel, #1a1b21));
+  /*
+   * Local dark ops tokens — do NOT inherit Pro/Light --panel (#fff) from html.
+   * Otherwise toolbar/cards resolve to white even when Classic boards look dark.
+   */
+  --panel: #1e1f25;
+  --panel2: #1a1b21;
+  --bg-elevated: #121820;
+  --ff-page: #111318;
+  --card: #1e1f25;
+  --card-soft: #282a2f;
+  --surface: #1a1b21;
+  --border: #30363d;
+  --text: #e2e2e9;
+  --muted: #ad8883;
   --accent: #c45c4a;
   --accent2: #2e9e5a;
   --warn: #c0392b;
   --radius: 10px;
-  color: var(--text, #e2e2e9);
+  color: var(--text);
   background: transparent;
   max-width: 1600px;
   margin: 0 auto;

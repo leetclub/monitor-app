@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-31 | **Footfall/Promo white panels:** Toolbar/cards no longer inherit Pro `--panel: #fff`. Local dark ops tokens + hardcoded `.ffAlertToolbar` / compare bar backgrounds. |
 | 2026-08-31 | **Promo + Footfall dark controls:** Date/select (including Footfall’s disabled Period dates) stay dark in Chrome/Safari; heatmap/charts use dark palette unless Light mode; Footfall `--surface` no longer falls through to a blank/light fill. |
 | 2026-08-31 | **Dark form chrome (cross-browser):** Stronger dark `color-scheme` + control fills for Classic dark / Pro dark / v2; WebKit date segments + calendar icon; autofill wash; Pro no longer forces `color-scheme: light` while in dark mode. |
 | 2026-08-30 | **Revenue labels:** Products mix basis renamed **Actual revenue \| + WEB cashless** (was Customer only / Include cashless). Brief strip shows **Actual + WEB cashless = Total income** with mix bar. Fleet bar eyebrow = **Fleet actual revenue**. API `product-compare` returns `actualRevenueKd` / `webCashlessKd` / `totalIncomeKd`. |

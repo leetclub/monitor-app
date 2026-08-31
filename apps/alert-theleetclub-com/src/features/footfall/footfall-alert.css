@@ -7,9 +7,10 @@
   gap: 12px;
   margin-bottom: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--border, #3a414d);
+  border: 1px solid #3a414d;
   border-radius: 10px;
-  background: var(--panel, #1a1f28);
+  background: #1a1f28;
+  color: #dee2ec;
 }
 
 .ffAlertSubTabs,
@@ -25,9 +26,9 @@
   min-height: 34px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid var(--border, #3a414d);
-  background: transparent;
-  color: var(--text, #dee2ec);
+  border: 1px solid #3a414d;
+  background: #121820;
+  color: #dee2ec;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -36,7 +37,7 @@
 .ffAlertSubTab.active,
 .ffAlertModeBtn.active {
   border-color: #c45c4a;
-  background: rgba(196, 92, 74, 0.18);
+  background: rgba(196, 92, 74, 0.22);
   color: #ffd4c2;
 }
 
@@ -45,16 +46,17 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--muted, #8a9aab);
+  color: #8a9aab;
   margin-right: 4px;
 }
 
 .ffAlertCompareRow {
   margin: 0 0 10px;
   padding: 8px 10px;
-  border: 1px solid var(--border, #3a414d);
+  border: 1px solid #3a414d;
   border-radius: 10px;
-  background: var(--panel, #1a1f28);
+  background: #1a1f28;
+  color: #dee2ec;
 }
 
 .ffCompareBarRow {
@@ -546,4 +548,43 @@ html[data-mode='dark'] .alertFootfallRoot .ownersLoginBlock,
 .alertFootfallDark .ownersLoginBlock {
   background: var(--card-soft) !important;
   border-color: var(--border) !important;
+}
+
+/* Light mode only — otherwise Footfall stays on dark ops surfaces */
+html[data-mode='light'] .alertFootfallRoot {
+  --panel: #ffffff;
+  --panel2: #f8fafc;
+  --bg-elevated: #ffffff;
+  --ff-page: #f4f1ec;
+  --card: #ffffff;
+  --card-soft: #f0ebe4;
+  --surface: #f8fafc;
+  --border: #d6d3d1;
+  --text: #1c1917;
+  --muted: #78716c;
+}
+
+html[data-mode='light'] .ffAlertToolbar,
+html[data-mode='light'] .ffAlertCompareRow {
+  background: #ffffff;
+  border-color: #d6d3d1;
+  color: #1c1917;
+}
+
+html[data-mode='light'] .ffAlertModeBtn,
+html[data-mode='light'] .ffAlertSubTab {
+  background: #f8fafc;
+  border-color: #d6d3d1;
+  color: #1c1917;
+}
+
+html[data-mode='light'] .ffAlertModeBtn.active,
+html[data-mode='light'] .ffAlertSubTab.active {
+  border-color: #c45c4a;
+  background: rgba(196, 92, 74, 0.12);
+  color: #9a3412;
+}
+
+html[data-mode='light'] .ffAlertModeLabel {
+  color: #78716c;
 }

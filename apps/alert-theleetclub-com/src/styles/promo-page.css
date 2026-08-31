@@ -1,9 +1,17 @@
 /* Promo tab + Admin → Promo — theme tokens (Classic / Pro / Manus) */
 
 .promoPage {
+  /* Own dark ops tokens so Pro/Light --panel (#fff) cannot wash this tab white */
+  --panel: #1e1f25;
+  --panel2: #1a1b21;
+  --bg-elevated: #121820;
+  --border: #30363d;
+  --border-soft: rgba(48, 54, 61, 0.85);
+  --text: #e2e2e9;
+  --muted: #ad8883;
   padding: 0.5rem 0 1.5rem;
   max-width: 1100px;
-  color: var(--text, #e2e8f0);
+  color: var(--text);
 }
 
 .promoPageManus {
@@ -232,23 +240,30 @@ html[data-theme='classic'][data-mode='light'] .promoDateRow input {
 /* Light mode: keep readable surfaces without hardcoding white-on-white */
 html[data-mode='light'] .promoPage,
 html[data-theme='classic'][data-mode='light'] .promoPage {
-  color: var(--text, #1c1917);
+  --panel: #ffffff;
+  --panel2: #f8fafc;
+  --bg-elevated: #ffffff;
+  --border: #d6d3d1;
+  --border-soft: rgba(214, 211, 209, 0.9);
+  --text: #1c1917;
+  --muted: #78716c;
+  color: var(--text);
 }
 
 html[data-mode='light'] .promoState,
 html[data-theme='classic'][data-mode='light'] .promoState {
-  background: var(--panel2, #f0ebe4);
-  border-color: var(--border, #d6d3d1);
-  color: var(--text, #1c1917);
+  background: var(--panel2);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 html[data-mode='light'] .promoLocCard,
 html[data-theme='classic'][data-mode='light'] .promoLocCard {
-  background: var(--panel, #fff);
-  border-color: var(--border, #d6d3d1);
+  background: var(--panel);
+  border-color: var(--border);
 }
 
 html[data-mode='light'] .promoDayBarTrack,
 html[data-theme='classic'][data-mode='light'] .promoDayBarTrack {
-  background: var(--surface-container-low, #f0ebe4);
+  background: var(--panel2);
 }
