@@ -1470,6 +1470,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     enabled: ids.length > 0 && Boolean(compareOpts),
     staleTime: 60_000,
     refetchInterval: 90_000,
+    placeholderData: (prev) => prev,
   });
 
   const fleetQ = useQuery({
@@ -1482,6 +1483,7 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
     enabled: fleetIds.length > 0 && Boolean(compareOpts),
     staleTime: 60_000,
     refetchInterval: 90_000,
+    placeholderData: (prev) => prev,
   });
 
   const payloadMachines = useMemo(() => {
@@ -1522,6 +1524,16 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
 
   const mixedRows = useMemo(() => aggregateProducts(payloadMachines), [payloadMachines]);
   const fleetMix = useMemo(() => aggregateProducts(fleetMachinesNamed), [fleetMachinesNamed]);
+
+  /** Graph B focus list = Locations filter (always), not API payload — payload is empty while loading/refetch. */
+  const focusLocOptions = useMemo(() => {
+    if (locNone || !ids.length) return [];
+    const byId = new Map(machines.map((m) => [m.id, m]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter((m): m is (typeof machines)[number] => Boolean(m))
+      .map((m) => ({ id: m.id, name: m.name || m.id }));
+  }, [locNone, ids, machines]);
 
   const focusMachine = useMemo(
     () => payloadMachines.find((m) => m.machineId === focusLocId) || null,
@@ -1582,14 +1594,18 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
   const multiLoc = ids.length > 1;
 
   useEffect(() => {
-    if (!payloadMachines.length) {
-      setFocusLocId('');
+    if (!focusLocOptions.length) {
+      if (focusLocId) setFocusLocId('');
       return;
     }
-    if (focusLocId && !payloadMachines.some((m) => m.machineId === focusLocId)) {
-      setFocusLocId('');
+    if (focusLocId && !focusLocOptions.some((m) => m.id === focusLocId)) {
+      setFocusLocId(focusLocOptions[0].id);
+      return;
     }
-  }, [payloadMachines, focusLocId]);
+    if (!focusLocId) {
+      setFocusLocId(focusLocOptions[0].id);
+    }
+  }, [focusLocOptions, focusLocId]);
 
   const inLocationRows = useMemo(() => {
     if (!skus.length) return mixedRows;
@@ -2498,11 +2514,14 @@ export function PerfProductsSection({ machines, selectedIds, allSelected, fleetI
                 value={focusLocId}
                 onChange={(e) => setFocusLocId(e.target.value)}
                 aria-label="Focus location for Graph B"
+                disabled={!focusLocOptions.length}
               >
-                <option value="">Select a location…</option>
-                {payloadMachines.map((m) => (
-                  <option key={m.machineId} value={m.machineId}>
-                    {m.machineName}
+                {!focusLocOptions.length ? (
+                  <option value="">No locations selected…</option>
+                ) : null}
+                {focusLocOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
                   </option>
                 ))}
               </select>

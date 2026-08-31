@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-31 | **Products Graph B focus location:** Dropdown uses selected Locations (not API payload), so it no longer goes empty while custom-range data is loading/refetching. |
 | 2026-08-31 | **Footfall/Promo always dark ops:** Dark surface CSS no longer gated on shell Dark mode; Pro Light white panel overrides skipped for Footfall/Promo; removed Light-mode white restores. |
 | 2026-08-31 | **Footfall Period vs Compare:** Report now loads Compare (B) dates; location detail shows **Period comparison** (totals Δ + daily/hourly charts). Compare bar hint points there. |
 | 2026-08-31 | **Footfall/Promo white panels:** Toolbar/cards no longer inherit Pro `--panel: #fff`. Local dark ops tokens + hardcoded `.ffAlertToolbar` / compare bar backgrounds. |
