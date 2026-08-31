@@ -36,6 +36,9 @@ from vendon_proxy_routes import (
     compute_vends_resolved_for_machine,
     _fetch_vends_stats_window,
     _refresh_revenue_cache_single_day,
+    _fill_revenue_cache_gaps,
+    _list_missing_revenue_cache_dates,
+    _ytd_ly_gap_windows,
 )
 from red_alert_routes import compute_daily_incidents_elapsed
 from models import PeopleAnalyticsRecord, VendonDailyMachineRevenueCache, create_engine_and_session
@@ -238,6 +241,45 @@ def _maybe_seed_vendon_revenue_cache(day: date, *, force_product_mix: bool = Fal
     import threading
 
     threading.Thread(target=_run_seed, daemon=True).start()
+
+
+def _maybe_fill_ytd_revenue_cache_gaps(*, max_days: int = 8) -> Dict[str, Any]:
+    """
+    Background gap-fill for fleet YTD / LY YTD windows.
+    Prevents Alert revenue bar from undercounting when cron lag or history holes exist.
+    """
+    throttle_key = "revenue_seed:ytd_ly_gaps"
+    cached = _alert_cache_get(throttle_key, 900)
+    if cached is not None:
+        return cached if isinstance(cached, dict) else {"ok": True, "skipped": "throttled"}
+
+    missing_n = 0
+    for a, b in _ytd_ly_gap_windows():
+        missing_n += len(_list_missing_revenue_cache_dates(a, b))
+    if missing_n <= 0:
+        out = {"ok": True, "missingBefore": 0, "skipped": "complete"}
+        _alert_cache_set(throttle_key, out)
+        return out
+
+    _alert_cache_set(throttle_key, {"ok": False, "inFlight": True, "missingBefore": missing_n})
+
+    def _run() -> None:
+        try:
+            res = _fill_revenue_cache_gaps(use_ytd_windows=True, max_days=max_days, oldest_first=True)
+            _alert_cache_set(throttle_key, res)
+            if res.get("remaining"):
+                logger.warning(
+                    "vendon revenue cache YTD/LY gaps remaining=%s filled=%s",
+                    res.get("remaining"),
+                    len(res.get("filled") or []),
+                )
+        except Exception:
+            logger.exception("vendon revenue cache YTD/LY gap fill failed")
+
+    import threading
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "queued": True, "missingBefore": missing_n, "maxDays": max_days}
 
 
 def _ensure_alert_ops_cache_tables(db: Session) -> None:
@@ -1366,8 +1408,13 @@ def _refresh_daily_sales_elapsed_cache_internal(
         last_mtd = _fleet_sum_cache_db(rev_db2, last_mtd_start, last_mtd_end)
         ytd_done = _fleet_sum_cache_db(rev_db2, ytd_start, yday) if ytd_start <= yday else 0.0
         last_ytd = _fleet_sum_cache_db(rev_db2, last_ytd_start, last_ytd_end)
+        ytd_gap_days = len(_list_missing_revenue_cache_dates(ytd_start, yday)) if ytd_start <= yday else 0
+        ly_gap_days = len(_list_missing_revenue_cache_dates(last_ytd_start, last_ytd_end))
     finally:
         rev_db2.close()
+
+    # Keep filling hollow YTD/LY history in the background (cron also does this nightly).
+    gap_fill_status = _maybe_fill_ytd_revenue_cache_gaps(max_days=8)
 
     fleet_mtd = round(mtd_done + fleet_today, 4)
     fleet_last_mtd = round(last_mtd, 4)
@@ -1398,6 +1445,9 @@ def _refresh_daily_sales_elapsed_cache_internal(
         "fleetYtdKwd": fleet_ytd,
         "fleetLastYtdKwd": fleet_last_ytd,
         "fleetYtdTrendPct": fleet_ytd_trend,
+        "fleetYtdCacheGapDays": ytd_gap_days,
+        "fleetLastYtdCacheGapDays": ly_gap_days,
+        "fleetYtdCacheGapFill": gap_fill_status,
         "allowedMachineIds": allowed_list,
         "byMachineId": out,
         "cacheBucket": cache_bucket,

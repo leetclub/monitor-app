@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
@@ -1349,10 +1349,209 @@ def _ensure_remote_credits_preload_table(db) -> None:
     db.execute(text("CREATE INDEX IF NOT EXISTS idx_remote_credits_preload_cache_date ON remote_credits_preload_cache (cache_date);"))
 
 
-def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
+def _revenue_cache_machine_payload(
+    machine_id: str,
+    machine_name: str,
+    vends: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build totals + payload_json fields for one machine's vends (customer sales exclude WEB cashless)."""
+    total_sales = 0.0
+    total_tx = 0
+    product_counts: Dict[str, int] = {}
+    product_sales: Dict[str, float] = {}
+    product_counts_all: Dict[str, int] = {}
+    product_sales_all: Dict[str, float] = {}
+    hour_counts: Dict[int, int] = {}
+    tz_kw = ZoneInfo("Asia/Kuwait")
+    for v in vends:
+        try:
+            price = float(v.get("price") or 0)
+        except Exception:
+            price = 0.0
+        try:
+            prod_name, _sel = _stats_vend_product_fields(v)
+        except Exception:
+            prod_name = ""
+        if prod_name:
+            product_counts_all[prod_name] = int(product_counts_all.get(prod_name, 0)) + 1
+            product_sales_all[prod_name] = float(product_sales_all.get(prod_name, 0.0)) + price
+        if _is_web_cashless_vend(v):
+            continue
+        total_sales += price
+        total_tx += 1
+        try:
+            if prod_name:
+                product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
+                product_sales[prod_name] = float(product_sales.get(prod_name, 0.0)) + price
+        except Exception:
+            pass
+        try:
+            ts_raw = v.get("datetime") or v.get("timestamp") or 0
+            ts_i = int(ts_raw) if ts_raw is not None else 0
+            if ts_i > 0:
+                hour = datetime.fromtimestamp(ts_i, tz=timezone.utc).astimezone(tz_kw).hour
+                hour_counts[hour] = int(hour_counts.get(hour, 0)) + 1
+        except Exception:
+            pass
+
+    top_product = None
+    low_product = None
+    top_products: List[Dict[str, Any]] = []
+    low_products: List[Dict[str, Any]] = []
+    if product_sales:
+        ordered = sorted(product_sales.items(), key=lambda kv: (-float(kv[1]), str(kv[0]).lower()))
+        ordered_low = sorted(product_sales.items(), key=lambda kv: (float(kv[1]), str(kv[0]).lower()))
+
+        def _row(name: str, kwd: float) -> Dict[str, Any]:
+            return {
+                "name": name,
+                "revenueKwd": round(float(kwd), 4),
+                "count": int(product_counts.get(name) or 0),
+            }
+
+        top_product = _row(ordered[0][0], ordered[0][1])
+        top_products = [_row(n, k) for n, k in ordered[:5]]
+        low_product = _row(ordered_low[0][0], ordered_low[0][1])
+        low_products = [_row(n, k) for n, k in ordered_low[:5]]
+    elif product_counts:
+        ordered = sorted(product_counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
+        ordered_low = sorted(product_counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
+        top_product = {"name": ordered[0][0], "count": int(ordered[0][1]), "revenueKwd": None}
+        top_products = [{"name": n, "count": int(c), "revenueKwd": None} for n, c in ordered[:5]]
+        low_product = {"name": ordered_low[0][0], "count": int(ordered_low[0][1]), "revenueKwd": None}
+        low_products = [{"name": n, "count": int(c), "revenueKwd": None} for n, c in ordered_low[:5]]
+
+    peak_hour = None
+    if hour_counts:
+        best_hour, best_count = sorted(hour_counts.items(), key=lambda kv: (-int(kv[1]), int(kv[0])))[0]
+        peak_hour = {"hour": int(best_hour), "count": int(best_count), "label": f"{int(best_hour):02d}:00"}
+
+    return {
+        "total_sales": total_sales,
+        "total_tx": total_tx,
+        "payload_json": {
+            "machine_id": machine_id,
+            "machine_name": machine_name,
+            "totalSales": total_sales,
+            "totalTransactions": total_tx,
+            "topProduct": top_product,
+            "lowProduct": low_product,
+            "topProducts": top_products,
+            "lowProducts": low_products,
+            "productCounts": {str(k): int(v) for k, v in product_counts.items()},
+            "productSales": {str(k): round(float(v), 4) for k, v in product_sales.items()},
+            "productCountsAll": {str(k): int(v) for k, v in product_counts_all.items()},
+            "productSalesAll": {str(k): round(float(v), 4) for k, v in product_sales_all.items()},
+            "productSalesMeta": {"excludesWebCashless": True, "v": 3},
+            "peakHour": peak_hour,
+        },
+    }
+
+
+def _list_missing_revenue_cache_dates(d0: date, d1: date) -> List[str]:
+    """Calendar days in [d0, d1] with zero rows in vendon_daily_machine_revenue_cache."""
+    if d0 > d1:
+        return []
+    db = _get_people_analytics_session()
+    try:
+        _ensure_revenue_table(db)
+        db.commit()
+        have = {
+            r[0]
+            for r in db.query(VendonDailyMachineRevenueCache.cache_date)
+            .filter(
+                VendonDailyMachineRevenueCache.cache_date >= d0,
+                VendonDailyMachineRevenueCache.cache_date <= d1,
+            )
+            .distinct()
+            .all()
+        }
+    finally:
+        db.close()
+    out: List[str] = []
+    cur = d0
+    while cur <= d1:
+        if cur not in have:
+            out.append(cur.isoformat())
+        cur += timedelta(days=1)
+    return out
+
+
+def _ytd_ly_gap_windows(today: Optional[date] = None) -> List[Tuple[date, date]]:
+    """Windows that power fleet YTD / LY YTD on the Alert revenue bar."""
+    import calendar as _cal
+
+    tz = ZoneInfo("Asia/Kuwait")
+    today = today or datetime.now(tz).date()
+    yday = today - timedelta(days=1)
+
+    def _safe(y: int, m: int, d: int) -> date:
+        return date(y, m, min(d, _cal.monthrange(y, m)[1]))
+
+    windows: List[Tuple[date, date]] = []
+    ytd0 = date(today.year, 1, 1)
+    if ytd0 <= yday:
+        windows.append((ytd0, yday))
+    ly0 = date(today.year - 1, 1, 1)
+    ly1 = _safe(today.year - 1, today.month, today.day)
+    if ly0 <= ly1:
+        windows.append((ly0, ly1))
+    return windows
+
+
+def _fill_revenue_cache_gaps(
+    *,
+    d0: Optional[date] = None,
+    d1: Optional[date] = None,
+    max_days: int = 14,
+    oldest_first: bool = True,
+    use_ytd_windows: bool = False,
+) -> Dict[str, Any]:
+    """
+    Refresh missing cache days (oldest first by default) so YTD/LY cannot stay hollow.
+    Caps work per call for cron / HTTP safety.
+    """
+    max_days = max(1, min(int(max_days), 60))
+    missing: List[str] = []
+    if use_ytd_windows or (d0 is None and d1 is None):
+        seen = set()
+        for a, b in _ytd_ly_gap_windows():
+            for ds in _list_missing_revenue_cache_dates(a, b):
+                if ds not in seen:
+                    seen.add(ds)
+                    missing.append(ds)
+    else:
+        if d0 is None or d1 is None:
+            return {"ok": False, "error": "from/to required unless use_ytd_windows"}
+        missing = _list_missing_revenue_cache_dates(d0, d1)
+
+    missing_sorted = sorted(missing) if oldest_first else sorted(missing, reverse=True)
+    todo = missing_sorted[:max_days]
+    filled: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
+    for ds in todo:
+        res = _refresh_revenue_cache_single_day(ds)
+        if res.get("ok"):
+            filled.append({"date": ds, "inserted": res.get("inserted")})
+        else:
+            failed.append({"date": ds, "error": res.get("error")})
+    return {
+        "ok": len(failed) == 0,
+        "missingBefore": len(missing_sorted),
+        "attempted": len(todo),
+        "filled": filled,
+        "failed": failed,
+        "remaining": max(0, len(missing_sorted) - len(todo)),
+    }
+
+
+def _refresh_revenue_cache_single_day(date_str: str, *, fleet_fetch: bool = True) -> Dict[str, Any]:
     """
     Compute per-machine revenue for one day and store in DB.
     Note: This is intended for cron / internal warm-ups, not per-request heavy usage.
+
+    fleet_fetch=True (default): one paginated /stats/vends window for the whole fleet,
+    then group by machine — much faster for backfill / gap-fill than N per-machine calls.
     """
     try:
         day = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -1369,6 +1568,7 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
         for m in mrows
         if isinstance(m, dict) and m.get("id") is not None and not machine_row_excluded(m.get("name"), m.get("id"))
     ]
+    by_id = {m["id"]: m["name"] for m in machines}
 
     db = _get_people_analytics_session()
     try:
@@ -1377,124 +1577,47 @@ def _refresh_revenue_cache_single_day(date_str: str) -> Dict[str, Any]:
 
         db.query(VendonDailyMachineRevenueCache).filter(VendonDailyMachineRevenueCache.cache_date == day).delete(synchronize_session=False)
 
+        vends_by_mid: Dict[str, List[Dict[str, Any]]] = {m["id"]: [] for m in machines}
+        if fleet_fetch:
+            # Busy fleet days can exceed 100k vends — do not truncate silently.
+            all_vends, ve = _fetch_vends_stats_window(from_ts, to_ts, None, max_rows=500_000)
+            if ve:
+                logger.warning("revenue cache fleet vends error %s: %s — falling back per-machine", date_str, ve)
+                fleet_fetch = False
+            else:
+                for v in all_vends:
+                    mid = str(v.get("machine_id") or "").strip()
+                    if mid in vends_by_mid:
+                        vends_by_mid[mid].append(v)
+                    elif mid and mid not in by_id:
+                        # Machine not in filtered list (excluded) — skip
+                        continue
+
         inserted = 0
         for m in machines:
-            vends, ve = _fetch_vends_stats_window(from_ts, to_ts, m["id"], max_rows=25000)
-            if ve:
-                logger.warning("revenue cache vends error for %s: %s", m["id"], ve)
-                continue
-            total_sales = 0.0
-            total_tx = 0
-            product_counts: Dict[str, int] = {}
-            product_sales: Dict[str, float] = {}
-            product_counts_all: Dict[str, int] = {}
-            product_sales_all: Dict[str, float] = {}
-            hour_counts: Dict[int, int] = {}
-            tz_kw = ZoneInfo("Asia/Kuwait")
-            for v in vends:
-                try:
-                    price = float(v.get("price") or 0)
-                except Exception:
-                    price = 0.0
-                try:
-                    prod_name, _sel = _stats_vend_product_fields(v)
-                except Exception:
-                    prod_name = ""
-                # All vends (incl. WEB cashless) for optional Alert toggle.
-                if prod_name:
-                    product_counts_all[prod_name] = int(product_counts_all.get(prod_name, 0)) + 1
-                    product_sales_all[prod_name] = float(product_sales_all.get(prod_name, 0.0)) + price
-                # Real customer sales only — WEB cashless ≈ remote credit / operator activity.
-                if _is_web_cashless_vend(v):
+            if not fleet_fetch:
+                vends, ve = _fetch_vends_stats_window(from_ts, to_ts, m["id"], max_rows=25000)
+                if ve:
+                    logger.warning("revenue cache vends error for %s: %s", m["id"], ve)
                     continue
-                total_sales += price
-                total_tx += 1
-                try:
-                    if prod_name:
-                        product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
-                        product_sales[prod_name] = float(product_sales.get(prod_name, 0.0)) + price
-                except Exception:
-                    pass
-                try:
-                    ts_raw = v.get("datetime") or v.get("timestamp") or 0
-                    ts_i = int(ts_raw) if ts_raw is not None else 0
-                    if ts_i > 0:
-                        hour = datetime.fromtimestamp(ts_i, tz=timezone.utc).astimezone(tz_kw).hour
-                        hour_counts[hour] = int(hour_counts.get(hour, 0)) + 1
-                except Exception:
-                    pass
+            else:
+                vends = vends_by_mid.get(m["id"]) or []
 
-            top_product = None
-            low_product = None
-            top_products: List[Dict[str, Any]] = []
-            low_products: List[Dict[str, Any]] = []
-            # Rank by sales revenue (KD) — primary operator focus; cups kept as secondary.
-            if product_sales:
-                ordered = sorted(
-                    product_sales.items(),
-                    key=lambda kv: (-float(kv[1]), str(kv[0]).lower()),
-                )
-                ordered_low = sorted(
-                    product_sales.items(),
-                    key=lambda kv: (float(kv[1]), str(kv[0]).lower()),
-                )
-
-                def _row(name: str, kwd: float) -> Dict[str, Any]:
-                    return {
-                        "name": name,
-                        "revenueKwd": round(float(kwd), 4),
-                        "count": int(product_counts.get(name) or 0),
-                    }
-
-                top_product = _row(ordered[0][0], ordered[0][1])
-                top_products = [_row(n, k) for n, k in ordered[:5]]
-                low_product = _row(ordered_low[0][0], ordered_low[0][1])
-                low_products = [_row(n, k) for n, k in ordered_low[:5]]
-            elif product_counts:
-                # Legacy path if prices missing.
-                ordered = sorted(product_counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0]).lower()))
-                ordered_low = sorted(product_counts.items(), key=lambda kv: (int(kv[1]), str(kv[0]).lower()))
-                top_product = {"name": ordered[0][0], "count": int(ordered[0][1]), "revenueKwd": None}
-                top_products = [{"name": n, "count": int(c), "revenueKwd": None} for n, c in ordered[:5]]
-                low_product = {"name": ordered_low[0][0], "count": int(ordered_low[0][1]), "revenueKwd": None}
-                low_products = [{"name": n, "count": int(c), "revenueKwd": None} for n, c in ordered_low[:5]]
-
-            peak_hour = None
-            if hour_counts:
-                # Highest count; tie-breaker earliest hour.
-                best_hour, best_count = sorted(hour_counts.items(), key=lambda kv: (-int(kv[1]), int(kv[0])))[0]
-                peak_hour = {"hour": int(best_hour), "count": int(best_count), "label": f"{int(best_hour):02d}:00"}
-
+            built = _revenue_cache_machine_payload(m["id"], m["name"], vends)
             rec = VendonDailyMachineRevenueCache(
                 cache_date=day,
                 machine_id=m["id"],
                 machine_name=m["name"],
-                total_sales_kwd=total_sales,
-                total_transactions=total_tx,
-                payload_json={
-                    "machine_id": m["id"],
-                    "machine_name": m["name"],
-                    "totalSales": total_sales,
-                    "totalTransactions": total_tx,
-                    "topProduct": top_product,
-                    "lowProduct": low_product,
-                    "topProducts": top_products,
-                    "lowProducts": low_products,
-                    # Cups + KD mix for period rollups (Alert / Performance).
-                    "productCounts": {str(k): int(v) for k, v in product_counts.items()},
-                    "productSales": {str(k): round(float(v), 4) for k, v in product_sales.items()},
-                    "productCountsAll": {str(k): int(v) for k, v in product_counts_all.items()},
-                    "productSalesAll": {str(k): round(float(v), 4) for k, v in product_sales_all.items()},
-                    "productSalesMeta": {"excludesWebCashless": True, "v": 3},
-                    "peakHour": peak_hour,
-                },
+                total_sales_kwd=built["total_sales"],
+                total_transactions=built["total_tx"],
+                payload_json=built["payload_json"],
                 created_at=datetime.utcnow(),
             )
             db.add(rec)
             inserted += 1
 
         db.commit()
-        return {"ok": True, "date": date_str, "inserted": inserted}
+        return {"ok": True, "date": date_str, "inserted": inserted, "fleetFetch": bool(fleet_fetch)}
     except Exception as ex:
         db.rollback()
         logger.exception("revenue cache refresh failed")
@@ -2011,6 +2134,52 @@ def register_vendon_proxy_routes(app) -> None:
         body = request.get_json(silent=True) or {}
         date_str = (body.get("date") or "").strip()
         days_back = body.get("daysBack") or body.get("days_back")
+        fill_gaps = body.get("fillGaps") or body.get("fill_gaps")
+        # Gap-fill YTD + LY YTD windows (or explicit from/to). Sync when maxDays small;
+        # larger batches run in background so cron/HTTP stay under gateway timeouts.
+        if fill_gaps:
+            raw_max = body.get("maxDays") or body.get("max_days") or 14
+            try:
+                max_days = max(1, min(int(raw_max), 60))
+            except (TypeError, ValueError):
+                return jsonify({"error": "maxDays must be an integer"}), 400
+            from_s = (body.get("from") or body.get("start") or "").strip()
+            to_s = (body.get("to") or body.get("end") or "").strip()
+            use_ytd = not (from_s and to_s)
+            d0 = d1 = None
+            if not use_ytd:
+                try:
+                    d0 = datetime.strptime(from_s, "%Y-%m-%d").date()
+                    d1 = datetime.strptime(to_s, "%Y-%m-%d").date()
+                except Exception as ex:
+                    return jsonify({"error": f"Invalid from/to: {ex}"}), 400
+
+            def _run_gaps() -> Dict[str, Any]:
+                return _fill_revenue_cache_gaps(
+                    d0=d0,
+                    d1=d1,
+                    max_days=max_days,
+                    oldest_first=True,
+                    use_ytd_windows=use_ytd,
+                )
+
+            # Cron passes sync:true + maxDays≤25. Larger historical fills can queue async.
+            sync_raw = body.get("sync")
+            if sync_raw is None:
+                do_sync = max_days <= 25
+            else:
+                do_sync = str(sync_raw).strip().lower() in ("1", "true", "yes", "on")
+            if do_sync:
+                res = _run_gaps()
+                return jsonify(res), (200 if res.get("ok") else 207)
+            import threading
+
+            threading.Thread(
+                target=lambda: logger.info("cache-revenue fillGaps done %s", _run_gaps()),
+                daemon=True,
+            ).start()
+            return jsonify({"ok": True, "queued": True, "maxDays": max_days, "useYtdWindows": use_ytd}), 202
+
         # Optional range backfill for productCounts (Alert drink / Performance mix).
         # Runs in background — full fleet × many days is too slow for one HTTP call.
         if days_back is not None and not date_str:
