@@ -16,7 +16,6 @@
 }
 
 html[data-theme='pro'] {
-  color-scheme: light;
   --bg: #e9eef4;
   --bg-elevated: #ffffff;
   --panel: #ffffff;
@@ -39,6 +38,11 @@ html[data-theme='pro'] {
   --pro-gutter: clamp(16px, 2.2vw, 28px);
   background: #e9eef4;
   width: 100%;
+}
+
+/* Light native widgets only in Pro light; Pro dark sets color-scheme in color-modes.css */
+html[data-theme='pro']:not([data-mode='dark']) {
+  color-scheme: light;
 }
 
 html[data-theme='pro'] body,

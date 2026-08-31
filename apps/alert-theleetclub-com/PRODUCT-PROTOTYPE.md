@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-08-31 | **Dark form chrome (cross-browser):** Stronger dark `color-scheme` + control fills for Classic dark / Pro dark / v2; WebKit date segments + calendar icon; autofill wash; Pro no longer forces `color-scheme: light` while in dark mode. |
 | 2026-08-30 | **Revenue labels:** Products mix basis renamed **Actual revenue \| + WEB cashless** (was Customer only / Include cashless). Brief strip shows **Actual + WEB cashless = Total income** with mix bar. Fleet bar eyebrow = **Fleet actual revenue**. API `product-compare` returns `actualRevenueKd` / `webCashlessKd` / `totalIncomeKd`. |
 | 2026-08-28 | **Fleet bar + v2 minimize:** Fleet revenue bar is full-width footer; side nav stops above it (no more under-nav hide). Alert v2 desktop sidebar has **minimize** (icons rail, persisted). |
 | 2026-08-28 | **Sheet batch (tester notes):** Red Flags **Op. hours** column; toolbar **Sales ↓** + **Hide inactive** on Red Flags/Overall; Schedule live person = **operators + route/deliver drivers** only; night→morning **handoff prefers today’s covering shift**; weekly report YoY totals use **daily sales cache** (not undercounting SKU mix); fleet KD vs Vendon portal gap = **WEB cashless** (Alert customer-only). Customer calls still stub. |

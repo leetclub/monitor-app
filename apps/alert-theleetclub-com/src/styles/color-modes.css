@@ -328,6 +328,12 @@ html[data-theme='pro'][data-mode='dark'] .proWorkspace {
   color: var(--pro-ink);
 }
 
+html[data-theme='pro'][data-mode='dark'] .proCompareChip {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
 /* Color mode toggle spacing next to shell toggle */
 .colorModeToggle {
   margin-left: 2px;
