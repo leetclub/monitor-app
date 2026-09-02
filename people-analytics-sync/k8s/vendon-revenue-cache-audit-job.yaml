@@ -1,0 +1,82 @@
+# One-shot Job: full audit (+ fix) of vendon_daily_machine_revenue_cache vs live Vendon.
+# Covers entire cache history through Kuwait yesterday (not only YTD).
+#
+# Prefer: bash people-analytics-sync/scripts/run_vendon_revenue_cache_audit_job.sh
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vendon-revenue-cache-audit
+  namespace: leet-monitor
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 43200
+  template:
+    metadata:
+      labels:
+        job: vendon-revenue-cache-audit
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: audit
+          image: programmeradmin25/people-analytics-sync:api-latest
+          imagePullPolicy: Always
+          command:
+            - python3
+            - -u
+            - /scripts/audit_vendon_revenue_cache.py
+            - --fix
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: AUDIT_FROM
+              value: "2025-01-01"
+            - name: AUDIT_REPORT
+              value: /tmp/vendon_cache_audit.json
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: db-password
+            - name: VENDON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: people-analytics-secrets
+                  key: vendon-api-key
+            - name: VENDON_API_BASE
+              value: https://cloud.vendon.net/rest/v1.9.0
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1500m"
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: vendon-revenue-cache-audit-script
+            defaultMode: 0555
