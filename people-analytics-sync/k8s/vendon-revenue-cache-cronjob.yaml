@@ -15,7 +15,7 @@ spec:
     spec:
       ttlSecondsAfterFinished: 3600
       backoffLimit: 2
-      activeDeadlineSeconds: 3500
+      activeDeadlineSeconds: 7200
       template:
         spec:
           restartPolicy: OnFailure
@@ -49,3 +49,7 @@ spec:
                   curl -fsS --connect-timeout 10 --max-time 3200 --retry 1 --retry-delay 10 \
                     -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
                     -d '{"fillGaps":true,"maxDays":25,"sync":true}'
+                  # Reconcile up to 15 newest days vs live Vendon (customer sales); refresh drift.
+                  curl -fsS --connect-timeout 10 --max-time 3200 --retry 1 --retry-delay 10 \
+                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
+                    -d '{"reconcile":true,"maxDays":15,"sync":true,"newestFirst":true}'

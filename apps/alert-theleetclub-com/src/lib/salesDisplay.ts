@@ -46,6 +46,17 @@ export type DailySalesElapsedResponse = {
   /** Last year same dates YTD. */
   fleetLastYtdKwd?: number;
   fleetYtdTrendPct?: number | null;
+  /** Missing completed days in YTD cache window (Jan 1 → yesterday). */
+  fleetYtdCacheGapDays?: number;
+  /** Missing days in LY YTD cache window. */
+  fleetLastYtdCacheGapDays?: number;
+  /** True when cache has no gaps and last reconcile vs Vendon is ok. */
+  fleetYtdCacheTrusted?: boolean;
+  /** ok | gaps | drift | refreshing | unknown — Vendon is source of truth. */
+  fleetRevenueCacheStatus?: 'ok' | 'gaps' | 'drift' | 'refreshing' | 'unknown' | string;
+  /** Max |live − cache| KD seen in last reconcile slice. */
+  fleetYtdCacheDeltaKwd?: number | null;
+  fleetRevenueCacheCheckedAt?: string | null;
   error?: string;
   fromCache?: boolean;
   stale?: boolean;
@@ -172,6 +183,35 @@ export function salesComparisonCaption(asOfLocal?: string | null): string {
     return 'Today (Kuwait) through page load vs each prior day over the same elapsed clock window.';
   }
   return `Today through ${asOfLocal.replace('T', ' ')} KWT vs each prior day over the same elapsed window.`;
+}
+
+/** Short trust cue when revenue cache is not yet verified against Vendon. */
+export function formatFleetRevenueCacheTrustNote(
+  data: Pick<
+    DailySalesElapsedResponse,
+    | 'fleetYtdCacheTrusted'
+    | 'fleetRevenueCacheStatus'
+    | 'fleetYtdCacheGapDays'
+    | 'fleetLastYtdCacheGapDays'
+  > | null | undefined,
+): string | null {
+  if (!data) return null;
+  const gaps =
+    Math.max(0, Number(data.fleetYtdCacheGapDays) || 0) +
+    Math.max(0, Number(data.fleetLastYtdCacheGapDays) || 0);
+  const status = String(data.fleetRevenueCacheStatus || '').toLowerCase();
+  if (data.fleetYtdCacheTrusted === true && gaps === 0 && (status === 'ok' || !status)) {
+    return null;
+  }
+  if (gaps > 0 || status === 'gaps') {
+    return gaps > 0
+      ? `verifying vs Vendon (${gaps} day gap${gaps === 1 ? '' : 's'})`
+      : 'verifying vs Vendon (cache gaps)';
+  }
+  if (status === 'drift') return 'verifying vs Vendon (cache drift)';
+  if (status === 'refreshing') return 'verifying vs Vendon…';
+  if (data.fleetYtdCacheTrusted === false) return 'verifying vs Vendon';
+  return null;
 }
 
 export function salesTrendFromToday(todayKwd: number, priorKwd: number): number | null {

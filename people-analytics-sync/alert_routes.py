@@ -39,6 +39,9 @@ from vendon_proxy_routes import (
     _fill_revenue_cache_gaps,
     _list_missing_revenue_cache_dates,
     _ytd_ly_gap_windows,
+    _reconcile_revenue_cache,
+    get_revenue_cache_trust_state,
+    _set_revenue_cache_trust_state,
 )
 from red_alert_routes import compute_daily_incidents_elapsed
 from models import PeopleAnalyticsRecord, VendonDailyMachineRevenueCache, create_engine_and_session
@@ -262,6 +265,7 @@ def _maybe_fill_ytd_revenue_cache_gaps(*, max_days: int = 8) -> Dict[str, Any]:
         return out
 
     _alert_cache_set(throttle_key, {"ok": False, "inFlight": True, "missingBefore": missing_n})
+    _set_revenue_cache_trust_state(status="gaps", ytdGapDays=missing_n)
 
     def _run() -> None:
         try:
@@ -280,6 +284,40 @@ def _maybe_fill_ytd_revenue_cache_gaps(*, max_days: int = 8) -> Dict[str, Any]:
 
     threading.Thread(target=_run, daemon=True).start()
     return {"ok": True, "queued": True, "missingBefore": missing_n, "maxDays": max_days}
+
+
+def _maybe_reconcile_revenue_cache(*, max_days: int = 5) -> Dict[str, Any]:
+    """
+    Background live-vs-cache day reconcile (Vendon is source of truth).
+    Throttled so Alert requests never block on multi-day Vendon pagination.
+    """
+    throttle_key = "revenue_seed:ytd_ly_reconcile"
+    cached = _alert_cache_get(throttle_key, 1800)
+    if cached is not None:
+        return cached if isinstance(cached, dict) else {"ok": True, "skipped": "throttled"}
+
+    _alert_cache_set(throttle_key, {"ok": False, "inFlight": True})
+    _set_revenue_cache_trust_state(status="refreshing")
+
+    def _run() -> None:
+        try:
+            res = _reconcile_revenue_cache(max_days=max_days, newest_first=True)
+            _alert_cache_set(throttle_key, res)
+            if res.get("driftDaysFound") or res.get("failed"):
+                logger.warning(
+                    "vendon revenue cache reconcile drift=%s refreshed=%s failed=%s",
+                    res.get("driftDaysFound"),
+                    len(res.get("refreshed") or []),
+                    len(res.get("failed") or []),
+                )
+        except Exception:
+            logger.exception("vendon revenue cache reconcile failed")
+            _set_revenue_cache_trust_state(status="drift")
+
+    import threading
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "queued": True, "maxDays": max_days}
 
 
 def _ensure_alert_ops_cache_tables(db: Session) -> None:
@@ -1150,7 +1188,12 @@ def _vend_row_dedupe_key(v: Dict[str, Any]) -> str:
 
 
 def _machine_window_sales_kwd(mid: str, ws: int, we: int) -> Tuple[float, bool]:
-    """Per-machine /stats/vends — Kuwait elapsed window [ws, we], deduped rows."""
+    """Per-machine /stats/vends — Kuwait elapsed window [ws, we], deduped rows.
+
+    Customer sales only (excludes WEB_CASHLESS) so today/YTD match revenue cache + Vendon.
+    """
+    from vendon_proxy_routes import _is_web_cashless_vend
+
     vends, err = _fetch_vends_stats_window(ws, we, mid, max_rows=25000)
     if err:
         raise RuntimeError(f"machine {mid}: {err}")
@@ -1159,6 +1202,8 @@ def _machine_window_sales_kwd(mid: str, ws: int, we: int) -> Tuple[float, bool]:
     seen: set[str] = set()
     for v in vends:
         if not isinstance(v, dict):
+            continue
+        if _is_web_cashless_vend(v):
             continue
         ts_i = _vend_ts(v)
         if ts_i <= 0 or ts_i < ws or ts_i > we:
@@ -1251,9 +1296,13 @@ def _refresh_daily_sales_elapsed_cache_internal(
             _apply_machine_kwd(mid, i, kwd, truncated)
 
     def _apply_vends_for_day(i: int, vends: List[Dict[str, Any]], ws: int, we: int) -> None:
+        from vendon_proxy_routes import _is_web_cashless_vend
+
         day_truncated = len(vends) >= 12000
         for v in vends:
             if not isinstance(v, dict):
+                continue
+            if _is_web_cashless_vend(v):
                 continue
             mid = _vend_machine_id(v)
             if not mid or mid not in allowed_ids:
@@ -1415,6 +1464,7 @@ def _refresh_daily_sales_elapsed_cache_internal(
 
     # Keep filling hollow YTD/LY history in the background (cron also does this nightly).
     gap_fill_status = _maybe_fill_ytd_revenue_cache_gaps(max_days=8)
+    reconcile_status = _maybe_reconcile_revenue_cache(max_days=5)
 
     fleet_mtd = round(mtd_done + fleet_today, 4)
     fleet_last_mtd = round(last_mtd, 4)
@@ -1426,6 +1476,15 @@ def _refresh_daily_sales_elapsed_cache_internal(
     fleet_ytd_trend = (
         round(((fleet_ytd - fleet_last_ytd) / fleet_last_ytd) * 100.0, 2) if fleet_last_ytd > 0 else None
     )
+
+    trust = get_revenue_cache_trust_state()
+    trust_status = str(trust.get("status") or "unknown")
+    if ytd_gap_days > 0 or ly_gap_days > 0:
+        trust_status = "gaps"
+    elif trust_status == "unknown" and ytd_gap_days == 0 and ly_gap_days == 0:
+        # No gaps and no reconcile result yet — treat as tentatively ok (cron/reconcile will harden).
+        trust_status = "ok"
+    trusted = trust_status == "ok" and ytd_gap_days == 0 and ly_gap_days == 0
 
     payload: Dict[str, Any] = {
         "timezone": "Asia/Kuwait",
@@ -1448,6 +1507,11 @@ def _refresh_daily_sales_elapsed_cache_internal(
         "fleetYtdCacheGapDays": ytd_gap_days,
         "fleetLastYtdCacheGapDays": ly_gap_days,
         "fleetYtdCacheGapFill": gap_fill_status,
+        "fleetYtdCacheReconcile": reconcile_status,
+        "fleetYtdCacheTrusted": trusted,
+        "fleetRevenueCacheStatus": trust_status,
+        "fleetYtdCacheDeltaKwd": trust.get("absDeltaKwdMax"),
+        "fleetRevenueCacheCheckedAt": trust.get("checkedAt"),
         "allowedMachineIds": allowed_list,
         "byMachineId": out,
         "cacheBucket": cache_bucket,

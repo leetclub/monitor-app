@@ -146,6 +146,7 @@ export function OpsRevenueTotalsBar({
   yearToDate,
   loading,
   salesFreshnessNote,
+  cacheTrustNote,
 }: {
   totals: CompareMetricPair;
   machineCount: number;
@@ -155,6 +156,8 @@ export function OpsRevenueTotalsBar({
   yearToDate?: PeriodCompareFleet | null;
   loading?: boolean;
   salesFreshnessNote?: string | null;
+  /** When set, cache is catching up / verifying against live Vendon (not yet trusted). */
+  cacheTrustNote?: string | null;
 }) {
   const barRef = useRef<HTMLElement | null>(null);
   const val = (n: number | null | undefined) =>
@@ -164,6 +167,13 @@ export function OpsRevenueTotalsBar({
   const up = hasTrend && trendPct >= 0;
   const down = hasTrend && trendPct < 0;
   const yoTrend = loading ? null : yesterdayOverall?.trendVsDayBeforePct;
+  const metaBits = [asOfLocal ? formatAsOfClock(asOfLocal) : null, salesFreshnessNote, cacheTrustNote].filter(
+    Boolean,
+  ) as string[];
+  const metaLine = metaBits.length ? metaBits.join(' · ') : null;
+  const trustTitle = cacheTrustNote
+    ? 'YTD/LY history is verified against live Vendon customer sales. Cache is a speed layer only — this note means gaps or drift are being refreshed.'
+    : undefined;
 
   useEffect(() => {
     const el = barRef.current;
@@ -213,7 +223,7 @@ export function OpsRevenueTotalsBar({
       el.style.removeProperty('width');
       clearFleetBarChrome();
     };
-  }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote]);
+  }, [loading, totals, yesterdayOverall, monthToDate, yearToDate, asOfLocal, salesFreshnessNote, cacheTrustNote]);
 
   const bar = (
     <footer ref={barRef} className="opsRevenueTotalsBar" aria-label="Fleet revenue running total">
@@ -221,11 +231,9 @@ export function OpsRevenueTotalsBar({
         <div className="opsRevenueTotalsBrand">
           <span className="opsRevenueTotalsEyebrow">Fleet actual revenue</span>
           <span className="opsRevenueTotalsCount">{machineCount} machines</span>
-          {asOfLocal || salesFreshnessNote ? (
-            <span className="opsRevenueTotalsAsOfMobile">
-              {asOfLocal ? formatAsOfClock(asOfLocal) : null}
-              {asOfLocal && salesFreshnessNote ? ' · ' : null}
-              {salesFreshnessNote}
+          {metaLine ? (
+            <span className="opsRevenueTotalsAsOfMobile" title={trustTitle}>
+              {metaLine}
             </span>
           ) : null}
         </div>
@@ -334,13 +342,19 @@ export function OpsRevenueTotalsBar({
           ) : null}
         </div>
 
-        {asOfLocal || salesFreshnessNote ? (
-          <span className="opsRevenueTotalsAsOf">
+        {metaLine ? (
+          <span className="opsRevenueTotalsAsOf" title={trustTitle}>
             {asOfLocal ? formatAsOfClock(asOfLocal) : null}
-            {asOfLocal && salesFreshnessNote ? ' · ' : null}
+            {asOfLocal && (salesFreshnessNote || cacheTrustNote) ? ' · ' : null}
             {salesFreshnessNote ? (
               <span className="opsRevenueTotalsFreshness" title={salesFreshnessNote}>
                 {salesFreshnessNote}
+              </span>
+            ) : null}
+            {salesFreshnessNote && cacheTrustNote ? ' · ' : null}
+            {cacheTrustNote ? (
+              <span className="opsRevenueTotalsFreshness opsRevenueTotalsCacheTrust" title={trustTitle}>
+                {cacheTrustNote}
               </span>
             ) : null}
           </span>

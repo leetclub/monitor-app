@@ -192,6 +192,10 @@ body:has(.v2AppRoot) .opsRevenueTotalsBar {
   color: #94a8b8;
 }
 
+.opsRevenueTotalsCacheTrust {
+  color: #d4a017;
+}
+
 .opsRevenueTotalsMetricDivider {
   padding-left: 16px;
   margin-left: 2px;

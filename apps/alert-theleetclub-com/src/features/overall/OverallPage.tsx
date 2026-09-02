@@ -45,6 +45,7 @@ import { TableScrollControls } from '@/components/TableScrollControls';
 import {
   salesElapsedForMachine,
   resolveSalesTrendPct,
+  formatFleetRevenueCacheTrustNote,
   type DailySalesElapsedResponse,
 } from '@/lib/salesDisplay';
 import { OVERALL_TABLE_HEADERS } from '@/lib/tableHeaderLabels';
@@ -1236,6 +1237,9 @@ export function OverallPage({
                 dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal,
               ) || (dailySalesQ.isFetching ? 'updating…' : null)
             : null
+        }
+        cacheTrustNote={
+          dailySalesQ.isFetched ? formatFleetRevenueCacheTrustNote(dailySalesQ.data) : null
         }
         yesterdayOverall={fleetYesterdayOverall}
         monthToDate={

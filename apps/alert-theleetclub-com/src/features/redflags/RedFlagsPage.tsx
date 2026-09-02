@@ -54,7 +54,6 @@ import {
   targetKwdForPreset,
 } from '@/lib/presetComparison';
 import { OpsRevenueTotalsBar } from '@/components/OpsRevenueTotalsBar';
-import { resolveSalesTrendPct } from '@/lib/salesDisplay';
 import { SalesHistoryModal } from '@/components/SalesHistoryModal';
 import { TrendHistoryModal } from '@/components/TrendHistoryModal';
 import { OperatorContactSection } from '@/components/OperatorContactSection';
@@ -76,8 +75,10 @@ import {
 } from '@/lib/incidentsDisplay';
 import {
   type DailySalesElapsedResponse,
+  formatFleetRevenueCacheTrustNote,
   formatKwd,
   formatSalesTrendPct,
+  resolveSalesTrendPct,
   salesDayKwd,
   salesElapsedForMachine,
   type SalesElapsedRow,
@@ -1923,6 +1924,9 @@ export function RedFlagsPage({
                   dailySalesQ.data?.cacheGeneratedAt ?? dailySalesQ.data?.asOfLocal,
                 ) || (dailySalesQ.isFetching ? 'updating…' : null)
               : null
+          }
+          cacheTrustNote={
+            dailySalesQ.isFetched ? formatFleetRevenueCacheTrustNote(dailySalesQ.data) : null
           }
           yesterdayOverall={fleetYesterdayOverall}
           monthToDate={

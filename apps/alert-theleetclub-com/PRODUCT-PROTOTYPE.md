@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-09-02 | **Vendon = source of truth for fleet KD:** Revenue cache is a speed layer only. WEB exclusion uses exact `WEB_CASHLESS`. Nightly + on-demand **reconcile** compares live Vendon day totals to cache and refreshes drift/gaps. Fleet bar shows a **verifying vs Vendon** cue when gaps/drift remain; `fleetYtdCacheTrusted` / `fleetRevenueCacheStatus` on daily-sales-elapsed. |
 | 2026-08-31 | **Footfall Period A / B labels:** Date bar, comparison section, totals table, and charts use **Period A vs Period B**. KPI cards titled Period A only (with hint that A vs B is below). |
 | 2026-08-31 | **Products Graph B focus location:** Dropdown uses selected Locations (not API payload), so it no longer goes empty while custom-range data is loading/refetching. |
 | 2026-08-31 | **Footfall/Promo always dark ops:** Dark surface CSS no longer gated on shell Dark mode; Pro Light white panel overrides skipped for Footfall/Promo; removed Light-mode white restores. |

@@ -28,7 +28,7 @@ from zoneinfo import ZoneInfo
 import requests
 from flask import jsonify, request, session as flask_session
 
-from sqlalchemy import and_, text, or_
+from sqlalchemy import and_, text, or_, func
 
 from dashboard_access_models import (
     DashboardAccessDefault,
@@ -525,20 +525,39 @@ def _last_transactions_classic_rows(machine_id: Optional[str]) -> Tuple[List[Dic
 
 
 def _is_web_cashless_vend(vend: Dict[str, Any]) -> bool:
+    """
+    True for remote-credit / WEB cashless dispenses — excluded from customer (actual) revenue.
+
+    Source of truth matches Alert verify scripts: payment_method == WEB_CASHLESS.
+    Do not treat plain CASHLESS as WEB (that undercounts customer sales).
+    """
     try:
-        js = json.dumps(vend or {}, ensure_ascii=False).upper()
-        if "WEB" in js and "CASHLESS" in js:
-            return True
-        candidates: List[str] = []
-        for k in ("payment_type", "payment_type_name", "type", "pay_type", "pay_type_name"):
-            v = vend.get(k)
-            if v is not None:
-                candidates.append(str(v))
-        for v in candidates:
-            u = v.upper()
-            if "WEB" in u or "CASHLESS" in u:
+        if not isinstance(vend, dict):
+            return False
+        pm_keys = (
+            "payment_method",
+            "paymentMethod",
+            "payment_type",
+            "payment_type_name",
+            "pay_type",
+            "pay_type_name",
+        )
+        saw_payment_field = False
+        for k in pm_keys:
+            raw = vend.get(k)
+            if raw is None:
+                continue
+            saw_payment_field = True
+            u = str(raw).strip().upper().replace(" ", "_").replace("-", "_")
+            if u in ("WEB_CASHLESS", "WEBCASHLESS"):
                 return True
-        return False
+            if "WEB" in u and "CASHLESS" in u:
+                return True
+        if saw_payment_field:
+            return False
+        # No payment field: only exclude when the row clearly encodes WEB_CASHLESS.
+        js = json.dumps(vend or {}, ensure_ascii=False).upper().replace(" ", "_").replace("-", "_")
+        return "WEB_CASHLESS" in js or "WEBCASHLESS" in js
     except Exception:
         return False
 
@@ -1545,6 +1564,224 @@ def _fill_revenue_cache_gaps(
     }
 
 
+# Day-total reconcile vs live Vendon (customer sales). Cache is not source of truth.
+REVENUE_CACHE_RECONCILE_TOLERANCE_KWD = 0.05
+_REVENUE_CACHE_TRUST_STATE: Dict[str, Any] = {
+    "status": "unknown",  # ok | gaps | drift | refreshing | unknown
+    "checkedAt": None,
+    "driftDaysFound": 0,
+    "checkedDays": 0,
+    "refreshed": [],
+    "failed": [],
+    "absDeltaKwdMax": 0.0,
+    "ytdGapDays": None,
+    "lyGapDays": None,
+}
+
+
+def get_revenue_cache_trust_state() -> Dict[str, Any]:
+    return dict(_REVENUE_CACHE_TRUST_STATE)
+
+
+def _set_revenue_cache_trust_state(**kwargs: Any) -> Dict[str, Any]:
+    _REVENUE_CACHE_TRUST_STATE.update(kwargs)
+    if "checkedAt" not in kwargs:
+        _REVENUE_CACHE_TRUST_STATE["checkedAt"] = datetime.now(timezone.utc).isoformat()
+    return get_revenue_cache_trust_state()
+
+
+def _cache_day_customer_sum(day: date) -> Optional[float]:
+    """Sum total_sales_kwd for cache_date, or None if the day has zero rows (missing)."""
+    db = _get_people_analytics_session()
+    try:
+        _ensure_revenue_table(db)
+        db.commit()
+        exists = (
+            db.query(VendonDailyMachineRevenueCache.id)
+            .filter(VendonDailyMachineRevenueCache.cache_date == day)
+            .first()
+            is not None
+        )
+        if not exists:
+            return None
+        tot = (
+            db.query(func.coalesce(func.sum(VendonDailyMachineRevenueCache.total_sales_kwd), 0.0))
+            .filter(VendonDailyMachineRevenueCache.cache_date == day)
+            .scalar()
+        )
+        return float(tot or 0.0)
+    finally:
+        db.close()
+
+
+def _live_day_customer_sum(date_str: str) -> Tuple[Optional[float], Optional[str]]:
+    """Live fleet customer sales for one Kuwait calendar day (excl. WEB_CASHLESS)."""
+    from_ts, to_ts = _kuwait_day_bounds_utc(date_str)
+    vends, err = _fetch_vends_stats_window(from_ts, to_ts, None, max_rows=500_000)
+    if err:
+        return None, err
+    total = 0.0
+    for v in vends or []:
+        if not isinstance(v, dict):
+            continue
+        if _is_web_cashless_vend(v):
+            continue
+        try:
+            total += float(v.get("price") or 0)
+        except Exception:
+            pass
+    return round(total, 4), None
+
+
+def _iter_ytd_ly_dates(*, newest_first: bool = True) -> List[str]:
+    days: List[str] = []
+    seen = set()
+    for a, b in _ytd_ly_gap_windows():
+        cur = a
+        while cur <= b:
+            ds = cur.isoformat()
+            if ds not in seen:
+                seen.add(ds)
+                days.append(ds)
+            cur += timedelta(days=1)
+    days.sort(reverse=newest_first)
+    return days
+
+
+def _reconcile_revenue_cache(
+    *,
+    max_days: int = 15,
+    newest_first: bool = True,
+    dates: Optional[List[str]] = None,
+    tolerance_kwd: float = REVENUE_CACHE_RECONCILE_TOLERANCE_KWD,
+) -> Dict[str, Any]:
+    """
+    Compare live Vendon customer totals to cache day-by-day; refresh drifted/missing days.
+
+    Caps live checks (+ refreshes) per call for cron/HTTP safety. Vendon is source of truth.
+    """
+    max_days = max(1, min(int(max_days), 60))
+    tol = max(0.0, float(tolerance_kwd))
+    _set_revenue_cache_trust_state(status="refreshing")
+
+    if dates:
+        todo = []
+        for raw in dates:
+            ds = str(raw or "").strip()
+            if not ds:
+                continue
+            try:
+                datetime.strptime(ds, "%Y-%m-%d")
+            except Exception:
+                continue
+            if ds not in todo:
+                todo.append(ds)
+        todo = todo[:max_days]
+    else:
+        missing = []
+        seen_m = set()
+        for a, b in _ytd_ly_gap_windows():
+            for ds in _list_missing_revenue_cache_dates(a, b):
+                if ds not in seen_m:
+                    seen_m.add(ds)
+                    missing.append(ds)
+        missing_sorted = sorted(missing) if not newest_first else sorted(missing, reverse=True)
+        # Prefer missing days, then walk remaining calendar for drift.
+        rest = [ds for ds in _iter_ytd_ly_dates(newest_first=newest_first) if ds not in seen_m]
+        todo = (missing_sorted + rest)[:max_days]
+
+    checked = 0
+    drift_found = 0
+    abs_delta_max = 0.0
+    refreshed: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
+    matched: List[Dict[str, Any]] = []
+
+    for ds in todo:
+        day = datetime.strptime(ds, "%Y-%m-%d").date()
+        cache_sum = _cache_day_customer_sum(day)
+        live_sum, live_err = _live_day_customer_sum(ds)
+        checked += 1
+        if live_err or live_sum is None:
+            failed.append({"date": ds, "error": live_err or "live_sum_none", "phase": "live"})
+            continue
+        if cache_sum is None:
+            delta = live_sum
+            needs = True
+            reason = "missing"
+        else:
+            delta = round(live_sum - cache_sum, 4)
+            abs_delta_max = max(abs_delta_max, abs(delta))
+            needs = abs(delta) > tol
+            reason = "drift" if needs else "ok"
+        if not needs:
+            matched.append({"date": ds, "live": live_sum, "cache": cache_sum, "delta": delta})
+            continue
+        drift_found += 1
+        res = _refresh_revenue_cache_single_day(ds, fleet_fetch=True)
+        if res.get("ok"):
+            refreshed.append(
+                {
+                    "date": ds,
+                    "reason": reason,
+                    "liveBefore": live_sum,
+                    "cacheBefore": cache_sum,
+                    "deltaBefore": delta if cache_sum is not None else live_sum,
+                    "inserted": res.get("inserted"),
+                }
+            )
+        else:
+            failed.append({"date": ds, "error": res.get("error"), "phase": "refresh", "reason": reason})
+
+    # Gap counts for trust payload
+    ytd_gaps = ly_gaps = 0
+    wins = _ytd_ly_gap_windows()
+    if wins:
+        ytd_gaps = len(_list_missing_revenue_cache_dates(wins[0][0], wins[0][1]))
+        if len(wins) > 1:
+            ly_gaps = len(_list_missing_revenue_cache_dates(wins[1][0], wins[1][1]))
+
+    if failed and not refreshed and drift_found == 0 and ytd_gaps == 0 and ly_gaps == 0:
+        status = "ok" if checked and not failed else ("drift" if failed else "unknown")
+    elif ytd_gaps > 0 or ly_gaps > 0:
+        status = "gaps"
+    elif drift_found > 0 or failed:
+        status = "drift" if (drift_found > 0 or failed) else "ok"
+    else:
+        status = "ok"
+
+    # If we refreshed all found drift and no gaps/failures remain from this pass, ok.
+    if status == "drift" and not failed and ytd_gaps == 0 and ly_gaps == 0 and refreshed:
+        # Still mark drift if we only partially walked the calendar — callers use gap counts too.
+        # After successful refresh of checked drifts with no open gaps, treat as ok for this slice.
+        status = "ok"
+
+    out = {
+        "ok": len(failed) == 0,
+        "status": status,
+        "checkedDays": checked,
+        "driftDaysFound": drift_found,
+        "absDeltaKwdMax": round(abs_delta_max, 4),
+        "refreshed": refreshed,
+        "failed": failed,
+        "matched": matched[:20],
+        "ytdGapDays": ytd_gaps,
+        "lyGapDays": ly_gaps,
+        "toleranceKwd": tol,
+    }
+    _set_revenue_cache_trust_state(
+        status=status,
+        driftDaysFound=drift_found,
+        checkedDays=checked,
+        refreshed=[r.get("date") for r in refreshed],
+        failed=[f.get("date") for f in failed],
+        absDeltaKwdMax=round(abs_delta_max, 4),
+        ytdGapDays=ytd_gaps,
+        lyGapDays=ly_gaps,
+    )
+    return out
+
+
 def _refresh_revenue_cache_single_day(date_str: str, *, fleet_fetch: bool = True) -> Dict[str, Any]:
     """
     Compute per-machine revenue for one day and store in DB.
@@ -2135,6 +2372,80 @@ def register_vendon_proxy_routes(app) -> None:
         date_str = (body.get("date") or "").strip()
         days_back = body.get("daysBack") or body.get("days_back")
         fill_gaps = body.get("fillGaps") or body.get("fill_gaps")
+        reconcile = body.get("reconcile") or body.get("reconcileDrift")
+        dates_raw = body.get("dates") or body.get("forceDates")
+        # Force-refresh an explicit list of Kuwait dates (sync, capped).
+        if dates_raw and not reconcile and not fill_gaps:
+            if not isinstance(dates_raw, list):
+                return jsonify({"error": "dates must be a list of YYYY-MM-DD"}), 400
+            try:
+                max_days = max(1, min(int(body.get("maxDays") or body.get("max_days") or len(dates_raw)), 60))
+            except (TypeError, ValueError):
+                return jsonify({"error": "maxDays must be an integer"}), 400
+            todo = []
+            for raw in dates_raw:
+                ds = str(raw or "").strip()
+                if not ds:
+                    continue
+                try:
+                    datetime.strptime(ds, "%Y-%m-%d")
+                except Exception:
+                    return jsonify({"error": f"Invalid date: {ds}"}), 400
+                if ds not in todo:
+                    todo.append(ds)
+            todo = todo[:max_days]
+            filled: List[Dict[str, Any]] = []
+            failed: List[Dict[str, Any]] = []
+            for ds in todo:
+                res = _refresh_revenue_cache_single_day(ds)
+                if res.get("ok"):
+                    filled.append({"date": ds, "inserted": res.get("inserted")})
+                else:
+                    failed.append({"date": ds, "error": res.get("error")})
+            return jsonify(
+                {"ok": len(failed) == 0, "attempted": len(todo), "filled": filled, "failed": failed}
+            ), (200 if not failed else 207)
+
+        # Live Vendon vs cache day totals — refresh drifted/missing (Vendon is source of truth).
+        if reconcile:
+            raw_max = body.get("maxDays") or body.get("max_days") or 15
+            try:
+                max_days = max(1, min(int(raw_max), 60))
+            except (TypeError, ValueError):
+                return jsonify({"error": "maxDays must be an integer"}), 400
+            date_list = None
+            if isinstance(dates_raw, list):
+                date_list = [str(x).strip() for x in dates_raw if str(x).strip()]
+            newest_first = str(body.get("newestFirst", "true")).strip().lower() not in (
+                "0",
+                "false",
+                "no",
+                "off",
+            )
+            sync_raw = body.get("sync")
+            if sync_raw is None:
+                do_sync = max_days <= 25
+            else:
+                do_sync = str(sync_raw).strip().lower() in ("1", "true", "yes", "on")
+
+            def _run_reconcile() -> Dict[str, Any]:
+                return _reconcile_revenue_cache(
+                    max_days=max_days,
+                    newest_first=newest_first,
+                    dates=date_list,
+                )
+
+            if do_sync:
+                res = _run_reconcile()
+                return jsonify(res), (200 if res.get("ok") else 207)
+            import threading
+
+            threading.Thread(
+                target=lambda: logger.info("cache-revenue reconcile done %s", _run_reconcile()),
+                daemon=True,
+            ).start()
+            return jsonify({"ok": True, "queued": True, "maxDays": max_days, "mode": "reconcile"}), 202
+
         # Gap-fill YTD + LY YTD windows (or explicit from/to). Sync when maxDays small;
         # larger batches run in background so cron/HTTP stay under gateway timeouts.
         if fill_gaps:
