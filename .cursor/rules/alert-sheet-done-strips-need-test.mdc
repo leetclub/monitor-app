@@ -1,0 +1,18 @@
+---
+description: When Alerts sheet Status becomes Done, strip NEED TEST from Notes
+globs:
+  - apps/alert-theleetclub-com/scripts/**/*sheet*
+  - apps/alert-theleetclub-com/scripts/**/*need*test*
+alwaysApply: false
+---
+
+# Alerts sheet status discipline
+
+When updating the workflow Alerts Google Sheet
+(`1N9Zlc1SaumhfcxT8biXCBhmfeuBg5p8s` / gid `1306124640`):
+
+1. Scope **Category = Alerts** unless the user asks otherwise.
+2. If **Status** is set to **Done**, Notes must **not** contain
+   `NEED TEST` / `need test`. Strip those phrases; use a short closed/shipped note.
+3. Apply the same cleanup to any existing **Done** rows that still say NEED TEST in Notes.
+4. Prefer Playwright sheet helpers when clasp OAuth lacks Sheets API enablement.

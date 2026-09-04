@@ -27,10 +27,10 @@ export type OperatorActivityTimes = {
   } | null;
 };
 
-type ActivityStampKey = 'cleaningAt' | 'refillAt' | 'remoteCreditAt' | 'doorOpenAt';
+type ActivityStampKey = 'refillAt' | 'remoteCreditAt' | 'doorOpenAt';
 
+/** Operator Activity column kinds — Clean is NOT shown here (use Last clean column). */
 const SOURCES: Array<{ key: ActivityStampKey; label: string; short: string }> = [
-  { key: 'cleaningAt', label: 'Cleaning', short: 'Clean' },
   { key: 'refillAt', label: 'Refill', short: 'Refill' },
   { key: 'remoteCreditAt', label: 'Remote credit', short: 'Credit' },
   { key: 'doorOpenAt', label: 'Door access', short: 'Door' },
@@ -41,7 +41,7 @@ function parseMs(iso: string): number {
   return Number.isFinite(t) ? t : NaN;
 }
 
-/** Newest of cleaning / refill / remote credit / door (or legacy WEB access). */
+/** Newest of refill / remote credit / door (or legacy WEB access). Cleaning is Last clean only. */
 export function resolveLatestOperatorActivity(
   activity?: OperatorActivityTimes | null,
   legacyWebAccessAt?: string | null,

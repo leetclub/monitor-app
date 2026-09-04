@@ -89,7 +89,7 @@ export const OVERALL_COLUMNS: Record<OverallColumnKey, { title: string; note?: s
   operator: { title: 'Operator' },
   operatorActivity: {
     title: 'Operator Activity',
-    note: 'Most recent operator touch on the machine (cleaning / refill / remote credit / door) with Kuwait date.',
+    note: 'Most recent operator touch (refill / remote credit / door) with Kuwait date. Cleaning is Last clean only.',
   },
   attendance: { title: 'Attendance', note: 'Task Manager schedule + punch status (tap for MTD detail).' },
   lastCleaned: {
