@@ -72,3 +72,14 @@ steps:
       K8S_NAMESPACE: $(K8S_NAMESPACE)
       K8S_DEPLOYMENT: $(K8S_DEPLOYMENT)
       K8S_APP_LABEL: $(K8S_APP_LABEL)
+
+  - bash: |
+      set -euo pipefail
+      export KUBECONFIG="$KUBECONFIG_PATH"
+      kubectl apply -f k8s/vendon-revenue-cache-cronjob.yaml
+      kubectl apply -f k8s/vendon-revenue-cache-semilive-cronjob.yaml
+      kubectl get cronjob -n "${K8S_NAMESPACE}" vendon-revenue-cache-refresh vendon-revenue-cache-semilive -o wide
+    displayName: Apply revenue cache cronjobs
+    env:
+      KUBECONFIG_PATH: $(kubeconfigFile.secureFilePath)
+      K8S_NAMESPACE: $(K8S_NAMESPACE)

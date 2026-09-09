@@ -157,7 +157,14 @@ _DAILY_SALES_ELAPSED_HISTORY_DAYS = int(os.environ.get("ALERT_DAILY_SALES_ELAPSE
 _DAILY_INCIDENTS_ELAPSED_CACHE_SEC = int(os.environ.get("ALERT_DAILY_INCIDENTS_ELAPSED_CACHE_SEC", "120"))
 _ALERT_REVENUE_CACHE_SEED_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_SEED_TTL_SEC", "900"))
 # Today’s mix keeps growing — re-pull Vendon more often than closed days.
-_ALERT_REVENUE_CACHE_TODAY_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_TODAY_TTL_SEC", "600"))
+_ALERT_REVENUE_CACHE_TODAY_TTL_SEC = int(os.environ.get("ALERT_REVENUE_CACHE_TODAY_TTL_SEC", "300"))
+# Background reconcile for today/yesterday when Alert is open (cron also runs every 15m).
+_ALERT_REVENUE_CACHE_SEMILIVE_RECONCILE_TTL_SEC = int(
+    os.environ.get("ALERT_REVENUE_CACHE_SEMILIVE_RECONCILE_TTL_SEC", "600")
+)
+_ALERT_REVENUE_CACHE_DEEP_RECONCILE_TTL_SEC = int(
+    os.environ.get("ALERT_REVENUE_CACHE_DEEP_RECONCILE_TTL_SEC", "1800")
+)
 _ALERT_DOWNTIME_CACHE_SEC = int(os.environ.get("ALERT_DOWNTIME_CACHE_SEC", "120"))
 
 
@@ -227,6 +234,20 @@ def _maybe_seed_vendon_revenue_cache(day: date, *, force_product_mix: bool = Fal
         if exists and not needs_mix and not is_today:
             _alert_cache_set(throttle_key, {"ok": True, "skipped": "exists"})
             return
+        # Today: also refresh when DB rows are older than semi-live TTL (cron may have missed).
+        if is_today and exists and not needs_mix:
+            latest = (
+                db.query(func.max(VendonDailyMachineRevenueCache.created_at))
+                .filter(VendonDailyMachineRevenueCache.cache_date == day)
+                .scalar()
+            )
+            if latest is not None:
+                if getattr(latest, "tzinfo", None) is None:
+                    latest = latest.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - latest.astimezone(timezone.utc)).total_seconds()
+                if age < ttl:
+                    _alert_cache_set(throttle_key, {"ok": True, "skipped": "fresh", "ageSec": round(age)})
+                    return
     finally:
         db.close()
 
@@ -244,6 +265,19 @@ def _maybe_seed_vendon_revenue_cache(day: date, *, force_product_mix: bool = Fal
     import threading
 
     threading.Thread(target=_run_seed, daemon=True).start()
+
+
+def _maybe_semilive_revenue_cache_refresh() -> Dict[str, Any]:
+    """
+    Keep today + yesterday near live Vendon on high-traffic Alert routes.
+    Cron vendon-revenue-cache-semilive runs the same every 15 minutes when nobody is in Alert.
+    """
+    tz = ZoneInfo("Asia/Kuwait")
+    today = datetime.now(tz).date()
+    yday = today - timedelta(days=1)
+    for d in (today, yday):
+        _maybe_seed_vendon_revenue_cache(d)
+    return _maybe_reconcile_revenue_cache(max_days=2, dates=[today.isoformat(), yday.isoformat()])
 
 
 def _maybe_fill_ytd_revenue_cache_gaps(*, max_days: int = 8) -> Dict[str, Any]:
@@ -286,13 +320,19 @@ def _maybe_fill_ytd_revenue_cache_gaps(*, max_days: int = 8) -> Dict[str, Any]:
     return {"ok": True, "queued": True, "missingBefore": missing_n, "maxDays": max_days}
 
 
-def _maybe_reconcile_revenue_cache(*, max_days: int = 5) -> Dict[str, Any]:
+def _maybe_reconcile_revenue_cache(
+    *,
+    max_days: int = 5,
+    dates: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """
     Background live-vs-cache day reconcile (Vendon is source of truth).
     Throttled so Alert requests never block on multi-day Vendon pagination.
     """
-    throttle_key = "revenue_seed:ytd_ly_reconcile"
-    cached = _alert_cache_get(throttle_key, 1800)
+    semi = bool(dates)
+    throttle_key = "revenue_seed:semilive_reconcile" if semi else "revenue_seed:ytd_ly_reconcile"
+    ttl = _ALERT_REVENUE_CACHE_SEMILIVE_RECONCILE_TTL_SEC if semi else _ALERT_REVENUE_CACHE_DEEP_RECONCILE_TTL_SEC
+    cached = _alert_cache_get(throttle_key, ttl)
     if cached is not None:
         return cached if isinstance(cached, dict) else {"ok": True, "skipped": "throttled"}
 
@@ -301,7 +341,7 @@ def _maybe_reconcile_revenue_cache(*, max_days: int = 5) -> Dict[str, Any]:
 
     def _run() -> None:
         try:
-            res = _reconcile_revenue_cache(max_days=max_days, newest_first=True)
+            res = _reconcile_revenue_cache(max_days=max_days, newest_first=True, dates=dates)
             _alert_cache_set(throttle_key, res)
             if res.get("driftDaysFound") or res.get("failed"):
                 logger.warning(
@@ -317,7 +357,7 @@ def _maybe_reconcile_revenue_cache(*, max_days: int = 5) -> Dict[str, Any]:
     import threading
 
     threading.Thread(target=_run, daemon=True).start()
-    return {"ok": True, "queued": True, "maxDays": max_days}
+    return {"ok": True, "queued": True, "maxDays": max_days, "dates": dates}
 
 
 def _ensure_alert_ops_cache_tables(db: Session) -> None:
@@ -1328,6 +1368,9 @@ def _refresh_daily_sales_elapsed_cache_internal(
             logger.warning("daily-sales-elapsed skip day %s: %s", day_offsets[i].isoformat(), err)
             continue
         _apply_vends_for_day(i, vends, ws, we)
+
+    # Keep today/yesterday revenue cache semi-live (cron also refreshes every 15m).
+    _maybe_semilive_revenue_cache_refresh()
 
     # Yesterday + day-before full calendar days — revenue cache (completed-day totals).
     day_before = today - timedelta(days=2)
