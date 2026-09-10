@@ -1,34 +1,51 @@
 # Alert vs VENDON QA Reconciliation Report
 
-**Generated:** 2026-09-10 17:20 Asia/Kuwait (execution window ~17:10–17:21)  
-**Artifacts:** `docs/ALERT-VENDON-QA-RESULTS.json`, `docs/ALERT-VENDON-TEST-MATRIX.csv`  
-**Method:** Read-only. Alert actual = `vendon_daily_machine_revenue_cache` (+ payload). VENDON expected = live `/stats/vends` customer sales (`payment_method != WEB_CASHLESS`).  
-**Tolerance:** monetary ≤ **0.01 KD** (spec); code reconcile uses 0.05 KD (noted, not used to pass tests).
+**Generated:** 2026-09-10 (fleet suite ~17:20; **Products/YoY function suite ~21:04** Asia/Kuwait)  
+**Artifacts:** `ALERT-VENDON-QA-RESULTS.json`, `ALERT-VENDON-FUNCTION-QA-RESULTS.json`, `ALERT-VENDON-QA-RESULTS-COMBINED.json`, `ALERT-VENDON-TEST-MATRIX.csv`  
+**Method:** Read-only. Alert actual = `vendon_daily_machine_revenue_cache` (+ Products date windows via `resolve_perf_window`). VENDON expected = live `/stats/vends` customer sales (`payment_method != WEB_CASHLESS`).  
+**Tolerance:** monetary ≤ **0.01 KD**.
+
+### Coverage honesty (important)
+
+The first suite was **fleet cache reconciliation**, not a full per-function audit. That gap is acknowledged.
+
+**Phase 2 (executed 2026-09-10 evening)** added **Performance → Products** scenarios the first run missed: location + presets + **custom range vs same range last year**, Period A / Period B / YoY, multi-location MTD, zero site — each compared to **live Vendon** with the same machines and dates.
+
+Method note: Products KPIs were validated through the **same source product-compare uses** (`resolve_perf_window` + Σ `total_sales_kwd`). Direct in-pod HTTP `product-compare` was attempted first and **OOM-killed (exit 137)**; KPI math path was used instead.
+
+Still not fully exhausted (follow-ups): browser DOM UI, Footfall cashless HTTP, sales-acceleration, machine-products popup, hourly single-day product buckets, `includeWebCashless` SKU mix via HTTP.
 
 ---
 
 ## 1. Executive Summary
 
-```text
-Total scenarios:                 38
-Executed:                        35
-Blocked:                          3
-MATCH:                           33
-MISMATCH:                         2
-PASS RATE (of executed):       94.3%
+### Combined (fleet + Products/YoY function suite)
 
-Confirmed Alert defects:          1
-Cache/staleness:                  0
-Data timing:                      1
-Expected business-rule diffs:     0
-Rounding:                         0
-UI-only defects:                  0
-Unconfirmed:                      0
+```text
+Fleet suite:     38 scenarios (35 executed) — 33 MATCH, 2 MISMATCH, 3 BLOCKED UI
+Products suite:  22 scenarios (22 executed) — 22 MATCH, 0 MISMATCH
+Combined matrix: see ALERT-VENDON-TEST-MATRIX.csv / COMBINED.json
 ```
 
-**Conclusion:** Closed-day fleet customer revenue (Alert cache vs live Vendon) matched **exactly** across 14 consecutive days, all date presets (Yday/WTD/MTD/L7/L30), month boundaries, top/zero locations, and multi-location sums. One **confirmed P2 Alert defect**: product mix (`productSales`) omits blank product names while `total_sales_kwd` still includes those vends (−2.4 KD on 2026-09-09, isolated to Farwaniya Main gate). One open-day (−12.4 KD) difference is **data timing** under the 15-minute semi-live cadence, not a closed-day calculation bug. Browser UI pixel checks were **blocked** (API/cache vs live Vendon was executed instead).
+### Fleet suite (original)
 
-> **DATA DIFFERENCE ≠ APPLICATION DEFECT.** Only TC-MIX is a confirmed Alert defect. TC-TODAY is timing.
+```text
+MATCH: 33 | MISMATCH: 2 | PASS RATE: 94.3%
+Confirmed Alert defects: 1 (P2 product mix unnamed)
+Data timing: 1 (open-day semi-live)
+```
+
+### Products / YoY function suite (new)
+
+```text
+Total / executed: 22
+MATCH: 22 | MISMATCH: 0 | PASS RATE: 100%
+Including: 1 location × Sep 1–7 2026 vs Sep 1–7 2025 (LY) — exact match
+```
+
+**Conclusion:** Closed-day fleet customer revenue matched Vendon. **Performance → Products Period A / B / YoY** (including custom location range vs last year) matched live Vendon **exactly** in all 22 executed cases. One **P2** mix defect remains (blank product names). Open-day lag is timing, not closed-day math.
+
+> **DATA DIFFERENCE ≠ APPLICATION DEFECT.** TC-MIX is the confirmed Alert defect. TC-TODAY is timing. Products YoY path: no defect found in this run.
 
 ---
 
@@ -124,6 +141,27 @@ At run time heartbeat: `lastRefreshAt` ~280s before final TC-TODAY; `lastReconci
 ---
 
 ## 6. Matching Scenarios (sample)
+
+### 6a. Performance → Products (location / range / YoY) — executed Phase 2
+
+Machine example: **Jaber Hospital - Gate 2** (`375535`) unless noted.
+
+| ID | Criteria | Metric | VENDON | Alert | Diff | Result |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| TC-PC-CUSTOM-LOC-RANGE-A | Sep 1–7 2026 / Jaber Gate 2 | Period A KD | 2014.85 | 2014.85 | 0 | MATCH |
+| TC-PC-CUSTOM-LOC-RANGE-LY-B | Sep 1–7 2025 / same location | Period B (= LY) | 1863.15 | 1863.15 | 0 | MATCH |
+| TC-PC-CUSTOM-LOC-RANGE-YOY | Sep 1–7 2025 / YoY column | yoyKd | 1863.15 | 1863.15 | 0 | MATCH |
+| TC-PC-YDAY-1LOC-A | Sep 9 / Jaber | Period A | 314.00 | 314.00 | 0 | MATCH |
+| TC-PC-YDAY-YOY | Sep 9 2025 / Jaber | YoY | 354.65 | 354.65 | 0 | MATCH |
+| TC-PC-LASTWEEK-1LOC-A | Aug 30–Sep 5 / Jaber | Period A | 2042.05 | 2042.05 | 0 | MATCH |
+| TC-PC-LASTWEEK-YOY | Aug 30–Sep 5 2025 | YoY | 1843.05 | 1843.05 | 0 | MATCH |
+| TC-PC-MTD-3LOC-A | Sep 1–10 / top 3 sites | Period A | 6321.00 | 6321.00 | 0 | MATCH |
+| TC-PC-MTD-YOY | Sep 1–10 2025 / top 3 | YoY | 6766.95 | 6766.95 | 0 | MATCH |
+| TC-PC-WTDVSLY-B | Sep 6–10 2025 / Jaber | WTD vs LY Period B | 1536.55 | 1536.55 | 0 | MATCH |
+| TC-PC-LASTMONTH-YOY | Aug 2025 / Jaber | Last month YoY | 8086.25 | 8086.25 | 0 | MATCH |
+| TC-OV-MTD-YOY-B | Sep 1–9 2025 / ALL fleet | MTD YoY fleet | 25786.26 | 25786.26 | 0 | MATCH |
+
+### 6b. Fleet cache suite (sample)
 
 | ID | Criteria | Metric | VENDON | Alert | Diff | Result |
 | --- | ---: | --- | ---: | ---: | ---: | --- |
