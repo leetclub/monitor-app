@@ -1349,6 +1349,128 @@ def _ensure_revenue_table(db) -> None:
     """))
     db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_vendon_daily_machine_revenue_cache_day_machine ON vendon_daily_machine_revenue_cache (cache_date, machine_id);"))
     db.execute(text("CREATE INDEX IF NOT EXISTS idx_vendon_daily_machine_revenue_cache_date ON vendon_daily_machine_revenue_cache (cache_date);"))
+    # Single-row heartbeat so cron/Alert can prove cache is being refreshed without watching jobs.
+    db.execute(text("""
+      CREATE TABLE IF NOT EXISTS vendon_revenue_cache_heartbeat (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        last_refresh_at TIMESTAMPTZ,
+        last_refresh_dates JSONB NOT NULL DEFAULT '[]'::jsonb,
+        last_reconcile_at TIMESTAMPTZ,
+        last_reconcile_status TEXT,
+        last_error TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    """))
+    db.execute(text("""
+      INSERT INTO vendon_revenue_cache_heartbeat (id)
+      VALUES (1) ON CONFLICT (id) DO NOTHING;
+    """))
+
+
+def _touch_revenue_cache_heartbeat(
+    *,
+    refresh_dates: Optional[List[str]] = None,
+    reconcile_status: Optional[str] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Best-effort persistent heartbeat for semi-live / nightly refresh."""
+    db = _get_people_analytics_session()
+    try:
+        _ensure_revenue_table(db)
+        now = datetime.now(timezone.utc)
+        if refresh_dates is not None:
+            db.execute(
+                text(
+                    """
+                    UPDATE vendon_revenue_cache_heartbeat
+                    SET last_refresh_at = :now,
+                        last_refresh_dates = CAST(:dates AS jsonb),
+                        last_error = COALESCE(:err, last_error),
+                        updated_at = :now
+                    WHERE id = 1
+                    """
+                ),
+                {
+                    "now": now,
+                    "dates": json.dumps(list(refresh_dates)[:14]),
+                    "err": error,
+                },
+            )
+        if reconcile_status is not None:
+            db.execute(
+                text(
+                    """
+                    UPDATE vendon_revenue_cache_heartbeat
+                    SET last_reconcile_at = :now,
+                        last_reconcile_status = :st,
+                        last_error = COALESCE(:err, last_error),
+                        updated_at = :now
+                    WHERE id = 1
+                    """
+                ),
+                {"now": now, "st": reconcile_status, "err": error},
+            )
+        if error and refresh_dates is None and reconcile_status is None:
+            db.execute(
+                text(
+                    """
+                    UPDATE vendon_revenue_cache_heartbeat
+                    SET last_error = :err, updated_at = :now
+                    WHERE id = 1
+                    """
+                ),
+                {"err": error, "now": now},
+            )
+        db.commit()
+    except Exception:
+        logger.exception("revenue cache heartbeat update failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+def get_revenue_cache_heartbeat() -> Dict[str, Any]:
+    db = _get_people_analytics_session()
+    try:
+        _ensure_revenue_table(db)
+        db.commit()
+        row = db.execute(
+            text(
+                """
+                SELECT last_refresh_at, last_refresh_dates, last_reconcile_at,
+                       last_reconcile_status, last_error, updated_at
+                FROM vendon_revenue_cache_heartbeat WHERE id = 1
+                """
+            )
+        ).mappings().first()
+        if not row:
+            return {"ok": False, "error": "no_heartbeat"}
+        last_refresh = row["last_refresh_at"]
+        age = None
+        if last_refresh is not None:
+            if getattr(last_refresh, "tzinfo", None) is None:
+                last_refresh = last_refresh.replace(tzinfo=timezone.utc)
+            age = int((datetime.now(timezone.utc) - last_refresh.astimezone(timezone.utc)).total_seconds())
+        # Semi-live target: today/yesterday refreshed every 15 minutes. Allow 25m slack.
+        stale = age is None or age > 1500
+        return {
+            "ok": not stale,
+            "stale": stale,
+            "lastRefreshAt": last_refresh.isoformat() if last_refresh else None,
+            "lastRefreshAgeSec": age,
+            "lastRefreshDates": row["last_refresh_dates"] or [],
+            "lastReconcileAt": row["last_reconcile_at"].isoformat() if row["last_reconcile_at"] else None,
+            "lastReconcileStatus": row["last_reconcile_status"],
+            "lastError": row["last_error"],
+            "updatedAt": row["updated_at"].isoformat() if row["updated_at"] else None,
+            "trust": get_revenue_cache_trust_state(),
+            "maxFreshAgeSec": 1500,
+        }
+    finally:
+        db.close()
 
 
 def _ensure_remote_credits_preload_table(db) -> None:
@@ -1779,6 +1901,11 @@ def _reconcile_revenue_cache(
         ytdGapDays=ytd_gaps,
         lyGapDays=ly_gaps,
     )
+    _touch_revenue_cache_heartbeat(
+        refresh_dates=[r.get("date") for r in refreshed if r.get("date")] or None,
+        reconcile_status=status,
+        error=(failed[0].get("error") if failed else None),
+    )
     return out
 
 
@@ -1854,10 +1981,12 @@ def _refresh_revenue_cache_single_day(date_str: str, *, fleet_fetch: bool = True
             inserted += 1
 
         db.commit()
+        _touch_revenue_cache_heartbeat(refresh_dates=[date_str])
         return {"ok": True, "date": date_str, "inserted": inserted, "fleetFetch": bool(fleet_fetch)}
     except Exception as ex:
         db.rollback()
         logger.exception("revenue cache refresh failed")
+        _touch_revenue_cache_heartbeat(error=f"refresh {date_str}: {ex}")
         return {"ok": False, "date": date_str, "error": str(ex)}
     finally:
         db.close()
@@ -2361,6 +2490,17 @@ def register_vendon_proxy_routes(app) -> None:
         res = _refresh_cache_single_day(date_str)
         code = 200 if res.get("ok") else 502
         return jsonify(res), code
+
+    @app.route("/api/vendon/internal/cache-revenue-health", methods=["GET", "OPTIONS"])
+    def vendon_internal_cache_revenue_health():
+        """Heartbeat for semi-live cache: last refresh age vs 15m target (no secrets in response)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        if not _check_secret():
+            return jsonify({"error": "Unauthorized"}), 401
+        hb = get_revenue_cache_heartbeat()
+        code = 200 if hb.get("ok") else 503
+        return jsonify(hb), code
 
     @app.route("/api/vendon/internal/cache-revenue", methods=["POST", "OPTIONS"])
     def vendon_internal_cache_revenue():

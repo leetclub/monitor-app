@@ -1,6 +1,9 @@
 # Semi-live refresh: today + yesterday every 15 minutes (Kuwait calendar).
 # Prevents revenue cache from sticking on an early-morning snapshot when Alert
 # traffic is quiet. Daily vendon-revenue-cache-refresh still does gap-fill + deep reconcile.
+#
+# IMPORTANT: curlimages/curl uses BusyBox date — do NOT use `date -d yesterday`
+# (it fails and the job exits under set -e before any refresh).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -14,8 +17,8 @@ spec:
   jobTemplate:
     spec:
       ttlSecondsAfterFinished: 1800
-      backoffLimit: 1
-      activeDeadlineSeconds: 900
+      backoffLimit: 2
+      activeDeadlineSeconds: 1200
       template:
         spec:
           restartPolicy: OnFailure
@@ -33,18 +36,28 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  set -e
+                  set -eu
                   SECRET="X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}"
                   URL="http://people-analytics-api/api/vendon/internal/cache-revenue"
-                  TODAY=$(TZ=Asia/Kuwait date +%Y-%m-%d)
-                  YEST=$(TZ=Asia/Kuwait date -d 'yesterday' +%Y-%m-%d)
+                  # BusyBox-safe Kuwait calendar days (epoch math; no GNU date -d).
+                  NOW=$(TZ=Asia/Kuwait date +%s)
+                  TODAY=$(TZ=Asia/Kuwait date -d "@$NOW" +%Y-%m-%d)
+                  YEST=$(TZ=Asia/Kuwait date -d "@$((NOW - 86400))" +%Y-%m-%d)
                   echo "semilive refresh $TODAY $YEST"
-                  curl -fsS --connect-timeout 10 --max-time 600 --retry 2 --retry-delay 5 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d "{\"date\":\"$TODAY\"}"
-                  curl -fsS --connect-timeout 10 --max-time 600 --retry 2 --retry-delay 5 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d "{\"date\":\"$YEST\"}"
-                  curl -fsS --connect-timeout 10 --max-time 600 --retry 1 --retry-delay 5 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d "{\"reconcile\":true,\"sync\":true,\"maxDays\":2,\"dates\":[\"$TODAY\",\"$YEST\"],\"newestFirst\":true}"
+                  post() {
+                    body="$1"
+                    # Accept 200/207 — 207 means some days refreshed with warnings; still self-healed.
+                    code=$(curl -sS -o /tmp/rr.json -w "%{http_code}" \
+                      --connect-timeout 10 --max-time 600 --retry 2 --retry-delay 5 \
+                      -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
+                      -d "$body" || echo 000)
+                    echo "http=$code body=$(head -c 240 /tmp/rr.json 2>/dev/null)"
+                    case "$code" in
+                      200|207) return 0 ;;
+                      *) return 1 ;;
+                    esac
+                  }
+                  post "{\"date\":\"$TODAY\"}"
+                  post "{\"date\":\"$YEST\"}"
+                  post "{\"reconcile\":true,\"sync\":true,\"maxDays\":2,\"dates\":[\"$TODAY\",\"$YEST\"],\"newestFirst\":true}"
+                  echo DONE

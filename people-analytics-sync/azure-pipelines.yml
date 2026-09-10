@@ -78,7 +78,11 @@ steps:
       export KUBECONFIG="$KUBECONFIG_PATH"
       kubectl apply -f k8s/vendon-revenue-cache-cronjob.yaml
       kubectl apply -f k8s/vendon-revenue-cache-semilive-cronjob.yaml
-      kubectl get cronjob -n "${K8S_NAMESPACE}" vendon-revenue-cache-refresh vendon-revenue-cache-semilive -o wide
+      kubectl apply -f k8s/vendon-revenue-cache-audit-fix-cronjob.yaml
+      kubectl get cronjob -n "${K8S_NAMESPACE}" \
+        vendon-revenue-cache-refresh \
+        vendon-revenue-cache-semilive \
+        vendon-revenue-cache-audit-fix -o wide
     displayName: Apply revenue cache cronjobs
     env:
       KUBECONFIG_PATH: $(kubeconfigFile.secureFilePath)

@@ -1,6 +1,5 @@
-# Refreshes vendon_daily_machine_revenue_cache for today + yesterday, then
-# fills oldest missing days in fleet YTD / LY YTD windows (so Alert bar never
-# undercounts from hollow cache again).
+# Nightly deep self-heal: fill YTD/LY gaps + reconcile newest days vs live Vendon.
+# BusyBox-safe date math (curlimages/curl). Do not use `date -d yesterday`.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -33,23 +32,28 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  set -e
+                  set -eu
                   SECRET="X-Dashboard-Access-Secret:${DASHBOARD_ACCESS_API_KEY}"
                   URL="http://people-analytics-api/api/vendon/internal/cache-revenue"
-                  # Kuwait "today" / "yesterday" (UTC+3) — keep aligned with ops calendar.
-                  TODAY=$(TZ=Asia/Kuwait date +%Y-%m-%d)
-                  YEST=$(TZ=Asia/Kuwait date -d 'yesterday' +%Y-%m-%d)
-                  curl -fsS --connect-timeout 10 --max-time 900 --retry 2 --retry-delay 5 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d "{\"date\":\"$TODAY\"}"
-                  curl -fsS --connect-timeout 10 --max-time 900 --retry 2 --retry-delay 5 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d "{\"date\":\"$YEST\"}"
-                  # Fill up to 25 oldest missing days across this YTD + last YTD (sync).
-                  curl -fsS --connect-timeout 10 --max-time 3200 --retry 1 --retry-delay 10 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d '{"fillGaps":true,"maxDays":25,"sync":true}'
-                  # Reconcile up to 15 newest days vs live Vendon (customer sales); refresh drift.
-                  curl -fsS --connect-timeout 10 --max-time 3200 --retry 1 --retry-delay 10 \
-                    -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
-                    -d '{"reconcile":true,"maxDays":15,"sync":true,"newestFirst":true}'
+                  NOW=$(TZ=Asia/Kuwait date +%s)
+                  TODAY=$(TZ=Asia/Kuwait date -d "@$NOW" +%Y-%m-%d)
+                  YEST=$(TZ=Asia/Kuwait date -d "@$((NOW - 86400))" +%Y-%m-%d)
+                  echo "nightly refresh $TODAY $YEST"
+                  post() {
+                    body="$1"
+                    maxt="${2:-900}"
+                    code=$(curl -sS -o /tmp/rr.json -w "%{http_code}" \
+                      --connect-timeout 10 --max-time "$maxt" --retry 2 --retry-delay 5 \
+                      -X POST "$URL" -H "Content-Type: application/json" -H "$SECRET" \
+                      -d "$body" || echo 000)
+                    echo "http=$code body=$(head -c 240 /tmp/rr.json 2>/dev/null)"
+                    case "$code" in
+                      200|207) return 0 ;;
+                      *) return 1 ;;
+                    esac
+                  }
+                  post "{\"date\":\"$TODAY\"}" 900
+                  post "{\"date\":\"$YEST\"}" 900
+                  post '{"fillGaps":true,"maxDays":25,"sync":true}' 3200
+                  post '{"reconcile":true,"maxDays":15,"sync":true,"newestFirst":true}' 3200
+                  echo DONE
