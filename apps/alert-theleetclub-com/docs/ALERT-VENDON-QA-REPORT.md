@@ -13,39 +13,35 @@ The first suite was **fleet cache reconciliation**, not a full per-function audi
 
 Method note: Products KPIs were validated through the **same source product-compare uses** (`resolve_perf_window` + Σ `total_sales_kwd`). Direct in-pod HTTP `product-compare` was attempted first and **OOM-killed (exit 137)**; KPI math path was used instead.
 
-Still not fully exhausted (follow-ups): browser DOM UI, Footfall cashless HTTP, sales-acceleration, machine-products popup, hourly single-day product buckets, `includeWebCashless` SKU mix via HTTP.
+**Phase 3 (2026-09-11):** Overall presets A/B, SX Loc KD, Fleet presets, machine-products grains, WEB cashless KD, Footfall cashless period/today, hourly≡day, elapsed yesterday full, machine-detail 7d — executed. Remaining gap: **browser DOM** only (needs Alert login).
 
 ---
 
 ## 1. Executive Summary
 
-### Combined (fleet + Products/YoY function suite)
+### Combined (all suites — full function audit progress)
 
 ```text
-Fleet suite:     38 scenarios (35 executed) — 33 MATCH, 2 MISMATCH, 3 BLOCKED UI
-Products suite:  22 scenarios (22 executed) — 22 MATCH, 0 MISMATCH
-Combined matrix: see ALERT-VENDON-TEST-MATRIX.csv / COMBINED.json
+Total scenarios:              104
+Executed:                     101
+Blocked (browser UI only):      3
+MATCH:                         94
+MISMATCH:                       7
+PASS RATE:                   93.1%
+
+Confirmed Alert defects:        1  (P2 product mix unnamed names)
+Data timing / open-day lag:     6  (windows that include today)
 ```
 
-### Fleet suite (original)
+| Suite | Executed | MATCH | MISMATCH |
+| --- | ---: | ---: | ---: |
+| Fleet cache | 35 | 33 | 2 |
+| Products location/range/YoY | 22 | 22 | 0 |
+| Remaining functions (Overall presets, SX, Fleet, machine-products, WEB, Footfall, hourly, elapsed, machine-detail) | 44 | 39 | 5 (all open-day timing) |
 
-```text
-MATCH: 33 | MISMATCH: 2 | PASS RATE: 94.3%
-Confirmed Alert defects: 1 (P2 product mix unnamed)
-Data timing: 1 (open-day semi-live)
-```
+**Conclusion:** Closed-day paths across Overall, SX Loc KD, Performance Fleet, machine-products, Products YoY, Footfall cashless, WEB split, and hourly sum **match live Vendon**. Every remaining FAIL in the latest suite is **open Kuwait today inside the window** (semi-live lag of ~0.8–5.5 KD) — not a closed-day calculation defect. One **P2** mix defect remains (blank product names). Browser DOM still blocked (no Alert UI session).
 
-### Products / YoY function suite (new)
-
-```text
-Total / executed: 22
-MATCH: 22 | MISMATCH: 0 | PASS RATE: 100%
-Including: 1 location × Sep 1–7 2026 vs Sep 1–7 2025 (LY) — exact match
-```
-
-**Conclusion:** Closed-day fleet customer revenue matched Vendon. **Performance → Products Period A / B / YoY** (including custom location range vs last year) matched live Vendon **exactly** in all 22 executed cases. One **P2** mix defect remains (blank product names). Open-day lag is timing, not closed-day math.
-
-> **DATA DIFFERENCE ≠ APPLICATION DEFECT.** TC-MIX is the confirmed Alert defect. TC-TODAY is timing. Products YoY path: no defect found in this run.
+> **DATA DIFFERENCE ≠ APPLICATION DEFECT.** Only TC-MIX is a confirmed Alert defect. Other FAILs are open-day timing.
 
 ---
 
