@@ -1,0 +1,803 @@
+{
+  "cases": {
+    "tester_current_week": {
+      "from": "2026-09-06",
+      "to": "2026-09-10",
+      "fleetCache": {
+        "customerKd": 17068.85,
+        "tx": 17500.0,
+        "productSales": 17054.85,
+        "productSalesAll": 18197.19,
+        "webImplied": 1142.34,
+        "mixGap": -14.0,
+        "rowDays": 5,
+        "rows": 374
+      },
+      "fleetLiveCustomer": 17068.85,
+      "fleetLiveErrs": [],
+      "fleetDelta": 0.0
+    },
+    "tester_ly_same_week": {
+      "from": "2025-09-06",
+      "to": "2025-09-10",
+      "fleetCache": {
+        "customerKd": 16097.59,
+        "tx": 16696.0,
+        "productSales": 15511.92,
+        "productSalesAll": 16402.3,
+        "webImplied": 890.38,
+        "mixGap": -585.67,
+        "rowDays": 5,
+        "rows": 365
+      },
+      "fleetLiveCustomer": 16097.59,
+      "fleetLiveErrs": [],
+      "fleetDelta": 0.0
+    },
+    "tester_prev_30aug_3sep": {
+      "from": "2026-08-30",
+      "to": "2026-09-03",
+      "fleetCache": {
+        "customerKd": 17086.88,
+        "tx": 17089.0,
+        "productSales": 17086.88,
+        "productSalesAll": 18061.18,
+        "webImplied": 974.3,
+        "mixGap": 0.0,
+        "rowDays": 5,
+        "rows": 365
+      },
+      "fleetLiveCustomer": 17086.88,
+      "fleetLiveErrs": [],
+      "fleetDelta": 0.0
+    },
+    "alert_last_week_sun_sat": {
+      "from": "2026-08-30",
+      "to": "2026-09-05",
+      "fleetCache": {
+        "customerKd": 19638.47,
+        "tx": 19711.0,
+        "productSales": 19638.47,
+        "productSalesAll": 20782.98,
+        "webImplied": 1144.51,
+        "mixGap": 0.0,
+        "rowDays": 7,
+        "rows": 511
+      },
+      "fleetLiveCustomer": 19638.47,
+      "fleetLiveErrs": [],
+      "fleetDelta": 0.0
+    },
+    "sep4_sep5_missing_from_tester_prev": {
+      "from": "2026-09-04",
+      "to": "2026-09-05",
+      "fleetCache": {
+        "customerKd": 2551.59,
+        "tx": 2622.0,
+        "productSales": 2551.59,
+        "productSalesAll": 2721.8,
+        "webImplied": 170.21,
+        "mixGap": 0.0,
+        "rowDays": 2,
+        "rows": 146
+      },
+      "fleetLiveCustomer": 2551.59,
+      "fleetLiveErrs": [],
+      "fleetDelta": 0.0
+    }
+  },
+  "locations": {
+    "jaber_gate_2": {
+      "name": "Jaber Hospital - Gate 2",
+      "id": "375535",
+      "windows": {
+        "week_6_10": {
+          "from": "2026-09-06",
+          "to": "2026-09-10",
+          "cache": {
+            "customerKd": 1544.25,
+            "tx": 1513.0,
+            "productSales": 1544.25,
+            "productSalesAll": 1585.8,
+            "webImplied": 41.55,
+            "mixGap": -0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 1544.25,
+            "webKd": 41.55,
+            "totalIncomeKd": 1585.8,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 1513,
+            "cupsWeb": 44,
+            "cupsAll": 1557,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 71.0,
+            "icedAmericanoAllKd": 73.5,
+            "icedAmericanoCups": 87,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -41.55
+        },
+        "prev_30_3": {
+          "from": "2026-08-30",
+          "to": "2026-09-03",
+          "cache": {
+            "customerKd": 1739.35,
+            "tx": 1703.0,
+            "productSales": 1739.35,
+            "productSalesAll": 1776.0,
+            "webImplied": 36.65,
+            "mixGap": -0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 1739.35,
+            "webKd": 36.65,
+            "totalIncomeKd": 1776.0,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 1703,
+            "cupsWeb": 36,
+            "cupsAll": 1739,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 81.7,
+            "icedAmericanoAllKd": 85.15,
+            "icedAmericanoCups": 101,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -36.65
+        },
+        "last_week_30_5": {
+          "from": "2026-08-30",
+          "to": "2026-09-05",
+          "cache": {
+            "customerKd": 2042.05,
+            "tx": 2004.0,
+            "productSales": 2042.05,
+            "productSalesAll": 2098.5,
+            "webImplied": 56.45,
+            "mixGap": -0.0,
+            "rowDays": 7,
+            "rows": 7
+          },
+          "live": {
+            "customerKd": 2042.05,
+            "webKd": 56.45,
+            "totalIncomeKd": 2098.5,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 2004,
+            "cupsWeb": 56,
+            "cupsAll": 2060,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 100.55,
+            "icedAmericanoAllKd": 104.8,
+            "icedAmericanoCups": 124,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -56.45
+        },
+        "ly_6_10": {
+          "from": "2025-09-06",
+          "to": "2025-09-10",
+          "cache": {
+            "customerKd": 1536.55,
+            "tx": 1550.0,
+            "productSales": 1476.25,
+            "productSalesAll": 1547.2,
+            "webImplied": 70.95,
+            "mixGap": -60.3,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 1536.55,
+            "webKd": 77.55,
+            "totalIncomeKd": 1614.1,
+            "unnamedKd": 60.3,
+            "cupsCustomer": 1550,
+            "cupsWeb": 81,
+            "cupsAll": 1631,
+            "cupsUnnamed": 54,
+            "icedAmericanoCustomerKd": 90.4,
+            "icedAmericanoAllKd": 95.2,
+            "icedAmericanoCups": 110,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -77.55
+        }
+      }
+    },
+    "farwaniya_hall": {
+      "name": "Farwaniya Hall",
+      "id": "385069",
+      "windows": {
+        "week_6_10": {
+          "from": "2026-09-06",
+          "to": "2026-09-10",
+          "cache": {
+            "customerKd": 1001.65,
+            "tx": 1024.0,
+            "productSales": 1001.65,
+            "productSalesAll": 1015.75,
+            "webImplied": 14.1,
+            "mixGap": 0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 1001.65,
+            "webKd": 14.1,
+            "totalIncomeKd": 1015.75,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 1024,
+            "cupsWeb": 15,
+            "cupsAll": 1039,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 126.5,
+            "icedAmericanoAllKd": 127.3,
+            "icedAmericanoCups": 154,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -14.1
+        },
+        "prev_30_3": {
+          "from": "2026-08-30",
+          "to": "2026-09-03",
+          "cache": {
+            "customerKd": 934.1,
+            "tx": 952.0,
+            "productSales": 934.1,
+            "productSalesAll": 947.7,
+            "webImplied": 13.6,
+            "mixGap": 0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 934.1,
+            "webKd": 13.6,
+            "totalIncomeKd": 947.7,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 952,
+            "cupsWeb": 15,
+            "cupsAll": 967,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 101.2,
+            "icedAmericanoAllKd": 102.0,
+            "icedAmericanoCups": 124,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -13.6
+        },
+        "last_week_30_5": {
+          "from": "2026-08-30",
+          "to": "2026-09-05",
+          "cache": {
+            "customerKd": 1139.55,
+            "tx": 1160.0,
+            "productSales": 1139.55,
+            "productSalesAll": 1157.35,
+            "webImplied": 17.8,
+            "mixGap": 0.0,
+            "rowDays": 7,
+            "rows": 7
+          },
+          "live": {
+            "customerKd": 1139.55,
+            "webKd": 17.8,
+            "totalIncomeKd": 1157.35,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 1160,
+            "cupsWeb": 19,
+            "cupsAll": 1179,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 130.3,
+            "icedAmericanoAllKd": 131.1,
+            "icedAmericanoCups": 160,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -17.8
+        },
+        "ly_6_10": {
+          "from": "2025-09-06",
+          "to": "2025-09-10",
+          "cache": {
+            "customerKd": 1042.3,
+            "tx": 1079.0,
+            "productSales": 1012.1,
+            "productSalesAll": 1041.35,
+            "webImplied": 29.25,
+            "mixGap": -30.2,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 1042.3,
+            "webKd": 31.25,
+            "totalIncomeKd": 1073.55,
+            "unnamedKd": 30.2,
+            "cupsCustomer": 1079,
+            "cupsWeb": 33,
+            "cupsAll": 1112,
+            "cupsUnnamed": 30,
+            "icedAmericanoCustomerKd": 125.2,
+            "icedAmericanoAllKd": 128.4,
+            "icedAmericanoCups": 154,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -31.25
+        }
+      }
+    },
+    "farwaniya_main": {
+      "name": "Farwaniya Main gate",
+      "id": "375531",
+      "windows": {
+        "week_6_10": {
+          "from": "2026-09-06",
+          "to": "2026-09-10",
+          "cache": {
+            "customerKd": 958.6,
+            "tx": 969.0,
+            "productSales": 953.8,
+            "productSalesAll": 972.0,
+            "webImplied": 18.2,
+            "mixGap": -4.8,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 958.6,
+            "webKd": 22.6,
+            "totalIncomeKd": 981.2,
+            "unnamedKd": 4.8,
+            "cupsCustomer": 969,
+            "cupsWeb": 23,
+            "cupsAll": 992,
+            "cupsUnnamed": 5,
+            "icedAmericanoCustomerKd": 109.8,
+            "icedAmericanoAllKd": 109.8,
+            "icedAmericanoCups": 134,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -22.6
+        },
+        "prev_30_3": {
+          "from": "2026-08-30",
+          "to": "2026-09-03",
+          "cache": {
+            "customerKd": 967.2,
+            "tx": 975.0,
+            "productSales": 967.2,
+            "productSalesAll": 978.35,
+            "webImplied": 11.15,
+            "mixGap": 0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 967.2,
+            "webKd": 11.15,
+            "totalIncomeKd": 978.35,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 975,
+            "cupsWeb": 12,
+            "cupsAll": 987,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 105.0,
+            "icedAmericanoAllKd": 105.8,
+            "icedAmericanoCups": 129,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -11.15
+        },
+        "last_week_30_5": {
+          "from": "2026-08-30",
+          "to": "2026-09-05",
+          "cache": {
+            "customerKd": 1123.5,
+            "tx": 1132.0,
+            "productSales": 1123.5,
+            "productSalesAll": 1137.75,
+            "webImplied": 14.25,
+            "mixGap": 0.0,
+            "rowDays": 7,
+            "rows": 7
+          },
+          "live": {
+            "customerKd": 1123.5,
+            "webKd": 14.25,
+            "totalIncomeKd": 1137.75,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 1132,
+            "cupsWeb": 15,
+            "cupsAll": 1147,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 122.4,
+            "icedAmericanoAllKd": 123.2,
+            "icedAmericanoCups": 150,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -14.25
+        },
+        "ly_6_10": {
+          "from": "2025-09-06",
+          "to": "2025-09-10",
+          "cache": {
+            "customerKd": 1036.25,
+            "tx": 1039.0,
+            "productSales": 1027.25,
+            "productSalesAll": 1090.0,
+            "webImplied": 62.75,
+            "mixGap": -9.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 1036.25,
+            "webKd": 63.65,
+            "totalIncomeKd": 1099.9,
+            "unnamedKd": 9.0,
+            "cupsCustomer": 1039,
+            "cupsWeb": 68,
+            "cupsAll": 1107,
+            "cupsUnnamed": 10,
+            "icedAmericanoCustomerKd": 103.9,
+            "icedAmericanoAllKd": 113.5,
+            "icedAmericanoCups": 128,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -63.65
+        }
+      }
+    },
+    "jaber_gate_6": {
+      "name": "Jaber Hospital - Gate 6",
+      "id": "375482",
+      "windows": {
+        "week_6_10": {
+          "from": "2026-09-06",
+          "to": "2026-09-10",
+          "cache": {
+            "customerKd": 844.4,
+            "tx": 860.0,
+            "productSales": 844.4,
+            "productSalesAll": 868.2,
+            "webImplied": 23.8,
+            "mixGap": 0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 844.4,
+            "webKd": 23.8,
+            "totalIncomeKd": 868.2,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 860,
+            "cupsWeb": 26,
+            "cupsAll": 886,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 55.5,
+            "icedAmericanoAllKd": 56.3,
+            "icedAmericanoCups": 68,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -23.8
+        },
+        "prev_30_3": {
+          "from": "2026-08-30",
+          "to": "2026-09-03",
+          "cache": {
+            "customerKd": 858.4,
+            "tx": 877.0,
+            "productSales": 858.4,
+            "productSalesAll": 886.8,
+            "webImplied": 28.4,
+            "mixGap": 0.0,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 858.4,
+            "webKd": 28.4,
+            "totalIncomeKd": 886.8,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 877,
+            "cupsWeb": 30,
+            "cupsAll": 907,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 58.0,
+            "icedAmericanoAllKd": 58.8,
+            "icedAmericanoCups": 71,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -28.4
+        },
+        "last_week_30_5": {
+          "from": "2026-08-30",
+          "to": "2026-09-05",
+          "cache": {
+            "customerKd": 1047.2,
+            "tx": 1069.0,
+            "productSales": 1047.2,
+            "productSalesAll": 1079.7,
+            "webImplied": 32.5,
+            "mixGap": 0.0,
+            "rowDays": 7,
+            "rows": 7
+          },
+          "live": {
+            "customerKd": 1047.2,
+            "webKd": 32.5,
+            "totalIncomeKd": 1079.7,
+            "unnamedKd": 0.0,
+            "cupsCustomer": 1069,
+            "cupsWeb": 35,
+            "cupsAll": 1104,
+            "cupsUnnamed": 0,
+            "icedAmericanoCustomerKd": 67.8,
+            "icedAmericanoAllKd": 68.6,
+            "icedAmericanoCups": 83,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -32.5
+        },
+        "ly_6_10": {
+          "from": "2025-09-06",
+          "to": "2025-09-10",
+          "cache": {
+            "customerKd": 927.05,
+            "tx": 959.0,
+            "productSales": 891.45,
+            "productSalesAll": 966.75,
+            "webImplied": 75.3,
+            "mixGap": -35.6,
+            "rowDays": 5,
+            "rows": 5
+          },
+          "live": {
+            "customerKd": 927.05,
+            "webKd": 78.6,
+            "totalIncomeKd": 1005.65,
+            "unnamedKd": 35.6,
+            "cupsCustomer": 959,
+            "cupsWeb": 82,
+            "cupsAll": 1041,
+            "cupsUnnamed": 32,
+            "icedAmericanoCustomerKd": 63.6,
+            "icedAmericanoAllKd": 68.4,
+            "icedAmericanoCups": 78,
+            "err": null
+          },
+          "deltaCustomer": 0.0,
+          "deltaVsTotalIncome": -78.6
+        }
+      }
+    }
+  },
+  "dayFleetWeek": [
+    {
+      "day": "2026-09-06",
+      "cacheCustomer": 3371.57,
+      "liveCustomer": 3371.57,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 208.32,
+      "mixGap": -1.2,
+      "tx": 3464.0
+    },
+    {
+      "day": "2026-09-07",
+      "cacheCustomer": 3436.58,
+      "liveCustomer": 3436.58,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 263.21,
+      "mixGap": -8.8,
+      "tx": 3518.0
+    },
+    {
+      "day": "2026-09-08",
+      "cacheCustomer": 3360.04,
+      "liveCustomer": 3360.04,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 242.15,
+      "mixGap": -0.8,
+      "tx": 3459.0
+    },
+    {
+      "day": "2026-09-09",
+      "cacheCustomer": 3646.36,
+      "liveCustomer": 3646.36,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 210.55,
+      "mixGap": -2.4,
+      "tx": 3720.0
+    },
+    {
+      "day": "2026-09-10",
+      "cacheCustomer": 3254.3,
+      "liveCustomer": 3254.3,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 218.11,
+      "mixGap": -0.8,
+      "tx": 3339.0
+    }
+  ],
+  "dayJaberWeek": [
+    {
+      "day": "2026-09-06",
+      "cacheCustomer": 310.75,
+      "liveCustomer": 310.75,
+      "liveWeb": 6.7,
+      "delta": 0.0,
+      "unnamed": 0.0
+    },
+    {
+      "day": "2026-09-07",
+      "cacheCustomer": 338.2,
+      "liveCustomer": 338.2,
+      "liveWeb": 9.9,
+      "delta": 0.0,
+      "unnamed": 0.0
+    },
+    {
+      "day": "2026-09-08",
+      "cacheCustomer": 276.6,
+      "liveCustomer": 276.6,
+      "liveWeb": 6.9,
+      "delta": 0.0,
+      "unnamed": 0.0
+    },
+    {
+      "day": "2026-09-09",
+      "cacheCustomer": 314.0,
+      "liveCustomer": 314.0,
+      "liveWeb": 8.0,
+      "delta": 0.0,
+      "unnamed": 0.0
+    },
+    {
+      "day": "2026-09-10",
+      "cacheCustomer": 304.7,
+      "liveCustomer": 304.7,
+      "liveWeb": 10.05,
+      "delta": 0.0,
+      "unnamed": 0.0
+    }
+  ],
+  "dayFarwaniyaMainWeek": [
+    {
+      "day": "2026-09-06",
+      "cacheCustomer": 194.0,
+      "liveCustomer": 194.0,
+      "liveWeb": 4.0,
+      "delta": 0.0,
+      "unnamed": 0.0
+    },
+    {
+      "day": "2026-09-07",
+      "cacheCustomer": 202.8,
+      "liveCustomer": 202.8,
+      "liveWeb": 5.9,
+      "delta": 0.0,
+      "unnamed": 0.8
+    },
+    {
+      "day": "2026-09-08",
+      "cacheCustomer": 186.25,
+      "liveCustomer": 186.25,
+      "liveWeb": 4.3,
+      "delta": 0.0,
+      "unnamed": 0.8
+    },
+    {
+      "day": "2026-09-09",
+      "cacheCustomer": 195.35,
+      "liveCustomer": 195.35,
+      "liveWeb": 2.5,
+      "delta": 0.0,
+      "unnamed": 2.4
+    },
+    {
+      "day": "2026-09-10",
+      "cacheCustomer": 180.2,
+      "liveCustomer": 180.2,
+      "liveWeb": 5.9,
+      "delta": 0.0,
+      "unnamed": 0.8
+    }
+  ],
+  "dayFleetPrev": [
+    {
+      "day": "2026-08-30",
+      "cacheCustomer": 3636.0,
+      "liveCustomer": 3636.0,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 213.2,
+      "mixGap": 0.0,
+      "tx": 3398.0
+    },
+    {
+      "day": "2026-08-31",
+      "cacheCustomer": 3430.26,
+      "liveCustomer": 3430.26,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 196.19,
+      "mixGap": 0.0,
+      "tx": 3461.0
+    },
+    {
+      "day": "2026-09-01",
+      "cacheCustomer": 3451.77,
+      "liveCustomer": 3451.77,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 189.66,
+      "mixGap": 0.0,
+      "tx": 3518.0
+    },
+    {
+      "day": "2026-09-02",
+      "cacheCustomer": 3315.98,
+      "liveCustomer": 3315.98,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 180.84,
+      "mixGap": 0.0,
+      "tx": 3386.0
+    },
+    {
+      "day": "2026-09-03",
+      "cacheCustomer": 3252.87,
+      "liveCustomer": 3252.87,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 194.41,
+      "mixGap": 0.0,
+      "tx": 3326.0
+    },
+    {
+      "day": "2026-09-04",
+      "cacheCustomer": 1313.1,
+      "liveCustomer": 1313.1,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 71.65,
+      "mixGap": 0.0,
+      "tx": 1352.0
+    },
+    {
+      "day": "2026-09-05",
+      "cacheCustomer": 1238.49,
+      "liveCustomer": 1238.49,
+      "delta": 0.0,
+      "liveErr": [],
+      "webImplied": 98.56,
+      "mixGap": 0.0,
+      "tx": 1270.0
+    }
+  ]
+}

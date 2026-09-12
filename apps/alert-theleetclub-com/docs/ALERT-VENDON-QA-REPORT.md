@@ -263,6 +263,27 @@ Root cause in code (`_revenue_cache_machine_payload`): customer totals always `+
 
 ---
 
+## 13b. External QA tester sheet (2026-09-12 re-check)
+
+Source: `QA_Alerts_vs_Vendon_Template (2) (1).xlsx` — 28 logged tests, 6 marked FAIL (plus cups rows TC-031/032).
+
+Re-ran **the same dates/locations** against Alert cache and live Vendon `/stats/vends` (excl WEB) on **2026-09-12** after those days were closed.
+
+| Tester ID | Tester Alert | Tester Vendon | Live Vendon now | Alert cache now | What happened |
+| --- | ---: | ---: | ---: | ---: | --- |
+| TC-002 week 6–10 Sep | 17060.85 | 17054.25 | **17068.85** | **17068.85** | Snapshots while 10 Sep still moving. Closed day: MATCH |
+| TC-027 same week (date typo 6/8) | 17060.85 | 17054.35 | **17068.85** | **17068.85** | Same as TC-002 |
+| TC-003 LY same week | 16097.59 | 16089.69 | **16097.59** | **16097.59** | Tester Alert was already correct. Their Vendon cell ≠ API |
+| TC-004 Jaber Gate 2 6–10 Sep | 1544.25 | 1541.95 | **1544.25** | **1544.25** | Tester Alert correct. Their Vendon cell ≠ API |
+| TC-006 Farwaniya Main 6–10 Sep | 953.80 | 958.60 | **958.60** | **958.60** | **−4.80 = unnamed SKUs** (0.8+0.8+2.4+0.8). Mix omitted blank names |
+| TC-026 prev 30 Aug–3 Sep | 17086.88 | 17043.88 | **17086.88** | **17086.88** | Tester Alert correct. Their Vendon cell ≠ API (−43) |
+| TC-031 cups 30 Aug–3 Sep | 17089 | 17079 | cache tx **17089** | **17089** | Alert cups = vend count. Tester Vendon cups −10 |
+| TC-005/007–025 locations | match | match | match | match | Confirmed |
+
+**Our automated FAILs vs this sheet:** same two families only — (1) open-day / snapshot timing, (2) unnamed product mix (P2). Fleet location **totals** are not wrong vs live Vendon.
+
+---
+
 ## 14. Root Cause Classification
 
 | ID | Classification | Defect? |
