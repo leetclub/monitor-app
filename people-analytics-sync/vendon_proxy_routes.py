@@ -1490,6 +1490,18 @@ def _ensure_remote_credits_preload_table(db) -> None:
     db.execute(text("CREATE INDEX IF NOT EXISTS idx_remote_credits_preload_cache_date ON remote_credits_preload_cache (cache_date);"))
 
 
+UNKNOWN_PRODUCT_NAME = "Unknown Product"
+
+
+def _mix_product_name(vend: Dict[str, Any]) -> str:
+    """Product mix bucket. Blank Vendon names still count (as Unknown Product)."""
+    try:
+        prod_name, _sel = _stats_vend_product_fields(vend)
+    except Exception:
+        prod_name = ""
+    return (prod_name or "").strip() or UNKNOWN_PRODUCT_NAME
+
+
 def _revenue_cache_machine_payload(
     machine_id: str,
     machine_name: str,
@@ -1509,21 +1521,16 @@ def _revenue_cache_machine_payload(
             price = float(v.get("price") or 0)
         except Exception:
             price = 0.0
-        try:
-            prod_name, _sel = _stats_vend_product_fields(v)
-        except Exception:
-            prod_name = ""
-        if prod_name:
-            product_counts_all[prod_name] = int(product_counts_all.get(prod_name, 0)) + 1
-            product_sales_all[prod_name] = float(product_sales_all.get(prod_name, 0.0)) + price
+        prod_name = _mix_product_name(v)
+        product_counts_all[prod_name] = int(product_counts_all.get(prod_name, 0)) + 1
+        product_sales_all[prod_name] = float(product_sales_all.get(prod_name, 0.0)) + price
         if _is_web_cashless_vend(v):
             continue
         total_sales += price
         total_tx += 1
         try:
-            if prod_name:
-                product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
-                product_sales[prod_name] = float(product_sales.get(prod_name, 0.0)) + price
+            product_counts[prod_name] = int(product_counts.get(prod_name, 0)) + 1
+            product_sales[prod_name] = float(product_sales.get(prod_name, 0.0)) + price
         except Exception:
             pass
         try:
@@ -1583,7 +1590,11 @@ def _revenue_cache_machine_payload(
             "productSales": {str(k): round(float(v), 4) for k, v in product_sales.items()},
             "productCountsAll": {str(k): int(v) for k, v in product_counts_all.items()},
             "productSalesAll": {str(k): round(float(v), 4) for k, v in product_sales_all.items()},
-            "productSalesMeta": {"excludesWebCashless": True, "v": 3},
+            "productSalesMeta": {
+                "excludesWebCashless": True,
+                "unknownProductBucket": True,
+                "v": 4,
+            },
             "peakHour": peak_hour,
         },
     }
@@ -1712,6 +1723,35 @@ def _set_revenue_cache_trust_state(**kwargs: Any) -> Dict[str, Any]:
     return get_revenue_cache_trust_state()
 
 
+def _cache_day_mix_sum(day: date) -> Optional[float]:
+    """Sum payload productSales (customer mix) for cache_date, or None if the day has zero rows."""
+    db = _get_people_analytics_session()
+    try:
+        _ensure_revenue_table(db)
+        db.commit()
+        rows = (
+            db.query(VendonDailyMachineRevenueCache.payload_json)
+            .filter(VendonDailyMachineRevenueCache.cache_date == day)
+            .all()
+        )
+        if not rows:
+            return None
+        mix = 0.0
+        for (payload,) in rows:
+            if not isinstance(payload, dict):
+                continue
+            ps = payload.get("productSales")
+            if isinstance(ps, dict):
+                for v in ps.values():
+                    try:
+                        mix += float(v or 0)
+                    except Exception:
+                        pass
+        return round(mix, 4)
+    finally:
+        db.close()
+
+
 def _cache_day_customer_sum(day: date) -> Optional[float]:
     """Sum total_sales_kwd for cache_date, or None if the day has zero rows (missing)."""
     db = _get_people_analytics_session()
@@ -1836,6 +1876,13 @@ def _reconcile_revenue_cache(
             abs_delta_max = max(abs_delta_max, abs(delta))
             needs = abs(delta) > tol
             reason = "drift" if needs else "ok"
+            if not needs:
+                mix_sum = _cache_day_mix_sum(day)
+                if mix_sum is not None and abs(mix_sum - cache_sum) > tol:
+                    needs = True
+                    reason = "mix_gap"
+                    delta = round(mix_sum - cache_sum, 4)
+                    abs_delta_max = max(abs_delta_max, abs(delta))
         if not needs:
             matched.append({"date": ds, "live": live_sum, "cache": cache_sum, "delta": delta})
             continue
