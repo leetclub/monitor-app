@@ -6461,6 +6461,33 @@ def register_alert_routes(app) -> None:
         machine_name = (request.args.get("machine_name") or request.args.get("machineName") or "").strip()
         return jsonify(get_tech_visit(machine_id, machine_name or None))
 
+    @app.route("/api/alert/workflow/technical-issues", methods=["GET", "OPTIONS"])
+    def alert_workflow_technical_issues():
+        """Active VM technical issues for one machine (Workflow API Pull Data View)."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import get_technical_issues
+
+        machine_id = (request.args.get("machine_id") or request.args.get("machineId") or "").strip()
+        return jsonify(get_technical_issues(machine_id))
+
+    @app.route("/api/alert/workflow/technical-issues-map", methods=["GET", "OPTIONS"])
+    def alert_workflow_technical_issues_map():
+        """Batch active technical issues keyed by vendon/machine id."""
+        if request.method == "OPTIONS":
+            return "", 204
+        _, denied = _require_alert_read()
+        if denied:
+            return denied
+        from leet_workflow_lib import get_technical_issues_map
+
+        raw = (request.args.get("machine_ids") or request.args.get("machineIds") or "").strip()
+        ids = [x.strip() for x in raw.split(",") if x.strip()]
+        return jsonify(get_technical_issues_map(ids))
+
     @app.route("/api/alert/workflow/go-check", methods=["POST", "OPTIONS"])
     def alert_workflow_go_check():
         if request.method == "OPTIONS":

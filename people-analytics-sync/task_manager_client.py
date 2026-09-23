@@ -903,3 +903,292 @@ def get_latest_quality_control_visit(
     dict_rows.sort(key=_qc_visit_sort_key, reverse=True)
     return _parse_quality_control_visit(dict_rows[0]), None
 
+
+def _status_value(raw: Any) -> str:
+    if isinstance(raw, dict):
+        return str(raw.get("value") or raw.get("label") or "").strip().lower()
+    return str(raw or "").strip().lower()
+
+
+def list_vm_technical_issues(
+    *,
+    page: int = 1,
+    per_page: int = 25,
+    vendon_id: Optional[str] = None,
+    status: Optional[str] = None,
+    from_date: Optional[str] = None,
+    until_date: Optional[str] = None,
+    date_exact: Optional[str] = None,
+    search: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Read-only list: GET /api/v1/vm-technical-issues (API Pull Data View).
+    Returns {data, pagination} or (None, error).
+    """
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+    params: Dict[str, Any] = {
+        "page": max(1, int(page or 1)),
+        "per_page": max(1, min(int(per_page or 25), 100)),
+    }
+    if vendon_id:
+        params["vendon_id"] = str(vendon_id).strip()
+    if status:
+        params["status"] = str(status).strip()
+    if date_exact:
+        params["date"] = str(date_exact).strip()
+    else:
+        if from_date:
+            params["from"] = str(from_date).strip()
+        if until_date:
+            params["until"] = str(until_date).strip()
+    if search:
+        params["search"] = str(search).strip()
+    data, err = _get("/api/v1/vm-technical-issues", params)
+    if err:
+        return None, err
+    return data if isinstance(data, dict) else {"data": data}, None
+
+
+def get_vm_technical_issue(
+    ticket_id: str,
+    *,
+    vendon_id: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read-only detail: GET /api/v1/vm-technical-issues/{ticket_id}."""
+    tid = str(ticket_id or "").strip()
+    if not tid:
+        return None, "ticket_id required"
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+    params: Dict[str, Any] = {}
+    if vendon_id:
+        params["vendon_id"] = str(vendon_id).strip()
+    data, err = _get(f"/api/v1/vm-technical-issues/{tid}", params or None)
+    if err:
+        return None, err
+    row = _unwrap_data(data)
+    return row if isinstance(row, dict) else None, None
+
+
+def list_tasks_view(
+    *,
+    page: int = 1,
+    per_page: int = 25,
+    status: Optional[str] = None,
+    user_id: Optional[int] = None,
+    search: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read-only list: GET /api/v1/tasks (API Pull Data View)."""
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+    params: Dict[str, Any] = {
+        "page": max(1, int(page or 1)),
+        "per_page": max(1, min(int(per_page or 25), 100)),
+    }
+    if status:
+        params["status"] = str(status).strip()
+    if user_id is not None:
+        params["user_id"] = int(user_id)
+    if search:
+        params["search"] = str(search).strip()
+    data, err = _get("/api/v1/tasks", params)
+    if err:
+        return None, err
+    return data if isinstance(data, dict) else {"data": data}, None
+
+
+def get_task_view(task_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read-only detail: GET /api/v1/tasks/{id}."""
+    tid = str(task_id or "").strip()
+    if not tid:
+        return None, "task_id required"
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+    data, err = _get(f"/api/v1/tasks/{tid}")
+    if err:
+        return None, err
+    row = _unwrap_data(data)
+    return row if isinstance(row, dict) else None, None
+
+
+def list_projects_view(
+    *,
+    page: int = 1,
+    per_page: int = 25,
+    from_date: Optional[str] = None,
+    until_date: Optional[str] = None,
+    search: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read-only list: GET /api/v1/projects (API Pull Data View)."""
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+    params: Dict[str, Any] = {
+        "page": max(1, int(page or 1)),
+        "per_page": max(1, min(int(per_page or 25), 100)),
+    }
+    if from_date:
+        params["from"] = str(from_date).strip()
+    if until_date:
+        params["until"] = str(until_date).strip()
+    if search:
+        params["search"] = str(search).strip()
+    data, err = _get("/api/v1/projects", params)
+    if err:
+        return None, err
+    return data if isinstance(data, dict) else {"data": data}, None
+
+
+def get_project_view(project_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read-only detail: GET /api/v1/projects/{id}."""
+    pid = str(project_id or "").strip()
+    if not pid:
+        return None, "project_id required"
+    if not task_manager_configured():
+        return None, "Task Manager API not configured"
+    data, err = _get(f"/api/v1/projects/{pid}")
+    if err:
+        return None, err
+    row = _unwrap_data(data)
+    return row if isinstance(row, dict) else None, None
+
+
+def parse_active_technical_issue_summary(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Compact Alert-friendly summary from a VM technical issue row."""
+    status = _status_value(row.get("status"))
+    maint = row.get("maintenance_tag")
+    maint_val = _status_value(maint) if maint is not None else ""
+    issue_type = row.get("issue_type") if isinstance(row.get("issue_type"), dict) else {}
+    tech = row.get("assigned_technician") if isinstance(row.get("assigned_technician"), dict) else {}
+    fix = row.get("fix") if isinstance(row.get("fix"), dict) else {}
+    machine = row.get("machine") if isinstance(row.get("machine"), dict) else {}
+    return {
+        "ticketId": str(row.get("ticket_id") or "").strip() or None,
+        "id": row.get("id"),
+        "vendonId": str(row.get("vendon_id") or machine.get("vendon_id") or "").strip() or None,
+        "machineName": str(machine.get("name") or "").strip() or None,
+        "status": status or None,
+        "statusLabel": (
+            str((row.get("status") or {}).get("label")).strip()
+            if isinstance(row.get("status"), dict)
+            else (status or None)
+        ),
+        "maintenanceTag": maint_val or None,
+        "description": str(row.get("description") or "").strip() or None,
+        "issueType": str(issue_type.get("name") or "").strip() or None,
+        "reportDate": str(row.get("report_date") or "").strip() or None,
+        "createdAt": str(row.get("created_at") or "").strip() or None,
+        "assignedTechnicianName": str(tech.get("name") or "").strip() or None,
+        "needsManualAssignment": bool(row.get("needs_manual_technician_assignment")),
+        "fixApproved": bool(fix.get("approved")) if fix else None,
+        "fixDurationSeconds": fix.get("duration_seconds"),
+        "fixDurationLabel": str(fix.get("duration_label") or "").strip() or None,
+        "source": "task_manager_vm_technical_issues",
+    }
+
+
+def get_active_technical_issues_for_machine(
+    vendon_id: str,
+    *,
+    days_back: int = 30,
+    per_page: int = 50,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Active (open + in_progress) technical issues for one machine.
+    Used by Alert tech downtime / active requests.
+    """
+    mid = str(vendon_id or "").strip()
+    if not mid:
+        return None, "vendon_id required"
+    today = kuwait_today()
+    from_iso = (today - timedelta(days=max(1, days_back))).isoformat()
+    until_iso = today.isoformat()
+    active_rows: List[Dict[str, Any]] = []
+    for st in ("open", "in_progress"):
+        payload, err = list_vm_technical_issues(
+            page=1,
+            per_page=per_page,
+            vendon_id=mid,
+            status=st,
+            from_date=from_iso,
+            until_date=until_iso,
+        )
+        if err:
+            return None, err
+        rows = (payload or {}).get("data") if isinstance(payload, dict) else None
+        for row in rows or []:
+            if isinstance(row, dict):
+                active_rows.append(row)
+    active_rows.sort(key=lambda r: str(r.get("created_at") or r.get("report_date") or ""), reverse=True)
+    summaries = [parse_active_technical_issue_summary(r) for r in active_rows]
+    latest = summaries[0] if summaries else None
+    return {
+        "vendonId": mid,
+        "activeCount": len(summaries),
+        "latest": latest,
+        "issues": summaries,
+    }, None
+
+
+def get_active_technical_issues_map(
+    machine_ids: List[str],
+    *,
+    days_back: int = 14,
+) -> Dict[str, Tuple[Optional[Dict[str, Any]], Optional[str]]]:
+    """Batch active technical issues keyed by vendon/machine id."""
+    ids = [str(x).strip() for x in machine_ids if str(x).strip()]
+    out: Dict[str, Tuple[Optional[Dict[str, Any]], Optional[str]]] = {mid: (None, None) for mid in ids}
+    if not ids:
+        return out
+    if not task_manager_configured():
+        err = "Task Manager API not configured"
+        return {mid: (None, err) for mid in ids}
+
+    want = set(ids)
+    today = kuwait_today()
+    from_iso = (today - timedelta(days=max(1, days_back))).isoformat()
+    until_iso = today.isoformat()
+    by_mid: Dict[str, List[Dict[str, Any]]] = {mid: [] for mid in ids}
+
+    for st in ("open", "in_progress"):
+        page = 1
+        while page <= 20:
+            payload, err = list_vm_technical_issues(
+                page=page,
+                per_page=100,
+                status=st,
+                from_date=from_iso,
+                until_date=until_iso,
+            )
+            if err:
+                return {mid: (None, err) for mid in ids}
+            rows = (payload or {}).get("data") if isinstance(payload, dict) else None
+            pag = (payload or {}).get("pagination") if isinstance(payload, dict) else {}
+            if not isinstance(rows, list):
+                break
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                machine = row.get("machine") if isinstance(row.get("machine"), dict) else {}
+                vid = str(row.get("vendon_id") or machine.get("vendon_id") or "").strip()
+                if vid in want:
+                    by_mid[vid].append(row)
+            if not (isinstance(pag, dict) and pag.get("has_next_page")):
+                break
+            page += 1
+
+    for mid in ids:
+        rows = by_mid.get(mid) or []
+        rows.sort(key=lambda r: str(r.get("created_at") or r.get("report_date") or ""), reverse=True)
+        summaries = [parse_active_technical_issue_summary(r) for r in rows]
+        out[mid] = (
+            {
+                "vendonId": mid,
+                "activeCount": len(summaries),
+                "latest": summaries[0] if summaries else None,
+                "issues": summaries[:20],
+            },
+            None,
+        )
+    return out
+

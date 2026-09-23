@@ -2,10 +2,269 @@
 	"info": {
 		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
 		"name": "Task Manager API",
-		"description": "JSON API for Task Manager (Laravel).\n\n## Purpose\nExternal integrations can read schedule periods, attendance, daily checks, quality control visits, and write urgent tasks, direct messages, and cleaning-overdue notifications.\n\n## Authentication\nEvery request requires the shared `API_KEY` from the Laravel `.env` file.\n\n```http\nX-Api-Key: {{api_key}}\n```\n\nor:\n\n```http\nAuthorization: Bearer {{api_key}}\n```\n\nMissing or invalid key \u2192 `401 Unauthorized`. Rate limit: **60 requests/minute**.\n\n## Collection Variables\n| Variable | Description |\n|----------|-------------|\n| `base_url` | App URL without trailing slash |\n| `api_key` | Shared API key (`API_KEY` in `.env`) |\n| `schedule_period_id` | From schedule period list |\n| `user_id` | Operator / user ID |\n| `daily_check_id` | From daily check list |\n| `vendon_id` | Vendon cloud machine ID |\n| `quality_control_visit_id` | From quality control list |\n\n## Write APIs\nPOST endpoints require `TASKS_SYSTEM_ISSUER_ADMIN_ID` in `.env` for system sender / task issuer admin.\n\n## Endpoint Groups\n- **Schedule Periods** \u2014 published schedules and employee assignments\n- **Attendance by User** \u2014 punches, lateness, calendar status\n- **Daily checks** \u2014 VM daily check submissions\n- **Quality Control** \u2014 QC visit incidents per machine\n- **Urgent operator tasks** \u2014 create urgent Received tasks\n- **Direct messages** \u2014 system DM to operator inbox\n- **Notifications** \u2014 cleaning-overdue DM delivery",
+		"description": "JSON API for Task Manager (Laravel).\n\n## Purpose\nExternal integrations can read schedule periods, attendance, daily checks, quality control visits, VM technical issue reports, and write urgent tasks, direct messages, and cleaning-overdue notifications.\n\n## Authentication\nEvery request requires the shared `API_KEY` from the Laravel `.env` file.\n\n```http\nX-Api-Key: {{api_key}}\n```\n\nor:\n\n```http\nAuthorization: Bearer {{api_key}}\n```\n\nMissing or invalid key \u2192 `401 Unauthorized`. Rate limit: **60 requests/minute**.\n\n## Collection Variables\n| Variable | Description |\n|----------|-------------|\n| `base_url` | App URL without trailing slash |\n| `api_key` | Shared API key (`API_KEY` in `.env`) |\n| `schedule_period_id` | From schedule period list |\n| `user_id` | Operator / user ID |\n| `daily_check_id` | From daily check list |\n| `vendon_id` | Vendon cloud machine ID |\n| `quality_control_visit_id` | From quality control list |\n| `technical_issue_ticket_id` | From VM technical issues list (`data[].ticket_id`, e.g. `TI-000001`) |\n| `task_id` | From tasks list (`data[].id`) |\n| `project_id` | From projects list (`data[].id`) |\n\n## Write APIs\nPOST endpoints require `TASKS_SYSTEM_ISSUER_ADMIN_ID` in `.env` for system sender / task issuer admin.\n\n## Endpoint Groups\n- **Schedule Periods** \u2014 published schedules and employee assignments\n- **Attendance by User** \u2014 punches, lateness, calendar status\n- **Daily checks** \u2014 VM daily check submissions\n- **Quality Control** \u2014 QC visit incidents per machine\n- **API Pull Data View** \u2014 read-only VM technical issues, tasks, and projects (list + detail)\n- **Urgent operator tasks** \u2014 create urgent Received tasks\n- **Direct messages** \u2014 system DM to operator inbox\n- **Notifications** \u2014 cleaning-overdue DM delivery",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
+		{
+			"name": "Mobile \u2014 Company Auth",
+			"item": [
+				{
+					"name": "Login (company user)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  if (json.token) pm.collectionVariables.set('mobile_token', json.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"operator@example.com\",\n  \"password\": \"your-password\",\n  \"device_name\": \"Postman\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/mobile/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"mobile",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Company panel user login for the Flutter mobile app.\n\nReturns `token_type`, `token`, and `user` (id, name, email, phone, permissions).\n\nNo `X-Api-Key` required \u2014 uses Laravel Sanctum bearer token.\n\nRate limit: **10 requests/minute**."
+					},
+					"response": []
+				},
+				{
+					"name": "Me (current user)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mobile_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/mobile/auth/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"mobile",
+								"auth",
+								"me"
+							]
+						},
+						"description": "Returns the authenticated company user profile."
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mobile_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/mobile/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"mobile",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Revokes the current Sanctum token."
+					},
+					"response": []
+				}
+			],
+			"description": "Mobile app authentication for **company panel users** (same credentials as `/company/login`). Uses Sanctum bearer tokens \u2014 not the integration `API_KEY`."
+		},
+		{
+			"name": "Mobile \u2014 Company Profile",
+			"item": [
+				{
+					"name": "Get profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mobile_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/mobile/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"mobile",
+								"profile"
+							]
+						},
+						"description": "Returns the authenticated company user's full profile (account, documents, emergency contact) \u2014 same fields as the company web profile page."
+					},
+					"response": []
+				},
+				{
+					"name": "Update profile (JSON)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mobile_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"+96550000000\",\n  \"civil_id_number\": \"299111312345\",\n  \"civil_id_expiry\": \"2027-06-13\",\n  \"passport_number\": \"P1234567\",\n  \"emergency_contact_name\": \"Emergency Contact\",\n  \"emergency_contact_phone\": \"+96551111111\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/mobile/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"mobile",
+								"profile"
+							]
+						},
+						"description": "Update text fields on the company profile. To change password include `password`, `password_confirmation`, and `current_password` (only when `can_change_password` is true)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update profile (multipart images)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mobile_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "profile_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "civil_id_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "passport_image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "remove_profile_image",
+									"value": "0",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/mobile/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"mobile",
+								"profile"
+							]
+						},
+						"description": "Upload profile photo and ID documents using multipart/form-data. Uploading a new civil ID image triggers automatic OCR (same as web). Set `remove_*_image` to `1` to clear an image."
+					},
+					"response": []
+				}
+			],
+			"description": "Company profile for the mobile app \u2014 mirrors `/company` **My profile** (account, documents, emergency contact)."
+		},
 		{
 			"name": "Schedule Periods",
 			"item": [
@@ -687,6 +946,437 @@
 			"description": "Quality control visit incidents per machine.\n\nFilter list by `vendon_id`, date, operator, incident type, result, and issue status."
 		},
 		{
+			"name": "API Pull Data View",
+			"item": [
+				{
+					"name": "VM Technical issues",
+					"item": [
+						{
+							"name": "List technical issues (paginated)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "X-Api-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/v1/vm-technical-issues?page=1&per_page=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vm-technical-issues"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "per_page",
+											"value": "25",
+											"description": "Max 100"
+										},
+										{
+											"key": "vendon_id",
+											"value": "{{vendon_id}}",
+											"description": "Optional \u2014 filter by machine vendon_id",
+											"disabled": true
+										},
+										{
+											"key": "user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 filter by submitter user id",
+											"disabled": true
+										},
+										{
+											"key": "date",
+											"value": "2026-06-15",
+											"description": "Optional \u2014 exact report_date (YYYY-MM-DD)",
+											"disabled": true
+										},
+										{
+											"key": "from",
+											"value": "2026-06-01",
+											"description": "Optional \u2014 range start (with until, not with date)",
+											"disabled": true
+										},
+										{
+											"key": "until",
+											"value": "2026-06-30",
+											"description": "Optional \u2014 range end (with from)",
+											"disabled": true
+										},
+										{
+											"key": "assigned_technician_user_id",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "status",
+											"value": "open",
+											"description": "open | in_progress | resolved",
+											"disabled": true
+										},
+										{
+											"key": "maintenance_tag",
+											"value": "corrective_maintenance",
+											"description": "corrective_maintenance | preventive_maintenance",
+											"disabled": true
+										},
+										{
+											"key": "technical_issue_type_id",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "ticket_id",
+											"value": "TI-000001",
+											"disabled": true
+										},
+										{
+											"key": "search",
+											"value": "power",
+											"description": "Ticket, description, machine name/vendon_id",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Read-only paginated list of VM technical issue reports.\n\n```\nGET /api/v1/vm-technical-issues?page=1&per_page=25\nHeader: X-Api-Key: {{api_key}}\n```\n\nOptional query filters (omit any you do not need): `vendon_id`, `user_id`, `date` or `from`/`until`, `status`, `maintenance_tag`, `technical_issue_type_id`, `ticket_id`, `search`.\n\nResponse includes `data` and `pagination`.\n\nEach row includes top-level **`vendon_id`** and **`user_id`** (submitter when type is user), **`media`**, **`images`**, and **`videos`** (with public URLs), plus `media_by_role`, ticket id, status, maintenance tag, machine, submitter, assigned technician, and fix summary.\n\nCopy `data[].ticket_id` into **`technical_issue_ticket_id`** for the detail request."
+							},
+							"response": []
+						},
+						{
+							"name": "Get technical issue by ticket ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "X-Api-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/v1/vm-technical-issues/{{technical_issue_ticket_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vm-technical-issues",
+										"{{technical_issue_ticket_id}}"
+									],
+									"query": [
+										{
+											"key": "vendon_id",
+											"value": "{{vendon_id}}",
+											"description": "Optional \u2014 return 404 if ticket is not for this machine",
+											"disabled": true
+										},
+										{
+											"key": "user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 return 404 if ticket was not submitted by this user",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Full read-only detail for one report by **ticket ID** (e.g. `TI-000042`). Case-insensitive.\n\n```\nGET /api/v1/vm-technical-issues/TI-000001\n```\n\nOptional query (same idea as list): `vendon_id`, `user_id` \u2014 omit unless you want to verify the ticket matches that machine or submitter.\n\n**Same fields as list**, including top-level `vendon_id`, `user_id`, **`media`**, **`images`**, **`videos`**, and `media_by_role` (all with attachment URLs). Extra on detail when applicable:\n\n| Field | Description |\n|-------|-------------|\n| `fix.approval_draft_description` | In-progress approve-fix draft text |\n| `has_fix_approval_draft` | Whether a fix approval draft exists |\n| `scheduled_visit` | Linked routine scheduled visit (preventive maintenance) |\n\n404 if ticket not found or optional scope does not match."
+							},
+							"response": []
+						}
+					],
+					"description": "Read-only VM technical issue reports (Technical issues machines).\n\nList: `GET /api/v1/vm-technical-issues` \u2014 paginated; optional `vendon_id`, `user_id`, and other filters.\nDetail: `GET /api/v1/vm-technical-issues/{ticketId}` \u2014 set `technical_issue_ticket_id` from list (`data[].ticket_id`)."
+				},
+				{
+					"name": "Tasks",
+					"item": [
+						{
+							"name": "List tasks (paginated, full detail)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "X-Api-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/v1/tasks?page=1&per_page=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"tasks"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "per_page",
+											"value": "25",
+											"description": "Max 100"
+										},
+										{
+											"key": "user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 assignee, issuer, or group member",
+											"disabled": true
+										},
+										{
+											"key": "assignee_user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 direct assignee only",
+											"disabled": true
+										},
+										{
+											"key": "issuer_user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 company user who issued the task",
+											"disabled": true
+										},
+										{
+											"key": "status",
+											"value": "pending",
+											"description": "pending | in_progress | completed | cancelled",
+											"disabled": true
+										},
+										{
+											"key": "priority",
+											"value": "urgent",
+											"disabled": true
+										},
+										{
+											"key": "search",
+											"value": "restock",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Read-only paginated tasks with **full detail on every row**.\n\n```\nGET /api/v1/tasks?page=1&per_page=25\nHeader: X-Api-Key: {{api_key}}\n```\n\nEach task includes title, explanation, status, priority, dates, assignee/issuer, department, group progress, **`attachments`**, **`images`**, **`videos`**, checklist items, discussion messages (with image/video URLs), and status change history.\n\nTop-level **`user_id`** is the assignee user id when set.\n\nCopy `data[].id` to **`task_id`** for the detail request."
+							},
+							"response": []
+						},
+						{
+							"name": "Get task by ID (full detail)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "X-Api-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/v1/tasks/{{task_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"tasks",
+										"{{task_id}}"
+									],
+									"query": [
+										{
+											"key": "user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 404 if task assignee is not this user",
+											"disabled": true
+										},
+										{
+											"key": "assignee_user_id",
+											"value": "{{user_id}}",
+											"disabled": true
+										},
+										{
+											"key": "issuer_user_id",
+											"value": "{{user_id}}",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Same full payload as list rows for one task.\n\n```\nGET /api/v1/tasks/42\n```\n\nOptional query: `user_id`, `assignee_user_id`, or `issuer_user_id` (omit unless you need to verify ownership)."
+							},
+							"response": []
+						}
+					],
+					"description": "Read-only tasks with complete detail on list and show.\n\nList: `GET /api/v1/tasks` \u2014 paginated.\nDetail: `GET /api/v1/tasks/{id}` \u2014 set `task_id` from list."
+				},
+				{
+					"name": "Projects",
+					"item": [
+						{
+							"name": "List projects (paginated, full detail)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "X-Api-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/v1/projects?page=1&per_page=25",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"projects"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "per_page",
+											"value": "25",
+											"description": "Max 100"
+										},
+										{
+											"key": "user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 department head assignee or step assignee",
+											"disabled": true
+										},
+										{
+											"key": "department_head_user_id",
+											"value": "{{user_id}}",
+											"disabled": true
+										},
+										{
+											"key": "step_assignee_user_id",
+											"value": "{{user_id}}",
+											"disabled": true
+										},
+										{
+											"key": "date",
+											"value": "2026-06-15",
+											"description": "Optional \u2014 project active on this date",
+											"disabled": true
+										},
+										{
+											"key": "from",
+											"value": "2026-06-01",
+											"disabled": true
+										},
+										{
+											"key": "until",
+											"value": "2026-06-30",
+											"disabled": true
+										},
+										{
+											"key": "search",
+											"value": "launch",
+											"description": "Name, remarks, or step title/message",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Read-only paginated projects with **full detail on every row**.\n\n```\nGET /api/v1/projects?page=1&per_page=25\nHeader: X-Api-Key: {{api_key}}\n```\n\nEach project includes name, start/end dates, remarks, department-head assignees, headed department ids, **`percent_done`** (0\u2013100, same as admin \u201cProject Complete\u201d; null if no steps), `completion` summary, creator, and **`steps`** (title, message, due date, status, approval, assignee).\n\nCopy `data[].id` to **`project_id`** for the detail request."
+							},
+							"response": []
+						},
+						{
+							"name": "Get project by ID (full detail)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "X-Api-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/v1/projects/{{project_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"projects",
+										"{{project_id}}"
+									],
+									"query": [
+										{
+											"key": "user_id",
+											"value": "{{user_id}}",
+											"description": "Optional \u2014 404 if user is not a dept head or step assignee",
+											"disabled": true
+										},
+										{
+											"key": "department_head_user_id",
+											"value": "{{user_id}}",
+											"disabled": true
+										},
+										{
+											"key": "step_assignee_user_id",
+											"value": "{{user_id}}",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Same full payload as list rows for one project.\n\n```\nGET /api/v1/projects/3\n```\n\nOptional query scopes (omit unless you need to verify participation)."
+							},
+							"response": []
+						}
+					],
+					"description": "Read-only projects with steps and department-head assignees.\n\nList: `GET /api/v1/projects` \u2014 paginated.\nDetail: `GET /api/v1/projects/{id}` \u2014 set `project_id` from list."
+				}
+			],
+			"description": "Read-only integration endpoints for pulling full records: **VM Technical issues**, **Tasks**, and **Projects** (paginated list + detail). All require `X-Api-Key: {{api_key}}`."
+		},
+		{
 			"name": "Urgent operator tasks",
 			"item": [
 				{
@@ -994,7 +1684,7 @@
 		},
 		{
 			"key": "api_key",
-			"value": "",
+			"value": "CHANGE_ME",
 			"type": "string"
 		},
 		{
@@ -1020,6 +1710,26 @@
 		{
 			"key": "quality_control_visit_id",
 			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "technical_issue_ticket_id",
+			"value": "TI-000001",
+			"type": "string"
+		},
+		{
+			"key": "task_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "project_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "mobile_token",
+			"value": "",
 			"type": "string"
 		}
 	]

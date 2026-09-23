@@ -82,6 +82,40 @@ export type TechVisitWorkflowPayload = WorkflowConfigured & {
   note?: string | null;
 };
 
+/** Active VM technical issues from Workflow API Pull Data View. */
+export type TechnicalIssueSummary = {
+  ticketId?: string | null;
+  id?: number | null;
+  vendonId?: string | null;
+  machineName?: string | null;
+  status?: string | null;
+  statusLabel?: string | null;
+  maintenanceTag?: string | null;
+  description?: string | null;
+  issueType?: string | null;
+  reportDate?: string | null;
+  createdAt?: string | null;
+  assignedTechnicianName?: string | null;
+  needsManualAssignment?: boolean;
+  fixApproved?: boolean | null;
+  fixDurationSeconds?: number | null;
+  fixDurationLabel?: string | null;
+  source?: string | null;
+};
+
+export type TechnicalIssuesPayload = WorkflowConfigured & {
+  vendonId?: string | null;
+  activeCount?: number;
+  latest?: TechnicalIssueSummary | null;
+  issues?: TechnicalIssueSummary[];
+  error?: string;
+};
+
+export type TechnicalIssuesMapPayload = WorkflowConfigured & {
+  byMachineId?: Record<string, TechnicalIssuesPayload>;
+  error?: string;
+};
+
 export type QaBulletsPayload = WorkflowConfigured & {
   bullets?: string[];
   summary?: string | null;
@@ -341,6 +375,21 @@ export function fetchTechVisitWorkflow(
   const name = String(machineName || '').trim();
   if (name) params.set('machine_name', name);
   return apiGet<TechVisitWorkflowPayload>(`/api/alert/workflow/tech-visit?${params.toString()}`);
+}
+
+export function fetchTechnicalIssuesWorkflow(machineId: string): Promise<TechnicalIssuesPayload> {
+  const params = new URLSearchParams({ machine_id: machineId });
+  return apiGet<TechnicalIssuesPayload>(`/api/alert/workflow/technical-issues?${params.toString()}`);
+}
+
+export function fetchTechnicalIssuesWorkflowMap(
+  machineIds: string[],
+): Promise<TechnicalIssuesMapPayload> {
+  const ids = machineIds.map((id) => String(id || '').trim()).filter(Boolean);
+  const params = new URLSearchParams({ machine_ids: ids.join(',') });
+  return apiGet<TechnicalIssuesMapPayload>(
+    `/api/alert/workflow/technical-issues-map?${params.toString()}`,
+  );
 }
 
 export function fetchQaBullets(auditId: string): Promise<QaBulletsPayload> {

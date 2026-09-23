@@ -548,6 +548,56 @@ def get_tech_visit(machine_id: str, machine_name: Optional[str] = None) -> Dict[
         except Exception:
             logger.exception("tech visit SafetyCulture fallback for %s", name)
 
+    out_empty: Dict[str, Any] = {
+        "lastVisitAt": None,
+        "visitorName": None,
+        "comment": None,
+        "source": None,
+        "note": tm_err or "No tech visit on record",
+    }
+    return _with_configured(out_empty)
+
+
+def get_technical_issues(machine_id: str) -> Dict[str, Any]:
+    """Active VM technical issues for one machine (API Pull Data View)."""
+    mid = (machine_id or "").strip()
+    if not mid:
+        return {"configured": workflow_configured(), "error": "machine_id required"}
+    if not workflow_configured():
+        return _not_configured()
+    try:
+        from task_manager_client import get_active_technical_issues_for_machine
+
+        payload, err = get_active_technical_issues_for_machine(mid)
+        if err:
+            return _with_configured({"error": err, "vendonId": mid, "activeCount": 0, "issues": []})
+        return _with_configured(payload or {"vendonId": mid, "activeCount": 0, "issues": []})
+    except Exception as ex:
+        logger.exception("technical issues for %s", mid)
+        return _with_configured({"error": str(ex), "vendonId": mid, "activeCount": 0, "issues": []})
+
+
+def get_technical_issues_map(machine_ids: List[str]) -> Dict[str, Any]:
+    """Batch active technical issues for Overall / Red Flags."""
+    ids = [str(x).strip() for x in (machine_ids or []) if str(x).strip()]
+    if not workflow_configured():
+        return _not_configured()
+    try:
+        from task_manager_client import get_active_technical_issues_map
+
+        raw = get_active_technical_issues_map(ids)
+        by_machine: Dict[str, Any] = {}
+        for mid in ids:
+            row, err = raw.get(mid, (None, None))
+            if err:
+                by_machine[mid] = {"vendonId": mid, "activeCount": 0, "issues": [], "error": err}
+            else:
+                by_machine[mid] = row or {"vendonId": mid, "activeCount": 0, "issues": []}
+        return _with_configured({"byMachineId": by_machine})
+    except Exception as ex:
+        logger.exception("technical issues map")
+        return _with_configured({"error": str(ex), "byMachineId": {}})
+
     return _with_configured(
         {
             "error": tm_err or "No tech / QC visit found for this machine",

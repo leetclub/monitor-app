@@ -7,11 +7,12 @@ alwaysApply: false
 # Workflow API — pending Alert needs
 
 Canonical tracker: `people-analytics-sync/docs/task-manager-api/PENDING-ALERT-INTEGRATION.md`  
-Package: Postman + `Task-Manager-API-New-Endpoints.pdf` under `docs/task-manager-api/`.
+Connector pack: `people-analytics-sync/docs/task-manager-api/CONNECTOR-HANDOFF.md`  
+Package: Postman under `docs/task-manager-api/`.
 
 Also apply mentally when editing `leet_workflow_lib.py`, `task_manager_client.py`, or Alert `leetWorkflowApi.ts` / GO CHECK / DM flows.
 
-## Wired in Alert (2026-07-29)
+## Wired in Alert
 
 | Ask | Endpoint | Alert path |
 |-----|----------|------------|
@@ -19,12 +20,13 @@ Also apply mentally when editing `leet_workflow_lib.py`, `task_manager_client.py
 | #2 DM scheduled operator | `POST /api/v1/direct-messages` | Call OP → `/api/alert/workflow/dm-operator` |
 | #3 Tech / QC visit | `GET /api/v1/quality-control` | Tech visit modal → `/api/alert/workflow/tech-visit` (SC fallback) |
 | #4 Cleaning overdue inbox | `POST /api/v1/notifications/cleaning-overdue` | Cleaning alert → `/api/alert/workflow/cleaning-overdue` |
+| Active VM technical issues | `GET /api/v1/vm-technical-issues` | `/api/alert/workflow/technical-issues` (+ map). UI column TBD |
 
-## Live updates (2026-08-09)
+## Still open
 
-- **#6** `from`/`until` on daily-checks → **200 Live**; Alert cleaning fetch uses it.
-- **#5** Live samples: `pending` / `complete` + `vm_review.check_result_*`. Parser updated. Still want explicit **rejected** sample if used.
-- **#3 naming:** confirm QC list is the intended **tech visit** source (Live QC has visitor/date/issue/result).
+- **Customer calls** — not in Workflow package
+- Tech downtime **UI** (sheet R52) — data via technical-issues; layout TBD
+- Explicit **rejected** CC daily-check sample if used
 
 ## Do not regress
 

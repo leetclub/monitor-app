@@ -103,6 +103,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-09-23 | **Workflow technical issues proxy:** people-api exposes `GET /api/alert/workflow/technical-issues` (+ batch map) from Task Manager `vm-technical-issues` (open/in_progress). Connector handoff doc for other teams under `people-analytics-sync/docs/task-manager-api/CONNECTOR-HANDOFF.md`. Customer calls still not in Workflow package. |
 | 2026-09-14 | **Products mix includes unnamed SKUs:** blank Vendon product names bucket as **Unknown Product** so mix KD sums to fleet actual (excl WEB). Cache reconcile also refreshes days where mix ≠ day total. |
 | 2026-09-04 | **Operator Activity drops Clean:** Op Activity shows Refill / Credit / Door only. Cleaning stays on **Last clean** (avoids duplicate Clean stamps). |
 | 2026-09-02 | **Vendon = source of truth for fleet KD:** Revenue cache is a speed layer only. WEB exclusion uses exact `WEB_CASHLESS`. Nightly + on-demand **reconcile** compares live Vendon day totals to cache and refreshes drift/gaps. Fleet bar shows a **verifying vs Vendon** cue when gaps/drift remain; `fleetYtdCacheTrusted` / `fleetRevenueCacheStatus` on daily-sales-elapsed. |
