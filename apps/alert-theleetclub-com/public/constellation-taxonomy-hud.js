@@ -5,10 +5,12 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-layout-fast';
+    const BUILD_STAMP = '20261014-layout-fast2';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
+    /** Phase 1 (machines + snapshot) must not block first paint forever. */
+    const PHASE1_TIMEOUT_MS = 4000;
     /** Live /api needs http(s) + session cookie: production Alert host or local Vite/nginx. file:// → DEMO. */
     const isHttpOrigin =
       typeof location !== 'undefined' &&
@@ -1037,6 +1039,115 @@
       updatePollAge();
     }
 
+    function raceTimeout(ms, label) {
+      return new Promise((_, reject) => {
+        setTimeout(() => {
+          const err = new Error(`${label} timeout ${ms}ms`);
+          err.code = 'TIMEOUT';
+          reject(err);
+        }, ms);
+      });
+    }
+
+    function paintLiveSkeleton(machines, snapshot) {
+      liveBundle = {
+        machines,
+        snapshotRows: (snapshot && snapshot.rows) || [],
+        salesById: {},
+        summaryById: {},
+        profilesById: {},
+        areaOwnerById: {},
+        attendanceById: {},
+        cleaningById: {},
+        techById: {},
+        lastTxById: {},
+        liveById: {},
+        downtimeById: {},
+        creditsById: {},
+        fromCache: snapshot && snapshot.fromCache,
+        cacheGeneratedAt: snapshot && snapshot.cacheGeneratedAt,
+      };
+      usingMock = false;
+      rebuildGraph(buildTaxonomy(liveBundle));
+      lastPollAt = Date.now();
+      document.getElementById('live-dot').className = 'dot warn';
+      document.getElementById('data-src').textContent =
+        `live skeleton · ${machines.length} machines · enriching…`;
+      logTrace(`INGEST skeleton: machines=${machines.length} snap=${((snapshot && snapshot.rows) || []).length}`);
+      updatePollAge();
+    }
+
+    async function enrichLive(machines, snapshot) {
+      // Phase 2 — enrich without blocking first paint. Downtime soft-fails (never blocks paint).
+      const soft = (label, p) =>
+        p.catch((e) => {
+          logTrace(`${label}: ${e.message}`, false);
+          return {};
+        });
+      const [
+        sales,
+        summary,
+        lastTxPayload,
+        liveDash,
+        profiles,
+        owners,
+        credits,
+        downtime,
+      ] = await Promise.all([
+        soft('sales-elapsed', apiGet(API.salesElapsed)),
+        soft('sales-summary', apiGet(API.salesSummary)),
+        soft('last-tx', apiGet(API.lastTx)),
+        soft('live-dashboard', apiGet(API.liveDash)),
+        soft('admin-profiles', apiGet(API.adminProfiles)),
+        soft('area-owners', apiGet(API.areaOwners)),
+        soft('remote-credits', apiGet(API.creditsTotals)),
+        soft('downtime', apiGet(API.downtime)),
+      ]);
+
+      const ids = machines.map((m) => String(m.id));
+      const [attendanceById, cleaningById, techById] = await Promise.all([
+        soft('attendance-map', fetchAttendanceMap(ids)),
+        soft('cleaning-map', fetchCleaningMap(ids)),
+        soft('tech-map', fetchTechIssuesMap(ids)),
+      ]);
+
+      const profilesById = {};
+      for (const row of profiles.rows || profiles.profiles || []) {
+        const id = String(row.machine_id || row.machineId || '').trim();
+        if (id) profilesById[id] = row;
+      }
+      if (profiles.byMachineId) Object.assign(profilesById, profiles.byMachineId);
+
+      liveBundle = {
+        ...(liveBundle || {}),
+        machines,
+        snapshotRows: (snapshot && snapshot.rows) || [],
+        salesById: sales.byMachineId || {},
+        summaryById: summary.byMachineId || {},
+        profilesById,
+        areaOwnerById: owners.byMachineId || {},
+        attendanceById: attendanceById || {},
+        cleaningById: cleaningById || {},
+        techById: techById || {},
+        lastTxById: lastTxPayload.byMachineId || {},
+        liveById: indexLiveDash(liveDash.machines || []),
+        downtimeById: downtime.byMachineId || {},
+        creditsById: credits.byMachineId || {},
+        fromCache: snapshot && snapshot.fromCache,
+        cacheGeneratedAt: snapshot && snapshot.cacheGeneratedAt,
+      };
+      usingMock = false;
+      rebuildGraph(buildTaxonomy(liveBundle));
+      lastPollAt = Date.now();
+      document.getElementById('live-dot').className = 'dot';
+      document.getElementById('data-src').textContent =
+        `live · ${machines.length} machines · cache ${snapshot && snapshot.fromCache ? 'HIT' : 'MISS'}`;
+      logTrace(
+        `INGEST enrich: live=${(liveDash.machines || []).length} att=${Object.keys(attendanceById || {}).length} tech=${Object.keys(techById || {}).length} dt=${Object.keys(downtime.byMachineId || {}).length}`,
+      );
+      updatePollAge();
+    }
+
     async function loadLive() {
       paintBuildStamp();
       if (!canUseLiveApis) {
@@ -1048,9 +1159,18 @@
         );
         return;
       }
-      document.getElementById('live-dot').className = 'dot warn';
-      document.getElementById('data-src').textContent = 'fetching…';
+      // Demo tree already painted on boot — keep it visible while APIs crawl.
+      if (!taxonomyRoot) {
+        enterDemoMode('boot placeholder before live');
+      } else {
+        document.getElementById('live-dot').className = 'dot warn';
+        document.getElementById('data-src').textContent = usingMock
+          ? 'DEMO visible · fetching live…'
+          : 'refreshing…';
+      }
       try {
+        // Session check is soft relative to first paint (demo already on screen).
+        // Only Phase 1 (machines+snapshot) is hard-raced below.
         const me = await apiGet(API.me);
         const email = me.email || null;
         document.getElementById('session-email').textContent = email || 'not signed in';
@@ -1062,110 +1182,52 @@
         }
         document.getElementById('auth-banner').className = 'banner hidden';
 
-        // Phase 1 — paint matrix ASAP (machines + red-flags only).
-        const [machinesPayload, snapshot] = await Promise.all([
-          apiGet(API.machines),
-          apiGet(API.snapshot),
-        ]);
-        const machines = machinesPayload.machines || [];
-        liveBundle = {
-          machines,
-          snapshotRows: snapshot.rows || [],
-          salesById: {},
-          summaryById: {},
-          profilesById: {},
-          areaOwnerById: {},
-          attendanceById: {},
-          cleaningById: {},
-          techById: {},
-          lastTxById: {},
-          liveById: {},
-          downtimeById: {},
-          creditsById: {},
-          fromCache: snapshot.fromCache,
-          cacheGeneratedAt: snapshot.cacheGeneratedAt,
-        };
-        usingMock = false;
-        rebuildGraph(buildTaxonomy(liveBundle));
-        lastPollAt = Date.now();
-        document.getElementById('live-dot').className = 'dot warn';
-        document.getElementById('data-src').textContent =
-          `live skeleton · ${machines.length} machines · enriching…`;
-        logTrace(`INGEST skeleton: machines=${machines.length} snap=${(snapshot.rows || []).length}`);
-
-        // Phase 2 — enrich without blocking first paint. Downtime is optional (can 500 under DB pressure).
-        const soft = (label, p) =>
-          p.catch((e) => {
-            logTrace(`${label}: ${e.message}`, false);
-            return {};
-          });
-        const [
-          sales,
-          summary,
-          lastTxPayload,
-          liveDash,
-          profiles,
-          owners,
-          credits,
-          downtime,
-        ] = await Promise.all([
-          soft('sales-elapsed', apiGet(API.salesElapsed)),
-          soft('sales-summary', apiGet(API.salesSummary)),
-          soft('last-tx', apiGet(API.lastTx)),
-          soft('live-dashboard', apiGet(API.liveDash)),
-          soft('admin-profiles', apiGet(API.adminProfiles)),
-          soft('area-owners', apiGet(API.areaOwners)),
-          soft('remote-credits', apiGet(API.creditsTotals)),
-          soft('downtime', apiGet(API.downtime)),
-        ]);
-
-        const ids = machines.map((m) => String(m.id));
-        const [attendanceById, cleaningById, techById] = await Promise.all([
-          fetchAttendanceMap(ids),
-          fetchCleaningMap(ids),
-          fetchTechIssuesMap(ids),
-        ]);
-
-        const profilesById = {};
-        for (const row of profiles.rows || profiles.profiles || []) {
-          const id = String(row.machine_id || row.machineId || '').trim();
-          if (id) profilesById[id] = row;
+        // Phase 1 — race machines+snapshot (~4s). On timeout keep demo tree; enrich continues in background.
+        const phase1Promise = Promise.all([apiGet(API.machines), apiGet(API.snapshot)]);
+        let machinesPayload;
+        let snapshot;
+        let phase1TimedOut = false;
+        try {
+          [machinesPayload, snapshot] = await Promise.race([
+            phase1Promise,
+            raceTimeout(PHASE1_TIMEOUT_MS, 'phase1'),
+          ]);
+        } catch (phase1Err) {
+          if (phase1Err.code !== 'TIMEOUT') throw phase1Err;
+          phase1TimedOut = true;
+          logTrace('PHASE1 timeout — keeping demo tree; live continues in background', false);
+          document.getElementById('data-src').textContent =
+            'DEMO visible · live skeleton still loading…';
+          // When phase1 eventually resolves, paint skeleton then enrich.
+          phase1Promise
+            .then(([mp, snap]) => {
+              const machines = (mp && mp.machines) || [];
+              paintLiveSkeleton(machines, snap || {});
+              return enrichLive(machines, snap || {});
+            })
+            .catch((e) => {
+              logTrace(`PHASE1 late fail: ${e.message}`, false);
+            });
+          return;
         }
-        if (profiles.byMachineId) Object.assign(profilesById, profiles.byMachineId);
 
-        liveBundle = {
-          ...liveBundle,
-          salesById: sales.byMachineId || {},
-          summaryById: summary.byMachineId || {},
-          profilesById,
-          areaOwnerById: owners.byMachineId || {},
-          attendanceById,
-          cleaningById,
-          techById,
-          lastTxById: lastTxPayload.byMachineId || {},
-          liveById: indexLiveDash(liveDash.machines || []),
-          downtimeById: downtime.byMachineId || {},
-          creditsById: credits.byMachineId || {},
-        };
-        rebuildGraph(buildTaxonomy(liveBundle));
-        lastPollAt = Date.now();
-        document.getElementById('live-dot').className = 'dot';
-        document.getElementById('data-src').textContent =
-          `live · ${machines.length} machines · cache ${snapshot.fromCache ? 'HIT' : 'MISS'}`;
-        logTrace(
-          `INGEST enrich: live=${(liveDash.machines || []).length} att=${Object.keys(attendanceById).length} tech=${Object.keys(techById).length} dt=${Object.keys(downtime.byMachineId || {}).length}`,
-        );
+        const machines = machinesPayload.machines || [];
+        paintLiveSkeleton(machines, snapshot);
+        await enrichLive(machines, snapshot);
+        void phase1TimedOut;
       } catch (e) {
         document.getElementById('live-dot').className = 'dot err';
-        document.getElementById('data-src').textContent = `fallback · ${e.message}`;
+        document.getElementById('data-src').textContent = `DEMO · ${e.message}`;
         if (e.code === 401) {
           document.getElementById('auth-banner').className = 'banner';
           document.getElementById('auth-banner').innerHTML =
             'Session cookie missing. Open <a href="/login">/login</a> on alert.theleetclub.com, then reload this HUD.';
         }
-        logTrace(`LIVE FAIL: ${e.message} — using demo seed`, false);
-        usingMock = true;
-        rebuildGraph(buildTaxonomy(demoBundle()));
+        logTrace(`LIVE FAIL: ${e.message} — keeping demo seed`, false);
+        if (!taxonomyRoot || !usingMock) {
+          usingMock = true;
+          rebuildGraph(buildTaxonomy(demoBundle()));
+        }
       }
       updatePollAge();
     }
@@ -1934,6 +1996,9 @@
         setInterval(updatePollAge, 1000);
         return;
       }
+      // Instant first frame: mock taxonomy so the tree is visible while live APIs crawl.
+      enterDemoMode('instant boot paint — live replace pending');
+      document.getElementById('data-src').textContent = 'DEMO visible · fetching live…';
       loadLive();
       setInterval(loadLive, POLL_MS);
       setInterval(updatePollAge, 1000);
