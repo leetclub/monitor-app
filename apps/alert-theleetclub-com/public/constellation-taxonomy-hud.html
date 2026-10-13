@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="20261014-file-guard+detail">
+<html lang="en" data-build="20261014-file-guard+vendon">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -265,9 +265,9 @@
     <h2 id="local-mode-title">Local file cannot use Alert session APIs</h2>
     <p>
       Opening this HUD via <code>file://</code> (or any host other than
-      <code>alert.theleetclub.com</code>) makes <code>fetch('/api/me')</code> resolve to a non-HTTP
-      origin. Live fleet data and cookies only work on the production Alert site (same-origin
-      <code>/api</code> via ingress + session cookie).
+      <code>alert.theleetclub.com</code>) blocks live fetch. The browser must not call Vendon or
+      <code>workflow.theleetclub.com</code> directly — only same-origin <code>/api</code> on Alert
+      (people-api proxies + session cookie).
     </p>
     <p class="demo-note">DEMO constellation with mock data is shown below so the canvas is not empty.</p>
     <div class="local-mode-actions">
@@ -287,7 +287,7 @@
         <div class="frame-tag">Taxonomy lab — future end-user product elsewhere · not fleet-ops mesh</div>
         <div class="breadcrumb hud-layer" id="breadcrumb">Loading live fleet…</div>
       </div>
-      <div class="status-box hud-layer" data-build="20261014-file-guard+detail">
+      <div class="status-box hud-layer" data-build="20261014-file-guard+vendon">
         <div>SESSION: <span id="session-email">…</span></div>
         <div>DATA: <span id="data-src">connecting</span></div>
         <div>POLL: <span id="poll-age">—</span></div>
@@ -300,9 +300,10 @@
           <div class="ops-bar"><i id="ops-focus-bar"></i></div>
         </div>
         <div class="build-stamp" id="build-stamp" title="Cache-bust: append ?v=timestamp if this looks stale">
-          BUILD: <span id="build-stamp-id">20261014-file-guard+detail</span>
-          <span class="hint">open via alert.theleetclub.com for live data</span>
+          BUILD: <span id="build-stamp-id">20261014-file-guard+vendon</span>
+          <span class="hint">open via alert.theleetclub.com for live data · people-api → Vendon/Workflow</span>
         </div>
+        <div class="live-via">Same-origin /api proxies only · credentials: include</div>
         <div style="margin-top:6px"><a href="/red-flags">← Red Flags</a> · <a href="/login">Login</a></div>
       </div>
     </div>
@@ -340,6 +341,6 @@
     </div>
   </div>
 
-  <script src="./constellation-taxonomy-hud.js" defer></script>
+  <script src="./constellation-taxonomy-hud.js?v=20261014-vendon-workflow" defer></script>
 </body>
 </html>

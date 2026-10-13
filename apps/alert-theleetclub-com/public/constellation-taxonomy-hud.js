@@ -5,16 +5,18 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-file-guard+detail';
+    const BUILD_STAMP = '20261014-file-guard+vendon';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
-    /** Live /api + session cookie only on production Alert host. file:// and other hosts → DEMO. */
+    /** Live /api needs http(s) + session cookie: production Alert host or local Vite/nginx. file:// → DEMO. */
     const isHttpOrigin =
       typeof location !== 'undefined' &&
       (location.protocol === 'http:' || location.protocol === 'https:');
+    const liveHost = String(location.hostname || '').toLowerCase();
     const canUseLiveApis =
-      isHttpOrigin && String(location.hostname || '').toLowerCase() === ALERT_HOST;
+      isHttpOrigin &&
+      (liveHost === ALERT_HOST || liveHost === 'localhost' || liveHost === '127.0.0.1');
 
     const API = {
       me: '/api/me',
@@ -22,10 +24,21 @@
       snapshot: '/api/alert/red-flags/snapshot',
       salesElapsed: '/api/alert/overall/daily-sales-elapsed',
       salesSummary: '/api/alert/overall/vendon-sales-summary?preset=today_vs_yesterday',
+      lastTx: '/api/alert/overall/last-transactions',
+      liveDash: '/api/live-dashboard/snapshot',
+      downtime: '/api/alert/overall/downtime-summary?preset=today_vs_yesterday',
       adminProfiles: '/api/alert/overall/admin-profiles',
       areaOwners: '/api/alert/area-owner-map',
       attendanceMap: (ids) =>
         `/api/alert/workflow/machine-attendance-map?machine_ids=${encodeURIComponent(ids)}`,
+      cleaningMap: (ids) =>
+        `/api/alert/workflow/cleaning-map?machine_ids=${encodeURIComponent(ids)}`,
+      techIssuesMap: (ids) =>
+        `/api/alert/workflow/technical-issues-map?machine_ids=${encodeURIComponent(ids)}`,
+      operatorSchedule: (id) =>
+        `/api/alert/workflow/operator-schedule?machine_id=${encodeURIComponent(id)}`,
+      techIssues: (id) =>
+        `/api/alert/workflow/technical-issues?machine_id=${encodeURIComponent(id)}`,
       goCheck: '/api/alert/workflow/go-check',
       dm: '/api/alert/workflow/dm-operator',
       cleaning: '/api/alert/workflow/cleaning-overdue',
@@ -224,6 +237,74 @@
       return byMachineId;
     }
 
+    async function fetchCleaningMap(machineIds) {
+      const byMachineId = {};
+      for (const group of chunk(machineIds, 24)) {
+        if (!group.length) continue;
+        try {
+          const data = await apiGet(API.cleaningMap(group.join(',')));
+          Object.assign(byMachineId, data.byMachineId || {});
+        } catch (e) {
+          logTrace(`cleaning-map batch fail: ${e.message}`, false);
+        }
+      }
+      return byMachineId;
+    }
+
+    async function fetchTechIssuesMap(machineIds) {
+      const byMachineId = {};
+      for (const group of chunk(machineIds, 24)) {
+        if (!group.length) continue;
+        try {
+          const data = await apiGet(API.techIssuesMap(group.join(',')));
+          Object.assign(byMachineId, data.byMachineId || {});
+        } catch (e) {
+          logTrace(`tech-issues-map batch fail: ${e.message}`, false);
+        }
+      }
+      return byMachineId;
+    }
+
+    function indexLiveDash(machines) {
+      const byId = {};
+      for (const row of machines || []) {
+        const id = String(row.machineId || row.machine_id || '').trim();
+        if (id) byId[id] = row;
+      }
+      return byId;
+    }
+
+    function fmtSaleAge(min) {
+      if (min == null || !Number.isFinite(Number(min))) return '—';
+      const m = Number(min);
+      if (m < 60) return `${Math.round(m)}m`;
+      return `${(m / 60).toFixed(1)}h`;
+    }
+
+    function fmtDowntimeSec(sec) {
+      if (sec == null || !Number.isFinite(Number(sec))) return '—';
+      const s = Math.max(0, Number(sec));
+      if (s < 60) return `${Math.round(s)}s`;
+      if (s < 3600) return `${(s / 60).toFixed(0)}m`;
+      return `${(s / 3600).toFixed(1)}h`;
+    }
+
+    function liveAlertCodes(live) {
+      const alerts = Array.isArray(live?.alerts) ? live.alerts : [];
+      return alerts
+        .map((a) => a.code || a.message || a.level)
+        .filter(Boolean)
+        .slice(0, 6);
+    }
+
+    function peakHourLabel(peak) {
+      if (peak == null || peak === '') return '—';
+      if (typeof peak === 'object') {
+        return peak.label || (peak.hour != null ? `H${peak.hour}` : '—');
+      }
+      return String(peak);
+    }
+
     function buildTaxonomy(bundle) {
       const {
         machines = [],
@@ -234,6 +315,11 @@
         areaOwnerById = {},
         attendanceById = {},
         creditsById = {},
+        lastTxById = {},
+        liveById = {},
+        cleaningById = {},
+        techById = {},
+        downtimeById = {},
       } = bundle;
 
       const snapById = {};
@@ -261,6 +347,11 @@
         const summary = summaryById[id] || {};
         const att = attendanceById[id] || {};
         const credits = creditsById[id] || null;
+        const live = liveById[id] || {};
+        const lastTxRow = lastTxById[id] || null;
+        const cleanWf = cleaningById[id] || {};
+        const tech = techById[id] || {};
+        const down = downtimeById[id] || {};
         const ownerPerson =
           areaOwnerById[id]?.name ||
           areaOwnerById[id]?.ownerName ||
@@ -299,12 +390,28 @@
             ? Number(snap.hoursSinceCleaning)
             : null;
         const tier = snap.alertPriorityTier != null ? Number(snap.alertPriorityTier) : null;
-        const lastTx =
+        let lastTx =
           snap.lastTransactionAtUtc ||
           snap.lastTxAtUtc ||
           snap.lastTransactionAt ||
           sales.lastTransactionAtUtc ||
           null;
+        if (!lastTx && lastTxRow?.timestamp) {
+          lastTx = new Date(Number(lastTxRow.timestamp) * 1000).toISOString();
+        } else if (!lastTx && live.lastVendAt) {
+          lastTx = live.lastVendAt;
+        }
+        const liveCodes = liveAlertCodes(live);
+        const techActive =
+          tech.activeCount != null
+            ? Number(tech.activeCount)
+            : Array.isArray(tech.issues)
+              ? tech.issues.length
+              : null;
+        const attStatus = att.attendanceStatusLabel || att.attendanceStatus || att.pill?.label || '';
+        const attState = att.state || '';
+        const wfLastClean = cleanWf.lastCleaningAt || live.lastCleaningAt || null;
+        const shiftLate = !!(live.shift && live.shift.late);
         const locOwner =
           prof.location_owner || m.vendon_location_owner || snap.machineLocationOwner || '—';
         const locHours = prof.location_hours || prof.locationHours || '—';
@@ -360,6 +467,8 @@
           hoursSinceCleaning,
           tier,
           lastTx,
+          lastTxProduct: lastTxRow?.product_name || null,
+          lastTxAmount: lastTxRow?.amount != null ? lastTxRow.amount : null,
           areaOwner: ownerPerson || '—',
           locationOwner: locOwner,
           locationHours: locHours,
@@ -377,6 +486,22 @@
           dispenseTests,
           creditKd,
           hasCreditsRow: !!credits,
+          liveCodes,
+          saleAgeMinutes: live.saleAgeMinutes != null ? Number(live.saleAgeMinutes) : null,
+          maintenanceStatus: live.maintenanceStatus || null,
+          shiftLate,
+          liveSalesToday: live.salesToday != null ? Number(live.salesToday) : null,
+          attendanceStatus: attStatus || null,
+          attendanceState: attState || null,
+          attendancePill: att.pill?.label || null,
+          techActiveCount: techActive,
+          techLatest:
+            tech.latest?.statusLabel || tech.latest?.status || tech.latest?.description || null,
+          wfLastCleaningAt: wfLastClean,
+          wfCleaningSource: cleanWf.cleaningSource || null,
+          wfHighRisk: !!cleanWf.highRisk,
+          downtimeTodaySec: down.todaySec != null ? Number(down.todaySec) : null,
+          downtimePeriodSec: down.periodSec != null ? Number(down.periodSec) : null,
         };
 
         const topProductChildren = tops.map((p, i) => ({
@@ -440,13 +565,15 @@
             'Today KD': fmtKwd(todayKwd),
             'Yest same clock': fmtKwd(yestKwd),
             Operator: opName,
-            Email: opEmail || '—',
+            Attendance: attStatus || attState || '—',
+            'Live codes': liveCodes.length ? liveCodes.join(', ') : 'none',
             Reasons: reasons.length ? reasons.join(', ') : 'none',
+            'Tech issues': techActive != null ? String(techActive) : '—',
             'Cleaning 15h': cleaningOverdue ? 'OVERDUE' : 'ok',
-            'Hours since clean': fmtHours(hoursSinceCleaning),
+            'Sale age': fmtSaleAge(live.saleAgeMinutes),
+            Maint: live.maintenanceStatus || '—',
             Tier: tier != null ? String(tier) : '—',
             'Last TX': fmtLastTx(lastTx),
-            'Area owner': ownerPerson || '—',
           },
           children: [
             {
@@ -909,29 +1036,55 @@
         }
         document.getElementById('auth-banner').className = 'banner hidden';
 
-        const [machinesPayload, snapshot, sales, summary, profiles, owners, credits] =
-          await Promise.all([
-            apiGet(API.machines),
-            apiGet(API.snapshot),
-            apiGet(API.salesElapsed).catch((e) => {
-              logTrace(`sales-elapsed: ${e.message}`, false);
-              return {};
-            }),
-            apiGet(API.salesSummary).catch((e) => {
-              logTrace(`sales-summary: ${e.message}`, false);
-              return {};
-            }),
-            apiGet(API.adminProfiles).catch(() => ({})),
-            apiGet(API.areaOwners).catch(() => ({})),
-            apiGet(API.creditsTotals).catch((e) => {
-              logTrace(`remote-credits: ${e.message}`, false);
-              return {};
-            }),
-          ]);
+        const [
+          machinesPayload,
+          snapshot,
+          sales,
+          summary,
+          lastTxPayload,
+          liveDash,
+          downtime,
+          profiles,
+          owners,
+          credits,
+        ] = await Promise.all([
+          apiGet(API.machines),
+          apiGet(API.snapshot),
+          apiGet(API.salesElapsed).catch((e) => {
+            logTrace(`sales-elapsed: ${e.message}`, false);
+            return {};
+          }),
+          apiGet(API.salesSummary).catch((e) => {
+            logTrace(`sales-summary: ${e.message}`, false);
+            return {};
+          }),
+          apiGet(API.lastTx).catch((e) => {
+            logTrace(`last-tx: ${e.message}`, false);
+            return {};
+          }),
+          apiGet(API.liveDash).catch((e) => {
+            logTrace(`live-dashboard: ${e.message}`, false);
+            return {};
+          }),
+          apiGet(API.downtime).catch((e) => {
+            logTrace(`downtime: ${e.message}`, false);
+            return {};
+          }),
+          apiGet(API.adminProfiles).catch(() => ({})),
+          apiGet(API.areaOwners).catch(() => ({})),
+          apiGet(API.creditsTotals).catch((e) => {
+            logTrace(`remote-credits: ${e.message}`, false);
+            return {};
+          }),
+        ]);
 
         const machines = machinesPayload.machines || [];
         const ids = machines.map((m) => String(m.id));
-        const attendanceById = await fetchAttendanceMap(ids);
+        const [attendanceById, cleaningById, techById] = await Promise.all([
+          fetchAttendanceMap(ids),
+          fetchCleaningMap(ids),
+          fetchTechIssuesMap(ids),
+        ]);
 
         const profilesById = {};
         for (const row of profiles.rows || profiles.profiles || []) {
@@ -951,6 +1104,11 @@
           profilesById,
           areaOwnerById: owners.byMachineId || {},
           attendanceById,
+          cleaningById,
+          techById,
+          lastTxById: lastTxPayload.byMachineId || {},
+          liveById: indexLiveDash(liveDash.machines || []),
+          downtimeById: downtime.byMachineId || {},
           creditsById: credits.byMachineId || {},
           fromCache: snapshot.fromCache,
           cacheGeneratedAt: snapshot.cacheGeneratedAt,
@@ -963,7 +1121,7 @@
         document.getElementById('data-src').textContent =
           `live · ${machines.length} machines · cache ${snapshot.fromCache ? 'HIT' : 'MISS'}`;
         logTrace(
-          `INGEST: machines=${machines.length} snapRows=${(snapshot.rows || []).length} fromCache=${snapshot.fromCache}`,
+          `INGEST: machines=${machines.length} snap=${(snapshot.rows || []).length} live=${(liveDash.machines || []).length} att=${Object.keys(attendanceById).length} tech=${Object.keys(techById).length}`,
         );
       } catch (e) {
         document.getElementById('live-dot').className = 'dot err';
@@ -1129,13 +1287,70 @@
         return rows;
       }
 
+
       if (level === 'machine' || (node.machineId && (level === 'facet' || level === 'revenueDetail' || level === 'salesDetail'))) {
+        const reasons = d.reasons || v.flagLabels || [];
+        const liveCodes = d.liveCodes || [];
+        const sec = (title) => rows.push({ k: `__SEC__${title}`, v: '', cls: 'sec' });
+
+        if (level === 'machine') {
+          sec('VENDON STATUS');
+          push('today_kd', fmtKwd(d.todayKd ?? v.todayKd));
+          push('yest_same_clock', fmtKwd(d.yestKd ?? v.yestKd));
+          push('tier', d.tier != null ? d.tier : v.tier != null ? v.tier : '—', (d.tier === 1 || v.tier === 1) ? 'crit' : '');
+          push('reasons', reasons.length ? reasons.join(' | ') : 'none', reasons.length ? 'crit' : '');
+          push('live_codes', liveCodes.length ? liveCodes.join(' | ') : 'none', liveCodes.length ? 'crit' : '');
+          push('sale_age', fmtSaleAge(d.saleAgeMinutes), Number(d.saleAgeMinutes) > 60 ? 'warn' : '');
+          push('maintenance', d.maintenanceStatus || '—', d.maintenanceStatus === 'overdue' ? 'crit' : '');
+          push('shift_late', d.shiftLate ? 'LATE / missing clock-in' : 'ok', d.shiftLate ? 'crit' : '');
+          push('last_tx', fmtLastTx(d.lastTx ?? v.lastTx));
+          if (d.lastTxProduct) push('last_tx_product', d.lastTxProduct);
+          if (d.lastTxAmount != null) push('last_tx_amount', d.lastTxAmount);
+          push('downtime_today', fmtDowntimeSec(d.downtimeTodaySec), Number(d.downtimeTodaySec) > 0 ? 'warn' : '');
+          push(
+            'cleaning_overdue_15h',
+            (d.cleaningOverdue ?? v.cleaningOverdue) ? 'OVERDUE' : 'ok',
+            (d.cleaningOverdue ?? v.cleaningOverdue) ? 'crit' : '',
+          );
+          push('hours_since_cleaning', fmtHours(d.hoursSinceCleaning ?? v.hoursSinceCleaning));
+
+          sec('WORKFLOW');
+          push('scheduled_operator', d.operator ?? v.operator);
+          push('operator_email', d.operatorEmail ?? v.operatorEmail ?? node.operatorEmail);
+          push('attendance', d.attendanceStatus || d.attendancePill || '—');
+          push('attendance_state', d.attendanceState || '—');
+          push(
+            'open_tech_issues',
+            d.techActiveCount != null ? d.techActiveCount : '—',
+            Number(d.techActiveCount) > 0 ? 'crit' : '',
+          );
+          push('latest_tech', d.techLatest || '—', d.techLatest ? 'warn' : 'mute');
+          push('wf_last_clean', fmtLastTx(d.wfLastCleaningAt), 'mute');
+          push('wf_clean_source', d.wfCleaningSource || '—', 'mute');
+          if (d.wfHighRisk) push('wf_high_risk', 'YES', 'crit');
+          push('area_owner', d.areaOwner ?? v.areaOwner);
+
+          sec('REVENUE');
+          push('a_sales_kwd', fmtKwd(d.aSalesKwd));
+          push('b_sales_kwd', fmtKwd(d.bSalesKwd));
+          push('a_tx / b_tx', `${d.aTx ?? '—'} / ${d.bTx ?? '—'}`);
+          push('trend_pct', d.trendPct != null ? `${Number(d.trendPct).toFixed(1)}%` : '—');
+          push('peak_hour', peakHourLabel(d.peakHour));
+          push('distinct_drinks', d.distinctDrinks != null ? d.distinctDrinks : '—');
+          (d.tops || []).slice(0, 5).forEach((p, i) =>
+            push(`top_${i + 1}`, `${p.name || '?'} ×${p.count ?? '—'}`),
+          );
+          if (!(d.tops || []).length) push('top_products', 'none in vendon-sales-summary', 'mute');
+          if (node.machineId) push('vendon_id', node.machineId, 'mute');
+          return rows;
+        }
+
         push('today_kd', fmtKwd(d.todayKd ?? v.todayKd));
         push('yest_same_clock', fmtKwd(d.yestKd ?? v.yestKd));
         push('operator', d.operator ?? v.operator);
         push('operator_email', d.operatorEmail ?? v.operatorEmail ?? node.operatorEmail);
-        const reasons = d.reasons || v.flagLabels || [];
         push('reasons', reasons.length ? reasons.join(' | ') : 'none', reasons.length ? 'crit' : '');
+        push('live_codes', liveCodes.length ? liveCodes.join(' | ') : 'none', liveCodes.length ? 'crit' : '');
         push(
           'cleaning_overdue_15h',
           (d.cleaningOverdue ?? v.cleaningOverdue) ? 'OVERDUE' : 'ok',
@@ -1164,7 +1379,7 @@
           push('a_tx / b_tx', `${d.aTx ?? '—'} / ${d.bTx ?? '—'}`);
           push('trend_pct', d.trendPct != null ? `${Number(d.trendPct).toFixed(1)}%` : '—');
           push('distinct_drinks', d.distinctDrinks != null ? d.distinctDrinks : '—');
-          push('peak_hour', d.peakHour != null && d.peakHour !== '' ? d.peakHour : '—');
+          push('peak_hour', peakHourLabel(d.peakHour));
           (d.tops || []).slice(0, 5).forEach((p, i) =>
             push(`top_${i + 1}`, `${p.name || '?'} qty=${p.count ?? '—'}`),
           );
@@ -1297,10 +1512,13 @@
         .join('');
       const detailRows = detailRowsFor(node);
       const detailHtml = detailRows
-        .map(
-          (r) =>
-            `<div class="kv ${r.cls || ''}"><span class="k">${r.k}</span><span class="v">${r.v}</span></div>`,
-        )
+        .map((r) => {
+          if (String(r.k || '').startsWith('__SEC__')) {
+            const title = String(r.k).slice(7);
+            return `<div class="sec">${title}</div>`;
+          }
+          return `<div class="kv ${r.cls || ''}"><span class="k">${r.k}</span><span class="v">${r.v}</span></div>`;
+        })
         .join('');
       document.getElementById('info-panel').innerHTML = `
         <h3 style="color:${node.color}">${node.label}</h3>
@@ -1324,6 +1542,53 @@
           ${detailHtml || '<div class="kv mute"><span class="k">—</span><span class="v">no detail</span></div>'}
         </div>
       `;
+    }
+
+    async function enrichFocusedMachine(node) {
+      if (!canUseLiveApis || usingMock || !node?.machineId || node.level !== 'machine') return;
+      const mid = String(node.machineId);
+      try {
+        const [sched, tech] = await Promise.all([
+          apiGet(API.operatorSchedule(mid)).catch(() => null),
+          apiGet(API.techIssues(mid)).catch(() => null),
+        ]);
+        if (!node.detail) node.detail = {};
+        if (sched) {
+          if (sched.operatorName) {
+            node.detail.operator = sched.operatorName;
+            if (node.vitals) node.vitals.operator = sched.operatorName;
+            node.metrics = { ...(node.metrics || {}), Operator: sched.operatorName };
+          }
+          if (sched.operatorEmail) {
+            node.detail.operatorEmail = sched.operatorEmail;
+            node.operatorEmail = sched.operatorEmail;
+          }
+          if (sched.attendanceStatusLabel || sched.attendanceStatus) {
+            node.detail.attendanceStatus = sched.attendanceStatusLabel || sched.attendanceStatus;
+          }
+          if (sched.state) node.detail.attendanceState = sched.state;
+          if (sched.present != null) {
+            node.detail.attendancePill = sched.present ? 'present' : 'absent';
+          }
+        }
+        if (tech) {
+          node.detail.techActiveCount =
+            tech.activeCount != null
+              ? Number(tech.activeCount)
+              : Array.isArray(tech.issues)
+                ? tech.issues.length
+                : node.detail.techActiveCount;
+          node.detail.techLatest =
+            tech.latest?.statusLabel ||
+            tech.latest?.status ||
+            tech.latest?.description ||
+            node.detail.techLatest;
+        }
+        if (window.currentNode === node) updateHUD(node);
+        logTrace(`FOCUS enrich #${mid}: op=${node.detail.operator || '—'} tech=${node.detail.techActiveCount ?? '—'}`);
+      } catch (e) {
+        logTrace(`FOCUS enrich fail: ${e.message}`, false);
+      }
     }
 
     function focusNode(node, animate = true) {
@@ -1350,6 +1615,7 @@
         targetTransform = { ...next };
       }
       updateHUD(node);
+      enrichFocusedMachine(node);
     }
 
     const stars = Array.from({ length: 500 }, () => ({

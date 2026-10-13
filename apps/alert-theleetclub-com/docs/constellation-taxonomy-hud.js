@@ -5,16 +5,18 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-vendon-workflow';
+    const BUILD_STAMP = '20261014-file-guard+vendon';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
-    /** Live /api + session cookie only on production Alert host. file:// and other hosts → DEMO. */
+    /** Live /api needs http(s) + session cookie: production Alert host or local Vite/nginx. file:// → DEMO. */
     const isHttpOrigin =
       typeof location !== 'undefined' &&
       (location.protocol === 'http:' || location.protocol === 'https:');
+    const liveHost = String(location.hostname || '').toLowerCase();
     const canUseLiveApis =
-      isHttpOrigin && String(location.hostname || '').toLowerCase() === ALERT_HOST;
+      isHttpOrigin &&
+      (liveHost === ALERT_HOST || liveHost === 'localhost' || liveHost === '127.0.0.1');
 
     const API = {
       me: '/api/me',
