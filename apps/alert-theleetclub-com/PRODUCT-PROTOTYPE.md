@@ -81,6 +81,15 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 - Lists refetch ~**1 min**; **Refresh now** on each screen.
 - Admin order: **Machines → Targets → Promo → Area owners → QA visit → Who can use Alert → My access → Advanced** (team tab only if org admin).
 
+### Constellation / taxonomy HUD — why it exists
+
+Standalone page at `/constellation-taxonomy-hud.html` (not Classic/Pro/v2 nav). **Alert-hosted prototype** for a future **end-user** constellation product — not the fleet-ops pipeline mesh.
+
+1. **Decision UX** — Spatial drill-down (Kuwait → brand → area → machine → Revenue/Stock/Contract) makes “where to act” faster than dense tables alone; focused vitals (today KD, flags, cleaning overdue, operator) surface the next move.
+2. **Gamified attention** — Mild “ops focus” scoring from live tier‑1 / overdue / flag load keeps operators locked on clearable work (focus → output).
+3. **Timing** — AI visualization gimmicks are peaking in consumer feeds; shipping a live ops version now is cheap initiative before a formal ask.
+4. **Prototype → product** — Prove taxonomy + Workflow assign here on Alert; later spin the same mental model into an end-user experience elsewhere (consumer/partner surfaces), keeping Alert as the ops lab.
+
 ---
 
 ## Planned additions (roadmap)
@@ -104,6 +113,7 @@ Aligned with current React shell (`App.tsx`), Home (“Choose a workspace”), a
 
 | Date (UTC) | Summary |
 |------------|---------|
+| 2026-10-14 | **Constellation HUD rationale + decision/gamify cues:** PRODUCT-PROTOTYPE subsection (decision UX, gamified focus, Instagram-timing initiative, Alert ops prototype → future end-user). HUD adds focused vitals emphasis, ops-focus score from tier‑1/overdue/flags, Prototype · Alert ops framing on the standalone page only. |
 | 2026-10-14 | **Constellation taxonomy HUD (live):** Static page `/constellation-taxonomy-hud.html` — space map of Region→Brand→Area→Machine→Revenue/Stock/Contract using Alert fleet/sales/operator data; Workflow assign modal (GO CHECK / DM / cleaning-overdue). Not the fleet-ops pipeline mesh. |
 | 2026-09-29 | **Technical service KPIs on Red Flags:** Response Time (avg `first_responded_at − created_at`, target &lt;30m) + Planned Maintenance Ratio (PM÷(PM+CM), target &gt;85%). API `GET /api/alert/workflow/technical-kpis` (Kuwait MTD). Workflow now exposes `first_responded_at`. |
 | 2026-09-29 | **Session hang root cause:** people-api (`gunicorn` 1 worker, `--timeout 900`) was saturated — even `/health` and `/api/me` timed out (~10–15s+), so Alert stayed on **Checking your session…**. Restarted API; live command patched to **16 threads / 120s timeout**; Dockerfile.api updated the same way. Auth gate also gets a **6s hard UI clear** (needs Alert image redeploy via Azure `dev` pipeline). |
