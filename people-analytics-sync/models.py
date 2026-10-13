@@ -206,7 +206,9 @@ def get_database_url():
     else:
         ssl_mode = os.getenv('DB_SSLMODE', 'prefer')
     
-    return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}?sslmode={ssl_mode}"
+    # Explicit psycopg2 driver (requirements: psycopg2-binary). Bare postgresql://
+    # can resolve to psycopg v3 under newer SQLAlchemy and crash the API image.
+    return f"postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}?sslmode={ssl_mode}"
 
 
 def create_engine_and_session():
