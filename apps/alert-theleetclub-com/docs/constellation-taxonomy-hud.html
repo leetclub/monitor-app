@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-build="20261014-file-guard+detail">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -61,21 +61,68 @@
       text-align: right; font-size: 11px; color: var(--amber); min-width: 220px;
     }
     .status-box a { color: var(--cyan); }
+    .build-stamp {
+      margin-top: 8px; font-size: 10px; line-height: 1.35; color: var(--teal);
+      letter-spacing: 0.3px; max-width: 280px; margin-left: auto;
+    }
+    .build-stamp .hint { display: block; color: #8ea3bf; font-size: 9px; margin-top: 2px; }
     .bottom {
       display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap;
     }
     .info-panel {
-      background: var(--hud-bg); border: 1px solid var(--amber); padding: 14px 16px;
-      min-width: 280px; max-width: 400px; box-shadow: 0 0 18px rgba(255,184,0,0.18);
+      background: var(--hud-bg); border: 1px solid var(--amber); padding: 12px 14px;
+      min-width: 300px; width: min(440px, 92vw); max-height: min(58vh, 520px);
+      box-shadow: 0 0 18px rgba(255,184,0,0.18);
       backdrop-filter: blur(6px);
+      display: flex; flex-direction: column; overflow: hidden;
     }
-    .info-panel h3 { margin: 0 0 6px; font-size: 15px; color: var(--amber); }
+    .info-panel h3 { margin: 0 0 4px; font-size: 15px; color: var(--amber); flex-shrink: 0; }
+    .info-panel .badge-row { flex-shrink: 0; margin-bottom: 6px; }
     .badge {
-      display: inline-block; font-size: 9px; border: 1px solid #fff; padding: 2px 6px; margin-bottom: 10px;
+      display: inline-block; font-size: 9px; border: 1px solid #fff; padding: 2px 6px; margin: 0 6px 0 0;
     }
     .vitals {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 0 12px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 8px; flex-shrink: 0;
     }
+    .detail-drawer {
+      flex: 1; min-height: 0; overflow-y: auto; margin-top: 4px;
+      border-top: 1px solid rgba(255,184,0,0.28); padding-top: 8px;
+      scrollbar-width: thin; scrollbar-color: var(--amber) transparent;
+    }
+    .detail-drawer .dh {
+      font-size: 9px; letter-spacing: 1.2px; color: var(--amber); margin-bottom: 6px;
+    }
+    .detail-drawer .sec {
+      font-size: 9px; letter-spacing: 1.4px; color: var(--cyan); margin: 10px 0 4px;
+      border-bottom: 1px solid rgba(0,240,255,0.22); padding-bottom: 2px;
+    }
+    .detail-drawer .sec:first-child { margin-top: 0; }
+    .status-box .live-via {
+      margin-top: 6px; font-size: 9px; color: #6b84a3; max-width: 260px; margin-left: auto;
+      line-height: 1.35; letter-spacing: 0.2px;
+    }
+    .detail-drawer .kv {
+      display: grid; grid-template-columns: minmax(110px, 42%) 1fr; gap: 2px 8px;
+      font-size: 10px; line-height: 1.35; margin-bottom: 3px; font-family: var(--mono);
+    }
+    .detail-drawer .kv .k { color: #6b84a3; word-break: break-word; }
+    .detail-drawer .kv .v { color: var(--teal); font-weight: 600; text-align: right; word-break: break-word; }
+    .detail-drawer .kv.crit .v { color: var(--red); text-shadow: 0 0 8px rgba(255,51,68,0.35); }
+    .detail-drawer .kv.warn .v { color: var(--amber); }
+    .detail-drawer .kv.mute .v { color: #8ea3bf; font-weight: 400; }
+    #node-tooltip {
+      position: fixed; z-index: 25; pointer-events: none;
+      background: rgba(1, 4, 8, 0.92); border: 1px solid var(--cyan);
+      padding: 8px 10px; min-width: 160px; max-width: 280px;
+      box-shadow: 0 0 16px rgba(0,240,255,0.2); font-size: 10px; line-height: 1.4;
+      backdrop-filter: blur(6px);
+    }
+    #node-tooltip.hidden { display: none; }
+    #node-tooltip .tt-title { color: #fff; font-weight: 700; margin-bottom: 4px; font-size: 11px; }
+    #node-tooltip .tt-row { display: flex; justify-content: space-between; gap: 12px; color: #8ea3bf; }
+    #node-tooltip .tt-row b { color: var(--teal); font-weight: 700; }
+    #node-tooltip .tt-row.crit b { color: var(--red); }
+    #node-tooltip .tt-row.warn b { color: var(--amber); }
     .vital {
       border: 1px solid rgba(142,163,191,0.35); padding: 7px 8px; background: rgba(0,0,0,0.35);
     }
@@ -106,7 +153,7 @@
       box-shadow: 0 0 8px rgba(5,255,161,0.45); transition: width 0.35s ease;
     }
     .frame-tag { color: var(--pink); font-size: 10px; letter-spacing: 1px; margin-top: 4px; }
-    .metrics { font-size: 11px; display: flex; flex-direction: column; gap: 5px; }
+    .metrics { font-size: 10px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; max-height: 88px; overflow-y: auto; }
     .metrics .lbl { color: #8ea3bf; }
     .metrics .val { float: right; color: var(--teal); font-weight: 700; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -157,6 +204,55 @@
     }
     .banner.hidden { display: none; }
     .banner a { color: var(--cyan); }
+    .local-mode-banner {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 50;
+      background: linear-gradient(180deg, rgba(8,2,6,0.97) 0%, rgba(1,4,8,0.94) 100%);
+      border-bottom: 3px solid var(--red);
+      box-shadow: 0 18px 48px rgba(255,51,68,0.28);
+      padding: 28px 24px 26px;
+      text-align: center;
+      pointer-events: auto;
+    }
+    .local-mode-banner.hidden { display: none; }
+    .local-mode-banner .kicker {
+      font-size: 11px; letter-spacing: 2.4px; color: var(--red); margin-bottom: 8px;
+      text-shadow: 0 0 12px rgba(255,51,68,0.45);
+    }
+    .local-mode-banner h2 {
+      margin: 0 0 12px; font-size: clamp(18px, 3.2vw, 28px); color: #fff;
+      letter-spacing: 0.5px; text-shadow: 0 0 18px rgba(255,51,68,0.35);
+    }
+    .local-mode-banner p {
+      margin: 0 auto 10px; max-width: 720px; font-size: 13px; line-height: 1.55; color: #ffb4bb;
+    }
+    .local-mode-banner p.demo-note { color: var(--amber); }
+    .local-mode-banner code {
+      color: var(--cyan); font-size: 12px; background: rgba(0,240,255,0.08); padding: 1px 5px;
+    }
+    .local-mode-actions {
+      display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 18px 0 10px;
+    }
+    .local-mode-actions a {
+      display: inline-block; text-decoration: none; font-weight: 700; text-transform: uppercase;
+      font-size: 12px; letter-spacing: 0.8px; padding: 14px 22px; border: 1px solid;
+      cursor: pointer; font-family: inherit;
+    }
+    .local-mode-actions a.primary {
+      border-color: var(--cyan); color: #000; background: var(--cyan);
+      box-shadow: 0 0 22px rgba(0,240,255,0.35);
+    }
+    .local-mode-actions a.primary:hover { filter: brightness(1.08); }
+    .local-mode-actions a.secondary {
+      border-color: var(--amber); color: var(--amber); background: rgba(255,184,0,0.08);
+    }
+    .local-mode-actions a.secondary:hover { background: var(--amber); color: #000; }
+    .local-mode-actions button.dismiss {
+      border: 1px solid #6b84a3; color: #8ea3bf; background: transparent;
+      padding: 14px 18px; font-family: inherit; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.6px; cursor: pointer; font-weight: 700;
+    }
+    .local-mode-actions button.dismiss:hover { border-color: #fff; color: #fff; }
+    .local-mode-banner .hint { font-size: 11px; color: #8ea3bf; margin-top: 4px; }
     @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
   </style>
 </head>
@@ -164,16 +260,34 @@
   <canvas id="universe"></canvas>
   <div id="crt"></div>
   <div id="auth-banner" class="banner hidden"></div>
+  <div id="local-mode-banner" class="local-mode-banner hidden" role="alertdialog" aria-labelledby="local-mode-title">
+    <div class="kicker">LOCAL FILE / OFF-HOST · NO SESSION APIS</div>
+    <h2 id="local-mode-title">Local file cannot use Alert session APIs</h2>
+    <p>
+      Opening this HUD via <code>file://</code> (or any host other than
+      <code>alert.theleetclub.com</code>) makes <code>fetch('/api/me')</code> resolve to a non-HTTP
+      origin. Live fleet data and cookies only work on the production Alert site (same-origin
+      <code>/api</code> via ingress + session cookie).
+    </p>
+    <p class="demo-note">DEMO constellation with mock data is shown below so the canvas is not empty.</p>
+    <div class="local-mode-actions">
+      <a class="primary" href="https://alert.theleetclub.com/constellation-taxonomy-hud.html">Open live HUD</a>
+      <a class="secondary" href="https://alert.theleetclub.com/login">Login on Alert</a>
+      <button type="button" class="dismiss" id="local-mode-dismiss">Explore DEMO below</button>
+    </div>
+    <p class="hint">After login, return to the live HUD URL (same browser). Verify BUILD stamp in the status box after refresh.</p>
+  </div>
+  <div id="node-tooltip" class="hidden"></div>
 
   <div id="hud">
     <div class="top">
       <div class="title-block">
-        <div class="eyebrow"><span class="dot" id="live-dot"></span> PROTOTYPE · ALERT OPS</div>
+        <div class="eyebrow"><span class="dot" id="live-dot"></span> <span id="mode-label">PROTOTYPE · ALERT OPS</span></div>
         <h1>alert.theleetclub.com constellation</h1>
         <div class="frame-tag">Taxonomy lab — future end-user product elsewhere · not fleet-ops mesh</div>
         <div class="breadcrumb hud-layer" id="breadcrumb">Loading live fleet…</div>
       </div>
-      <div class="status-box hud-layer">
+      <div class="status-box hud-layer" data-build="20261014-file-guard+detail">
         <div>SESSION: <span id="session-email">…</span></div>
         <div>DATA: <span id="data-src">connecting</span></div>
         <div>POLL: <span id="poll-age">—</span></div>
@@ -185,6 +299,10 @@
           <div class="sub"><span id="ops-focus-targets">—</span> attention targets · clearable load</div>
           <div class="ops-bar"><i id="ops-focus-bar"></i></div>
         </div>
+        <div class="build-stamp" id="build-stamp" title="Cache-bust: append ?v=timestamp if this looks stale">
+          BUILD: <span id="build-stamp-id">20261014-file-guard+detail</span>
+          <span class="hint">open via alert.theleetclub.com for live data</span>
+        </div>
         <div style="margin-top:6px"><a href="/red-flags">← Red Flags</a> · <a href="/login">Login</a></div>
       </div>
     </div>
@@ -193,8 +311,8 @@
       <div class="info-panel hud-layer" id="info-panel"></div>
       <div class="trace hud-layer" id="trace"></div>
       <div class="actions hud-layer">
-        <button class="action-btn" onclick="refreshLive()">Refresh</button>
-        <button class="action-btn pink" onclick="openTaskModal()">Assign via Workflow</button>
+        <button type="button" class="action-btn" id="btn-refresh">Refresh</button>
+        <button type="button" class="action-btn pink" id="btn-assign">Assign via Workflow</button>
       </div>
     </div>
   </div>
@@ -216,1057 +334,12 @@
       <label>Recipient hint (optional email for DM)</label>
       <input id="task-recipient" placeholder="Uses scheduled Workflow operator when blank" />
       <div class="btn-row">
-        <button class="primary" id="task-submit" onclick="submitTask()">Send to Workflow</button>
-        <button onclick="closeTaskModal()">Cancel</button>
+        <button type="button" class="primary" id="task-submit">Send to Workflow</button>
+        <button type="button" id="task-cancel">Cancel</button>
       </div>
     </div>
   </div>
 
-  <script>
-    /**
-     * Live taxonomy HUD for alert.theleetclub.com
-     * Hydrates from people-api (same-origin /api) and dispatches via Workflow proxies.
-     * Hierarchy: Region (Kuwait) → Brand (Leet/EE/Park) → Area → Machine → Revenue|Stock|Contract
-     */
-    const API = {
-      me: '/api/me',
-      machines: '/api/alert/machines',
-      snapshot: '/api/alert/red-flags/snapshot',
-      salesElapsed: '/api/alert/overall/daily-sales-elapsed',
-      salesSummary: '/api/alert/overall/vendon-sales-summary?preset=today_vs_yesterday',
-      adminProfiles: '/api/alert/overall/admin-profiles',
-      areaOwners: '/api/alert/area-owner-map',
-      attendanceMap: (ids) =>
-        `/api/alert/workflow/machine-attendance-map?machine_ids=${encodeURIComponent(ids)}`,
-      goCheck: '/api/alert/workflow/go-check',
-      dm: '/api/alert/workflow/dm-operator',
-      cleaning: '/api/alert/workflow/cleaning-overdue',
-    };
-
-    const POLL_MS = 60000;
-    const levelColors = {
-      root: '#ffffff',
-      region: '#00f0ff',
-      brand: '#a855f7',
-      area: '#ff2a85',
-      machine: '#ffb800',
-      facet: '#05ffa1',
-      revenueDetail: '#00f0ff',
-      salesDetail: '#ffb800',
-    };
-
-    /** Geographic area hints from real Kuwait fleet naming (extend as needed). */
-    const AREA_RULES = [
-      { area: 'Shadadiya', re: /shadadiya|shadadiyah|\bku[-_\s]?\d|\bcoba\b|kuwait\s*univ/i },
-      { area: 'Zahra', re: /zahra|mew|jaber/i },
-      { area: 'Salmiya', re: /salmiya|salmiyah/i },
-      { area: 'Hawally', re: /hawally|hawalli/i },
-      { area: 'Farwaniya', re: /farwaniya|farwaniyah/i },
-      { area: 'Ahmadi', re: /ahmadi/i },
-      { area: 'Jahra', re: /jahra/i },
-      { area: 'Capital', re: /capital|kuwait\s*city|sharq|mirqab/i },
-    ];
-
-    const canvas = document.getElementById('universe');
-    const ctx = canvas.getContext('2d');
-    let width = 0, height = 0;
-    let taxonomyRoot = null;
-    let flatNodes = [];
-    let flatEdges = [];
-    let signals = [];
-    let liveBundle = null;
-    let lastPollAt = null;
-    let usingMock = false;
-
-    let currentTransform = { x: 0, y: 0, scale: 0.75 };
-    let targetTransform = { x: 0, y: 0, scale: 0.75 };
-    window.currentNode = null;
-
-    function resize() {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width;
-      canvas.height = height;
-      if (!window.currentNode) {
-        currentTransform = { x: width / 2, y: height / 2, scale: 0.75 };
-        targetTransform = { ...currentTransform };
-      }
-    }
-    window.addEventListener('resize', resize);
-    resize();
-
-    function logTrace(msg, ok = true) {
-      const box = document.getElementById('trace');
-      const t = new Date().toTimeString().slice(0, 8);
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.innerHTML = `<span class="ts">[${t}]</span><span class="${ok ? 'ok' : 'bad'}">${msg}</span>`;
-      box.prepend(row);
-      while (box.children.length > 7) box.removeChild(box.lastChild);
-    }
-
-    async function apiGet(path) {
-      const res = await fetch(path, { credentials: 'include' });
-      if (res.status === 401) {
-        const err = new Error('Unauthorized');
-        err.code = 401;
-        throw err;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${path}`);
-      return res.json();
-    }
-
-    async function apiPost(path, body) {
-      const res = await fetch(path, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const err = new Error(data.error || `HTTP ${res.status}`);
-        err.payload = data;
-        throw err;
-      }
-      return data;
-    }
-
-    function fmtKwd(n) {
-      if (n == null || !Number.isFinite(Number(n))) return '—';
-      return `${Number(n).toFixed(3)} KD`;
-    }
-
-    function areaFromMachine(name, location, tag) {
-      const hay = `${name || ''} ${location || ''} ${tag || ''}`;
-      for (const rule of AREA_RULES) {
-        if (rule.re.test(hay)) return rule.area;
-      }
-      if (location && String(location).trim()) return String(location).trim();
-      if (tag && String(tag).trim()) return `Owner · ${String(tag).trim()}`;
-      const m = String(name || '').trim();
-      const parts = m.split(/[-–|]/);
-      if (parts[0] && parts[0].trim().length >= 3) return parts[0].trim();
-      return 'Unassigned area';
-    }
-
-    function chunk(arr, size) {
-      const out = [];
-      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-      return out;
-    }
-
-    async function fetchAttendanceMap(machineIds) {
-      const byMachineId = {};
-      for (const group of chunk(machineIds, 24)) {
-        if (!group.length) continue;
-        try {
-          const data = await apiGet(API.attendanceMap(group.join(',')));
-          Object.assign(byMachineId, data.byMachineId || {});
-        } catch (e) {
-          logTrace(`attendance batch fail: ${e.message}`, false);
-        }
-      }
-      return byMachineId;
-    }
-
-    function buildTaxonomy(bundle) {
-      const {
-        machines = [],
-        snapshotRows = [],
-        salesById = {},
-        summaryById = {},
-        profilesById = {},
-        areaOwnerById = {},
-        attendanceById = {},
-      } = bundle;
-
-      const snapById = {};
-      for (const r of snapshotRows) {
-        const id = String(r.machineId ?? r.machine_id ?? '').trim();
-        if (id) snapById[id] = r;
-      }
-
-      const machineList = machines.length
-        ? machines
-        : Object.keys(snapById).map((id) => ({
-            id,
-            name: snapById[id].machineName || id,
-            vendon_location_owner: null,
-          }));
-
-      const areas = new Map();
-
-      for (const m of machineList) {
-        const id = String(m.id);
-        const name = m.name || id;
-        const snap = snapById[id] || {};
-        const prof = profilesById[id] || {};
-        const sales = salesById[id] || {};
-        const summary = summaryById[id] || {};
-        const att = attendanceById[id] || {};
-        const ownerPerson = areaOwnerById[id]?.name || '';
-
-        const areaName = areaFromMachine(
-          name,
-          snap.machineLocation,
-          m.vendon_location_owner || prof.location_owner,
-        );
-
-        if (!areas.has(areaName)) areas.set(areaName, []);
-
-        const todayKwd = sales.todayKwd != null ? Number(sales.todayKwd) : null;
-        const yestKwd = sales.yesterdaySameElapsedKwd != null ? Number(sales.yesterdaySameElapsedKwd) : null;
-        const top = (summary.topProducts && summary.topProducts[0]) || summary.topProduct || null;
-        const opName =
-          att.operatorName ||
-          snap.operator ||
-          snap.operatorName ||
-          snap.redAlertOperator ||
-          '—';
-        const opEmail = att.operatorEmail || snap.strikeOperatorEmail || snap.operatorEmail || '';
-
-        const reasons = Array.isArray(snap.reasons) ? snap.reasons : [];
-        const cleaningOverdue = !!snap.cleaningOverdue15h;
-        const tier = snap.alertPriorityTier != null ? Number(snap.alertPriorityTier) : null;
-        const flagCount = reasons.length;
-        const isTier1 = tier === 1;
-        const attentionPts = (isTier1 ? 3 : 0) + (cleaningOverdue ? 2 : 0) + (flagCount ? 1 : 0);
-        const attentionTargets =
-          (isTier1 ? 1 : 0) + (cleaningOverdue ? 1 : 0) + (flagCount ? 1 : 0);
-        const vitals = {
-          todayKd: todayKwd,
-          flags: flagCount,
-          flagLabels: reasons.slice(0, 3),
-          cleaningOverdue,
-          operator: opName,
-          tier,
-          attentionPts,
-          attentionTargets,
-        };
-
-        const machineNode = {
-          id: `m-${id}`,
-          label: name,
-          level: 'machine',
-          machineId: id,
-          machineName: name,
-          operatorEmail: opEmail,
-          vitals,
-          metrics: {
-            Status: reasons.length || cleaningOverdue ? 'FLAGGED' : 'ONLINE',
-            Operator: opName,
-            'Flags': reasons.length ? reasons.slice(0, 3).join(', ') : 'none',
-            'Cleaning 15h': cleaningOverdue ? 'OVERDUE' : 'ok',
-            Tier: tier != null ? String(tier) : '—',
-          },
-          children: [
-            {
-              id: `m-${id}-rev`,
-              label: 'Revenue',
-              level: 'facet',
-              machineId: id,
-              machineName: name,
-              operatorEmail: opEmail,
-              vitals,
-              metrics: {
-                'Today (elapsed)': fmtKwd(todayKwd),
-                'Yest same clock': fmtKwd(yestKwd),
-                Source: 'Alert daily-sales-elapsed',
-              },
-              children: [
-                {
-                  id: `m-${id}-rev-sales`,
-                  label: 'Total Sales To Hour',
-                  level: 'revenueDetail',
-                  machineId: id,
-                  machineName: name,
-                  operatorEmail: opEmail,
-                  vitals,
-                  metrics: {
-                    Value: fmtKwd(todayKwd),
-                    Window: 'Kuwait today through now',
-                  },
-                  children: top
-                    ? [
-                        {
-                          id: `m-${id}-rev-top`,
-                          label: `Top: ${top.name || 'Unknown'}`,
-                          level: 'salesDetail',
-                          machineId: id,
-                          machineName: name,
-                          operatorEmail: opEmail,
-                          vitals,
-                          metrics: {
-                            Qty: top.count != null ? String(top.count) : '—',
-                            Source: 'vendon-sales-summary',
-                          },
-                        },
-                      ]
-                    : [],
-                },
-                {
-                  id: `m-${id}-rev-peak`,
-                  label: 'Peak Hours',
-                  level: 'revenueDetail',
-                  machineId: id,
-                  machineName: name,
-                  operatorEmail: opEmail,
-                  vitals,
-                  metrics: {
-                    Note: 'Hourly peak from Footfall/Performance (wire next)',
-                    Hint: 'Use Performance tab for cup trajectory',
-                  },
-                },
-                {
-                  id: `m-${id}-rev-ops`,
-                  label: 'Operators',
-                  level: 'revenueDetail',
-                  machineId: id,
-                  machineName: name,
-                  operatorEmail: opEmail,
-                  vitals,
-                  metrics: {
-                    Scheduled: opName,
-                    Email: opEmail || '—',
-                    Source: 'Workflow attendance map',
-                  },
-                },
-              ],
-            },
-            {
-              id: `m-${id}-stock`,
-              label: 'Stock',
-              level: 'facet',
-              machineId: id,
-              machineName: name,
-              operatorEmail: opEmail,
-              vitals,
-              metrics: {
-                Note: 'Ingredient stock not in Alert APIs yet',
-                'Top drink today': top?.name || '—',
-                'Credits / tests': 'See Red Flags Credits column',
-              },
-            },
-            {
-              id: `m-${id}-contract`,
-              label: 'Contract',
-              level: 'facet',
-              machineId: id,
-              machineName: name,
-              operatorEmail: opEmail,
-              vitals,
-              metrics: {
-                'Location owner': ownerPerson || prof.location_owner || m.vendon_location_owner || '—',
-                'Op hours': prof.location_hours || '—',
-                Source: 'Alert Admin profiles',
-              },
-            },
-          ],
-        };
-
-        areas.get(areaName).push(machineNode);
-      }
-
-      const areaNodes = [...areas.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([areaName, kids]) => {
-          const sorted = kids.sort((a, b) => a.label.localeCompare(b.label));
-          const areaVitals = aggregateVitals(sorted);
-          return {
-            id: `area-${areaName}`,
-            label: areaName,
-            level: 'area',
-            vitals: areaVitals,
-            metrics: {
-              Machines: String(sorted.length),
-              Brand: 'Leet',
-              'Attention pts': String(areaVitals.attentionPts),
-              Overdue: String(areaVitals.overdueCount),
-              'Tier-1': String(areaVitals.tier1Count),
-            },
-            children: sorted,
-          };
-        });
-
-      const allMachines = areaNodes.flatMap((a) => a.children || []);
-      const leetMachineCount = allMachines.length;
-      const fleetVitals = aggregateVitals(allMachines);
-      const fleetToday = Object.values(salesById).reduce(
-        (s, r) => s + (Number.isFinite(Number(r.todayKwd)) ? Number(r.todayKwd) : 0),
-        0,
-      );
-      fleetVitals.todayKd = fleetToday;
-
-      return {
-        id: 'root',
-        label: 'Almaghreb Ops',
-        level: 'root',
-        vitals: fleetVitals,
-        metrics: {
-          Regions: '1',
-          Source: usingMock ? 'MOCK' : 'alert.theleetclub.com',
-          'Ops focus': `${fleetVitals.attentionPts} pts`,
-        },
-        children: [
-          {
-            id: 'region-kw',
-            label: 'Kuwait',
-            level: 'region',
-            vitals: fleetVitals,
-            metrics: {
-              Brands: 'Leet · EE · Park',
-              'Fleet today': fmtKwd(fleetToday),
-              Machines: String(leetMachineCount),
-              'Attention targets': String(fleetVitals.attentionTargets),
-            },
-            children: [
-              {
-                id: 'brand-leet',
-                label: 'Leet',
-                level: 'brand',
-                vitals: fleetVitals,
-                metrics: {
-                  Areas: String(areaNodes.length),
-                  Machines: String(leetMachineCount),
-                  Live: 'Alert red-flags + sales',
-                  'Tier-1 / overdue': `${fleetVitals.tier1Count} / ${fleetVitals.overdueCount}`,
-                },
-                children: areaNodes,
-              },
-              {
-                id: 'brand-ee',
-                label: 'EE',
-                level: 'brand',
-                metrics: { Status: 'ACTIVE', Machines: '0 in Alert feed' },
-                children: [],
-              },
-              {
-                id: 'brand-park',
-                label: 'Park (Future)',
-                level: 'brand',
-                metrics: { Status: 'PLANNED' },
-                children: [],
-              },
-            ],
-          },
-        ],
-      };
-    }
-
-    function aggregateVitals(machineNodes) {
-      let todayKd = 0;
-      let flags = 0;
-      let overdueCount = 0;
-      let tier1Count = 0;
-      let attentionPts = 0;
-      let attentionTargets = 0;
-      const ops = new Set();
-      for (const m of machineNodes) {
-        const v = m.vitals || {};
-        if (Number.isFinite(Number(v.todayKd))) todayKd += Number(v.todayKd);
-        flags += Number(v.flags) || 0;
-        if (v.cleaningOverdue) overdueCount += 1;
-        if (v.tier === 1) tier1Count += 1;
-        attentionPts += Number(v.attentionPts) || 0;
-        attentionTargets += Number(v.attentionTargets) || 0;
-        if (v.operator && v.operator !== '—') ops.add(v.operator);
-      }
-      return {
-        todayKd,
-        flags,
-        flagLabels: [],
-        cleaningOverdue: overdueCount > 0,
-        overdueCount,
-        tier1Count,
-        operator: ops.size === 1 ? [...ops][0] : ops.size ? `${ops.size} operators` : '—',
-        tier: tier1Count ? 1 : null,
-        attentionPts,
-        attentionTargets,
-        machineCount: machineNodes.length,
-      };
-    }
-
-    function resolveVitals(node) {
-      if (!node) return null;
-      if (node.vitals) return node.vitals;
-      let n = node;
-      while (n && !n.vitals) n = n.parent;
-      return n?.vitals || null;
-    }
-
-    function vitalsPanelHtml(node) {
-      const v = resolveVitals(node);
-      if (!v) return '';
-      const showDecision =
-        node.level === 'machine' ||
-        node.level === 'area' ||
-        node.level === 'facet' ||
-        node.level === 'revenueDetail' ||
-        node.level === 'salesDetail' ||
-        (node.machineId && node.level !== 'root');
-      if (!showDecision && node.level !== 'brand' && node.level !== 'region') return '';
-
-      const kdHot = Number.isFinite(Number(v.todayKd)) && Number(v.todayKd) < 20;
-      const flagsHot = (Number(v.flags) || 0) > 0 || (Number(v.tier1Count) || 0) > 0 || v.tier === 1;
-      const cleanHot = !!v.cleaningOverdue || (Number(v.overdueCount) || 0) > 0;
-      const flagsLabel =
-        node.level === 'machine' || node.machineId
-          ? v.flagLabels?.length
-            ? v.flagLabels.join(', ')
-            : v.flags
-              ? String(v.flags)
-              : 'none'
-          : `${v.flags || 0} open`;
-      const cleanLabel =
-        node.level === 'machine' || (node.machineId && v.overdueCount == null)
-          ? v.cleaningOverdue
-            ? 'OVERDUE'
-            : 'ok'
-          : `${v.overdueCount || 0} overdue`;
-      const tierBits =
-        node.level === 'machine' || node.machineId
-          ? v.tier != null
-            ? `T${v.tier}`
-            : '—'
-          : `${v.tier1Count || 0}× T1`;
-
-      return `
-        <div class="decision-cue">DECISION FOCUS · clearable vitals</div>
-        <div class="vitals">
-          <div class="vital focus-ring ${kdHot ? 'warn' : ''}">
-            <span class="k">TODAY KD</span>
-            <span class="v">${fmtKwd(v.todayKd)}</span>
-          </div>
-          <div class="vital focus-ring ${flagsHot ? 'hot' : ''}">
-            <span class="k">FLAGS · ${tierBits}</span>
-            <span class="v">${flagsLabel}</span>
-          </div>
-          <div class="vital focus-ring ${cleanHot ? 'hot' : ''}">
-            <span class="k">CLEANING 15h</span>
-            <span class="v">${cleanLabel}</span>
-          </div>
-          <div class="vital focus-ring">
-            <span class="k">OPERATOR</span>
-            <span class="v">${v.operator || '—'}</span>
-          </div>
-        </div>
-      `;
-    }
-
-    function updateOpsFocusChip(root) {
-      const v = root?.vitals || aggregateVitals([]);
-      const pts = Number(v.attentionPts) || 0;
-      const targets = Number(v.attentionTargets) || 0;
-      const machines = Number(v.machineCount) || 1;
-      const maxPts = Math.max(machines * 6, 6);
-      const pct = Math.min(100, Math.round((pts / maxPts) * 100));
-      const ptsEl = document.getElementById('ops-focus-pts');
-      const tgtEl = document.getElementById('ops-focus-targets');
-      const barEl = document.getElementById('ops-focus-bar');
-      if (ptsEl) ptsEl.textContent = `${pts} pts`;
-      if (tgtEl) tgtEl.textContent = `${targets} · T1 ${v.tier1Count || 0} · overdue ${v.overdueCount || 0}`;
-      if (barEl) barEl.style.width = `${pct}%`;
-    }
-
-    function calculateLayout(node, x, y, angleStart, angleEnd, radius) {
-      node.x = x;
-      node.y = y;
-      if (!node.children?.length) return;
-      const angleRange = angleEnd - angleStart;
-      const angleStep = angleRange / node.children.length;
-      node.children.forEach((child, i) => {
-        const childAngle = angleStart + angleStep * i + angleStep / 2;
-        const childRadius = radius * 0.85;
-        const cx = x + Math.cos(childAngle) * childRadius;
-        const cy = y + Math.sin(childAngle) * childRadius;
-        let fan = Math.PI * 0.9;
-        if (node.children.length === 1) fan = Math.PI * 1.4;
-        calculateLayout(child, cx, cy, childAngle - fan / 2, childAngle + fan / 2, radius * 0.62);
-      });
-    }
-
-    function flatten(node, parent) {
-      node.parent = parent;
-      node.color = levelColors[node.level] || '#fff';
-      flatNodes.push(node);
-      if (parent) {
-        const dx = node.x - parent.x;
-        const dy = node.y - parent.y;
-        flatEdges.push({
-          source: parent,
-          target: node,
-          cx: parent.x + dx / 2 - dy * 0.15,
-          cy: parent.y + dy / 2 + dx * 0.15,
-        });
-      }
-      (node.children || []).forEach((c) => flatten(c, node));
-    }
-
-    function rebuildGraph(root) {
-      taxonomyRoot = root;
-      flatNodes = [];
-      flatEdges = [];
-      calculateLayout(root, 0, 0, 0, Math.PI * 2, 420);
-      flatten(root, null);
-      updateOpsFocusChip(root);
-      focusNode(root, false);
-    }
-
-    async function loadLive() {
-      document.getElementById('live-dot').className = 'dot warn';
-      document.getElementById('data-src').textContent = 'fetching…';
-      try {
-        const me = await apiGet(API.me);
-        const email = me.email || null;
-        document.getElementById('session-email').textContent = email || 'not signed in';
-        if (!email) {
-          document.getElementById('auth-banner').className = 'banner';
-          document.getElementById('auth-banner').innerHTML =
-            'Sign in required for live Alert data. <a href="/login">Open login</a> then return here.';
-          throw Object.assign(new Error('No session'), { code: 401 });
-        }
-        document.getElementById('auth-banner').className = 'banner hidden';
-
-        const [machinesPayload, snapshot, sales, summary, profiles, owners] = await Promise.all([
-          apiGet(API.machines),
-          apiGet(API.snapshot),
-          apiGet(API.salesElapsed).catch((e) => {
-            logTrace(`sales-elapsed: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.salesSummary).catch((e) => {
-            logTrace(`sales-summary: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.adminProfiles).catch(() => ({})),
-          apiGet(API.areaOwners).catch(() => ({})),
-        ]);
-
-        const machines = machinesPayload.machines || [];
-        const ids = machines.map((m) => String(m.id));
-        const attendanceById = await fetchAttendanceMap(ids);
-
-        const profilesById = {};
-        for (const row of profiles.rows || profiles.profiles || []) {
-          const id = String(row.machine_id || row.machineId || '').trim();
-          if (id) profilesById[id] = row;
-        }
-        // admin-profiles shape: { byMachineId: { id: { location_owner, ... }}}
-        if (profiles.byMachineId) {
-          Object.assign(profilesById, profiles.byMachineId);
-        }
-
-        liveBundle = {
-          machines,
-          snapshotRows: snapshot.rows || [],
-          salesById: sales.byMachineId || {},
-          summaryById: summary.byMachineId || {},
-          profilesById,
-          areaOwnerById: owners.byMachineId || {},
-          attendanceById,
-          fromCache: snapshot.fromCache,
-          cacheGeneratedAt: snapshot.cacheGeneratedAt,
-        };
-        usingMock = false;
-        const root = buildTaxonomy(liveBundle);
-        rebuildGraph(root);
-        lastPollAt = Date.now();
-        document.getElementById('live-dot').className = 'dot';
-        document.getElementById('data-src').textContent =
-          `live · ${machines.length} machines · cache ${snapshot.fromCache ? 'HIT' : 'MISS'}`;
-        logTrace(
-          `INGEST: machines=${machines.length} snapRows=${(snapshot.rows || []).length} fromCache=${snapshot.fromCache}`,
-        );
-      } catch (e) {
-        document.getElementById('live-dot').className = 'dot err';
-        document.getElementById('data-src').textContent = `fallback · ${e.message}`;
-        if (e.code === 401) {
-          document.getElementById('auth-banner').className = 'banner';
-          document.getElementById('auth-banner').innerHTML =
-            'Session cookie missing. Open <a href="/login">/login</a> on alert.theleetclub.com, then reload this HUD.';
-        }
-        logTrace(`LIVE FAIL: ${e.message} — using demo seed`, false);
-        usingMock = true;
-        rebuildGraph(buildTaxonomy(demoBundle()));
-      }
-      updatePollAge();
-    }
-
-    function demoBundle() {
-      return {
-        machines: [
-          { id: 'demo-ku1', name: 'KU-1 COBA Shadadiya', vendon_location_owner: 'KU' },
-          { id: 'demo-mew', name: 'MEW Zahra', vendon_location_owner: 'MOH' },
-          { id: 'demo-jg2', name: 'Jaber Gate 2', vendon_location_owner: 'MOH' },
-          { id: 'demo-jg6', name: 'Jaber Gate 6', vendon_location_owner: 'MOH' },
-        ],
-        snapshotRows: [
-          {
-            machineId: 'demo-ku1',
-            machineName: 'KU-1 COBA Shadadiya',
-            machineLocation: 'Shadadiya',
-            cleaningOverdue15h: false,
-            reasons: [],
-            operator: 'Demo Op',
-          },
-          {
-            machineId: 'demo-jg6',
-            machineName: 'Jaber Gate 6',
-            machineLocation: 'Zahra',
-            cleaningOverdue15h: true,
-            reasons: ['NO_RECENT_SALE'],
-            alertPriorityTier: 1,
-            operator: 'Demo Op 2',
-          },
-        ],
-        salesById: {
-          'demo-ku1': { todayKwd: 245.5, yesterdaySameElapsedKwd: 210.0 },
-          'demo-mew': { todayKwd: 180.25 },
-          'demo-jg2': { todayKwd: 95.0 },
-          'demo-jg6': { todayKwd: 12.0 },
-        },
-        summaryById: {
-          'demo-ku1': { topProduct: { name: 'Spanish Latte', count: 84 } },
-        },
-        profilesById: {},
-        areaOwnerById: {},
-        attendanceById: {
-          'demo-ku1': { operatorName: 'Ahmed', operatorEmail: 'ahmed@example.com' },
-        },
-      };
-    }
-
-    function updateHUD(node) {
-      const path = [];
-      let curr = node;
-      while (curr) {
-        path.unshift(curr);
-        curr = curr.parent;
-      }
-      document.getElementById('breadcrumb').innerHTML = path
-        .map(
-          (n) =>
-            `<span class="bc-link" data-id="${n.id}" style="color:${n.color}">${n.label}</span>`,
-        )
-        .join(' <span style="color:#555">/</span> ');
-
-      const v = resolveVitals(node);
-      const focusPts = v ? Number(v.attentionPts) || 0 : 0;
-      const metricsHtml = Object.entries(node.metrics || {})
-        .map(
-          ([k, val]) =>
-            `<div><span class="lbl">${k}</span> <span class="val">${val}</span></div>`,
-        )
-        .join('');
-      document.getElementById('info-panel').innerHTML = `
-        <h3 style="color:${node.color}">${node.label}</h3>
-        <div class="badge" style="border-color:${node.color}">${node.level.toUpperCase()}</div>
-        ${
-          focusPts
-            ? `<div class="badge" style="border-color:var(--teal);color:var(--teal);margin-left:6px">FOCUS +${focusPts}</div>`
-            : ''
-        }
-        ${vitalsPanelHtml(node)}
-        <div class="metrics">${metricsHtml || '<span class="lbl">No metrics</span>'}</div>
-        ${
-          node.machineId
-            ? `<div style="margin-top:8px;font-size:10px;color:#8ea3bf">Vendon #${node.machineId}</div>`
-            : ''
-        }
-      `;
-    }
-
-    function focusNode(node, animate = true) {
-      window.currentNode = node;
-      const scales = {
-        root: 0.55,
-        region: 0.9,
-        brand: 1.5,
-        area: 2.6,
-        machine: 4.2,
-        facet: 6.5,
-        revenueDetail: 9,
-        salesDetail: 12,
-      };
-      const s = scales[node.level] || 1;
-      const next = {
-        x: width / 2 - node.x * s,
-        y: height / 2 - node.y * s,
-        scale: s,
-      };
-      if (animate) targetTransform = next;
-      else {
-        currentTransform = { ...next };
-        targetTransform = { ...next };
-      }
-      updateHUD(node);
-    }
-
-    const stars = Array.from({ length: 500 }, () => ({
-      x: Math.random(),
-      y: Math.random(),
-      r: Math.random() * 1.2,
-      a: Math.random() * 0.5 + 0.1,
-    }));
-
-    function updateSignals() {
-      if (Math.random() < 0.22 && flatEdges.length) {
-        signals.push({
-          edge: flatEdges[Math.floor(Math.random() * flatEdges.length)],
-          progress: 0,
-          speed: 0.01 + Math.random() * 0.02,
-        });
-      }
-      signals.forEach((s) => (s.progress += s.speed));
-      signals = signals.filter((s) => s.progress < 1);
-    }
-
-    function render() {
-      currentTransform.x += (targetTransform.x - currentTransform.x) * 0.1;
-      currentTransform.y += (targetTransform.y - currentTransform.y) * 0.1;
-      currentTransform.scale += (targetTransform.scale - currentTransform.scale) * 0.1;
-
-      ctx.fillStyle = '#010408';
-      ctx.fillRect(0, 0, width, height);
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      stars.forEach((s) => {
-        ctx.fillStyle = `rgba(255,255,255,${s.a})`;
-        ctx.beginPath();
-        ctx.arc(s.x * width, s.y * height, s.r, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.restore();
-
-      ctx.save();
-      ctx.translate(currentTransform.x, currentTransform.y);
-      ctx.scale(currentTransform.scale, currentTransform.scale);
-
-      ctx.lineWidth = 1.4 / currentTransform.scale;
-      flatEdges.forEach((e) => {
-        ctx.beginPath();
-        ctx.moveTo(e.source.x, e.source.y);
-        ctx.quadraticCurveTo(e.cx, e.cy, e.target.x, e.target.y);
-        ctx.strokeStyle = `${e.target.color}55`;
-        ctx.stroke();
-      });
-
-      signals.forEach((s) => {
-        const e = s.edge;
-        const t = s.progress;
-        const bx =
-          Math.pow(1 - t, 2) * e.source.x +
-          2 * (1 - t) * t * e.cx +
-          Math.pow(t, 2) * e.target.x;
-        const by =
-          Math.pow(1 - t, 2) * e.source.y +
-          2 * (1 - t) * t * e.cy +
-          Math.pow(t, 2) * e.target.y;
-        ctx.beginPath();
-        ctx.arc(bx, by, 3 / currentTransform.scale, 0, Math.PI * 2);
-        ctx.fillStyle = e.target.color;
-        ctx.shadowColor = e.target.color;
-        ctx.shadowBlur = 10 / currentTransform.scale;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      });
-
-      flatNodes.forEach((n) => {
-        const base = n === window.currentNode ? 11 : 7;
-        const r = base / currentTransform.scale;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = n.color;
-        ctx.shadowColor = n.color;
-        ctx.shadowBlur = (n === window.currentNode ? 22 : 8) / currentTransform.scale;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        const show =
-          currentTransform.scale > 2 ||
-          ['root', 'region', 'brand'].includes(n.level) ||
-          (currentTransform.scale > 0.9 && n.level === 'area');
-        if (show) {
-          ctx.fillStyle = '#e2eeff';
-          ctx.font = `${12 / currentTransform.scale}px monospace`;
-          ctx.textBaseline = 'middle';
-          ctx.fillText(n.label, n.x + r + 4 / currentTransform.scale, n.y);
-        }
-      });
-
-      ctx.restore();
-      updateSignals();
-      requestAnimationFrame(render);
-    }
-
-    let isDragging = false;
-    let lastMouse = { x: 0, y: 0 };
-    let hover = null;
-
-    canvas.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      lastMouse = { x: e.clientX, y: e.clientY };
-    });
-    canvas.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        targetTransform.x += e.clientX - lastMouse.x;
-        targetTransform.y += e.clientY - lastMouse.y;
-        lastMouse = { x: e.clientX, y: e.clientY };
-        return;
-      }
-      const mx = (e.clientX - currentTransform.x) / currentTransform.scale;
-      const my = (e.clientY - currentTransform.y) / currentTransform.scale;
-      let closest = null;
-      let min = 16 / currentTransform.scale;
-      for (const n of flatNodes) {
-        const d = Math.hypot(n.x - mx, n.y - my);
-        if (d < min) {
-          min = d;
-          closest = n;
-        }
-      }
-      hover = closest;
-      canvas.style.cursor = hover ? 'pointer' : 'default';
-    });
-    canvas.addEventListener('mouseup', () => (isDragging = false));
-    canvas.addEventListener('mouseleave', () => (isDragging = false));
-    canvas.addEventListener('click', () => {
-      if (hover) focusNode(hover);
-    });
-    canvas.addEventListener('dblclick', () => {
-      if (taxonomyRoot) focusNode(taxonomyRoot);
-    });
-    canvas.addEventListener(
-      'wheel',
-      (e) => {
-        e.preventDefault();
-        const zoom = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-        const mx = e.clientX;
-        const my = e.clientY;
-        const wx = (mx - targetTransform.x) / targetTransform.scale;
-        const wy = (my - targetTransform.y) / targetTransform.scale;
-        targetTransform.scale = Math.min(40, Math.max(0.2, targetTransform.scale * zoom));
-        targetTransform.x = mx - wx * targetTransform.scale;
-        targetTransform.y = my - wy * targetTransform.scale;
-      },
-      { passive: false },
-    );
-
-    document.getElementById('breadcrumb').addEventListener('click', (e) => {
-      if (!e.target.classList.contains('bc-link')) return;
-      const id = e.target.getAttribute('data-id');
-      const node = flatNodes.find((n) => n.id === id);
-      if (node) focusNode(node);
-    });
-
-    function nearestMachineContext() {
-      let n = window.currentNode;
-      while (n && !n.machineId) n = n.parent;
-      return n;
-    }
-
-    function openTaskModal() {
-      const ctxNode = nearestMachineContext() || window.currentNode;
-      document.getElementById('task-context').textContent = ctxNode
-        ? `TARGET: ${ctxNode.label} (${ctxNode.level})${ctxNode.machineId ? ` · #${ctxNode.machineId}` : ''}`
-        : 'TARGET: —';
-      if (ctxNode?.operatorEmail) {
-        document.getElementById('task-recipient').value = ctxNode.operatorEmail;
-      }
-      if (ctxNode?.machineName) {
-        document.getElementById('task-text').value =
-          `Follow-up on ${ctxNode.machineName} from Constellation HUD`;
-      }
-      document.getElementById('task-modal').classList.remove('hidden');
-    }
-    function closeTaskModal() {
-      document.getElementById('task-modal').classList.add('hidden');
-    }
-
-    async function submitTask() {
-      const ctxNode = nearestMachineContext();
-      if (!ctxNode?.machineId) {
-        alert('Zoom into a machine (or a facet under a machine) before dispatching to Workflow.');
-        return;
-      }
-      if (usingMock) {
-        alert('Demo mode — sign in on alert.theleetclub.com to send real Workflow tasks.');
-        return;
-      }
-      const action = document.getElementById('task-action').value;
-      const message = document.getElementById('task-text').value.trim();
-      const errorType = document.getElementById('task-error-type').value.trim() || 'Ops follow-up';
-      const recipient = document.getElementById('task-recipient').value.trim();
-      if (!message) {
-        alert('Message required');
-        return;
-      }
-      const btn = document.getElementById('task-submit');
-      btn.disabled = true;
-      try {
-        let result;
-        if (action === 'go-check') {
-          result = await apiPost(API.goCheck, {
-            machineId: ctxNode.machineId,
-            machineName: ctxNode.machineName || ctxNode.label,
-            errorType,
-            message,
-          });
-        } else if (action === 'dm') {
-          result = await apiPost(API.dm, {
-            machineId: ctxNode.machineId,
-            operatorEmail: recipient || undefined,
-            message,
-          });
-        } else {
-          result = await apiPost(API.cleaning, {
-            machineId: ctxNode.machineId,
-            message,
-          });
-        }
-        logTrace(
-          `WORKFLOW ${action}: ok=${result.ok} delivery=${result.delivery || '—'} taskId=${result.taskId || '—'}`,
-          !!result.ok,
-        );
-        alert(
-          result.ok
-            ? `Sent via ${result.delivery || 'Workflow'}${result.note ? `\n${result.note}` : ''}`
-            : `Failed: ${result.error || result.note || 'unknown'}`,
-        );
-        if (result.ok) closeTaskModal();
-      } catch (e) {
-        logTrace(`WORKFLOW FAIL: ${e.message}`, false);
-        alert(`Workflow error: ${e.message}`);
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    function refreshLive() {
-      loadLive();
-    }
-
-    function updatePollAge() {
-      const el = document.getElementById('poll-age');
-      if (!lastPollAt) {
-        el.textContent = '—';
-        return;
-      }
-      const sec = Math.round((Date.now() - lastPollAt) / 1000);
-      el.textContent = `${sec}s ago`;
-    }
-
-    // expose for buttons
-    window.refreshLive = refreshLive;
-    window.openTaskModal = openTaskModal;
-    window.closeTaskModal = closeTaskModal;
-    window.submitTask = submitTask;
-
-    requestAnimationFrame(render);
-    loadLive();
-    setInterval(loadLive, POLL_MS);
-    setInterval(updatePollAge, 1000);
-  </script>
+  <script src="./constellation-taxonomy-hud.js" defer></script>
 </body>
 </html>
