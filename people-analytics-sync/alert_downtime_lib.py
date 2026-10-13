@@ -245,10 +245,12 @@ def _load_off_events_from_cache(
     day_lo: date,
     day_hi_excl: date,
 ) -> List[Tuple[str, str, int, Optional[int]]]:
+    """Best-effort cache read. DB connect failures must not 500 the whole downtime route."""
     out: List[Tuple[str, str, int, Optional[int]]] = []
-    _, factory = create_engine_and_session()
-    db = factory()
+    db = None
     try:
+        _, factory = create_engine_and_session()
+        db = factory()
         rows = (
             db.query(VendonEventCache)
             .filter(
@@ -273,7 +275,11 @@ def _load_off_events_from_cache(
     except Exception:
         logger.exception("alert downtime: vendon_events_cache read failed")
     finally:
-        db.close()
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
     return out
 
 
@@ -371,12 +377,20 @@ def compute_machine_downtime_summary(
                 continue
             machine_list.append({"id": mid, "name": mname})
 
-    _, dash_factory = create_dashboard_engine_and_session()
-    dash = dash_factory()
+    cleaning_rules: List[MachineCleaningSchedule] = []
+    dash = None
     try:
-        cleaning_rules: List[MachineCleaningSchedule] = dash.query(MachineCleaningSchedule).all()
+        _, dash_factory = create_dashboard_engine_and_session()
+        dash = dash_factory()
+        cleaning_rules = dash.query(MachineCleaningSchedule).all()
+    except Exception:
+        logger.exception("alert downtime: cleaning schedule read failed — continuing without")
     finally:
-        dash.close()
+        if dash is not None:
+            try:
+                dash.close()
+            except Exception:
+                pass
 
     cleaning_by_mid: Dict[str, Any] = {}
     for m in machine_list:

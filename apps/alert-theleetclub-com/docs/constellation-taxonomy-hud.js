@@ -5,7 +5,7 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-csp-favicon';
+    const BUILD_STAMP = '20261014-layout-fast';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
@@ -938,20 +938,46 @@
       if (barEl) barEl.style.width = `${pct}%`;
     }
 
+    function countLeaves(node) {
+      if (!node?.children?.length) return 1;
+      return node.children.reduce((sum, c) => sum + countLeaves(c), 0);
+    }
+
+    /** Radial layout weighted by subtree size so Leet (many machines) gets a wide arc, not one corner. */
     function calculateLayout(node, x, y, angleStart, angleEnd, radius) {
       node.x = x;
       node.y = y;
-      if (!node.children?.length) return;
+      const kids = node.children || [];
+      if (!kids.length) return;
+
+      const weights = kids.map((c) => Math.max(1, countLeaves(c)));
+      const totalW = weights.reduce((a, b) => a + b, 0) || kids.length;
       const angleRange = angleEnd - angleStart;
-      const angleStep = angleRange / node.children.length;
-      node.children.forEach((child, i) => {
-        const childAngle = angleStart + angleStep * i + angleStep / 2;
-        const childRadius = radius * 0.85;
+      const n = kids.length;
+      const wideLevel = node.level === 'brand' || node.level === 'area' || node.level === 'region';
+      const spread = wideLevel ? Math.min(3.2, 1.05 + Math.log2(1 + n) * 0.55) : 1;
+      const childRadius = radius * (node.level === 'area' ? 1.25 : node.level === 'brand' ? 1.05 : 0.92) * spread;
+      const nextRadius =
+        radius *
+        (node.level === 'brand'
+          ? 1.05
+          : node.level === 'area'
+            ? Math.min(1.55, 0.85 + Math.log2(1 + n) * 0.28)
+            : node.level === 'machine'
+              ? 0.72
+              : 0.7);
+
+      let cursor = angleStart;
+      kids.forEach((child, i) => {
+        const slice = (angleRange * weights[i]) / totalW;
+        const childAngle = cursor + slice / 2;
         const cx = x + Math.cos(childAngle) * childRadius;
         const cy = y + Math.sin(childAngle) * childRadius;
-        let fan = Math.PI * 0.9;
-        if (node.children.length === 1) fan = Math.PI * 1.4;
-        calculateLayout(child, cx, cy, childAngle - fan / 2, childAngle + fan / 2, radius * 0.62);
+        const pad = Math.min(slice * 0.06, 0.05);
+        const fanStart = cursor + pad;
+        const fanEnd = Math.max(fanStart + 0.02, cursor + slice - pad);
+        calculateLayout(child, cx, cy, fanStart, fanEnd, nextRadius);
+        cursor += slice;
       });
     }
 
@@ -977,7 +1003,7 @@
       taxonomyRoot = root;
       flatNodes = [];
       flatEdges = [];
-      calculateLayout(root, 0, 0, 0, Math.PI * 2, 420);
+      calculateLayout(root, 0, 0, -Math.PI / 2, Math.PI * 1.5, 820);
       flatten(root, null);
       updateOpsFocusChip(root);
       const keep = keepId ? flatNodes.find((n) => n.id === keepId) : null;
@@ -1036,49 +1062,63 @@
         }
         document.getElementById('auth-banner').className = 'banner hidden';
 
+        // Phase 1 — paint matrix ASAP (machines + red-flags only).
+        const [machinesPayload, snapshot] = await Promise.all([
+          apiGet(API.machines),
+          apiGet(API.snapshot),
+        ]);
+        const machines = machinesPayload.machines || [];
+        liveBundle = {
+          machines,
+          snapshotRows: snapshot.rows || [],
+          salesById: {},
+          summaryById: {},
+          profilesById: {},
+          areaOwnerById: {},
+          attendanceById: {},
+          cleaningById: {},
+          techById: {},
+          lastTxById: {},
+          liveById: {},
+          downtimeById: {},
+          creditsById: {},
+          fromCache: snapshot.fromCache,
+          cacheGeneratedAt: snapshot.cacheGeneratedAt,
+        };
+        usingMock = false;
+        rebuildGraph(buildTaxonomy(liveBundle));
+        lastPollAt = Date.now();
+        document.getElementById('live-dot').className = 'dot warn';
+        document.getElementById('data-src').textContent =
+          `live skeleton · ${machines.length} machines · enriching…`;
+        logTrace(`INGEST skeleton: machines=${machines.length} snap=${(snapshot.rows || []).length}`);
+
+        // Phase 2 — enrich without blocking first paint. Downtime is optional (can 500 under DB pressure).
+        const soft = (label, p) =>
+          p.catch((e) => {
+            logTrace(`${label}: ${e.message}`, false);
+            return {};
+          });
         const [
-          machinesPayload,
-          snapshot,
           sales,
           summary,
           lastTxPayload,
           liveDash,
-          downtime,
           profiles,
           owners,
           credits,
+          downtime,
         ] = await Promise.all([
-          apiGet(API.machines),
-          apiGet(API.snapshot),
-          apiGet(API.salesElapsed).catch((e) => {
-            logTrace(`sales-elapsed: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.salesSummary).catch((e) => {
-            logTrace(`sales-summary: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.lastTx).catch((e) => {
-            logTrace(`last-tx: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.liveDash).catch((e) => {
-            logTrace(`live-dashboard: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.downtime).catch((e) => {
-            logTrace(`downtime: ${e.message}`, false);
-            return {};
-          }),
-          apiGet(API.adminProfiles).catch(() => ({})),
-          apiGet(API.areaOwners).catch(() => ({})),
-          apiGet(API.creditsTotals).catch((e) => {
-            logTrace(`remote-credits: ${e.message}`, false);
-            return {};
-          }),
+          soft('sales-elapsed', apiGet(API.salesElapsed)),
+          soft('sales-summary', apiGet(API.salesSummary)),
+          soft('last-tx', apiGet(API.lastTx)),
+          soft('live-dashboard', apiGet(API.liveDash)),
+          soft('admin-profiles', apiGet(API.adminProfiles)),
+          soft('area-owners', apiGet(API.areaOwners)),
+          soft('remote-credits', apiGet(API.creditsTotals)),
+          soft('downtime', apiGet(API.downtime)),
         ]);
 
-        const machines = machinesPayload.machines || [];
         const ids = machines.map((m) => String(m.id));
         const [attendanceById, cleaningById, techById] = await Promise.all([
           fetchAttendanceMap(ids),
@@ -1091,14 +1131,10 @@
           const id = String(row.machine_id || row.machineId || '').trim();
           if (id) profilesById[id] = row;
         }
-        // admin-profiles shape: { byMachineId: { id: { location_owner, ... }}}
-        if (profiles.byMachineId) {
-          Object.assign(profilesById, profiles.byMachineId);
-        }
+        if (profiles.byMachineId) Object.assign(profilesById, profiles.byMachineId);
 
         liveBundle = {
-          machines,
-          snapshotRows: snapshot.rows || [],
+          ...liveBundle,
           salesById: sales.byMachineId || {},
           summaryById: summary.byMachineId || {},
           profilesById,
@@ -1110,18 +1146,14 @@
           liveById: indexLiveDash(liveDash.machines || []),
           downtimeById: downtime.byMachineId || {},
           creditsById: credits.byMachineId || {},
-          fromCache: snapshot.fromCache,
-          cacheGeneratedAt: snapshot.cacheGeneratedAt,
         };
-        usingMock = false;
-        const root = buildTaxonomy(liveBundle);
-        rebuildGraph(root);
+        rebuildGraph(buildTaxonomy(liveBundle));
         lastPollAt = Date.now();
         document.getElementById('live-dot').className = 'dot';
         document.getElementById('data-src').textContent =
           `live · ${machines.length} machines · cache ${snapshot.fromCache ? 'HIT' : 'MISS'}`;
         logTrace(
-          `INGEST: machines=${machines.length} snap=${(snapshot.rows || []).length} live=${(liveDash.machines || []).length} att=${Object.keys(attendanceById).length} tech=${Object.keys(techById).length}`,
+          `INGEST enrich: live=${(liveDash.machines || []).length} att=${Object.keys(attendanceById).length} tech=${Object.keys(techById).length} dt=${Object.keys(downtime.byMachineId || {}).length}`,
         );
       } catch (e) {
         document.getElementById('live-dot').className = 'dot err';
