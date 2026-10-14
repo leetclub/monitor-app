@@ -5,7 +5,7 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-layout-fast2';
+    const BUILD_STAMP = '20261014-layout-tidy';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
@@ -940,46 +940,68 @@
       if (barEl) barEl.style.width = `${pct}%`;
     }
 
-    function countLeaves(node) {
-      if (!node?.children?.length) return 1;
-      return node.children.reduce((sum, c) => sum + countLeaves(c), 0);
+    /** Count machines only — product/facet leaves must not inflate angles (that caused the messy tangle). */
+    function countMachines(node) {
+      if (!node) return 0;
+      if (node.level === 'machine') return 1;
+      if (!node.children?.length) return 0;
+      return node.children.reduce((sum, c) => sum + countMachines(c), 0);
     }
 
-    /** Radial layout weighted by subtree size so Leet (many machines) gets a wide arc, not one corner. */
-    function calculateLayout(node, x, y, angleStart, angleEnd, radius) {
-      node.x = x;
-      node.y = y;
+    /** Concentric rings from origin — clean hierarchy instead of compounding radial hops. */
+    const RING_R = {
+      root: 0,
+      region: 220,
+      brand: 420,
+      area: 720,
+      machine: 1080,
+      facet: 1280,
+      revenueDetail: 1440,
+      salesDetail: 1580,
+    };
+
+    /**
+     * Tidy radial layout:
+     * - each level sits on a fixed ring
+     * - angle share ~ sqrt(machines) so Leet gets room without crushing siblings into a corner
+     * - empty brands keep a small reserved wedge
+     * - padding between slices so arcs do not collide
+     */
+    function calculateLayout(node, angleStart, angleEnd) {
+      const level = node.level || 'root';
+      const ring = RING_R[level] != null ? RING_R[level] : 1080 + 160;
+      const mid = (angleStart + angleEnd) / 2;
+      if (level === 'root') {
+        node.x = 0;
+        node.y = 0;
+      } else {
+        node.x = Math.cos(mid) * ring;
+        node.y = Math.sin(mid) * ring;
+      }
+
       const kids = node.children || [];
       if (!kids.length) return;
 
-      const weights = kids.map((c) => Math.max(1, countLeaves(c)));
-      const totalW = weights.reduce((a, b) => a + b, 0) || kids.length;
+      const raw = kids.map((c) => {
+        const m = countMachines(c);
+        if (m > 0) return Math.sqrt(m);
+        // EE / Park placeholders — tiny but visible wedges
+        if (c.level === 'brand') return 0.55;
+        return 0.4;
+      });
+      const totalW = raw.reduce((a, b) => a + b, 0) || kids.length;
       const angleRange = angleEnd - angleStart;
-      const n = kids.length;
-      const wideLevel = node.level === 'brand' || node.level === 'area' || node.level === 'region';
-      const spread = wideLevel ? Math.min(3.2, 1.05 + Math.log2(1 + n) * 0.55) : 1;
-      const childRadius = radius * (node.level === 'area' ? 1.25 : node.level === 'brand' ? 1.05 : 0.92) * spread;
-      const nextRadius =
-        radius *
-        (node.level === 'brand'
-          ? 1.05
-          : node.level === 'area'
-            ? Math.min(1.55, 0.85 + Math.log2(1 + n) * 0.28)
-            : node.level === 'machine'
-              ? 0.72
-              : 0.7);
+      // Keep a little gap between sibling fans
+      const gap = Math.min(0.028, angleRange / (kids.length * 8 + 1));
+      const usable = Math.max(angleRange - gap * (kids.length + 1), angleRange * 0.85);
 
-      let cursor = angleStart;
+      let cursor = angleStart + gap;
       kids.forEach((child, i) => {
-        const slice = (angleRange * weights[i]) / totalW;
-        const childAngle = cursor + slice / 2;
-        const cx = x + Math.cos(childAngle) * childRadius;
-        const cy = y + Math.sin(childAngle) * childRadius;
-        const pad = Math.min(slice * 0.06, 0.05);
-        const fanStart = cursor + pad;
-        const fanEnd = Math.max(fanStart + 0.02, cursor + slice - pad);
-        calculateLayout(child, cx, cy, fanStart, fanEnd, nextRadius);
-        cursor += slice;
+        const slice = (usable * raw[i]) / totalW;
+        const fanStart = cursor;
+        const fanEnd = cursor + Math.max(slice, 0.012);
+        calculateLayout(child, fanStart, fanEnd);
+        cursor = fanEnd + gap;
       });
     }
 
@@ -988,13 +1010,16 @@
       node.color = levelColors[node.level] || '#fff';
       flatNodes.push(node);
       if (parent) {
-        const dx = node.x - parent.x;
-        const dy = node.y - parent.y;
+        // Gentle outward curve (small) — avoids spaghetti links
+        const mx = (parent.x + node.x) / 2;
+        const my = (parent.y + node.y) / 2;
+        const tx = -my * 0.04;
+        const ty = mx * 0.04;
         flatEdges.push({
           source: parent,
           target: node,
-          cx: parent.x + dx / 2 - dy * 0.15,
-          cy: parent.y + dy / 2 + dx * 0.15,
+          cx: mx + tx,
+          cy: my + ty,
         });
       }
       (node.children || []).forEach((c) => flatten(c, node));
@@ -1005,7 +1030,8 @@
       taxonomyRoot = root;
       flatNodes = [];
       flatEdges = [];
-      calculateLayout(root, 0, 0, -Math.PI / 2, Math.PI * 1.5, 820);
+      // Full circle starting at top (−π/2)
+      calculateLayout(root, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2);
       flatten(root, null);
       updateOpsFocusChip(root);
       const keep = keepId ? flatNodes.find((n) => n.id === keepId) : null;
@@ -1687,15 +1713,16 @@
 
     function focusNode(node, animate = true) {
       window.currentNode = node;
+      // Rings are ~220–1580 units; keep fleet readable and drill-ins tight.
       const scales = {
-        root: 0.55,
-        region: 0.9,
-        brand: 1.5,
-        area: 2.6,
-        machine: 4.2,
-        facet: 6.5,
-        revenueDetail: 9,
-        salesDetail: 12,
+        root: 0.42,
+        region: 0.72,
+        brand: 1.05,
+        area: 1.55,
+        machine: 2.4,
+        facet: 3.6,
+        revenueDetail: 5.2,
+        salesDetail: 6.5,
       };
       const s = scales[node.level] || 1;
       const next = {
@@ -1792,15 +1819,22 @@
         ctx.fill();
         ctx.shadowBlur = 0;
 
+        const sc = currentTransform.scale;
         const show =
-          currentTransform.scale > 2 ||
           ['root', 'region', 'brand'].includes(n.level) ||
-          (currentTransform.scale > 0.9 && n.level === 'area');
+          (n.level === 'area' && sc > 0.85) ||
+          (n.level === 'machine' && sc > 1.6) ||
+          (n.level === 'facet' && sc > 2.8) ||
+          (sc > 4 && (n.level === 'revenueDetail' || n.level === 'salesDetail'));
         if (show) {
+          const maxChars =
+            n.level === 'machine' ? 18 : n.level === 'area' ? 22 : 28;
+          const label =
+            n.label.length > maxChars ? `${n.label.slice(0, maxChars - 1)}…` : n.label;
           ctx.fillStyle = '#e2eeff';
-          ctx.font = `${12 / currentTransform.scale}px monospace`;
+          ctx.font = `${Math.max(9, 11 / sc)}px monospace`;
           ctx.textBaseline = 'middle';
-          ctx.fillText(n.label, n.x + r + 4 / currentTransform.scale, n.y);
+          ctx.fillText(label, n.x + r + 4 / sc, n.y);
         }
       });
 
