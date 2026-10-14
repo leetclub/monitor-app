@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APOS Organizational Map | Leet Alert</title>
+  <link rel="stylesheet" href="radial-org-map.css">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+  <div class="app-container">
+    <header class="top-bar">
+      <div class="header-left">
+        <div class="apos-logo-header">APOS</div>
+        <h1 class="page-title">Organizational Map</h1>
+      </div>
+      <div class="header-right">
+        <div class="view-toggle">
+          <button class="toggle-btn active" data-view="chart">Chart</button>
+          <button class="toggle-btn" data-view="dashboards">Dashboards</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="canvas-container">
+      <svg id="org-map-svg" class="org-map-canvas"></svg>
+      <div class="zoom-controls">
+        <button class="zoom-btn" data-action="zoom-in" title="Zoom in">+</button>
+        <button class="zoom-btn" data-action="zoom-out" title="Zoom out">−</button>
+        <button class="zoom-btn" data-action="reset" title="Reset view">⟲</button>
+      </div>
+    </main>
+
+    <nav class="department-nav">
+      <button class="nav-chevron" data-dir="prev" title="Previous department">‹</button>
+      <div class="department-label">
+        <span id="current-department">All Departments</span>
+      </div>
+      <button class="nav-chevron" data-dir="next" title="Next department">›</button>
+    </nav>
+
+    <aside class="detail-drawer" id="detail-drawer">
+      <button class="drawer-close" aria-label="Close">&times;</button>
+      <div class="drawer-content">
+        <div class="job-header">
+          <h2 class="job-title" id="job-title">Loading...</h2>
+          <span class="job-department-tag" id="job-department">—</span>
+        </div>
+
+        <section class="drawer-section">
+          <h3>What it replaces</h3>
+          <p class="replaces-text" id="replaces-text">—</p>
+        </section>
+
+        <section class="drawer-section">
+          <h3>Autonomy Ladder</h3>
+          <div class="autonomy-ladder">
+            <div class="ladder-item" data-level="human-led">
+              <div class="ladder-indicator"></div>
+              <span>Human-Led</span>
+            </div>
+            <div class="ladder-item" data-level="human-assisted">
+              <div class="ladder-indicator"></div>
+              <span>Human-Assisted</span>
+            </div>
+            <div class="ladder-item" data-level="fully-autonomous">
+              <div class="ladder-indicator"></div>
+              <span>Fully Autonomous</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <h3>Technical Instructions</h3>
+          <div class="tech-instructions" id="tech-instructions">
+            <p class="endpoint-info" id="endpoint-info">—</p>
+            <pre class="code-block" id="code-block"></pre>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <div class="action-buttons">
+            <button class="action-btn primary" id="run-skill-btn">Run Skill</button>
+            <button class="action-btn secondary" id="view-payload-btn">View Payload</button>
+          </div>
+        </section>
+
+        <section class="drawer-section workflow-section">
+          <h3>New Task</h3>
+          <form class="workflow-form" id="workflow-form">
+            <textarea 
+              class="task-input" 
+              id="task-description" 
+              placeholder="Describe the task..."
+              rows="3"
+            ></textarea>
+            <div class="form-row">
+              <label>
+                Recipient:
+                <input type="text" class="form-input" id="task-recipient" placeholder="e.g., Dispatch Agent">
+              </label>
+              <label>
+                Priority:
+                <select class="form-select" id="task-priority">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="submit-btn">Create Task</button>
+          </form>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="radial-org-map.js"></script>
+</body>
+</html>
