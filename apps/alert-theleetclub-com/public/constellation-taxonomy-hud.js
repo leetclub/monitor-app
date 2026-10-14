@@ -5,7 +5,7 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-galaxy-qa2';
+    const BUILD_STAMP = '20261014-galaxy-disk';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
@@ -1007,16 +1007,31 @@
       return plan;
     }
 
+    /**
+     * Compact layout:
+     * - Overview uses absolute rings (region/brand) inside GALAXY_DISK_R.
+     * - Drill-in places each child a short LOCAL_STEP from its parent so edges stay short.
+     */
     const RING_R = {
       root: 0,
-      region: 240,
-      brand: 440,
-      area: 760,
-      machine: 1120,
-      facet: 1320,
-      revenueDetail: 1480,
-      salesDetail: 1620,
+      region: 105,
+      brand: 195,
+      area: 290,
+      machine: 375,
+      facet: 430,
+      revenueDetail: 475,
+      salesDetail: 515,
     };
+    const LOCAL_STEP = {
+      region: 72,
+      brand: 56,
+      area: 46,
+      machine: 38,
+      facet: 32,
+      revenueDetail: 28,
+      salesDetail: 26,
+    };
+    const GALAXY_DISK_R = RING_R.brand + 48;
 
     function calculateLayout(node, angleStart, angleEnd, plan) {
       const level = node.level || 'root';
@@ -1075,11 +1090,29 @@
     }
 
     function applyGalaxyPositions() {
-      for (const n of flatNodes) {
-        const a = (n.layoutAngle || 0) + galaxyAngle;
-        const r = n.ringR || 0;
-        n.x = Math.cos(a) * r;
-        n.y = Math.sin(a) * r;
+      const overview = isOverviewFocus();
+      if (overview || !taxonomyRoot) {
+        for (const n of flatNodes) {
+          const a = (n.layoutAngle || 0) + galaxyAngle;
+          const r = n.ringR || 0;
+          n.x = Math.cos(a) * r;
+          n.y = Math.sin(a) * r;
+        }
+      } else {
+        // Parent-relative orbits: every link is LOCAL_STEP long (no spider-web spokes).
+        const place = (node, px, py) => {
+          if (!node.parent) {
+            node.x = 0;
+            node.y = 0;
+          } else {
+            const a = (node.layoutAngle || 0) + galaxyAngle;
+            const step = LOCAL_STEP[node.level] || 50;
+            node.x = px + Math.cos(a) * step;
+            node.y = py + Math.sin(a) * step;
+          }
+          (node.children || []).forEach((c) => place(c, node.x, node.y));
+        };
+        place(taxonomyRoot, 0, 0);
       }
       for (const e of flatEdges) {
         const mx = (e.source.x + e.target.x) / 2;
@@ -1119,12 +1152,36 @@
       focusNode(keep || root, false);
     }
 
-    /** Gold core + silver orbital arcs (video-inspired). */
+    /** Gold core + silver orbital arcs + soft disk rim (everything stays inside). */
     function drawGalaxyBackdrop(gAngle) {
       const sc = currentTransform.scale;
-      for (let i = 0; i < 120; i++) {
+      const diskR = isOverviewFocus() ? GALAXY_DISK_R : RING_R.machine + 36;
+
+      // Soft galactic disk wash
+      const diskGrad = ctx.createRadialGradient(0, 0, diskR * 0.15, 0, 0, diskR);
+      diskGrad.addColorStop(0, 'rgba(40,70,120,0.16)');
+      diskGrad.addColorStop(0.7, 'rgba(20,40,80,0.08)');
+      diskGrad.addColorStop(1, 'rgba(10,20,40,0)');
+      ctx.fillStyle = diskGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, diskR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rim
+      ctx.strokeStyle = 'rgba(200,220,255,0.14)';
+      ctx.lineWidth = 1.25 / sc;
+      ctx.beginPath();
+      ctx.arc(0, 0, diskR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(160,190,255,0.06)';
+      ctx.lineWidth = 6 / sc;
+      ctx.beginPath();
+      ctx.arc(0, 0, diskR * 0.92, 0, Math.PI * 2);
+      ctx.stroke();
+
+      for (let i = 0; i < 90; i++) {
         const a = gAngle * 0.35 + i * 0.51;
-        const rr = 40 + (i % 40) * 28;
+        const rr = 30 + (i % 28) * (diskR / 36);
         const px = Math.cos(a) * rr;
         const py = Math.sin(a) * rr * 0.55;
         ctx.fillStyle = 'rgba(162,155,254,' + (0.04 + (i % 5) * 0.01) + ')';
@@ -1132,7 +1189,7 @@
         ctx.arc(px, py, 1.2 / sc, 0, Math.PI * 2);
         ctx.fill();
       }
-      const coreR = 28;
+      const coreR = 22;
       const grd = ctx.createRadialGradient(0, 0, 2, 0, 0, coreR * 2.2);
       grd.addColorStop(0, 'rgba(255,220,120,0.55)');
       grd.addColorStop(0.45, 'rgba(255,180,60,0.18)');
@@ -1141,19 +1198,19 @@
       ctx.beginPath();
       ctx.arc(0, 0, coreR * 2.2, 0, Math.PI * 2);
       ctx.fill();
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < 70; i++) {
         const a = gAngle * 1.2 + i * 0.7;
-        const rr = (i % 7) * 3.5;
+        const rr = (i % 7) * 3.2;
         ctx.fillStyle = 'rgba(255,215,100,' + (0.15 + (i % 4) * 0.05) + ')';
         ctx.beginPath();
         ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 1.1 / sc, 0, Math.PI * 2);
         ctx.fill();
       }
       for (const tilt of [0.35, -0.28]) {
-        for (let i = 0; i < 100; i++) {
-          const t = (i / 100) * Math.PI * 2 + gAngle * 0.8;
-          const x = Math.cos(t) * 180;
-          const y = Math.sin(t) * 180 * 0.22 * Math.cos(tilt);
+        for (let i = 0; i < 80; i++) {
+          const t = (i / 80) * Math.PI * 2 + gAngle * 0.8;
+          const x = Math.cos(t) * (diskR * 0.72);
+          const y = Math.sin(t) * (diskR * 0.72) * 0.22 * Math.cos(tilt);
           ctx.fillStyle = 'rgba(230,240,255,' + (0.12 + (i % 3) * 0.04) + ')';
           ctx.beginPath();
           ctx.arc(x, y, 1.15 / sc, 0, Math.PI * 2);
@@ -1858,20 +1915,28 @@
       }
       focusPlan = analyzeFocusPlan(node);
       const scales = {
-        root: 0.38,
-        region: 0.62,
-        brand: 0.95,
-        area: 1.45,
-        machine: 2.35,
-        facet: 3.5,
-        revenueDetail: 5.0,
-        salesDetail: 6.2,
+        root: 0.55,
+        region: 0.85,
+        brand: 1.05,
+        area: 1.25,
+        machine: 1.85,
+        facet: 2.6,
+        revenueDetail: 3.4,
+        salesDetail: 4.0,
       };
       const boost = focusPlan?.cameraScaleBoost || 1;
       let s = (scales[node.level] || 1) * boost;
-      // Fit children cluster when drilling into brand/area
+      // Root/region: fit the galaxy disk into the viewport with margin (HUD chrome inset).
+      if (node.level === 'root' || node.level === 'region') {
+        const disk = node.level === 'root' ? GALAXY_DISK_R : RING_R.brand + 28;
+        const fit = Math.min((width * 0.34) / disk, (height * 0.3) / disk);
+        s = Math.min(s, fit);
+      }
+      // Fit visible neighborhood — prefer zoom-out so links stay short on screen.
       if (node.level !== 'root' && node.children?.length) {
-        const group = [node].concat(node.children.filter((c) => !c.uxDeferred));
+        const group = [node].concat(
+          flatNodes.filter((c) => c !== node && nodeVisibleInView(c)),
+        );
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         group.forEach((g) => {
           minX = Math.min(minX, g.x);
@@ -1879,18 +1944,23 @@
           minY = Math.min(minY, g.y);
           maxY = Math.max(maxY, g.y);
         });
-        const bw = Math.max(maxX - minX, 80);
-        const bh = Math.max(maxY - minY, 80);
-        const fit = Math.min((width * 0.5) / bw, (height * 0.62) / bh);
-        s = Math.min(s * 1.6, Math.max(s * 0.65, fit));
+        const pad = 72;
+        const bw = Math.max(maxX - minX, 60) + pad;
+        const bh = Math.max(maxY - minY, 60) + pad;
+        const fit = Math.min((width * 0.3) / bw, (height * 0.34) / bh);
+        s = Math.min(s, fit);
       }
+      // Hard caps so brand/area clusters never stretch into spider webs.
+      if (node.level === 'brand') s = Math.min(s, 1.05);
+      if (node.level === 'area') s = Math.min(s, 1.35);
       s = Math.min(40, Math.max(0.2, s));
       const lead = 0.08;
       const cx = node.x * (1 - lead);
       const cy = node.y * (1 - lead);
+      // Bias camera slightly down so top banner / HUD doesn't cover the disk.
       const next = {
         x: width / 2 - cx * s,
-        y: height / 2 - cy * s,
+        y: height * 0.54 - cy * s,
         scale: s,
       };
       if (animate) targetTransform = next;
@@ -1911,9 +1981,10 @@
     }));
 
     function updateSignals() {
-      if (Math.random() < 0.22 && flatEdges.length) {
+      const visibleEdges = flatEdges.filter(edgeVisibleInView);
+      if (Math.random() < 0.22 && visibleEdges.length) {
         signals.push({
-          edge: flatEdges[Math.floor(Math.random() * flatEdges.length)],
+          edge: visibleEdges[Math.floor(Math.random() * visibleEdges.length)],
           progress: 0,
           speed: 0.01 + Math.random() * 0.02,
         });
@@ -1927,17 +1998,44 @@
       return !lv || lv === 'root' || lv === 'region';
     }
 
+    function isAncestor(maybeAnc, node) {
+      let p = node;
+      while (p) {
+        if (p === maybeAnc) return true;
+        p = p.parent;
+      }
+      return false;
+    }
+
     function nodeVisibleInView(n) {
       if (!n) return false;
       if (n.uxDeferred && n.level !== 'area' && n.level !== 'machine') return false;
+      const focus = window.currentNode;
+      const lv = n.level || '';
+
+      // Overview galaxy: only root → region → brand. No long spokes to areas/machines.
+      if (isOverviewFocus()) {
+        return lv === 'root' || lv === 'region' || lv === 'brand';
+      }
+
+      // Drill-in: focus + children + grandchildren only (parent stays in breadcrumb, not on canvas).
+      if (focus) {
+        const nearFocus = n === focus || n.parent === focus || n.parent?.parent === focus;
+        if (!nearFocus) return false;
+      }
+
       const plan = focusPlan;
       if (plan?.hideFacetsUntilMachine) {
         if (['facet', 'revenueDetail', 'salesDetail'].includes(n.level)) {
-          const focus = window.currentNode;
-          if (!focus || (focus.level !== 'machine' && focus.level !== 'facet' && focus.level !== 'revenueDetail' && focus.level !== 'salesDetail')) {
+          if (
+            !focus ||
+            (focus.level !== 'machine' &&
+              focus.level !== 'facet' &&
+              focus.level !== 'revenueDetail' &&
+              focus.level !== 'salesDetail')
+          ) {
             return false;
           }
-          // Only show facets under the focused machine lineage
           let p = n;
           let under = false;
           while (p) {
@@ -1951,6 +2049,15 @@
         }
       }
       return true;
+    }
+
+    function edgeVisibleInView(e) {
+      if (!e?.source || !e?.target) return false;
+      if (!nodeVisibleInView(e.source) || !nodeVisibleInView(e.target)) return false;
+      // Drop absurdly long chords (overview rings / local steps should stay short).
+      const len = Math.hypot(e.target.x - e.source.x, e.target.y - e.source.y);
+      const maxLen = isOverviewFocus() ? GALAXY_DISK_R * 1.15 : 90;
+      return len <= maxLen;
     }
 
     function render() {
@@ -1972,7 +2079,7 @@
         if (n && ['root', 'region', 'brand'].includes(n.level)) {
           const s = currentTransform.scale;
           targetTransform.x = width / 2 - n.x * s;
-          targetTransform.y = height / 2 - n.y * s;
+          targetTransform.y = height * 0.54 - n.y * s;
         }
       }
 
@@ -1995,21 +2102,26 @@
 
       drawGalaxyBackdrop(galaxyAngle);
 
-      ctx.lineWidth = 1.35 / currentTransform.scale;
+      ctx.lineWidth = 1.15 / currentTransform.scale;
       flatEdges.forEach((e) => {
-        if (!nodeVisibleInView(e.target) && !nodeVisibleInView(e.source)) return;
-        if (!nodeVisibleInView(e.target)) return;
+        if (!edgeVisibleInView(e)) return;
         ctx.beginPath();
         ctx.moveTo(e.source.x, e.source.y);
-        ctx.quadraticCurveTo(e.cx, e.cy, e.target.x, e.target.y);
-        const dim = e.target.uxDeferred ? '22' : '55';
+        // Gentle arc — short chords look like orbital links, not spider webs.
+        const mx = (e.source.x + e.target.x) / 2;
+        const my = (e.source.y + e.target.y) / 2;
+        const dx = e.target.x - e.source.x;
+        const dy = e.target.y - e.source.y;
+        const bend = 0.12;
+        ctx.quadraticCurveTo(mx - dy * bend, my + dx * bend, e.target.x, e.target.y);
+        const dim = e.target.uxDeferred ? '22' : '48';
         ctx.strokeStyle = `${e.target.color}${dim}`;
         ctx.stroke();
       });
 
       signals.forEach((s) => {
         const e = s.edge;
-        if (!nodeVisibleInView(e.target)) return;
+        if (!edgeVisibleInView(e)) return;
         const t = s.progress;
         const bx =
           Math.pow(1 - t, 2) * e.source.x +
@@ -2316,6 +2428,12 @@
           x: n.x,
           y: n.y,
         })),
+        diskR: isOverviewFocus() ? GALAXY_DISK_R : RING_R.machine + 36,
+        visibleNodes: flatNodes.filter(nodeVisibleInView).length,
+        visibleEdges: flatEdges.filter(edgeVisibleInView).length,
+        maxEdgeLen: flatEdges
+          .filter(edgeVisibleInView)
+          .reduce((m, e) => Math.max(m, Math.hypot(e.target.x - e.source.x, e.target.y - e.source.y)), 0),
       };
     };
     window.__leetConstellationFocusId = function (id) {
