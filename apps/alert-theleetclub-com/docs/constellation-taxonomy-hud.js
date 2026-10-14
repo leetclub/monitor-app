@@ -5,7 +5,7 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-galaxy-verified';
+    const BUILD_STAMP = '20261014-galaxy-qa2';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
@@ -2087,6 +2087,18 @@
       isDragging = true;
       lastMouse = { x: e.clientX, y: e.clientY };
     });
+    function pointerToWorld(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = rect.width > 0 ? canvas.width / rect.width : 1;
+      const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+      const cx = (clientX - rect.left) * sx;
+      const cy = (clientY - rect.top) * sy;
+      return {
+        x: (cx - currentTransform.x) / currentTransform.scale,
+        y: (cy - currentTransform.y) / currentTransform.scale,
+      };
+    }
+
     canvas.addEventListener('mousemove', (e) => {
       if (isDragging) {
         targetTransform.x += e.clientX - lastMouse.x;
@@ -2094,10 +2106,13 @@
         lastMouse = { x: e.clientX, y: e.clientY };
         return;
       }
-      const mx = (e.clientX - currentTransform.x) / currentTransform.scale;
-      const my = (e.clientY - currentTransform.y) / currentTransform.scale;
+      const world = pointerToWorld(e.clientX, e.clientY);
+      const mx = world.x;
+      const my = world.y;
       let closest = null;
-      let min = 16 / currentTransform.scale;
+      // Overview spins — slightly larger hit target so nodes stay clickable.
+      const hitPx = isOverviewFocus() ? 36 : 22;
+      let min = hitPx / currentTransform.scale;
       for (const n of flatNodes) {
         if (!nodeVisibleInView(n) || n.uxDeferred) continue;
         const d = Math.hypot(n.x - mx, n.y - my);
@@ -2127,8 +2142,11 @@
       (e) => {
         e.preventDefault();
         const zoom = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-        const mx = e.clientX;
-        const my = e.clientY;
+        const rect = canvas.getBoundingClientRect();
+        const sx = rect.width > 0 ? canvas.width / rect.width : 1;
+        const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+        const mx = (e.clientX - rect.left) * sx;
+        const my = (e.clientY - rect.top) * sy;
         const wx = (mx - targetTransform.x) / targetTransform.scale;
         const wy = (my - targetTransform.y) / targetTransform.scale;
         targetTransform.scale = Math.min(40, Math.max(0.2, targetTransform.scale * zoom));
@@ -2277,17 +2295,33 @@
 
     /** Test/debug hook for Playwright + console QA (no secrets). */
     window.__leetConstellationDebug = function () {
+      const cur = window.currentNode;
+      const rect = canvas.getBoundingClientRect();
       return {
         build: BUILD_STAMP,
         nodes: flatNodes.length,
         edges: flatEdges.length,
-        level: window.currentNode?.level || null,
-        label: window.currentNode?.label || null,
+        level: cur?.level || null,
+        label: cur?.label || null,
         plan: focusPlan || window.__leetConstellationFocusPlan || null,
         galaxyAngle,
         usingMock,
         hasRoot: !!taxonomyRoot,
+        transform: { ...currentTransform },
+        canvasRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        children: (cur?.children || []).slice(0, 12).map((n) => ({
+          id: n.id,
+          level: n.level,
+          label: n.label,
+          x: n.x,
+          y: n.y,
+        })),
       };
+    };
+    window.__leetConstellationFocusId = function (id) {
+      const n = flatNodes.find((x) => x.id === id);
+      if (n) focusNode(n);
+      return !!n;
     };
 
     if (document.readyState === "loading") {
