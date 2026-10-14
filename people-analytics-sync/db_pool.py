@@ -10,17 +10,31 @@ from typing import Iterator
 import psycopg2
 
 
+def _to_libpq_dsn(url: str) -> str:
+    """SQLAlchemy dialect URLs (postgresql+psycopg2://) are invalid for psycopg2.connect."""
+    u = (url or '').strip()
+    for prefix in (
+        'postgresql+psycopg2://',
+        'postgres+psycopg2://',
+        'postgresql+psycopg://',
+        'postgres+psycopg://',
+    ):
+        if u.startswith(prefix):
+            return 'postgresql://' + u[len(prefix) :]
+    return u
+
+
 def _dsn() -> str:
     ov = (os.environ.get('ATTENDANCE_SNAPSHOT_DATABASE_URL') or '').strip()
     if ov:
-        return ov
+        return _to_libpq_dsn(ov)
     try:
         from dashboard_access_models import get_dashboard_database_url
 
-        return get_dashboard_database_url()
+        return _to_libpq_dsn(get_dashboard_database_url())
     except Exception:
         pass
-    return (
+    return _to_libpq_dsn(
         (os.environ.get('PEOPLE_API_DATABASE_URL') or '').strip()
         or (os.environ.get('DATABASE_URL') or '').strip()
     )
