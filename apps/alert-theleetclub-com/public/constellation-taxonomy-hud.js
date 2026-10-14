@@ -5,7 +5,7 @@
      *
      * file:// / off-host: never call fetch('/api/...') — CORS blocks non-http origins.
      */
-    const BUILD_STAMP = '20261014-layout-tidy';
+    const BUILD_STAMP = '20261014-galaxy-verified';
     const ALERT_HOST = 'alert.theleetclub.com';
     const LIVE_HUD_URL = `https://${ALERT_HOST}/constellation-taxonomy-hud.html`;
     const LIVE_LOGIN_URL = `https://${ALERT_HOST}/login`;
@@ -85,7 +85,12 @@
 
     let currentTransform = { x: 0, y: 0, scale: 0.75 };
     let targetTransform = { x: 0, y: 0, scale: 0.75 };
+    let galaxyAngle = 0;
+    let focusPlan = null;
+    const GALAXY_SPIN_OVERVIEW = 0.00115;
+    const GALAXY_SPIN_DRILL = 0.00025;
     window.currentNode = null;
+    window.__leetConstellationFocusPlan = null;
 
     function resize() {
       width = window.innerWidth;
@@ -940,7 +945,8 @@
       if (barEl) barEl.style.width = `${pct}%`;
     }
 
-    /** Count machines only — product/facet leaves must not inflate angles (that caused the messy tangle). */
+
+    /** Count machines only — product/facet leaves must not inflate angles. */
     function countMachines(node) {
       if (!node) return 0;
       if (node.level === 'machine') return 1;
@@ -948,61 +954,139 @@
       return node.children.reduce((sum, c) => sum + countMachines(c), 0);
     }
 
-    /** Concentric rings from origin — clean hierarchy instead of compounding radial hops. */
-    const RING_R = {
-      root: 0,
-      region: 220,
-      brand: 420,
-      area: 720,
-      machine: 1080,
-      facet: 1280,
-      revenueDetail: 1440,
-      salesDetail: 1580,
-    };
+    function attentionScore(node) {
+      const v = (typeof resolveVitals === 'function' ? resolveVitals(node) : null) || node?.vitals || {};
+      const flags = Number(v.flags || v.flaggedCount) || 0;
+      const overdue = Number(v.overdueCount) || (v.cleaningOverdue ? 1 : 0);
+      const tier1 = Number(v.tier1Count) || (v.tier === 1 ? 1 : 0);
+      const kd = Number(v.todayKd);
+      const lowKd = Number.isFinite(kd) && kd < 20 ? 1 : 0;
+      return flags + overdue * 2 + tier1 * 3 + lowKd;
+    }
 
     /**
-     * Tidy radial layout:
-     * - each level sits on a fixed ring
-     * - angle share ~ sqrt(machines) so Leet gets room without crushing siblings into a corner
-     * - empty brands keep a small reserved wedge
-     * - padding between slices so arcs do not collide
+     * Deterministic drill-in UX rules (LLM-ready via window.__leetConstellationReason).
      */
-    function calculateLayout(node, angleStart, angleEnd) {
+    function analyzeFocusPlan(node) {
+      if (!node) return null;
+      const machines = countMachines(node);
+      const attn = attentionScore(node);
       const level = node.level || 'root';
-      const ring = RING_R[level] != null ? RING_R[level] : 1080 + 160;
-      const mid = (angleStart + angleEnd) / 2;
-      if (level === 'root') {
-        node.x = 0;
-        node.y = 0;
-      } else {
-        node.x = Math.cos(mid) * ring;
-        node.y = Math.sin(mid) * ring;
-      }
+      let plan = {
+        level,
+        machines,
+        attention: attn,
+        galaxySpin: ['root', 'region'].includes(level)
+          ? GALAXY_SPIN_OVERVIEW
+          : level === 'brand'
+            ? GALAXY_SPIN_OVERVIEW * 0.45
+            : GALAXY_SPIN_DRILL,
+        distribution:
+          (level === 'brand' && machines > 14) || (level === 'area' && machines > 20)
+            ? 'cluster-hot'
+            : 'fan',
+        maxLabeledChildren:
+          level === 'root' || level === 'region' ? 0 : level === 'brand' ? 8 : level === 'area' ? 16 : 99,
+        hideFacetsUntilMachine:
+          level !== 'machine' &&
+          level !== 'facet' &&
+          level !== 'revenueDetail' &&
+          level !== 'salesDetail',
+        emphasizeRing: level === 'brand' ? 'area' : level === 'area' ? 'machine' : level,
+        cameraScaleBoost: attn >= 6 ? 1.18 : attn >= 3 ? 1.08 : 1,
+        sortChildren: attn > 0 ? 'attention' : 'alpha',
+        panelPriority: ['vitals', 'flags', 'cleaning', 'kd', 'operator'],
+      };
+      try {
+        if (typeof window.__leetConstellationReason === 'function') {
+          const next = window.__leetConstellationReason(node, plan);
+          if (next && typeof next === 'object') plan = next;
+        }
+      } catch (_e) {}
+      window.__leetConstellationFocusPlan = plan;
+      return plan;
+    }
 
-      const kids = node.children || [];
+    const RING_R = {
+      root: 0,
+      region: 240,
+      brand: 440,
+      area: 760,
+      machine: 1120,
+      facet: 1320,
+      revenueDetail: 1480,
+      salesDetail: 1620,
+    };
+
+    function calculateLayout(node, angleStart, angleEnd, plan) {
+      const level = node.level || 'root';
+      const ring = RING_R[level] != null ? RING_R[level] : 1120 + 160;
+      const mid = (angleStart + angleEnd) / 2;
+      node.layoutAngle = mid;
+      node.ringR = level === 'root' ? 0 : ring;
+      node.fanStart = angleStart;
+      node.fanEnd = angleEnd;
+
+      let kids = (node.children || []).slice();
       if (!kids.length) return;
 
-      const raw = kids.map((c) => {
+      if (plan && plan.sortChildren === 'attention') {
+        kids = kids
+          .slice()
+          .sort((a, b) => attentionScore(b) - attentionScore(a) || a.label.localeCompare(b.label));
+      }
+
+      const dist = plan && node === window.currentNode ? plan.distribution : 'fan';
+      const maxShow =
+        plan && node === window.currentNode && dist === 'cluster-hot'
+          ? Math.min(kids.length, plan.maxLabeledChildren || 8)
+          : kids.length;
+
+      kids.forEach((c, i) => {
+        c.uxDeferred = i >= maxShow;
+        c.uxHot = attentionScore(c) > 0;
+      });
+
+      const visible = kids.filter((c) => !c.uxDeferred);
+      const deferred = kids.filter((c) => c.uxDeferred);
+      const layoutKids = visible.concat(deferred);
+
+      const raw = layoutKids.map((c) => {
+        if (c.uxDeferred) return 0.12;
         const m = countMachines(c);
-        if (m > 0) return Math.sqrt(m);
-        // EE / Park placeholders — tiny but visible wedges
+        const hotBoost = c.uxHot ? 1.35 : 1;
+        if (m > 0) return Math.sqrt(m) * hotBoost;
         if (c.level === 'brand') return 0.55;
         return 0.4;
       });
-      const totalW = raw.reduce((a, b) => a + b, 0) || kids.length;
+      const totalW = raw.reduce((a, b) => a + b, 0) || layoutKids.length;
       const angleRange = angleEnd - angleStart;
-      // Keep a little gap between sibling fans
-      const gap = Math.min(0.028, angleRange / (kids.length * 8 + 1));
-      const usable = Math.max(angleRange - gap * (kids.length + 1), angleRange * 0.85);
+      const gap = Math.min(0.024, angleRange / (layoutKids.length * 8 + 1));
+      const usable = Math.max(angleRange - gap * (layoutKids.length + 1), angleRange * 0.85);
 
       let cursor = angleStart + gap;
-      kids.forEach((child, i) => {
+      layoutKids.forEach((child, i) => {
         const slice = (usable * raw[i]) / totalW;
         const fanStart = cursor;
-        const fanEnd = cursor + Math.max(slice, 0.012);
-        calculateLayout(child, fanStart, fanEnd);
+        const fanEnd = cursor + Math.max(slice, 0.01);
+        calculateLayout(child, fanStart, fanEnd, plan);
         cursor = fanEnd + gap;
       });
+    }
+
+    function applyGalaxyPositions() {
+      for (const n of flatNodes) {
+        const a = (n.layoutAngle || 0) + galaxyAngle;
+        const r = n.ringR || 0;
+        n.x = Math.cos(a) * r;
+        n.y = Math.sin(a) * r;
+      }
+      for (const e of flatEdges) {
+        const mx = (e.source.x + e.target.x) / 2;
+        const my = (e.source.y + e.target.y) / 2;
+        e.cx = mx - my * 0.035;
+        e.cy = my + mx * 0.035;
+      }
     }
 
     function flatten(node, parent) {
@@ -1010,33 +1094,74 @@
       node.color = levelColors[node.level] || '#fff';
       flatNodes.push(node);
       if (parent) {
-        // Gentle outward curve (small) — avoids spaghetti links
-        const mx = (parent.x + node.x) / 2;
-        const my = (parent.y + node.y) / 2;
-        const tx = -my * 0.04;
-        const ty = mx * 0.04;
-        flatEdges.push({
-          source: parent,
-          target: node,
-          cx: mx + tx,
-          cy: my + ty,
-        });
+        flatEdges.push({ source: parent, target: node, cx: 0, cy: 0 });
       }
       (node.children || []).forEach((c) => flatten(c, node));
+    }
+
+    function relayoutUniverse(focusHint) {
+      if (!taxonomyRoot) return;
+      focusPlan = analyzeFocusPlan(focusHint || window.currentNode || taxonomyRoot);
+      flatNodes = [];
+      flatEdges = [];
+      calculateLayout(taxonomyRoot, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2, focusPlan);
+      flatten(taxonomyRoot, null);
+      applyGalaxyPositions();
+      updateOpsFocusChip(taxonomyRoot);
     }
 
     function rebuildGraph(root) {
       const keepId = window.currentNode && window.currentNode.id;
       taxonomyRoot = root;
-      flatNodes = [];
-      flatEdges = [];
-      // Full circle starting at top (−π/2)
-      calculateLayout(root, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2);
-      flatten(root, null);
-      updateOpsFocusChip(root);
+      window.currentNode = keepId ? window.currentNode : root;
+      relayoutUniverse(root);
       const keep = keepId ? flatNodes.find((n) => n.id === keepId) : null;
       focusNode(keep || root, false);
     }
+
+    /** Gold core + silver orbital arcs (video-inspired). */
+    function drawGalaxyBackdrop(gAngle) {
+      const sc = currentTransform.scale;
+      for (let i = 0; i < 120; i++) {
+        const a = gAngle * 0.35 + i * 0.51;
+        const rr = 40 + (i % 40) * 28;
+        const px = Math.cos(a) * rr;
+        const py = Math.sin(a) * rr * 0.55;
+        ctx.fillStyle = 'rgba(162,155,254,' + (0.04 + (i % 5) * 0.01) + ')';
+        ctx.beginPath();
+        ctx.arc(px, py, 1.2 / sc, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const coreR = 28;
+      const grd = ctx.createRadialGradient(0, 0, 2, 0, 0, coreR * 2.2);
+      grd.addColorStop(0, 'rgba(255,220,120,0.55)');
+      grd.addColorStop(0.45, 'rgba(255,180,60,0.18)');
+      grd.addColorStop(1, 'rgba(255,180,60,0)');
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(0, 0, coreR * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 90; i++) {
+        const a = gAngle * 1.2 + i * 0.7;
+        const rr = (i % 7) * 3.5;
+        ctx.fillStyle = 'rgba(255,215,100,' + (0.15 + (i % 4) * 0.05) + ')';
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 1.1 / sc, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      for (const tilt of [0.35, -0.28]) {
+        for (let i = 0; i < 100; i++) {
+          const t = (i / 100) * Math.PI * 2 + gAngle * 0.8;
+          const x = Math.cos(t) * 180;
+          const y = Math.sin(t) * 180 * 0.22 * Math.cos(tilt);
+          ctx.fillStyle = 'rgba(230,240,255,' + (0.12 + (i % 3) * 0.04) + ')';
+          ctx.beginPath();
+          ctx.arc(x, y, 1.15 / sc, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
 
     function showLocalModeBanner() {
       const el = document.getElementById('local-mode-banner');
@@ -1249,8 +1374,9 @@
           document.getElementById('auth-banner').innerHTML =
             'Session cookie missing. Open <a href="/login">/login</a> on alert.theleetclub.com, then reload this HUD.';
         }
-        logTrace(`LIVE FAIL: ${e.message} — keeping demo seed`, false);
-        if (!taxonomyRoot || !usingMock) {
+        logTrace(`LIVE FAIL: ${e.message} — keeping current tree`, false);
+        // Never blank/replace a tree that is already painted (live skeleton or demo).
+        if (!taxonomyRoot) {
           usingMock = true;
           rebuildGraph(buildTaxonomy(demoBundle()));
         }
@@ -1640,10 +1766,18 @@
           return `<div class="kv ${r.cls || ''}"><span class="k">${r.k}</span><span class="v">${r.v}</span></div>`;
         })
         .join('');
+      const plan = focusPlan || analyzeFocusPlan(node);
+      const uxBadge =
+        plan?.distribution === 'cluster-hot'
+          ? 'UX · HOT CLUSTER'
+          : ['root', 'region'].includes(node.level)
+            ? 'UX · GALAXY SPIN'
+            : 'UX · FAN';
       document.getElementById('info-panel').innerHTML = `
         <h3 style="color:${node.color}">${node.label}</h3>
         <div class="badge-row">
           <span class="badge" style="border-color:${node.color}">${node.level.toUpperCase()}</span>
+          <span class="badge" style="border-color:#a29bfe;color:#c4b5fd">${uxBadge}</span>
           ${
             focusPts
               ? `<span class="badge" style="border-color:var(--teal);color:var(--teal)">FOCUS +${focusPts}</span>`
@@ -1711,23 +1845,52 @@
       }
     }
 
+
     function focusNode(node, animate = true) {
+      if (!node) return;
       window.currentNode = node;
-      // Rings are ~220–1580 units; keep fleet readable and drill-ins tight.
+      if (taxonomyRoot) {
+        const id = node.id;
+        relayoutUniverse(node);
+        const again = flatNodes.find((n) => n.id === id);
+        if (again) node = again;
+        window.currentNode = node;
+      }
+      focusPlan = analyzeFocusPlan(node);
       const scales = {
-        root: 0.42,
-        region: 0.72,
-        brand: 1.05,
-        area: 1.55,
-        machine: 2.4,
-        facet: 3.6,
-        revenueDetail: 5.2,
-        salesDetail: 6.5,
+        root: 0.38,
+        region: 0.62,
+        brand: 0.95,
+        area: 1.45,
+        machine: 2.35,
+        facet: 3.5,
+        revenueDetail: 5.0,
+        salesDetail: 6.2,
       };
-      const s = scales[node.level] || 1;
+      const boost = focusPlan?.cameraScaleBoost || 1;
+      let s = (scales[node.level] || 1) * boost;
+      // Fit children cluster when drilling into brand/area
+      if (node.level !== 'root' && node.children?.length) {
+        const group = [node].concat(node.children.filter((c) => !c.uxDeferred));
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        group.forEach((g) => {
+          minX = Math.min(minX, g.x);
+          maxX = Math.max(maxX, g.x);
+          minY = Math.min(minY, g.y);
+          maxY = Math.max(maxY, g.y);
+        });
+        const bw = Math.max(maxX - minX, 80);
+        const bh = Math.max(maxY - minY, 80);
+        const fit = Math.min((width * 0.5) / bw, (height * 0.62) / bh);
+        s = Math.min(s * 1.6, Math.max(s * 0.65, fit));
+      }
+      s = Math.min(40, Math.max(0.2, s));
+      const lead = 0.08;
+      const cx = node.x * (1 - lead);
+      const cy = node.y * (1 - lead);
       const next = {
-        x: width / 2 - node.x * s,
-        y: height / 2 - node.y * s,
+        x: width / 2 - cx * s,
+        y: height / 2 - cy * s,
         scale: s,
       };
       if (animate) targetTransform = next;
@@ -1738,6 +1901,7 @@
       updateHUD(node);
       enrichFocusedMachine(node);
     }
+
 
     const stars = Array.from({ length: 500 }, () => ({
       x: Math.random(),
@@ -1758,19 +1922,69 @@
       signals = signals.filter((s) => s.progress < 1);
     }
 
+    function isOverviewFocus() {
+      const lv = window.currentNode?.level;
+      return !lv || lv === 'root' || lv === 'region';
+    }
+
+    function nodeVisibleInView(n) {
+      if (!n) return false;
+      if (n.uxDeferred && n.level !== 'area' && n.level !== 'machine') return false;
+      const plan = focusPlan;
+      if (plan?.hideFacetsUntilMachine) {
+        if (['facet', 'revenueDetail', 'salesDetail'].includes(n.level)) {
+          const focus = window.currentNode;
+          if (!focus || (focus.level !== 'machine' && focus.level !== 'facet' && focus.level !== 'revenueDetail' && focus.level !== 'salesDetail')) {
+            return false;
+          }
+          // Only show facets under the focused machine lineage
+          let p = n;
+          let under = false;
+          while (p) {
+            if (p === focus || (focus.machineId && p.machineId === focus.machineId)) {
+              under = true;
+              break;
+            }
+            p = p.parent;
+          }
+          if (!under) return false;
+        }
+      }
+      return true;
+    }
+
     function render() {
       currentTransform.x += (targetTransform.x - currentTransform.x) * 0.1;
       currentTransform.y += (targetTransform.y - currentTransform.y) * 0.1;
       currentTransform.scale += (targetTransform.scale - currentTransform.scale) * 0.1;
+
+      const spin =
+        focusPlan?.galaxySpin != null
+          ? focusPlan.galaxySpin
+          : isOverviewFocus()
+            ? GALAXY_SPIN_OVERVIEW
+            : GALAXY_SPIN_DRILL;
+      if (!isDragging) {
+        galaxyAngle += spin;
+        applyGalaxyPositions();
+        // Keep camera locked on focused node as galaxy turns
+        const n = window.currentNode;
+        if (n && ['root', 'region', 'brand'].includes(n.level)) {
+          const s = currentTransform.scale;
+          targetTransform.x = width / 2 - n.x * s;
+          targetTransform.y = height / 2 - n.y * s;
+        }
+      }
 
       ctx.fillStyle = '#010408';
       ctx.fillRect(0, 0, width, height);
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       stars.forEach((s) => {
+        const drift = galaxyAngle * 0.02;
         ctx.fillStyle = `rgba(255,255,255,${s.a})`;
         ctx.beginPath();
-        ctx.arc(s.x * width, s.y * height, s.r, 0, Math.PI * 2);
+        ctx.arc(((s.x + drift) % 1) * width, s.y * height, s.r, 0, Math.PI * 2);
         ctx.fill();
       });
       ctx.restore();
@@ -1779,17 +1993,23 @@
       ctx.translate(currentTransform.x, currentTransform.y);
       ctx.scale(currentTransform.scale, currentTransform.scale);
 
-      ctx.lineWidth = 1.4 / currentTransform.scale;
+      drawGalaxyBackdrop(galaxyAngle);
+
+      ctx.lineWidth = 1.35 / currentTransform.scale;
       flatEdges.forEach((e) => {
+        if (!nodeVisibleInView(e.target) && !nodeVisibleInView(e.source)) return;
+        if (!nodeVisibleInView(e.target)) return;
         ctx.beginPath();
         ctx.moveTo(e.source.x, e.source.y);
         ctx.quadraticCurveTo(e.cx, e.cy, e.target.x, e.target.y);
-        ctx.strokeStyle = `${e.target.color}55`;
+        const dim = e.target.uxDeferred ? '22' : '55';
+        ctx.strokeStyle = `${e.target.color}${dim}`;
         ctx.stroke();
       });
 
       signals.forEach((s) => {
         const e = s.edge;
+        if (!nodeVisibleInView(e.target)) return;
         const t = s.progress;
         const bx =
           Math.pow(1 - t, 2) * e.source.x +
@@ -1808,30 +2028,46 @@
         ctx.shadowBlur = 0;
       });
 
+      const sc = currentTransform.scale;
+      const overview = isOverviewFocus();
       flatNodes.forEach((n) => {
-        const base = n === window.currentNode ? 11 : 7;
-        const r = base / currentTransform.scale;
+        if (!nodeVisibleInView(n)) return;
+        const hot = n.uxHot || attentionScore(n) > 0;
+        const base = n === window.currentNode ? 12 : hot ? 8.5 : 6.5;
+        const r = base / sc;
+        const alpha = n.uxDeferred ? 0.28 : 1;
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
         ctx.fillStyle = n.color;
         ctx.shadowColor = n.color;
-        ctx.shadowBlur = (n === window.currentNode ? 22 : 8) / currentTransform.scale;
+        ctx.shadowBlur = (n === window.currentNode ? 26 : hot ? 14 : 7) / sc;
         ctx.fill();
         ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
 
-        const sc = currentTransform.scale;
-        const show =
-          ['root', 'region', 'brand'].includes(n.level) ||
-          (n.level === 'area' && sc > 0.85) ||
-          (n.level === 'machine' && sc > 1.6) ||
-          (n.level === 'facet' && sc > 2.8) ||
-          (sc > 4 && (n.level === 'revenueDetail' || n.level === 'salesDetail'));
-        if (show) {
-          const maxChars =
-            n.level === 'machine' ? 18 : n.level === 'area' ? 22 : 28;
+        // Overview: only Region/Brand labels. Drill-in reveals areas/machines by zoom + plan.
+        let showLabel = false;
+        if (overview) {
+          showLabel = ['root', 'region', 'brand'].includes(n.level);
+        } else if (n.uxDeferred) {
+          showLabel = false;
+        } else if (n.level === 'brand' || n.level === 'region' || n.level === 'root') {
+          showLabel = true;
+        } else if (n.level === 'area') {
+          showLabel = sc > 0.8 || n === window.currentNode || n.parent === window.currentNode;
+        } else if (n.level === 'machine') {
+          showLabel = sc > 1.45 || n === window.currentNode;
+        } else if (n.level === 'facet') {
+          showLabel = sc > 2.6;
+        } else {
+          showLabel = sc > 4;
+        }
+        if (showLabel) {
+          const maxChars = n.level === 'machine' ? 16 : n.level === 'area' ? 20 : 26;
           const label =
             n.label.length > maxChars ? `${n.label.slice(0, maxChars - 1)}…` : n.label;
-          ctx.fillStyle = '#e2eeff';
+          ctx.fillStyle = hot ? '#ffe6a8' : '#e2eeff';
           ctx.font = `${Math.max(9, 11 / sc)}px monospace`;
           ctx.textBaseline = 'middle';
           ctx.fillText(label, n.x + r + 4 / sc, n.y);
@@ -1863,6 +2099,7 @@
       let closest = null;
       let min = 16 / currentTransform.scale;
       for (const n of flatNodes) {
+        if (!nodeVisibleInView(n) || n.uxDeferred) continue;
         const d = Math.hypot(n.x - mx, n.y - my);
         if (d < min) {
           min = d;
@@ -2037,6 +2274,21 @@
       setInterval(loadLive, POLL_MS);
       setInterval(updatePollAge, 1000);
     }
+
+    /** Test/debug hook for Playwright + console QA (no secrets). */
+    window.__leetConstellationDebug = function () {
+      return {
+        build: BUILD_STAMP,
+        nodes: flatNodes.length,
+        edges: flatEdges.length,
+        level: window.currentNode?.level || null,
+        label: window.currentNode?.label || null,
+        plan: focusPlan || window.__leetConstellationFocusPlan || null,
+        galaxyAngle,
+        usingMock,
+        hasRoot: !!taxonomyRoot,
+      };
+    };
 
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", boot);

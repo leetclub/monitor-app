@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="20261014-layout-tidy">
+<html lang="en" data-build="20261014-galaxy-verified">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -135,6 +135,17 @@
     .vital.warn { border-color: var(--amber); box-shadow: 0 0 10px rgba(255,184,0,0.2); }
     .vital.warn .v { color: var(--amber); }
     .vital.focus-ring { outline: 1px solid var(--cyan); outline-offset: 1px; }
+    .attn-queue { margin: 0 0 8px; border: 1px solid rgba(255,77,109,0.35); background: rgba(255,77,109,0.05); }
+    .attn-queue.clear { border-color: rgba(5,255,161,0.35); background: rgba(5,255,161,0.05); }
+    .attn-queue .qh { font-size: 10px; color: #ff8fa3; padding: 4px 8px; letter-spacing: 0.4px; }
+    .attn-queue.clear .qh { color: var(--teal); }
+    .attn-row {
+      display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; font-size: 10px;
+      border-top: 1px solid rgba(255,255,255,0.06); cursor: pointer; color: #cfe0f5;
+    }
+    .attn-row:hover { background: rgba(0,240,255,0.1); }
+    .attn-row .why { color: #8ea3bf; text-align: right; }
+    .panel-compact .vitals { opacity: 0.85; }
     .decision-cue {
       font-size: 10px; color: var(--cyan); margin: 0 0 8px; letter-spacing: 0.4px;
     }
@@ -289,7 +300,7 @@
         <div class="frame-tag">Taxonomy lab — future end-user product elsewhere · not fleet-ops mesh</div>
         <div class="breadcrumb hud-layer" id="breadcrumb">Loading live fleet…</div>
       </div>
-      <div class="status-box hud-layer" data-build="20261014-layout-tidy">
+      <div class="status-box hud-layer" data-build="20261014-galaxy-verified">
         <div>SESSION: <span id="session-email">…</span></div>
         <div>DATA: <span id="data-src">connecting</span></div>
         <div>POLL: <span id="poll-age">—</span></div>
@@ -302,7 +313,7 @@
           <div class="ops-bar"><i id="ops-focus-bar"></i></div>
         </div>
         <div class="build-stamp" id="build-stamp" title="Cache-bust: append ?v=timestamp if this looks stale">
-          BUILD: <span id="build-stamp-id">20261014-layout-tidy</span>
+          BUILD: <span id="build-stamp-id">20261014-galaxy-verified</span>
           <span class="hint">LIVE via alert.theleetclub.com → people-api → Vendon/Workflow</span>
         </div>
         <div class="live-via">Same-origin /api proxies only · credentials: include</div>
@@ -343,6 +354,6 @@
     </div>
   </div>
 
-  <script src="./constellation-taxonomy-hud.js?v=20261014-layout-tidy" defer></script>
+  <script src="./constellation-taxonomy-hud.js?v=20261014-galaxy-verified" defer></script>
 </body>
 </html>
