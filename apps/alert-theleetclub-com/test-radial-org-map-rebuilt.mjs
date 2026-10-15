@@ -9,7 +9,7 @@ import { chromium, firefox } from 'playwright';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const BASE_URL = 'http://localhost:8767/radial-org-map.html';
+const BASE_URL = 'http://localhost:8768/radial-org-map.html';
 const ARTIFACTS_DIR = join(process.env.HOME || process.env.USERPROFILE, '.cursor', 'projects', 'mnt-c-Users-mahdi-OneDrive-theleetclub-monitoring-app', 'artifacts');
 
 if (!existsSync(ARTIFACTS_DIR)) {
