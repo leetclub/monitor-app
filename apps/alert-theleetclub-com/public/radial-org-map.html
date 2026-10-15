@@ -37,93 +37,48 @@
       <button class="nav-chevron" data-dir="next" title="Next department">›</button>
     </nav>
 
-    <aside class="detail-panel" id="detail-panel">
-      <button class="panel-close" aria-label="Close">&times;</button>
-      <div class="panel-content">
-        <span class="job-category-tag" id="job-category">FULLY AUTONOMOUS</span>
-        <h2 class="job-title-panel" id="job-title-panel">Loading...</h2>
-        <p class="job-subtitle-panel" id="job-subtitle-panel">—</p>
-
-        <div class="skill-file-box">
-          <span class="skill-file-label">1 runnable skill file</span>
-          <div class="skill-file-action" id="take-skill">
-            <span>Take it</span>
-            <span>→</span>
-          </div>
-        </div>
-
-        <section class="panel-section">
-          <h3 class="panel-section-title">BREAKS INTO</h3>
-          <div class="pill-tags" id="breaks-into">
-            <span class="pill-tag">sequence-writer</span>
-            <span class="pill-tag">subject-line-generator</span>
-          </div>
-        </section>
-
-        <section class="panel-section">
-          <h3 class="panel-section-title">BUILDS ON</h3>
-          <div class="pill-tags" id="builds-on">
-            <span class="pill-tag">ICP Definition</span>
-            <span class="pill-tag">Personalization Research</span>
-          </div>
-        </section>
-
-        <section class="panel-section">
-          <h3 class="panel-section-title">WHAT IT REPLACES</h3>
-          <div class="replaces-box">
-            <p class="replaces-text" id="replaces-text-panel">—</p>
-          </div>
-        </section>
-
-        <section class="panel-section">
-          <h3 class="panel-section-title">THE LADDER</h3>
-          <div class="ladder-list">
-            <div class="ladder-item" data-level="human-led">
-              <div class="ladder-label">Human-Led</div>
-              <div class="ladder-desc" id="ladder-human-led">One template, first-name token, pray.</div>
-            </div>
-            <div class="ladder-item" data-level="human-assisted">
-              <div class="ladder-label">Human-Assisted</div>
-              <div class="ladder-desc" id="ladder-human-assisted">The agent writes the full sequence per segment from your offer doc and dossiers; a human approves before launch.</div>
-            </div>
-            <div class="ladder-item" data-level="fully-autonomous">
-              <div class="ladder-label">Fully Autonomous</div>
-              <div class="ladder-desc" id="ladder-fully-autonomous">Sequences generate per segment. A/B variants included, with reply data feeding the next round's angles.</div>
-            </div>
-          </div>
-        </section>
-
-        <button class="cta-button" id="run-skill-cta">Run Skill</button>
-
-        <section class="workflow-section">
-          <h3 class="panel-section-title">NEW TASK</h3>
-          <form class="workflow-form" id="workflow-form">
-            <textarea 
-              class="task-input" 
-              id="task-description" 
-              placeholder="Describe the task..."
-              rows="3"
-            ></textarea>
-            <div class="form-row">
-              <label>
-                Recipient:
-                <input type="text" class="form-input" id="task-recipient" placeholder="e.g., Dispatch Agent">
-              </label>
-              <label>
-                Priority:
-                <select class="form-select" id="task-priority">
-                  <option value="low">Low</option>
-                  <option value="medium" selected>Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-              </label>
-            </div>
-            <button type="submit" class="submit-btn">Create Task</button>
-          </form>
-        </section>
+    <div class="data-card" id="data-card">
+      <button class="card-close" id="card-close" aria-label="Close">&times;</button>
+      <h3 class="card-title" id="card-title">Node</h3>
+      <div class="card-metrics" id="card-metrics">
+        <div class="metric-row"><span class="metric-key">status:</span> <span class="metric-value">green</span></div>
       </div>
-    </aside>
+      <div class="card-footer">
+        <div class="card-children-info">
+          <span class="metric-key">children:</span> <span id="card-children">0</span>
+        </div>
+        <a href="#" id="new-task-link" class="new-task-link">New task →</a>
+      </div>
+    </div>
+
+    <div class="task-popover" id="task-popover">
+      <button class="popover-close" id="task-popover-close" aria-label="Close">&times;</button>
+      <h4 class="popover-title">New Task</h4>
+      <form class="task-form" id="task-form">
+        <textarea 
+          class="task-input" 
+          id="task-desc" 
+          placeholder="Describe the task..."
+          rows="3"
+        ></textarea>
+        <div class="form-row">
+          <label>
+            Recipient:
+            <input type="text" class="form-input" id="task-recipient" placeholder="e.g., Dispatch Agent">
+          </label>
+          <label>
+            Priority:
+            <select class="form-select" id="task-priority">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit" class="submit-btn">Create</button>
+      </form>
+    </div>
   </div>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
