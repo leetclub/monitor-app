@@ -114,40 +114,12 @@
   }
 
   function paintHexOverlay() {
+    // Engine draws world-locked hex grid; DOM overlay unused
     const canvas = document.getElementById('hex-layer');
-    const stage = document.querySelector('.space-stage');
-    if (!canvas || !stage) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = stage.clientWidth;
-    const h = stage.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    if (layoutMode !== 'hex') return;
-    const R = 74;
-    const dx = R * 1.5;
-    const dy = R * Math.sqrt(3);
-    ctx.strokeStyle = 'rgba(0, 242, 254, 0.14)';
-    ctx.lineWidth = 1;
-    for (let row = -2; row < h / dy + 3; row++) {
-      for (let col = -2; col < w / dx + 3; col++) {
-        const cx = col * dx + (row % 2 ? R * 0.75 : 0) + w * 0.5;
-        const cy = row * dy * 0.5 + h * 0.5;
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const a = (Math.PI / 3) * i + Math.PI / 6;
-          const x = cx + Math.cos(a) * R;
-          const y = cy + Math.sin(a) * R;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-      }
+    if (canvas) {
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.classList.remove('is-on');
     }
   }
 

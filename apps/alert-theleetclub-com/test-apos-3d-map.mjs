@@ -113,40 +113,99 @@ async function runBrowser(browserType, name) {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '));
   });
 
+
+  await test('overview closes inspector drawer', async () => {
+    await page.evaluate(() => window.APOS_3D_MAP.reset());
+    await waitIdle(page);
+    await delay(200);
+    const open = await page.evaluate(() => document.getElementById('inspector-drawer')?.classList.contains('is-open'));
+    if (open) throw new Error('drawer open at overview');
+  });
+
+  await test('visible labels at hub / site / machine', async () => {
+    const check = async (id, minLabels) => {
+      await page.evaluate((nid) => window.APOS_3D_MAP.flyTo(nid), id);
+      await waitIdle(page);
+      await delay(300);
+      const labels = await page.evaluate(() => {
+        const list = window.APOS_3D_MAP.visibleLabels();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        return list.map((l) => ({
+          ...l,
+          inView: l.x >= 0 && l.y >= 0 && l.x + (l.w || 0) <= vw && l.y + (l.h || 0) <= vh
+            && l.w > 4 && l.h > 4,
+        }));
+      });
+      const visible = labels.filter((l) => l.inView);
+      if (visible.length < minLabels) {
+        throw new Error(`${id}: visible labels ${visible.length} < ${minLabels} (${labels.map((l) => l.text).join(',')})`);
+      }
+      // Non-overlapping in viewport (AABB)
+      for (let i = 0; i < visible.length; i++) {
+        for (let j = i + 1; j < visible.length; j++) {
+          const a = visible[i], b = visible[j];
+          const aw = a.w || 40, ah = a.h || 12, bw = b.w || 40, bh = b.h || 12;
+          const overlapX = a.x < b.x + bw && a.x + aw > b.x;
+          const overlapY = a.y < b.y + bh && a.y + ah > b.y;
+          if (overlapX && overlapY) throw new Error(`overlap ${a.text} / ${b.text}`);
+        }
+      }
+      return visible;
+    };
+    await check('country-kw', 3); // KW + brands
+    await check('loc-ee-farwaniya', 2); // site + machine children
+    const mLabels = await check('m-ee-4', 6); // machine + 5 branch children
+    const texts = mLabels.map((l) => l.text.toLowerCase());
+    const need = ['revenue', 'operators', 'stock', 'contract', 'technical'];
+    for (const n of need) {
+      if (!texts.some((t) => t.includes(n))) throw new Error(`missing branch label ${n}: ${texts.join(',')}`);
+    }
+  });
+
   // Stills (chromium)
   if (name === 'chromium') {
     console.log('\nScreenshots — CHROMIUM\n');
     await page.evaluate(() => window.APOS_3D_MAP.reset());
     await waitIdle(page);
-    await delay(300);
+    await delay(500);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-level-full.png') });
     console.log('   📸 3d-level-full.png');
 
     await page.evaluate(() => window.APOS_3D_MAP.flyTo('country-kw'));
     await waitIdle(page);
+    await delay(350);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-level-hub.png') });
     console.log('   📸 3d-level-hub.png');
 
     await page.evaluate(() => window.APOS_3D_MAP.flyTo('loc-ee-farwaniya'));
     await waitIdle(page);
+    await delay(350);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-level-site.png') });
     console.log('   📸 3d-level-site.png');
 
     await page.evaluate(() => window.APOS_3D_MAP.flyTo('m-ee-4'));
     await waitIdle(page);
+    await delay(400);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-level-machine.png') });
     console.log('   📸 3d-level-machine.png');
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-focus.png') });
     console.log('   📸 3d-focus.png');
 
     await page.evaluate(() => window.APOS_3D_MAP.setHudMode(true));
-    await delay(300);
+    await delay(400);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-hud.png') });
     console.log('   📸 3d-hud.png');
     await page.evaluate(() => window.APOS_3D_MAP.setHudMode(false));
 
     await page.evaluate(() => window.APOS_3D_MAP.reset());
     await waitIdle(page);
+    await delay(600);
+    // Ensure drawer closed for overview still
+    await page.evaluate(() => {
+      document.getElementById('inspector-drawer')?.classList.remove('is-open');
+    });
+    await delay(100);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-overview.png') });
     console.log('   📸 3d-overview.png');
   }

@@ -1144,12 +1144,17 @@
       sub.className = 'hub-sub';
       // Overview: planned countries → titles outside; active with brands → title
       // sits inward of the hub (toward core) so it never fights brand labels.
+      // Hex: titles sit on the cell (equal planned AE/SA cells stay in the cluster).
       // Focus: under orb along inward radial.
       let wx, wy;
       const inward = h.outAngle + Math.PI;
       const brands = (childrenOf.get(h.id) || []).filter((c) => c.type === 'client' && c.draw && c.label);
-      const titleInward = overviewMode && brands.length > 0 && h.status !== 'future';
-      if (focused) {
+      const titleInward = overviewMode && layoutMode !== 'hex' && brands.length > 0 && h.status !== 'future';
+      if (layoutMode === 'hex' && overviewMode) {
+        // Label under the occupied cell centre
+        wx = h.x;
+        wy = h.y + 42;
+      } else if (focused) {
         wx = h.x + Math.cos(inward) * 34;
         wy = h.y + Math.sin(inward) * 34;
       } else if (titleInward) {
@@ -1166,7 +1171,22 @@
       el.style.top = '0';
       const ax = Math.cos(h.outAngle);
       const ay = Math.sin(h.outAngle);
-      if (!focused) {
+      if (layoutMode === 'hex' && overviewMode) {
+        let tx = Math.max(56, Math.min(stage.clientWidth - 56, s.x));
+        let ty = Math.max(40, Math.min(stage.clientHeight - 40, s.y));
+        title.style.left = `${tx}px`;
+        title.style.top = `${ty}px`;
+        title.style.transform = 'translate(-50%, -50%)';
+        sub.style.left = `${tx}px`;
+        sub.style.top = `${ty + 18}px`;
+        sub.style.transform = 'translate(-50%, 0)';
+        // Planned AE/SA: dim equal cells — keep subtitle "planned"
+        if (h.status === 'future' || h.planned) {
+          sub.textContent = 'planned';
+          title.style.opacity = '0.72';
+          sub.style.opacity = '0.55';
+        }
+      } else if (!focused) {
         let tx;
         let ty;
         if (titleInward) {
@@ -1274,6 +1294,14 @@
 
       // ——— Full view: areas only + readable labels ———
       if (overviewMode) {
+        // Hex honeycomb: country + brand cells only (no area/site clutter / stray curves)
+        if (layoutMode === 'hex') {
+          const hexSeat = n.type === 'client' && expandedPath.has(n.id);
+          n.draw = hexSeat;
+          n.lodAlpha = hexSeat ? (n.status === 'future' || n.comingSoon ? 0.45 : 1) : 0;
+          n.labelOn = hexSeat && !!n.label;
+          return;
+        }
         const overviewLeaf = (n.type === 'area' || n.type === 'client') && expandedPath.has(n.id);
         if (overviewLeaf) {
           n.draw = true;
@@ -1777,31 +1805,33 @@
       if (!badge.empty()) badge.style('display', 'none');
     });
 
-    // Canvas owns link rendering — keep SVG paths for hit-testing only
+    // Canvas owns link rendering — SVG paths are hit-test only (never paint in hex:
+    // nearby brand/area Béziers looked like stray squiggles inside cells).
     gLinks.selectAll('path.link').style('opacity', 0).style('display', 'none');
-    gLinks.selectAll('path.link').each(function (d) {
-      const s = nodeById.get(d.source);
-      const t = nodeById.get(d.target);
-      let show = !!(s?.draw && t?.draw) && !s?.ancestorOnly && !t?.ancestorOnly;
-      if (d.kind === 'spine' && !overviewMode) show = false;
-      if (!overviewMode && (s?.type === 'enterprise' || t?.type === 'enterprise')) show = false;
-      const onPath = focusPath.has(d.source) && focusPath.has(d.target);
-      const el = d3.select(this);
-      // Constant screen opacity ~50% for tree lines (CSS stroke is near-white; do not multiply by 0.35)
-      let op = 0;
-      if (show) {
-        if (onPath) op = 0.92;
-        else if (d.kind === 'spine') op = 0.5;
-        else if (s?.preview || t?.preview) op = 0.34;
-        else op = 0.55;
-      }
-      el.style('display', show ? null : 'none')
-        .classed('on-path', onPath)
-        .classed('dim', !!(s?.preview || t?.preview) || (!overviewMode && !onPath && show))
-        .style('opacity', op);
-      if (onPath && accent) el.style('stroke', accent.stroke);
-      else el.style('stroke', null);
-    });
+    if (layoutMode !== 'hex') {
+      gLinks.selectAll('path.link').each(function (d) {
+        const s = nodeById.get(d.source);
+        const t = nodeById.get(d.target);
+        let show = !!(s?.draw && t?.draw) && !s?.ancestorOnly && !t?.ancestorOnly;
+        if (d.kind === 'spine' && !overviewMode) show = false;
+        if (!overviewMode && (s?.type === 'enterprise' || t?.type === 'enterprise')) show = false;
+        const onPath = focusPath.has(d.source) && focusPath.has(d.target);
+        const el = d3.select(this);
+        let op = 0;
+        if (show) {
+          if (onPath) op = 0.92;
+          else if (d.kind === 'spine') op = 0.5;
+          else if (s?.preview || t?.preview) op = 0.34;
+          else op = 0.55;
+        }
+        el.style('display', show ? null : 'none')
+          .classed('on-path', onPath)
+          .classed('dim', !!(s?.preview || t?.preview) || (!overviewMode && !onPath && show))
+          .style('opacity', op);
+        if (onPath && accent) el.style('stroke', accent.stroke);
+        else el.style('stroke', null);
+      });
+    }
 
     gArts.selectAll('circle.art-dot').each(function (d) {
       d3.select(this)
@@ -3102,26 +3132,58 @@
       }
     }
 
-    // ——— Hex cell outlines (hex layout mode) ———
-    if (layoutMode === 'hex' && overviewMode) {
+    // ——— Hex: world-locked grid + cell outlines ———
+    if (layoutMode === 'hex') {
+      const Rhex = Number(stage.dataset.hexR) || Math.max(200, R_HUB * 0.38);
       const k = transform.k || 1;
-      const Rpx = 74; // spec screen radius
-      hubs.filter((h) => !h.pad && h.draw !== false).forEach((h) => {
-        const p = screenOf(h);
+      // World-locked hex grid (centers on axial lattice around origin)
+      const maxRing = 4;
+      pctx.save();
+      pctx.strokeStyle = 'rgba(0, 242, 254, 0.10)';
+      pctx.lineWidth = 1;
+      for (let q = -maxRing; q <= maxRing; q++) {
+        for (let r = -maxRing; r <= maxRing; r++) {
+          if (Math.abs(q + r) > maxRing) continue;
+          const wx = Rhex * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
+          const wy = Rhex * ((3 / 2) * r);
+          const sx = wx * k + transform.x;
+          const sy = wy * k + transform.y;
+          const rad = Rhex * k * 0.95;
+          pctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = (Math.PI / 3) * i + Math.PI / 6;
+            const x = sx + Math.cos(a) * rad;
+            const y = sy + Math.sin(a) * rad;
+            if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
+          }
+          pctx.closePath();
+          pctx.stroke();
+        }
+      }
+      // Emphasize occupied country + brand cells (AE/SA = equal dim planned cells)
+      const seatIds = new Set(hubs.filter((h) => !h.pad).map((h) => h.id));
+      nodes.forEach((n) => {
+        const isCountry = seatIds.has(n.id);
+        const isBrand = n.type === 'client' && n.draw;
+        if (!isCountry && !isBrand) return;
+        const p = screenOf(n);
+        const rad = Rhex * k * 0.95;
+        const dim = n.status === 'future' || n.comingSoon || n.planned;
         pctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (Math.PI / 3) * i + Math.PI / 6;
-          const x = p.x + Math.cos(a) * Rpx;
-          const y = p.y + Math.sin(a) * Rpx;
+          const x = p.x + Math.cos(a) * rad;
+          const y = p.y + Math.sin(a) * rad;
           if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
         }
         pctx.closePath();
-        pctx.strokeStyle = 'rgba(0, 242, 254, 0.2)';
-        pctx.lineWidth = 1;
+        pctx.strokeStyle = dim ? 'rgba(125, 147, 178, 0.42)' : 'rgba(0, 242, 254, 0.32)';
+        pctx.lineWidth = dim ? 1.15 : 1.4;
         pctx.stroke();
-        pctx.fillStyle = 'rgba(0, 242, 254, 0.03)';
+        pctx.fillStyle = dim ? 'rgba(125, 147, 178, 0.06)' : 'rgba(0, 242, 254, 0.055)';
         pctx.fill();
       });
+      pctx.restore();
     }
 
     // ——— Nodes ———
@@ -3603,56 +3665,84 @@
   }
 
   function computeHexTargets() {
-    const R = Math.max(260, R_HUB * 0.52);
+    // Honeycomb cluster: country cells around core; KW brand cells adjacent
+    const R = Math.max(200, R_HUB * 0.38);
     const targets = new Map();
     const core = nodeById.get(DATA.enterprise.id);
     if (core) targets.set(core.id, { x: 0, y: 0 });
 
-    // Ring-1 axial seats (never center). Extra rings if >6 hubs.
-    const ring1 = [
-      { q: 1, r: 0 }, { q: 0, r: -1 }, { q: -1, r: 1 },
-      { q: -1, r: 0 }, { q: 0, r: 1 }, { q: 1, r: -1 },
-    ];
-    const seats = hubs.filter((h) => !h.pad);
-    seats.forEach((n, i) => {
-      let q, r;
-      if (i < ring1.length) {
-        q = ring1[i].q; r = ring1[i].r;
-      } else {
-        const ring = 2 + Math.floor((i - 6) / 12);
-        const idx = (i - 6) % (ring * 6);
-        const side = Math.floor(idx / ring);
-        const pos = idx % ring;
-        const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
-        q = dirs[side][0] * ring;
-        r = dirs[side][1] * ring;
-        const step = dirs[(side + 2) % 6];
-        q += step[0] * pos;
-        r += step[1] * pos;
-      }
-      const x = R * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
-      const y = R * ((3 / 2) * r);
-      targets.set(n.id, { x, y });
+    const axialToXY = (q, r) => ({
+      x: R * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r),
+      y: R * ((3 / 2) * r),
+    });
 
-      const kids = (childrenOf.get(n.id) || []).filter(
+    const prefer = ['country-kw', 'country-ae', 'country-sa'];
+    const seatHubs = [];
+    prefer.forEach((id) => {
+      const h = hubs.find((x) => x.id === id && !x.pad);
+      if (h) seatHubs.push(h);
+    });
+    hubs.forEach((h) => {
+      if (!h.pad && !seatHubs.includes(h)) seatHubs.push(h);
+    });
+
+    const countryAxial = [
+      { q: 1, r: -1 },
+      { q: -1, r: 0 },
+      { q: 0, r: 1 },
+      { q: 1, r: 0 },
+      { q: 0, r: -1 },
+      { q: -1, r: 1 },
+    ];
+
+    seatHubs.forEach((h, i) => {
+      const ax = countryAxial[i] || { q: 2, r: -2 };
+      const p = axialToXY(ax.q, ax.r);
+      targets.set(h.id, { x: p.x, y: p.y });
+      h._hexQ = ax.q;
+      h._hexR = ax.r;
+    });
+
+    const kw = seatHubs.find((h) => h.id === 'country-kw');
+    if (kw) {
+      const kwA = countryAxial[0];
+      const nbr = [
+        { q: kwA.q + 1, r: kwA.r },
+        { q: kwA.q, r: kwA.r - 1 },
+        { q: kwA.q + 1, r: kwA.r - 1 },
+      ];
+      const kids = (childrenOf.get(kw.id) || []).filter(
         (c) => !c.pad && (c.type === 'client' || c.type === 'area')
       );
       kids.forEach((c, ci) => {
-        const ang = -Math.PI / 2 + ((ci + 0.5) / Math.max(kids.length, 1)) * Math.PI * 2;
-        const rad = R * 0.42;
-        const cx = x + Math.cos(ang) * rad;
-        const cy = y + Math.sin(ang) * rad;
-        targets.set(c.id, { x: cx, y: cy });
-        // Micro-dots: up to 6 grandchildren packed near brand
+        const ax = nbr[ci] || { q: kwA.q + 2, r: kwA.r - ci };
+        const p = axialToXY(ax.q, ax.r);
+        targets.set(c.id, { x: p.x, y: p.y });
         const gkids = (childrenOf.get(c.id) || []).filter((g) => !g.pad && g.type !== 'branch');
-        gkids.slice(0, 6).forEach((g, gi) => {
-          const ga = ang + ((gi + 0.5) / Math.max(Math.min(gkids.length, 6), 1) - 0.5) * 1.1;
+        gkids.slice(0, 5).forEach((g, gi) => {
+          const a = -Math.PI / 2 + ((gi + 0.5) / 5) * Math.PI * 2;
           targets.set(g.id, {
-            x: cx + Math.cos(ga) * R * 0.14,
-            y: cy + Math.sin(ga) * R * 0.14,
+            x: p.x + Math.cos(a) * R * 0.2,
+            y: p.y + Math.sin(a) * R * 0.2,
           });
         });
       });
+    }
+
+    seatHubs.forEach((h) => {
+      if (h.id === 'country-kw') return;
+      const hp = targets.get(h.id);
+      if (!hp) return;
+      (childrenOf.get(h.id) || [])
+        .filter((c) => !c.pad && (c.type === 'client' || c.type === 'area'))
+        .forEach((c, ci, arr) => {
+          if (targets.has(c.id)) return;
+          const a = -Math.PI / 2 + ((ci + 0.5) / Math.max(arr.length, 1)) * Math.PI * 2;
+          targets.set(c.id, {
+            x: hp.x + Math.cos(a) * R * 0.25,
+            y: hp.y + Math.sin(a) * R * 0.25,
+          });
+        });
     });
 
     nodes.forEach((n) => {
@@ -3661,11 +3751,13 @@
       const p = n.parentId ? targets.get(n.parentId) : null;
       if (p) {
         const a = (hash(n.id) % 360) * (Math.PI / 180);
-        targets.set(n.id, { x: p.x + Math.cos(a) * R * 0.06, y: p.y + Math.sin(a) * R * 0.06 });
+        targets.set(n.id, { x: p.x + Math.cos(a) * R * 0.08, y: p.y + Math.sin(a) * R * 0.08 });
       } else {
-        targets.set(n.id, { x: (n.radialX ?? n.x) * 0.15, y: (n.radialY ?? n.y) * 0.15 });
+        targets.set(n.id, { x: 0, y: 0 });
       }
     });
+
+    stage.dataset.hexR = String(R);
     return targets;
   }
 

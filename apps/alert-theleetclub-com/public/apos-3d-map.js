@@ -48,7 +48,7 @@ function buildGraph() {
     const country = add({
       id: c.id, type: 'country', label: c.code || c.label,
       subtitle: c.status === 'future' ? 'planned' : 'live', status: c.status,
-      depth: 1, angle: a, orbit: 16, color: RING[c.id] || COLORS.indigo, r: 1.15, parentId: core.id,
+      depth: 1, angle: a, orbit: 16, color: RING[c.id] || COLORS.indigo, r: 0.55, parentId: core.id,
     });
     links.push({ source: core.id, target: country.id, kind: 'spine' });
 
@@ -56,7 +56,7 @@ function buildGraph() {
       const fan = ((ci + 0.5) / Math.max(arr.length, 1) - 0.5) * 0.95;
       const brand = add({
         id: cl.id, type: 'client', label: cl.label || cl.brand, depth: 2,
-        angle: a + fan, orbit: 26, color: country.color, r: 0.72,
+        angle: a + fan, orbit: 26, color: country.color, r: 0.28,
         parentId: country.id, countryId: country.id, comingSoon: !!cl.comingSoon,
       });
       links.push({ source: country.id, target: brand.id, kind: 'tree' });
@@ -65,7 +65,7 @@ function buildGraph() {
         const af = ((ai + 0.5) / Math.max(aarr.length, 1) - 0.5) * 0.55;
         const an = add({
           id: area.id, type: 'area', label: area.label, depth: 3,
-          angle: brand.angle + af, orbit: 34, color: country.color, r: 0.48,
+          angle: brand.angle + af, orbit: 34, color: country.color, r: 0.22,
           parentId: brand.id, countryId: country.id, clientId: brand.id,
         });
         links.push({ source: brand.id, target: an.id, kind: 'tree' });
@@ -74,7 +74,7 @@ function buildGraph() {
           const lf = ((li + 0.5) / Math.max(larr.length, 1) - 0.5) * 0.4;
           const ln = add({
             id: loc.id, type: 'location', label: loc.label, depth: 4,
-            angle: an.angle + lf, orbit: 40, color: COLORS.white, r: 0.36,
+            angle: an.angle + lf, orbit: 40, color: COLORS.white, r: 0.18,
             parentId: an.id, countryId: country.id, clientId: brand.id,
             alert: !!(loc.machines || []).some((m) => m.alert),
           });
@@ -85,7 +85,7 @@ function buildGraph() {
             const mn = add({
               id: m.id, type: 'machine', label: m.label, depth: 5,
               angle: ln.angle + mf, orbit: 45,
-              color: m.alert ? COLORS.magenta : COLORS.white, r: 0.28,
+              color: m.alert ? COLORS.magenta : COLORS.white, r: 0.15,
               parentId: ln.id, countryId: country.id, clientId: brand.id,
               alert: !!m.alert, revenue: m.revenue, stock: m.stock,
               technical: m.technical, operators: m.operators, contract: m.contract,
@@ -96,7 +96,7 @@ function buildGraph() {
               const ba = mn.angle + ((bi + 0.5) / BRANCHES.length - 0.5) * 0.85;
               add({
                 id: `${m.id}::${b.id}`, type: 'branch', branchId: b.id, label: b.label, depth: 6,
-                angle: ba, orbit: 49, color: COLORS.mint, r: 0.18,
+                angle: ba, orbit: 49, color: COLORS.mint, r: 0.11,
                 parentId: mn.id, countryId: country.id, clientId: brand.id, machineId: m.id,
               });
               links.push({ source: mn.id, target: `${m.id}::${b.id}`, kind: 'tree' });
@@ -164,7 +164,7 @@ function mount() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 500);
-  camera.position.set(22, 18, 38);
+  camera.position.set(28, 22, 58);
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -175,13 +175,17 @@ function mount() {
   controls.addEventListener('start', () => { idleOrbit = false; lastInteract = performance.now(); });
   controls.addEventListener('end', () => { lastInteract = performance.now(); });
 
-  scene.add(new THREE.AmbientLight(0x6688aa, 0.5));
-  const key = new THREE.PointLight(0x00f2fe, 1.2, 160);
+  scene.add(new THREE.AmbientLight(0x6688aa, 0.55));
+  const key = new THREE.PointLight(0x00f2fe, 1.35, 160);
   key.position.set(10, 20, 12);
   scene.add(key);
-  const fill = new THREE.PointLight(0x05ffa1, 0.4, 120);
+  const fill = new THREE.PointLight(0x05ffa1, 0.45, 120);
   fill.position.set(-14, -2, -10);
   scene.add(fill);
+  // Rim light so hubs read as spheres (not flat discs) when drilled
+  const rim = new THREE.DirectionalLight(0xa8d8ff, 0.55);
+  rim.position.set(-8, 14, 6);
+  scene.add(rim);
 
   {
     const N = 280;
@@ -275,19 +279,25 @@ function mount() {
     if (n.type === 'enterprise') return;
     const mat = new THREE.MeshStandardMaterial({
       color: n.color, emissive: n.color,
-      emissiveIntensity: n.type === 'country' || n.type === 'client' ? 0.45 : 0.22,
-      metalness: 0.12, roughness: 0.4, transparent: true,
-      opacity: n.status === 'future' || n.comingSoon ? 0.4 : 0.95,
+      emissiveIntensity: n.type === 'country' ? 0.55 : n.type === 'client' ? 0.42 : 0.28,
+      metalness: 0.08, roughness: 0.35, transparent: true,
+      opacity: n.status === 'future' || n.comingSoon ? 0.38 : 0.98,
     });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(n.r, 20, 20), mat);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(n.r, 24, 24), mat);
     mesh.position.copy(n.pos);
     mesh.userData.nodeId = n.id;
     scene.add(mesh);
+    // Soft volumetric halo (additive) — restrained glow, sized by level
     let halo = null;
-    if (n.depth <= 2) {
+    if (n.depth <= 3) {
+      const haloScale = n.depth <= 1 ? 2.6 : n.depth === 2 ? 2.35 : 2.1;
+      const haloOp = n.depth <= 1 ? 0.16 : n.depth === 2 ? 0.12 : 0.08;
       halo = new THREE.Mesh(
-        new THREE.SphereGeometry(n.r * 2.2, 16, 16),
-        new THREE.MeshBasicMaterial({ color: n.color, transparent: true, opacity: 0.12, depthWrite: false })
+        new THREE.SphereGeometry(n.r * haloScale, 20, 20),
+        new THREE.MeshBasicMaterial({
+          color: n.color, transparent: true, opacity: haloOp, depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        })
       );
       halo.position.copy(n.pos);
       scene.add(halo);
@@ -383,6 +393,8 @@ function mount() {
       graph.nodes.forEach((n) => {
         if (n.depth <= 2) box.expandByPoint(n.pos);
       });
+      // Pad so SA/AE halos are not clipped at the frame edge
+      box.expandByScalar(6);
     }
     return box;
   }
@@ -423,20 +435,25 @@ function mount() {
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
-    if (n.type === 'enterprise') { center.set(0, 0, 0); size.set(40, 20, 40); }
+    if (n.type === 'enterprise') {
+      center.set(0, 0.8, 0);
+      // Fit full constellation (core + KW/AE/SA + KW brands) in ~70% of view
+      size.set(58, 32, 58);
+    }
 
-    const fitFrac = 0.65;
-    const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 36 : 8);
+    const fitFrac = n.type === 'enterprise' ? 0.68 : 0.65;
+    const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 58 : 6);
     const fov = THREE.MathUtils.degToRad(camera.fov);
     let dist = (maxDim / fitFrac) / (2 * Math.tan(fov / 2));
-    dist = THREE.MathUtils.clamp(dist, n.type === 'enterprise' ? 36 : 10, 90);
+    dist = THREE.MathUtils.clamp(dist, n.type === 'enterprise' ? 72 : 9, 140);
 
     const ndcShiftX = (insets.left - insets.right) / Math.max(insets.w, 1);
     const endTarget = center.clone();
+    // Slightly higher camera so hubs read as spheres (not flat discs) and SA stays in frame
     const endCam = center.clone().add(new THREE.Vector3(
-      dist * 0.42 + ndcShiftX * dist * 0.55,
-      dist * 0.38,
-      dist * 0.78
+      dist * 0.38 + ndcShiftX * dist * 0.55,
+      dist * (n.type === 'enterprise' ? 0.48 : 0.42),
+      dist * 0.72
     ));
 
     const startCam = camera.position.clone();
@@ -466,7 +483,12 @@ function mount() {
   function openInspectorFor(n) {
     const d = document.getElementById('inspector-drawer');
     if (!d) return;
-    if (n.type === 'enterprise') { d.classList.remove('is-open'); return; }
+    if (n.type === 'enterprise' || focusId === graph.core.id) {
+      d.classList.remove('is-open');
+      document.body.classList.remove('inspector-open');
+      resize();
+      return;
+    }
     document.getElementById('insp-kicker').textContent = n.type;
     document.getElementById('insp-title').textContent = n.label;
     const grid = document.getElementById('insp-grid');
@@ -513,78 +535,163 @@ function mount() {
     const focus = graph.byId.get(focusId);
     meshes.forEach(({ mesh, halo, node }) => {
       if (node.type === 'enterprise') return;
-      const onPath = path.has(node.id) || expanded.has(node.id);
+      const isFocus = node.id === focusId;
       const isChild = node.parentId === focusId;
-      let show = node.depth <= 2 || onPath || isChild;
-      if (node.type === 'branch') show = focus?.type === 'machine' && node.parentId === focusId;
-      else if (focus?.type === 'machine') show = onPath || isChild || node.depth <= 1;
-      else if (focus?.type === 'location') show = onPath || isChild || node.depth <= 2;
-      else if (node.depth >= 5 && !onPath && !isChild) show = false;
+      let show;
+      if (focusId === graph.core.id) {
+        // Overview: countries + brands only
+        show = node.depth <= 2;
+      } else if (node.type === 'branch') {
+        show = focus?.type === 'machine' && isChild;
+      } else {
+        // Drill: focus + direct children only (ancestors stay off — parent uses stub)
+        show = isFocus || isChild;
+      }
       mesh.visible = show;
-      if (halo) halo.visible = show && node.depth <= 2;
-      if (show && focusId !== graph.core.id && !onPath && !isChild && node.depth > 1) mesh.material.opacity = 0.12;
-      else mesh.material.opacity = node.status === 'future' || node.comingSoon ? 0.4 : 0.95;
+      if (halo) {
+        halo.visible = show && node.depth <= 3;
+        if (halo.visible) halo.position.copy(node.pos);
+      }
+      mesh.material.opacity = node.status === 'future' || node.comingSoon ? 0.38 : 0.98;
     });
     linkLines.forEach((line) => {
       const s = graph.byId.get(line.userData.source);
       const t = graph.byId.get(line.userData.target);
-      const sm = meshes.get(s?.id);
-      const tm = meshes.get(t?.id);
-      const hot = path.has(line.userData.source) && path.has(line.userData.target);
-      const childLink = line.userData.source === focusId || line.userData.target === focusId;
-      line.visible = !!(sm?.mesh.visible && tm?.mesh.visible);
+      if (!s || !t) { line.visible = false; return; }
+      const sm = meshes.get(s.id);
+      const tm = meshes.get(t.id);
+      const hot = path.has(s.id) && path.has(t.id);
+      const childLink = (s.id === focusId && t.parentId === focusId)
+        || (t.id === focusId && s.parentId === focusId);
+      const bothLocal = !!(sm?.mesh.visible && tm?.mesh.visible);
+      const parentId = focus?.parentId;
+      const touchesCore = s.type === 'enterprise' || t.type === 'enterprise';
+      const isParentStub = focusId !== graph.core.id && (
+        (parentId && ((s.id === focusId && t.id === parentId) || (t.id === focusId && s.id === parentId)))
+        || (touchesCore && (s.id === focusId || t.id === focusId))
+      );
+
+      // Short faded parent stub (like 2D maps) — never a full curve off-frame
+      if (isParentStub) {
+        const localNode = s.id === focusId ? s
+          : (t.id === focusId ? t : (s.type === 'enterprise' ? t : s));
+        const remote = localNode === s ? t : s;
+        const from = localNode.pos.clone();
+        const toward = remote.pos.clone().sub(from);
+        const len = toward.length() || 1;
+        const stubLen = Math.min(0.85, Math.max(0.45, len * 0.055));
+        toward.multiplyScalar(stubLen / len);
+        const to = from.clone().add(toward);
+        const mid = from.clone().lerp(to, 0.55);
+        line.geometry.dispose();
+        line.geometry = new THREE.BufferGeometry().setFromPoints([from, mid, to]);
+        line.visible = true;
+        line.material.opacity = 0.22;
+        line.userData.stubbed = true;
+        return;
+      }
+
+      // Hide ancestor-path / spine links when drilled (children-only curves)
+      if (focusId !== graph.core.id && hot && !childLink) {
+        line.visible = false;
+        return;
+      }
+      if (focusId !== graph.core.id && touchesCore) {
+        line.visible = false;
+        return;
+      }
+
+      if (line.userData.stubbed && bothLocal && !isParentStub) {
+        const pts = curvePoints(s.pos, t.pos, 18);
+        line.geometry.dispose();
+        line.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+        line.userData.stubbed = false;
+      }
+
+      line.visible = bothLocal;
+      if (!line.visible) return;
       if (focusId !== graph.core.id && !hot && !childLink) line.material.opacity = 0.08;
-      else line.material.opacity = hot ? 0.65 : line.userData.kind === 'spine' ? 0.35 : 0.3;
+      else line.material.opacity = hot ? 0.55 : line.userData.kind === 'spine' ? 0.28 : 0.32;
     });
+    // Orbit rings only on overview (avoid long dashed diagonals on drill views)
+    const focusDepth = focus?.depth ?? 0;
+    ringGroup.visible = focusId === graph.core.id;
+
     if (focusId === graph.core.id) {
       wordmark.visible = true;
       coreGroup.visible = true;
       const vFOV = THREE.MathUtils.degToRad(camera.fov);
       const distCore = camera.position.distanceTo(controls.target) || camera.position.length();
+      const aspect = camera.aspect || 1.7;
       const worldH = 2 * Math.tan(vFOV / 2) * distCore;
-      const targetH = worldH * 0.22;
-      wordmark.scale.set(targetH * 3.85, targetH, 1);
+      const worldW = worldH * aspect;
+      // Wordmark ≈ 12–15% viewport (sprite+bloom reads larger than raw scale)
+      const targetW = worldW * 0.072;
+      const targetH = targetW / 3.9;
+      wordmark.scale.set(targetW, targetH, 1);
       wordmark.material.opacity = 1;
     } else {
-      // Keep a faint core presence but don't dominate the frame
-      const deep = (graph.byId.get(focusId)?.depth || 0) >= 4;
-      wordmark.visible = !deep;
-      wordmark.material.opacity = deep ? 0 : 0.25;
-      coreGroup.visible = true;
+      wordmark.visible = false;
+      // Hide core as soon as we leave overview so no long spine to origin
+      coreGroup.visible = false;
     }
   }
 
   function syncLabels() {
-    const w = stage.clientWidth;
-    const h = stage.clientHeight;
+    const w = stage.clientWidth || 1920;
+    const h = stage.clientHeight || 1080;
+    const insets = viewportInsets();
     const want = new Set();
+    const focus = graph.byId.get(focusId);
     if (focusId === graph.core.id) {
-      graph.nodes.forEach((n) => { if (n.depth === 1) want.add(n.id); });
+      graph.nodes.forEach((n) => {
+        if (n.depth === 1 || n.depth === 2) want.add(n.id);
+      });
     } else {
       want.add(focusId);
       childrenOf(focusId).forEach((c) => want.add(c.id));
     }
     const placed = [];
+    const visible = [];
     labelEls.forEach((el, id) => {
       const entry = meshes.get(id);
-      if (!entry || !want.has(id) || !entry.mesh.visible) { el.style.display = 'none'; return; }
+      if (!entry || !want.has(id)) { el.style.display = 'none'; return; }
+      // Force mesh visible for labeled nodes
+      entry.mesh.visible = true;
+      if (entry.halo) entry.halo.visible = entry.node.depth <= 3;
       const n = entry.node;
       const v = n.pos.clone().project(camera);
-      if (v.z > 1) { el.style.display = 'none'; return; }
-      let x = (v.x * 0.5 + 0.5) * w;
-      let y = (-v.y * 0.5 + 0.5) * h + 14;
-      let tries = 0;
-      while (tries < 8 && placed.some((p) => Math.abs(p.x - x) < 72 && Math.abs(p.y - y) < 18)) {
-        y += 16; tries += 1;
+      // NDC: discard behind / far out of frustum
+      if (v.z < -1 || v.z > 1 || Math.abs(v.x) > 1.15 || Math.abs(v.y) > 1.15) {
+        el.style.display = 'none';
+        return;
       }
-      if (x < 8 || x > w - 8 || y < 40 || y > h - 40) { el.style.display = 'none'; return; }
-      el.style.display = '';
+      let x = (v.x * 0.5 + 0.5) * w;
+      let y = (-v.y * 0.5 + 0.5) * h + (id === focusId ? 18 : 12);
+      // Keep inside visible area (excluding drawer/HUD)
+      const minX = insets.left + 28;
+      const maxX = w - insets.right - 28;
+      const minY = insets.top + 12;
+      const maxY = h - insets.bottom - 16;
+      let tries = 0;
+      while (tries < 10 && placed.some((p) => Math.abs(p.x - x) < 78 && Math.abs(p.y - y) < 16)) {
+        y += 15;
+        tries += 1;
+      }
+      x = Math.min(maxX, Math.max(minX, x));
+      y = Math.min(maxY, Math.max(minY, y));
+      el.style.display = 'block';
+      el.style.visibility = 'visible';
+      el.style.opacity = '1';
       el.style.left = `${x}px`;
       el.style.top = `${y}px`;
       el.classList.toggle('is-focus', id === focusId);
       el.classList.toggle('is-hub', n.depth <= 1);
-      placed.push({ x, y });
+      el.classList.toggle('is-child', n.parentId === focusId);
+      placed.push({ x, y, id });
+      visible.push({ id, label: n.label, x, y });
     });
+    return visible;
   }
 
   const raycaster = new THREE.Raycaster();
@@ -711,8 +818,27 @@ function mount() {
     else renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
+  document.getElementById('inspector-drawer')?.classList.remove('is-open');
   renderBreadcrumb();
   applyLod();
+  // Settle overview framing (pulled back so SA + brands fit)
+  {
+    const box = subtreeBounds(graph.core.id);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size); box.getCenter(center);
+    center.set(0, 0.8, 0);
+    const maxDim = Math.max(size.x, size.y, size.z, 58);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    let dist = (maxDim / 0.68) / (2 * Math.tan(fov / 2));
+    dist = THREE.MathUtils.clamp(dist, 72, 140);
+    camera.position.set(dist * 0.38, dist * 0.48, dist * 0.72);
+    controls.target.copy(center);
+    controls.maxDistance = 140;
+    controls.update();
+    applyLod();
+    syncLabels();
+  }
   requestAnimationFrame(tick);
 
   const api = {
@@ -726,7 +852,21 @@ function mount() {
       };
     },
     flyTo: (id) => flyTo(id),
-    reset: () => flyTo(graph.core.id),
+    reset: () => {
+      document.getElementById('inspector-drawer')?.classList.remove('is-open');
+      document.body.classList.remove('inspector-open');
+      flyTo(graph.core.id);
+    },
+    visibleLabels: () => {
+      const list = [];
+      labelEls.forEach((el, id) => {
+        if (el.style.display === 'none' || el.style.visibility === 'hidden') return;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        list.push({ id, text: el.textContent, x: r.left, y: r.top, w: r.width, h: r.height });
+      });
+      return list;
+    },
     goBack: () => flyTo(graph.byId.get(focusId)?.parentId || graph.core.id),
     waitForIdle: () => new Promise((resolve) => {
       const check = () => { if (!flying) resolve(); else requestAnimationFrame(check); };

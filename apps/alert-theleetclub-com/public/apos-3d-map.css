@@ -279,29 +279,36 @@ html, body { margin: 0; height: 100%; overflow: hidden; font-family: var(--font)
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 9;
+  z-index: 15;
   overflow: hidden;
 }
 .m3d-label {
   position: absolute;
   transform: translate(-50%, 0);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8fa8c8;
-  text-shadow: 0 0 4px #04080e, 0 1px 2px #04080e;
+  color: #c5d6ea;
+  text-shadow: 0 0 6px #04080e, 0 1px 3px #04080e, 0 0 1px #04080e;
   white-space: nowrap;
-  opacity: 0.92;
+  opacity: 1;
+  font-weight: 500;
 }
 .m3d-label.is-hub {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: #e8f7ff;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
+}
+.m3d-label.is-child {
+  font-size: 0.68rem;
+  color: #a8c0d8;
 }
 .m3d-label.is-focus {
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
 }
 
 /* HUD glass panels */
