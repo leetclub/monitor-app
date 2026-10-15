@@ -207,3 +207,12 @@
 .tree-app .map-page-nav a.is-active {
   border-color: rgba(200, 180, 255, 0.55);
 }
+
+.inspector-drawer:not(.is-open) {
+  transform: translateX(110%);
+  pointer-events: none;
+  visibility: hidden;
+}
+.inspector-drawer.is-open {
+  visibility: visible;
+}

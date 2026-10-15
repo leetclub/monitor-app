@@ -131,7 +131,7 @@
     const R = 74;
     const dx = R * 1.5;
     const dy = R * Math.sqrt(3);
-    ctx.strokeStyle = 'rgba(0, 242, 254, 0.08)';
+    ctx.strokeStyle = 'rgba(0, 242, 254, 0.14)';
     ctx.lineWidth = 1;
     for (let row = -2; row < h / dy + 3; row++) {
       for (let col = -2; col < w / dx + 3; col++) {
@@ -211,7 +211,8 @@
         setTimeout(() => {
           try {
             const focus = m.getFocus?.();
-            if (!focus || focus.overview) {
+            const isOverview = !!(focus?.overview || m.isOverview?.());
+            if (!focus || isOverview || focus.type === 'enterprise') {
               closeInspector();
               return;
             }
@@ -223,12 +224,19 @@
                 ['Machine', focus.machineId || '—'],
                 ['Location', focus.locationId || '—'],
                 ['Hub', focus.hubId || focus.countryId || '—'],
-                ['Mode', layoutMode],
+                ['Mode', m.getLayoutMode?.() || layoutMode],
               ],
             });
           } catch (_) { /* ignore */ }
-        }, 420);
+        }, 480);
         return r;
+      };
+    }
+    const prevReset = m.reset?.bind(m);
+    if (prevReset) {
+      m.reset = (...args) => {
+        closeInspector();
+        return prevReset(...args);
       };
     }
   }

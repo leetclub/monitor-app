@@ -229,21 +229,50 @@
         n.radialY = n.y;
       }
     });
-    // Alert / task signal arcs (tech support ↔ machine, operator routes, low stock)
+    // Curated overview signals: cross-brand only (never duplicate tree edges).
+    // Max 3 calm cyan arcs. Drill signals added below.
+    const overviewSignals = [];
+    const alertByClient = new Map();
     machines.forEach((m) => {
-      if (m.alert) {
-        const tech = nodeById.get(m.id + '::technical');
-        if (tech) links.push({ source: tech.id, target: m.id, kind: 'signal', alert: true });
-        if (m.clientId) links.push({ source: m.clientId, target: m.id, kind: 'signal', alert: true, soft: true });
-        else if (m.hubId) links.push({ source: m.hubId, target: m.id, kind: 'signal', alert: true, soft: true });
+      if (!m.alert || !m.clientId) return;
+      alertByClient.set(m.clientId, (alertByClient.get(m.clientId) || 0) + 1);
+    });
+    const alertClients = [...alertByClient.keys()];
+    // Pair adjacent alert brands under same country when possible
+    hubs.forEach((h) => {
+      const brands = (childrenOf.get(h.id) || []).filter(
+        (c) => (c.type === 'client' || c.type === 'area') && alertByClient.has(c.id)
+      );
+      for (let i = 0; i + 1 < brands.length && overviewSignals.length < 3; i++) {
+        overviewSignals.push({
+          source: brands[i].id,
+          target: brands[i + 1].id,
+          kind: 'signal',
+          soft: true,
+          overview: true,
+          cross: true,
+        });
       }
-      const op = nodeById.get(m.id + '::operators');
-      if (op && (m.alert || (hash(m.id) % 5 === 0))) {
-        links.push({ source: op.id, target: m.id, kind: 'signal', alert: false });
-      }
-      if (m.stock && m.stock.fillPct != null && m.stock.fillPct < (DATA.thresholds?.stockLowPct || 15)) {
-        const st = nodeById.get(m.id + '::stock');
-        if (st) links.push({ source: st.id, target: m.id, kind: 'signal', alert: true });
+    });
+    // If still short, one cross-hub brand pair
+    if (overviewSignals.length < 2 && alertClients.length >= 2) {
+      overviewSignals.push({
+        source: alertClients[0],
+        target: alertClients[1],
+        kind: 'signal',
+        soft: true,
+        overview: true,
+        cross: true,
+      });
+    }
+    overviewSignals.slice(0, 3).forEach((L) => links.push(L));
+
+    // Drill-only: tech support ↔ alert machine (drawn only when both local)
+    machines.forEach((m) => {
+      if (!m.alert) return;
+      const tech = nodeById.get(m.id + '::technical');
+      if (tech) {
+        links.push({ source: tech.id, target: m.id, kind: 'signal', drill: true });
       }
     });
   }
@@ -300,12 +329,12 @@
     const dist = Math.hypot(x2 - x1, y2 - y1) || 1;
     // Gemini signal arcs: P1 = P0+(P0-core)*0.25, P2 = P3-(P3-core)*0.25
     if (kind === 'signal') {
-      return {
-        c1x: x1 + x1 * 0.25,
-        c1y: y1 + y1 * 0.25,
-        c2x: x2 - x2 * 0.25,
-        c2y: y2 - y2 * 0.25,
-      };
+      // core assumed at origin; mild inward bow, never looping
+      const p1x = x1 + x1 * 0.25;
+      const p1y = y1 + y1 * 0.25;
+      const p2x = x2 - x2 * 0.25;
+      const p2y = y2 - y2 * 0.25;
+      return { c1x: p1x, c1y: p1y, c2x: p2x, c2y: p2y };
     }
     // Spine: gentle radial arc from core; tree: organic outward flow
     if (kind === 'spine' || s.type === 'enterprise') {
@@ -317,13 +346,25 @@
         c2y: y2 - Math.sin(a) * dist * 0.28,
       };
     }
+    // First hop from hub/country: gentle single arc (no overshoot loops)
+    if (
+      s.type === 'hub' || s.type === 'country' || s.type === 'enterprise' ||
+      t.type === 'hub' || t.type === 'country'
+    ) {
+      return {
+        c1x: x1 + (x2 - x1) * 0.35,
+        c1y: y1 + (y2 - y1) * 0.35,
+        c2x: x1 + (x2 - x1) * 0.7,
+        c2y: y1 + (y2 - y1) * 0.7,
+      };
+    }
     const a1 = s.angle != null ? s.angle : Math.atan2(y1, x1);
     const a2 = t.angle != null ? t.angle : Math.atan2(y2 - y1, x2 - x1);
     return {
-      c1x: x1 + Math.cos(a1) * dist * 0.45,
-      c1y: y1 + Math.sin(a1) * dist * 0.45,
-      c2x: x2 - Math.cos(a2) * dist * 0.38,
-      c2y: y2 - Math.sin(a2) * dist * 0.38,
+      c1x: x1 + Math.cos(a1) * dist * 0.4,
+      c1y: y1 + Math.sin(a1) * dist * 0.4,
+      c2x: x2 - Math.cos(a2) * dist * 0.35,
+      c2y: y2 - Math.sin(a2) * dist * 0.35,
     };
   }
 
@@ -892,6 +933,12 @@
   }
 
   function setOverviewExpansion() {
+    // Overview: inspector stays closed
+    const _insp = document.getElementById('inspector-drawer');
+    if (_insp) _insp.classList.remove('is-open');
+    document.body.classList.remove('inspector-open');
+    if (stage) stage.classList.remove('inspector-open');
+
     overviewMode = true;
     // Progressive: core + ring hubs/countries + first-level children only
     expandedPath = new Set([DATA.enterprise.id, ...allHubIds()]);
@@ -1484,8 +1531,18 @@
       el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}${overviewBrand ? ' overview-brand' : ''}`;
       const sx = n._labelSx != null ? n._labelSx : screenOf(n).x;
       const sy = n._labelSy != null ? n._labelSy : screenOf(n).y + 20;
-      el.style.left = `${sx}px`;
-      el.style.top = `${sy}px`;
+      // Hex: park labels under the cell, never over the core logo
+      let lx = sx;
+      let ly = sy;
+      if (layoutMode === 'hex') {
+        ly = sy + 18;
+        const coreS = screenOf(nodeById.get(DATA.enterprise.id) || { x: 0, y: 0 });
+        if (Math.hypot(lx - coreS.x, ly - coreS.y) < 56 && n.type !== 'enterprise') {
+          ly = coreS.y + 64;
+        }
+      }
+      el.style.left = `${lx}px`;
+      el.style.top = `${ly}px`;
       el.style.display = '';
       // Gemini LOD: leaf labels fade 1.4→2.0; hubs always on at overview
       let lop = 1;
@@ -1720,6 +1777,8 @@
       if (!badge.empty()) badge.style('display', 'none');
     });
 
+    // Canvas owns link rendering — keep SVG paths for hit-testing only
+    gLinks.selectAll('path.link').style('opacity', 0).style('display', 'none');
     gLinks.selectAll('path.link').each(function (d) {
       const s = nodeById.get(d.source);
       const t = nodeById.get(d.target);
@@ -2037,7 +2096,7 @@
     flyToTransform(fitTransform(subtreeExtent(node), node));
   }
 
-  function flyToGalaxy() {
+  function flyToGalaxy(_geminiInsp) {
     setOverviewExpansion();
     focusPinned = true;
     closeLeafCard();
@@ -2778,6 +2837,12 @@
       const t = nodeById.get(L.target);
       if (!s || !t) return;
       if (L.kind === 'signal') return; // drawn in signal pass
+      // Hex mode: no tree/spine/leaf links at all unless hovering a related path
+      if (layoutMode === 'hex') {
+        if (!hoverId || !hoverHotDraw) return;
+        if (!(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target))) return;
+        if (L.kind === 'spine') return;
+      }
       if (L.kind === 'spine') {
         if (!overviewMode) return;
         if (!s.draw || !t.draw) return;
@@ -2887,65 +2952,81 @@
     });
     if (!linkDrawStats.count) linkDrawStats.minOp = 0;
 
-    // ——— Gemini signal arcs (alert / task) with flowing packets ———
-    links.forEach((L) => {
-      if (L.kind !== 'signal') return;
-      const s = nodeById.get(L.source);
-      const t = nodeById.get(L.target);
-      if (!s || !t) return;
-      const soft = !!L.soft;
-      const sOk = s.draw || soft;
-      const tOk = t.draw || soft;
-      if (!sOk || !tOk) return;
-      if (!overviewMode && soft) return;
-      if (!overviewMode && !(localIds.has(s.id) || localIds.has(t.id) || focusPath.has(s.id) || focusPath.has(t.id))) return;
-      let hot = true;
-      if (hoverHotDraw) {
-        hot = hoverHotDraw.has(s.id) || hoverHotDraw.has(t.id);
-        if (!hot && hoverId) return;
-      } else if (overviewMode && soft && !hoverId) {
-        if (!L.alert) return;
-      }
-      const cc = curveControls(s, t, 'signal');
-      const a0 = screenOf(s);
-      const b0 = screenOf(t);
-      const c1x = cc.c1x * transform.k + transform.x;
-      const c1y = cc.c1y * transform.k + transform.y;
-      const c2x = cc.c2x * transform.k + transform.x;
-      const c2y = cc.c2y * transform.k + transform.y;
-      const rgb = L.alert ? [255, 42, 133] : (THEME === 'space' ? [0, 242, 254] : [157, 78, 221]);
-      let op = soft ? (hoverId ? 0.72 : 0.28) : 0.55;
-      if (hoverHotDraw && hot) op = Math.max(op, 0.85);
-      pctx.beginPath();
-      pctx.moveTo(a0.x, a0.y);
-      pctx.bezierCurveTo(c1x, c1y, c2x, c2y, b0.x, b0.y);
-      pctx.lineWidth = soft ? 1.7 : 1.9;
-      pctx.lineCap = 'round';
-      pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
-      pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.55)`;
-      pctx.shadowBlur = 10;
-      pctx.stroke();
-      pctx.shadowBlur = 0;
-      if (!reduceMotion) {
-        const tSec = (ts || 0) / 1000;
-        const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 28);
-        for (let k = 0; k < 2; k++) {
-          const u = (tSec * 0.4 + k * 0.5 + (hash(L.source + L.target) % 40) * 0.01) % 1;
+    // ——— Gemini signal arcs: calm cyan, max ~5, smooth core-bow Béziers ———
+    if (layoutMode !== 'hex' || hoverId) {
+      const signalCandidates = [];
+      links.forEach((L) => {
+        if (L.kind !== 'signal') return;
+        const s = nodeById.get(L.source);
+        const t = nodeById.get(L.target);
+        if (!s || !t) return;
+        // Hex: only when hovering a related endpoint
+        if (layoutMode === 'hex') {
+          if (!hoverId) return;
+          if (hoverId !== s.id && hoverId !== t.id && !hoverHotDraw?.has(s.id) && !hoverHotDraw?.has(t.id)) return;
+        }
+        if (L.overview || L.soft) {
+          if (!overviewMode && layoutMode !== 'hex') return;
+          // Overview: only reveal cross-signal arcs on hover (no idle spaghetti)
+          if (overviewMode && !hoverId) return;
+          if (!s.draw || !t.draw || s.ancestorOnly || t.ancestorOnly) return;
+        } else if (L.drill) {
+          if (overviewMode) return;
+          if (!(localIds.has(s.id) && localIds.has(t.id))) return;
+        } else {
+          return;
+        }
+        if (hoverHotDraw && !(hoverHotDraw.has(s.id) || hoverHotDraw.has(t.id))) {
+          // keep quiet unless related to hover
+          if (hoverId) return;
+        }
+        const dist = Math.hypot(t.x - s.x, t.y - s.y);
+        if (dist < 40) return; // avoid tiny loops
+        signalCandidates.push({ L, s, t, dist });
+      });
+      // Cap visible arcs
+      signalCandidates.sort((a, b) => b.dist - a.dist);
+      const shown = signalCandidates.slice(0, hoverId ? 5 : 4);
+      const rgb = THEME === 'space' ? [0, 210, 230] : [140, 160, 220];
+      shown.forEach(({ L, s, t }, si) => {
+        const cc = curveControls(s, t, 'signal');
+        const a0 = screenOf(s);
+        const b0 = screenOf(t);
+        const c1x = cc.c1x * transform.k + transform.x;
+        const c1y = cc.c1y * transform.k + transform.y;
+        const c2x = cc.c2x * transform.k + transform.x;
+        const c2y = cc.c2y * transform.k + transform.y;
+        const hot = !!(hoverHotDraw && (hoverHotDraw.has(s.id) || hoverHotDraw.has(t.id)));
+        const op = hot ? 0.75 : overviewMode ? 0.38 : 0.5;
+        pctx.beginPath();
+        pctx.moveTo(a0.x, a0.y);
+        pctx.bezierCurveTo(c1x, c1y, c2x, c2y, b0.x, b0.y);
+        pctx.lineWidth = hot ? 2 : 1.6;
+        pctx.lineCap = 'round';
+        pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
+        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.35)`;
+        pctx.shadowBlur = hot ? 10 : 6;
+        pctx.stroke();
+        pctx.shadowBlur = 0;
+        if (!reduceMotion) {
+          const tSec = (ts || 0) / 1000;
+          const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 24);
+          const u = (tSec * 0.35 + si * 0.22) % 1;
           const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
           const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
           pctx.beginPath();
-          pctx.arc(sp.x, sp.y, 2.4, 0, Math.PI * 2);
+          pctx.arc(sp.x, sp.y, 2.2, 0, Math.PI * 2);
           pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
-          pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
-          pctx.shadowBlur = 8;
+          pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.7)`;
+          pctx.shadowBlur = 6;
           pctx.fill();
           pctx.shadowBlur = 0;
         }
-      }
-    });
+      });
+    }
 
     // ——— Overview depth clusters: soft compact dots only (no hairlines) ———
-    if (overviewMode) {
+    if (overviewMode && layoutMode !== 'hex') {
       nodes.forEach((n) => {
         if (n.type !== 'area' || !n.draw) return;
         const p = screenOf(n);
@@ -2978,7 +3059,7 @@
     }
 
     // ——— Gentle signal particles along visible curves ———
-    if (!reduceMotion) {
+    if (!reduceMotion && layoutMode !== 'hex') {
       const tSec = (ts || 0) / 1000;
       links.forEach((L, li) => {
         const s = nodeById.get(L.source);
@@ -3019,6 +3100,28 @@
         pctx.fillStyle = p.color;
         pctx.fill();
       }
+    }
+
+    // ——— Hex cell outlines (hex layout mode) ———
+    if (layoutMode === 'hex' && overviewMode) {
+      const k = transform.k || 1;
+      const Rpx = 74; // spec screen radius
+      hubs.filter((h) => !h.pad && h.draw !== false).forEach((h) => {
+        const p = screenOf(h);
+        pctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 3) * i + Math.PI / 6;
+          const x = p.x + Math.cos(a) * Rpx;
+          const y = p.y + Math.sin(a) * Rpx;
+          if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
+        }
+        pctx.closePath();
+        pctx.strokeStyle = 'rgba(0, 242, 254, 0.2)';
+        pctx.lineWidth = 1;
+        pctx.stroke();
+        pctx.fillStyle = 'rgba(0, 242, 254, 0.03)';
+        pctx.fill();
+      });
     }
 
     // ——— Nodes ———
@@ -3199,10 +3302,11 @@
     pctx.save();
     pctx.setLineDash([2, 4]);
     pctx.lineWidth = 1;
-    pctx.strokeStyle = THEME === 'space' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.07)';
+    pctx.strokeStyle = THEME === 'space' ? 'rgba(200,220,255,0.14)' : 'rgba(255,255,255,0.12)';
+    pctx.lineWidth = 1.15;
     rings.forEach((rw) => {
       const rr = rw * k;
-      if (rr < 8 || rr > Math.max(w, h) * 1.2) return;
+      if (rr < 12 || rr > Math.max(w, h) * 1.35) return;
       pctx.beginPath();
       pctx.arc(cx, cy, rr, 0, Math.PI * 2);
       pctx.stroke();
@@ -3499,48 +3603,67 @@
   }
 
   function computeHexTargets() {
-    const R = 74 * 3.2; // world units ~ hex cell
-    const seats = nodes.filter((n) =>
-      n.type === 'hub' || n.type === 'country' || (n.type === 'client' && !n.pad) || (n.type === 'area' && LAYOUT === 'brandHubs')
-    );
+    const R = Math.max(260, R_HUB * 0.52);
     const targets = new Map();
+    const core = nodeById.get(DATA.enterprise.id);
+    if (core) targets.set(core.id, { x: 0, y: 0 });
+
+    // Ring-1 axial seats (never center). Extra rings if >6 hubs.
+    const ring1 = [
+      { q: 1, r: 0 }, { q: 0, r: -1 }, { q: -1, r: 1 },
+      { q: -1, r: 0 }, { q: 0, r: 1 }, { q: 1, r: -1 },
+    ];
+    const seats = hubs.filter((h) => !h.pad);
     seats.forEach((n, i) => {
-      // axial hex spiral
-      let ring = 0, idx = i;
-      while (idx >= (ring === 0 ? 1 : ring * 6)) {
-        idx -= ring === 0 ? 1 : ring * 6;
-        ring += 1;
-      }
-      let q = 0, r = 0;
-      if (ring === 0) {
-        q = 0; r = 0;
+      let q, r;
+      if (i < ring1.length) {
+        q = ring1[i].q; r = ring1[i].r;
       } else {
+        const ring = 2 + Math.floor((i - 6) / 12);
+        const idx = (i - 6) % (ring * 6);
         const side = Math.floor(idx / ring);
         const pos = idx % ring;
-        const dirs = [[1, 0], [0, -1], [-1, 0], [-1, 1], [0, 1], [1, -1]];
+        const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
         q = dirs[side][0] * ring;
         r = dirs[side][1] * ring;
-        for (let s = 0; s < pos; s++) {
-          const d = dirs[(side + 2) % 6];
-          q += d[0];
-          r += d[1];
-        }
+        const step = dirs[(side + 2) % 6];
+        q += step[0] * pos;
+        r += step[1] * pos;
       }
       const x = R * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
       const y = R * ((3 / 2) * r);
       targets.set(n.id, { x, y });
-      // children keep relative offset from radial home, scaled
-      nodes.forEach((c) => {
-        if (c.parentId !== n.id) return;
-        if (targets.has(c.id)) return;
-        const ox = (c.radialX ?? c.x) - (n.radialX ?? n.x);
-        const oy = (c.radialY ?? c.y) - (n.radialY ?? n.y);
-        targets.set(c.id, { x: x + ox * 0.55, y: y + oy * 0.55 });
+
+      const kids = (childrenOf.get(n.id) || []).filter(
+        (c) => !c.pad && (c.type === 'client' || c.type === 'area')
+      );
+      kids.forEach((c, ci) => {
+        const ang = -Math.PI / 2 + ((ci + 0.5) / Math.max(kids.length, 1)) * Math.PI * 2;
+        const rad = R * 0.42;
+        const cx = x + Math.cos(ang) * rad;
+        const cy = y + Math.sin(ang) * rad;
+        targets.set(c.id, { x: cx, y: cy });
+        // Micro-dots: up to 6 grandchildren packed near brand
+        const gkids = (childrenOf.get(c.id) || []).filter((g) => !g.pad && g.type !== 'branch');
+        gkids.slice(0, 6).forEach((g, gi) => {
+          const ga = ang + ((gi + 0.5) / Math.max(Math.min(gkids.length, 6), 1) - 0.5) * 1.1;
+          targets.set(g.id, {
+            x: cx + Math.cos(ga) * R * 0.14,
+            y: cy + Math.sin(ga) * R * 0.14,
+          });
+        });
       });
     });
+
     nodes.forEach((n) => {
-      if (!targets.has(n.id)) {
-        targets.set(n.id, { x: n.radialX ?? n.x, y: n.radialY ?? n.y });
+      if (targets.has(n.id)) return;
+      if (n.type === 'enterprise') { targets.set(n.id, { x: 0, y: 0 }); return; }
+      const p = n.parentId ? targets.get(n.parentId) : null;
+      if (p) {
+        const a = (hash(n.id) % 360) * (Math.PI / 180);
+        targets.set(n.id, { x: p.x + Math.cos(a) * R * 0.06, y: p.y + Math.sin(a) * R * 0.06 });
+      } else {
+        targets.set(n.id, { x: (n.radialX ?? n.x) * 0.15, y: (n.radialY ?? n.y) * 0.15 });
       }
     });
     return targets;
@@ -3584,7 +3707,19 @@
       gNodes.selectAll('g.node').attr('transform', (d) => `translate(${d.x},${d.y})`);
       applyLod();
       if (u < 1) requestAnimationFrame(step);
-      else layoutTween = null;
+      else {
+        layoutTween = null;
+        if (overviewMode) {
+          const t = fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id));
+          targetTransform = t;
+          if (!GEMINI || reduceMotion) {
+            transform = t;
+            gRoot.attr('transform', transform);
+            svg.call(zoomBehavior.transform, transform);
+          }
+        }
+        applyLod();
+      }
     }
     requestAnimationFrame(step);
   }
@@ -3747,18 +3882,28 @@
     setInspectorOpen: (open) => {
       if (!stage) return;
       const was = stage.classList.contains('inspector-open');
-      stage.classList.toggle('inspector-open', !!open);
-      if (was === !!open) return;
-      if (overviewMode && targetTransform) {
-        const dx = open ? -160 : 160;
-        targetTransform = d3.zoomIdentity
-          .translate(targetTransform.x + dx, targetTransform.y)
-          .scale(targetTransform.k);
-        if (!GEMINI || reduceMotion) {
-          transform = targetTransform;
-          gRoot.attr('transform', transform);
-          svg.call(zoomBehavior.transform, transform);
+      const want = !!open && !overviewMode;
+      stage.classList.toggle('inspector-open', want);
+      if (was === want) return;
+      const drawer = document.getElementById('inspector-drawer');
+      const halfW = drawer ? Math.round((drawer.getBoundingClientRect().width || 320) / 2) : 160;
+      if (targetTransform) {
+        const dx = want ? -halfW : (was ? halfW : 0);
+        if (dx) {
+          targetTransform = d3.zoomIdentity
+            .translate(targetTransform.x + dx, targetTransform.y)
+            .scale(targetTransform.k);
+          if (!GEMINI || reduceMotion) {
+            transform = targetTransform;
+            gRoot.attr('transform', transform);
+            svg.call(zoomBehavior.transform, transform);
+          }
         }
+      }
+      if (!want) {
+        const d = document.getElementById('inspector-drawer');
+        if (d) d.classList.remove('is-open');
+        document.body.classList.remove('inspector-open');
       }
     },
     setLayoutMode: (mode) => {

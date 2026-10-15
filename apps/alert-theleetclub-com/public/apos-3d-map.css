@@ -272,3 +272,102 @@ html, body { margin: 0; height: 100%; overflow: hidden; font-family: var(--font)
   font: inherit;
 }
 .term-log { margin-top: 0.55rem; font-size: 0.68rem; opacity: 0.75; min-height: 1.2em; }
+
+
+/* Screen-space labels with collision */
+.map3d-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  overflow: hidden;
+}
+.m3d-label {
+  position: absolute;
+  transform: translate(-50%, 0);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8fa8c8;
+  text-shadow: 0 0 4px #04080e, 0 1px 2px #04080e;
+  white-space: nowrap;
+  opacity: 0.92;
+}
+.m3d-label.is-hub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e8f7ff;
+  letter-spacing: 0.14em;
+}
+.m3d-label.is-focus {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* HUD glass panels */
+.hud-panel {
+  position: absolute;
+  top: 64px;
+  bottom: 120px;
+  width: 200px;
+  z-index: 18;
+  padding: 0.85rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(7, 16, 28, 0.78);
+  border: 1px solid rgba(0, 242, 254, 0.18);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  overflow: auto;
+}
+.hud-left { left: 12px; }
+.hud-right { right: 12px; }
+.hud-panel h4 {
+  margin: 0 0 0.65rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7d93b2;
+}
+.hud-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hud-panel li {
+  font-size: 0.78rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(125, 147, 178, 0.12);
+  color: #e8f4ff;
+}
+.hud-panel li.hud-team { color: #7d93b2; font-size: 0.72rem; }
+.hud-bottom {
+  position: absolute;
+  left: 230px;
+  right: 230px;
+  bottom: 12px;
+  z-index: 18;
+  min-height: 88px;
+  padding: 0.55rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(7, 16, 28, 0.82);
+  border: 1px solid rgba(0, 242, 254, 0.16);
+  backdrop-filter: blur(12px);
+  font-family: ui-monospace, 'IBM Plex Mono', monospace;
+}
+.hud-term-chrome {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: #05ffa1;
+  margin-bottom: 0.35rem;
+}
+.hud-term-log {
+  font-size: 0.72rem;
+  color: #7d93b2;
+  line-height: 1.45;
+}
+.map3d-app.hud-mode .map3d-crumb { left: 230px; }
+.map3d-app.hud-mode .inspector-drawer {
+  /* HUD right panel occupies right; keep inspector narrower / over graph */
+  width: min(280px, 22vw);
+  right: 220px;
+}
