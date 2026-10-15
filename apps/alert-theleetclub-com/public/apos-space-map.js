@@ -1,6 +1,6 @@
 /**
- * APOS Space Map — dark operations constellation (D3 + canvas signals).
- * Levels: galaxy → country → client → area → location → machine → branch card.
+ * APOS Space Map — deep-space ops constellation.
+ * Camera: animated d3 zoom framing. Nodes: expand from parent. Labels: anchored + counter-scale.
  */
 (function () {
   'use strict';
@@ -14,6 +14,9 @@
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const THRESH = DATA.thresholds;
+  const CAM_MS = reduceMotion ? 0 : 820;
+  const CAM_EASE = d3.easeCubicInOut;
+  const FIT = 0.82; // target content span as fraction of viewport
 
   const LEVEL = {
     GALAXY: 0,
@@ -26,7 +29,7 @@
 
   /** @type {{level:number, countryId?:string, clientId?:string, areaId?:string, locationId?:string, machineId?:string, branchId?:string}[]} */
   let focusStack = [{ level: LEVEL.GALAXY }];
-  let currentFocus = () => focusStack[focusStack.length - 1];
+  const currentFocus = () => focusStack[focusStack.length - 1];
 
   const people = DATA.people;
   const nodes = [];
@@ -34,14 +37,24 @@
   const nodeById = new Map();
   const machines = [];
 
-  // ——— flatten hierarchy into layout nodes ———
+  const SIZE = {
+    enterprise: 48,
+    country: 18,
+    client: 12,
+    area: 9,
+    location: 8,
+    machine: 7.5,
+    branch: 8,
+  };
+
+  // ——— graph ———
   function buildGraph() {
     nodes.length = 0;
     links.length = 0;
     nodeById.clear();
     machines.length = 0;
 
-    const core = {
+    addNode({
       id: DATA.enterprise.id,
       type: 'enterprise',
       label: DATA.enterprise.label,
@@ -49,31 +62,25 @@
       status: 'active',
       parentId: null,
       depth: 0,
-    };
-    addNode(core);
+    });
 
-    const countryCount = DATA.countries.length;
     DATA.countries.forEach((country, ci) => {
-      const angle = -Math.PI / 2 + (ci / countryCount) * Math.PI * 2;
-      const r = 280;
-      const cNode = {
+      const angle = -Math.PI / 2 + (ci / DATA.countries.length) * Math.PI * 2;
+      addNode({
         id: country.id,
         type: 'country',
         label: country.label,
         status: country.status,
         opsManagerId: country.opsManagerId,
-        parentId: core.id,
+        parentId: DATA.enterprise.id,
         depth: 1,
         homeAngle: angle,
-        homeR: r,
         code: country.code,
-      };
-      addNode(cNode);
-      links.push({ source: core.id, target: country.id, kind: 'spine' });
+      });
+      links.push({ source: DATA.enterprise.id, target: country.id, kind: 'spine' });
 
       (country.clients || []).forEach((client, kli) => {
-        const clientAngle = angle + (kli - ((country.clients.length - 1) / 2)) * 0.35;
-        const clNode = {
+        addNode({
           id: client.id,
           type: 'client',
           label: client.label,
@@ -82,15 +89,11 @@
           parentId: country.id,
           countryId: country.id,
           depth: 2,
-          homeAngle: clientAngle,
-          homeR: r + 160,
-        };
-        addNode(clNode);
+        });
         links.push({ source: country.id, target: client.id, kind: 'constellation' });
 
-        (client.areas || []).forEach((area, ai) => {
-          const areaAngle = clientAngle + (ai - ((client.areas.length - 1) / 2)) * 0.28;
-          const aNode = {
+        (client.areas || []).forEach((area) => {
+          addNode({
             id: area.id,
             type: 'area',
             label: area.label,
@@ -99,16 +102,12 @@
             countryId: country.id,
             clientId: client.id,
             depth: 3,
-            homeAngle: areaAngle,
-            homeR: r + 280,
             status: 'active',
-          };
-          addNode(aNode);
+          });
           links.push({ source: client.id, target: area.id, kind: 'constellation' });
 
-          (area.locations || []).forEach((loc, li) => {
-            const locAngle = areaAngle + (li - ((area.locations.length - 1) / 2)) * 0.18;
-            const lNode = {
+          (area.locations || []).forEach((loc) => {
+            addNode({
               id: loc.id,
               type: 'location',
               label: loc.label,
@@ -120,15 +119,12 @@
               clientId: client.id,
               areaId: area.id,
               depth: 4,
-              homeAngle: locAngle,
-              homeR: r + 400,
               status: 'active',
               machineIds: (loc.machines || []).map((m) => m.id),
-            };
-            addNode(lNode);
+            });
             links.push({ source: area.id, target: loc.id, kind: 'constellation' });
 
-            (loc.machines || []).forEach((m, mi) => {
+            (loc.machines || []).forEach((m) => {
               const mNode = {
                 id: m.id,
                 type: 'machine',
@@ -149,8 +145,6 @@
                 areaId: area.id,
                 locationId: loc.id,
                 depth: 5,
-                homeAngle: locAngle + (mi - ((loc.machines.length - 1) / 2)) * 0.08,
-                homeR: r + 480,
               };
               mNode.alert = computeAlert(mNode);
               addNode(mNode);
@@ -164,6 +158,12 @@
   }
 
   function addNode(n) {
+    n.x = 0;
+    n.y = 0;
+    n.tx = 0;
+    n.ty = 0;
+    n.opacity = 1;
+    n.visible = false;
     nodes.push(n);
     nodeById.set(n.id, n);
   }
@@ -178,46 +178,81 @@
     return null;
   }
 
-  // ——— layout positions based on focus ———
-  function layoutPositions(focus) {
-    const W = stage.clientWidth || 1200;
-    const H = stage.clientHeight || 800;
-    const cx = W / 2;
-    const cy = H / 2 - 20;
+  // ——— world layout (origin at focus center; camera frames it) ———
+  const WORLD_R = 420;
 
+  function layoutTargets(focus) {
     nodes.forEach((n) => {
+      n.wasVisible = n.visible;
       n.visible = false;
       n.labelVisible = false;
-      n.x = cx;
-      n.y = cy;
-      n.r = 4;
+      n.labelMode = 'primary';
+      n.context = false;
+      n.nebulaR = 0;
+      n.nebulaTone = 'indigo';
+      n.labelOx = 0;
+      n.labelOy = 0;
+      n.r = SIZE[n.type] || 6;
+      n.halo = n.r * 2.6;
     });
 
     const core = nodeById.get(DATA.enterprise.id);
     core.visible = true;
-    core.x = cx;
-    core.y = cy;
-    core.r = focus.level === LEVEL.GALAXY ? 36 : 18;
-    core.labelVisible = focus.level <= LEVEL.COUNTRY;
+    core.tx = 0;
+    core.ty = 0;
+    core.r = focus.level === LEVEL.GALAXY ? SIZE.enterprise : 22;
+    core.halo = core.r * 2.8;
+    core.labelVisible = false;
 
     if (focus.level === LEVEL.GALAXY) {
       const active = DATA.countries.filter((c) => c.status === 'active');
       const future = DATA.countries.filter((c) => c.status !== 'active');
-      // Keep Kuwait as the primary cluster; futures sit dimmed on the rim.
       const placed = [...active, ...future];
       placed.forEach((c, i) => {
         const n = nodeById.get(c.id);
         const count = placed.length;
-        // Favor upper-mid arc so labels stay in frame with generous space.
-        const a = -Math.PI / 2 + ((i + 0.5) / count - 0.5) * Math.PI * 1.15;
-        const r = c.status === 'future' ? 240 : 210;
+        const a = -Math.PI / 2 + ((i + 0.5) / count - 0.5) * Math.PI * 1.35;
+        const r = c.status === 'future' ? WORLD_R * 0.95 : WORLD_R * 0.78;
         n.visible = true;
         n.labelVisible = true;
-        n.x = cx + Math.cos(a) * r;
-        n.y = cy + Math.sin(a) * r + 30;
-        n.r = c.status === 'future' ? 18 : 30;
-        n.nebulaR = c.status === 'future' ? 64 : 100;
+        n.labelMode = c.status === 'future' ? 'dim' : 'primary';
+        n.tx = Math.cos(a) * r;
+        n.ty = Math.sin(a) * r;
+        n.r = c.status === 'future' ? 12 : SIZE.country;
+        n.halo = n.r * 3.2;
+        n.nebulaR = c.status === 'future' ? WORLD_R * 0.3 : WORLD_R * 0.5;
+        n.nebulaTone = i % 3 === 0 ? 'indigo' : i % 3 === 1 ? 'teal' : 'violet';
+
+        if (c.status === 'active') {
+          const clients = nodes.filter((x) => x.type === 'client' && x.countryId === c.id);
+          clients.forEach((cl, ki) => {
+            const ca = a + ((ki + 0.5) / Math.max(clients.length, 1) - 0.5) * 0.95;
+            const cr = n.nebulaR * (0.4 + (ki % 3) * 0.08);
+            cl.visible = true;
+            cl.context = true;
+            cl.labelVisible = true;
+            cl.labelMode = 'context';
+            cl.tx = n.tx + Math.cos(ca) * cr;
+            cl.ty = n.ty + Math.sin(ca) * cr;
+            cl.r = SIZE.client * 0.75;
+            cl.halo = cl.r * 2.2;
+
+            const areas = nodes.filter((x) => x.type === 'area' && x.clientId === cl.id);
+            areas.forEach((ar, ai) => {
+              const aa = ca + ((ai + 0.5) / Math.max(areas.length, 1) - 0.5) * 0.55;
+              ar.visible = true;
+              ar.context = true;
+              ar.labelVisible = ai === 0;
+              ar.labelMode = 'context';
+              ar.tx = n.tx + Math.cos(aa) * n.nebulaR * 0.78;
+              ar.ty = n.ty + Math.sin(aa) * n.nebulaR * 0.78;
+              ar.r = SIZE.area * 0.7;
+              ar.halo = ar.r * 2;
+            });
+          });
+        }
       });
+      resolveLabelOffsets();
       return;
     }
 
@@ -225,86 +260,78 @@
       const country = nodeById.get(focus.countryId);
       country.visible = true;
       country.labelVisible = true;
-      country.x = cx;
-      country.y = cy - 40;
-      country.r = 28;
-      core.y = cy + 200;
-      core.x = cx;
-      core.labelVisible = true;
+      country.labelMode = 'primary';
+      country.tx = 0;
+      country.ty = -WORLD_R * 0.06;
+      country.r = SIZE.country + 5;
+      country.halo = country.r * 3.4;
+      country.nebulaR = WORLD_R * 0.75;
+      country.nebulaTone = 'indigo';
+
+      core.tx = 0;
+      core.ty = WORLD_R * 0.78;
+      core.r = 20;
+      core.halo = 50;
 
       const clients = nodes.filter((n) => n.type === 'client' && n.countryId === focus.countryId);
       clients.forEach((n, i) => {
-        const a = -Math.PI / 2 + ((i + 0.5) / Math.max(clients.length, 1)) * Math.PI * 1.4 - 0.7;
-        const r = 200;
+        const a = -Math.PI / 2 + ((i + 0.5) / Math.max(clients.length, 1) - 0.5) * Math.PI * 1.55;
+        const r = WORLD_R * 0.55;
         n.visible = true;
         n.labelVisible = true;
-        n.x = cx + Math.cos(a) * r;
-        n.y = cy - 40 + Math.sin(a) * r;
-        n.r = n.status === 'future' ? 10 : 16;
+        n.labelMode = n.status === 'future' ? 'dim' : 'primary';
+        n.tx = Math.cos(a) * r;
+        n.ty = country.ty + Math.sin(a) * r;
+        n.r = n.status === 'future' ? 7 : SIZE.client + 2;
+        n.halo = n.r * 2.8;
+
+        const areas = nodes.filter((x) => x.type === 'area' && x.clientId === n.id);
+        areas.forEach((ar, ai) => {
+          const aa = a + ((ai + 0.5) / Math.max(areas.length, 1) - 0.5) * 0.7;
+          ar.visible = true;
+          ar.context = true;
+          ar.labelVisible = true;
+          ar.labelMode = 'context';
+          ar.tx = n.tx + Math.cos(aa) * (WORLD_R * 0.22);
+          ar.ty = n.ty + Math.sin(aa) * (WORLD_R * 0.22);
+          ar.r = SIZE.area;
+          ar.halo = ar.r * 2.2;
+        });
       });
+      resolveLabelOffsets();
       return;
     }
 
     if (focus.level === LEVEL.CLIENT) {
-      const client = nodeById.get(focus.clientId);
-      client.visible = true;
-      client.labelVisible = true;
-      client.x = cx;
-      client.y = cy - 60;
-      client.r = 20;
-
-      const areas = nodes.filter((n) => n.type === 'area' && n.clientId === focus.clientId);
-      areas.forEach((n, i) => {
-        const a = (i / Math.max(areas.length, 1)) * Math.PI * 2 - Math.PI / 2;
-        const r = 180;
-        n.visible = true;
-        n.labelVisible = true;
-        n.x = cx + Math.cos(a) * r;
-        n.y = cy - 60 + Math.sin(a) * r;
-        n.r = 14;
-      });
+      placeRadialFocus(nodeById.get(focus.clientId), nodes.filter((n) => n.type === 'area' && n.clientId === focus.clientId), SIZE.area + 3);
       return;
     }
-
     if (focus.level === LEVEL.AREA) {
-      const area = nodeById.get(focus.areaId);
-      area.visible = true;
-      area.labelVisible = true;
-      area.x = cx;
-      area.y = cy - 80;
-      area.r = 16;
-
-      const locs = nodes.filter((n) => n.type === 'location' && n.areaId === focus.areaId);
-      locs.forEach((n, i) => {
-        const a = (i / Math.max(locs.length, 1)) * Math.PI * 2 - Math.PI / 2;
-        const r = 200;
-        n.visible = true;
-        n.labelVisible = true;
-        n.x = cx + Math.cos(a) * r;
-        n.y = cy - 80 + Math.sin(a) * r;
-        n.r = 12;
-      });
+      placeRadialFocus(nodeById.get(focus.areaId), nodes.filter((n) => n.type === 'location' && n.areaId === focus.areaId), SIZE.location + 3);
       return;
     }
-
     if (focus.level === LEVEL.LOCATION) {
       const loc = nodeById.get(focus.locationId);
       loc.visible = true;
       loc.labelVisible = true;
-      loc.x = cx;
-      loc.y = cy - 100;
-      loc.r = 14;
-
+      loc.labelMode = 'primary';
+      loc.tx = 0;
+      loc.ty = -WORLD_R * 0.1;
+      loc.r = SIZE.location + 4;
+      loc.halo = loc.r * 3;
       const ms = nodes.filter((n) => n.type === 'machine' && n.locationId === focus.locationId);
       ms.forEach((n, i) => {
         const a = (i / Math.max(ms.length, 1)) * Math.PI * 2 - Math.PI / 2;
-        const r = Math.max(90, 50 + ms.length * 28);
+        const r = Math.max(WORLD_R * 0.4, WORLD_R * 0.28 + ms.length * 10);
         n.visible = true;
         n.labelVisible = true;
-        n.x = cx + Math.cos(a) * r;
-        n.y = cy + 20 + Math.sin(a) * r;
-        n.r = 18;
+        n.labelMode = 'primary';
+        n.tx = Math.cos(a) * r;
+        n.ty = Math.sin(a) * r * 0.92;
+        n.r = SIZE.machine + 3;
+        n.halo = n.r * 3.2;
       });
+      resolveLabelOffsets();
       return;
     }
 
@@ -312,9 +339,11 @@
       const m = nodeById.get(focus.machineId);
       m.visible = true;
       m.labelVisible = true;
-      m.x = cx;
-      m.y = cy;
-      m.r = 22;
+      m.labelMode = 'primary';
+      m.tx = 0;
+      m.ty = 0;
+      m.r = SIZE.machine + 6;
+      m.halo = m.r * 3.4;
 
       BRANCHES.forEach((b, i) => {
         const id = `${m.id}::${b.id}`;
@@ -330,23 +359,91 @@
             parentId: m.id,
             depth: 6,
             status: 'active',
+            x: 0,
+            y: 0,
+            tx: 0,
+            ty: 0,
           };
           addNode(bn);
           links.push({ source: m.id, target: id, kind: 'branch' });
         }
         const a = (i / BRANCHES.length) * Math.PI * 2 - Math.PI / 2;
-        const r = 140;
+        const r = WORLD_R * 0.52;
         bn.visible = true;
         bn.labelVisible = true;
-        bn.x = cx + Math.cos(a) * r;
-        bn.y = cy + Math.sin(a) * r;
-        bn.r = 14;
+        bn.labelMode = 'primary';
+        bn.tx = Math.cos(a) * r;
+        bn.ty = Math.sin(a) * r;
+        bn.r = SIZE.branch + 2;
+        bn.halo = bn.r * 2.6;
         bn.machine = m;
       });
+      resolveLabelOffsets();
     }
   }
 
-  // ——— DOM / SVG ———
+  function placeRadialFocus(center, children, childR) {
+    center.visible = true;
+    center.labelVisible = true;
+    center.labelMode = 'primary';
+    center.tx = 0;
+    center.ty = 0;
+    center.r = (SIZE[center.type] || 10) + 4;
+    center.halo = center.r * 3;
+    children.forEach((n, i) => {
+      const a = (i / Math.max(children.length, 1)) * Math.PI * 2 - Math.PI / 2;
+      const r = WORLD_R * 0.58;
+      n.visible = true;
+      n.labelVisible = true;
+      n.labelMode = 'primary';
+      n.tx = Math.cos(a) * r;
+      n.ty = Math.sin(a) * r;
+      n.r = childR;
+      n.halo = n.r * 2.8;
+    });
+    resolveLabelOffsets();
+  }
+
+  /** Simple vertical collision offset for labels under nodes */
+  function resolveLabelOffsets() {
+    const labeled = nodes.filter((n) => n.visible && n.labelVisible && n.type !== 'enterprise');
+    labeled.forEach((n) => {
+      n.labelOx = 0;
+      n.labelOy = (n.halo || n.r * 2) * 0.55 + 16;
+    });
+    // push apart labels that share similar x and close y
+    for (let iter = 0; iter < 4; iter++) {
+      for (let i = 0; i < labeled.length; i++) {
+        for (let j = i + 1; j < labeled.length; j++) {
+          const a = labeled[i];
+          const b = labeled[j];
+          const ax = a.tx + a.labelOx;
+          const ay = a.ty + a.labelOy;
+          const bx = b.tx + b.labelOx;
+          const by = b.ty + b.labelOy;
+          const dx = bx - ax;
+          const dy = by - ay;
+          if (Math.abs(dx) < 90 && Math.abs(dy) < 22) {
+            const push = (22 - Math.abs(dy)) / 2 + 2;
+            if (ay <= by) {
+              a.labelOy -= push / 2;
+              b.labelOy += push / 2;
+            } else {
+              a.labelOy += push / 2;
+              b.labelOy -= push / 2;
+            }
+            // slight horizontal nudge if still tight
+            if (Math.abs(dx) < 40) {
+              a.labelOx -= 6;
+              b.labelOx += 6;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ——— DOM ———
   const stage = document.getElementById('space-stage');
   const svgEl = document.getElementById('space-svg');
   const svg = d3.select(svgEl);
@@ -357,31 +454,106 @@
   const terminalOverlay = document.getElementById('terminal-overlay');
 
   let gRoot;
+  let gNebulae;
   let gLinks;
   let gNodes;
   let zoomBehavior;
   let transform = d3.zoomIdentity;
+  let animating = false;
 
   function initSvg() {
     svg.selectAll('*').remove();
     const defs = svg.append('defs');
-    const grad = defs.append('radialGradient').attr('id', 'nebula-grad');
-    grad.append('stop').attr('offset', '0%').attr('stop-color', '#7eb8d4').attr('stop-opacity', 0.35);
-    grad.append('stop').attr('offset', '55%').attr('stop-color', '#3a5a78').attr('stop-opacity', 0.12);
-    grad.append('stop').attr('offset', '100%').attr('stop-color', '#05070c').attr('stop-opacity', 0);
+    const addRadial = (id, stops) => {
+      const g = defs.append('radialGradient').attr('id', id);
+      stops.forEach((s) =>
+        g.append('stop').attr('offset', s[0]).attr('stop-color', s[1]).attr('stop-opacity', s[2])
+      );
+    };
+    addRadial('nebula-indigo', [
+      ['0%', '#5a6eb8', 0.42],
+      ['45%', '#2a3a78', 0.18],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('nebula-teal', [
+      ['0%', '#3a8a9a', 0.4],
+      ['50%', '#1a4a58', 0.16],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('nebula-violet', [
+      ['0%', '#6a5a9a', 0.36],
+      ['50%', '#3a2a5a', 0.14],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('core-glow-grad', [
+      ['0%', '#9fd9f0', 0.45],
+      ['40%', '#4a8ab0', 0.18],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('core-mid-grad', [
+      ['0%', '#e8f6ff', 0.85],
+      ['55%', '#7ec8e8', 0.35],
+      ['100%', '#1a4060', 0],
+    ]);
+    addRadial('core-body-grad', [
+      ['0%', '#ffffff', 1],
+      ['35%', '#d8f0ff', 0.95],
+      ['70%', '#6ab0d0', 0.85],
+      ['100%', '#1a5070', 0.9],
+    ]);
+    addRadial('star-halo-grad', [
+      ['0%', '#c8e4f8', 0.55],
+      ['50%', '#6a9ab8', 0.18],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('star-halo-ok', [
+      ['0%', '#b8f0d0', 0.55],
+      ['55%', '#4a9070', 0.16],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('star-halo-amber', [
+      ['0%', '#f0d090', 0.55],
+      ['55%', '#a07830', 0.18],
+      ['100%', '#03050a', 0],
+    ]);
+    addRadial('star-halo-red', [
+      ['0%', '#f0a0a0', 0.55],
+      ['55%', '#903030', 0.2],
+      ['100%', '#03050a', 0],
+    ]);
+
+    const linkGrad = defs
+      .append('linearGradient')
+      .attr('id', 'link-grad')
+      .attr('x1', '0%')
+      .attr('y1', '0%')
+      .attr('x2', '100%')
+      .attr('y2', '0%');
+    linkGrad.append('stop').attr('offset', '0%').attr('stop-color', '#9ec8e0').attr('stop-opacity', 0.2);
+    linkGrad.append('stop').attr('offset', '50%').attr('stop-color', '#d0e8f8').attr('stop-opacity', 0.55);
+    linkGrad.append('stop').attr('offset', '100%').attr('stop-color', '#9ec8e0').attr('stop-opacity', 0.2);
 
     gRoot = svg.append('g').attr('class', 'viewport');
+    gNebulae = gRoot.append('g').attr('class', 'nebulae');
     gLinks = gRoot.append('g').attr('class', 'links');
     gNodes = gRoot.append('g').attr('class', 'nodes');
 
     zoomBehavior = d3
       .zoom()
-      .scaleExtent([0.35, 4])
+      .scaleExtent([0.25, 5])
+      .filter((event) => {
+        // allow wheel + drag; ignore dblclick (we handle back)
+        if (event.type === 'dblclick') return false;
+        return !event.ctrlKey && !event.button;
+      })
       .on('zoom', (event) => {
         transform = event.transform;
         gRoot.attr('transform', transform);
+        applyLabelCounterScale();
       })
-      .on('start', () => stage.classList.add('is-panning'))
+      .on('start', (event) => {
+        if (event.sourceEvent) stage.classList.add('is-panning');
+      })
       .on('end', () => stage.classList.remove('is-panning'));
 
     svg.call(zoomBehavior);
@@ -400,38 +572,149 @@
     });
   }
 
-  function render() {
-    const focus = currentFocus();
-    layoutPositions(focus);
-    updateBreadcrumb();
+  function machineHaloUrl(d) {
+    if (d.type !== 'machine') return 'url(#star-halo-grad)';
+    if (d.status === 'offline' || d.alert === 'red') return 'url(#star-halo-red)';
+    if (d.status === 'maintenance' || d.alert === 'amber') return 'url(#star-halo-amber)';
+    return 'url(#star-halo-ok)';
+  }
 
+  function machineCoreFill(d) {
+    if (d.type !== 'machine') return '#e8f2fa';
+    if (d.status === 'offline' || d.alert === 'red') return '#f0b0b0';
+    if (d.status === 'maintenance' || d.alert === 'amber') return '#f0d8a0';
+    return '#d8f5e8';
+  }
+
+  function nodeClass(d) {
+    let cls = `node node-${d.type}`;
+    if (d.status === 'future') cls += ' future';
+    if (d.context) cls += ' context';
+    return cls;
+  }
+
+  function contentBBox() {
+    const primary = nodes.filter((n) => n.visible && !n.context);
+    const pts = primary.length ? primary : nodes.filter((n) => n.visible);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    pts.forEach((n) => {
+      // Frame stars + labels; only a fraction of nebula so zoom fills the viewport
+      const nebPad = n.nebulaR ? n.nebulaR * 0.28 : 0;
+      const pad = Math.max(n.halo || n.r * 2.5, nebPad) + (n.labelVisible ? 24 : 10);
+      const labelExtra = n.labelVisible ? Math.min(n.labelOy || 20, 36) : 0;
+      minX = Math.min(minX, n.tx - pad + (n.labelOx || 0));
+      maxX = Math.max(maxX, n.tx + pad + (n.labelOx || 0));
+      minY = Math.min(minY, n.ty - pad);
+      maxY = Math.max(maxY, n.ty + pad + labelExtra);
+    });
+    if (!isFinite(minX)) return { x: -200, y: -200, w: 400, h: 400 };
+    return { x: minX, y: minY, w: Math.max(maxX - minX, 80), h: Math.max(maxY - minY, 80) };
+  }
+
+  function fitTransformForBBox(bbox) {
+    const W = stage.clientWidth || 1200;
+    const H = stage.clientHeight || 800;
+    const kx = (W * FIT) / Math.max(bbox.w, 1);
+    const ky = (H * FIT) / Math.max(bbox.h, 1);
+    const k = Math.max(0.3, Math.min(3.2, Math.min(kx, ky)));
+    const cx = bbox.x + bbox.w / 2;
+    const cy = bbox.y + bbox.h / 2;
+    return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
+  }
+
+  /** Seed positions: new nodes emerge from originParent; survivors keep place */
+  function seedMotion(originWorld) {
+    const ox = originWorld?.x ?? 0;
+    const oy = originWorld?.y ?? 0;
+    nodes.forEach((n) => {
+      if (!n.visible) {
+        n.opacity = 0;
+        return;
+      }
+      if (!n.wasVisible) {
+        n.x = ox;
+        n.y = oy;
+        n.opacity = 0;
+        n._emerging = true;
+      } else {
+        n._emerging = false;
+        n.opacity = n.context ? 0.55 : 1;
+      }
+    });
+  }
+
+  function applyLabelCounterScale() {
+    const k = transform.k || 1;
+    const inv = 1 / k;
+    gNodes.selectAll('g.label-layer').attr('transform', `scale(${inv})`);
+    gNodes.selectAll('text.core-wordmark').attr('transform', `scale(${inv})`);
+  }
+
+  function paintFrame(t) {
+    // t in [0,1] during transitions — interpolate x,y,opacity
     const vLinks = visibleLinks();
     const linkSel = gLinks.selectAll('path.link').data(vLinks, (d) => {
       const s = typeof d.source === 'string' ? d.source : d.source.id;
-      const t = typeof d.target === 'string' ? d.target : d.target.id;
-      return `${s}->${t}`;
+      const tid = typeof d.target === 'string' ? d.target : d.target.id;
+      return `${s}->${tid}`;
     });
     linkSel.exit().remove();
-    const linkEnter = linkSel.enter().append('path').attr('class', 'link');
-    linkEnter
+    linkSel
+      .enter()
+      .append('path')
+      .attr('class', 'link')
+      .attr('opacity', 0)
       .merge(linkSel)
-      .attr('class', (d) => `link ${d.kind === 'spine' ? 'active-path' : ''}`)
+      .attr('class', (d) => {
+        const s = nodeById.get(typeof d.source === 'string' ? d.source : d.source.id);
+        const tgt = nodeById.get(typeof d.target === 'string' ? d.target : d.target.id);
+        const ctx = s?.context || tgt?.context ? ' context' : '';
+        return `link ${d.kind || ''}${ctx}`;
+      })
       .attr('d', (d) => {
         const s = nodeById.get(typeof d.source === 'string' ? d.source : d.source.id);
-        const t = nodeById.get(typeof d.target === 'string' ? d.target : d.target.id);
-        return `M${s.x},${s.y}L${t.x},${t.y}`;
+        const tgt = nodeById.get(typeof d.target === 'string' ? d.target : d.target.id);
+        const mx = (s.x + tgt.x) / 2;
+        const my = (s.y + tgt.y) / 2;
+        const dx = tgt.x - s.x;
+        const dy = tgt.y - s.y;
+        return `M${s.x},${s.y}Q${mx - dy * 0.08},${my + dx * 0.08} ${tgt.x},${tgt.y}`;
+      })
+      .attr('opacity', (d) => {
+        const s = nodeById.get(typeof d.source === 'string' ? d.source : d.source.id);
+        const tgt = nodeById.get(typeof d.target === 'string' ? d.target : d.target.id);
+        return Math.min(s.opacity ?? 1, tgt.opacity ?? 1) * (s.context || tgt.context ? 0.7 : 1);
       });
 
-    const vNodes = nodes.filter((n) => n.visible);
+    const nebulaNodes = nodes.filter((n) => n.visible && n.nebulaR > 0);
+    const nebSel = gNebulae.selectAll('circle.nebula').data(nebulaNodes, (d) => d.id);
+    nebSel.exit().remove();
+    nebSel
+      .enter()
+      .append('circle')
+      .attr('class', 'nebula')
+      .attr('opacity', 0)
+      .merge(nebSel)
+      .attr('class', (d) => `nebula nebula-${d.nebulaTone || 'indigo'}`)
+      .attr('cx', (d) => d.x)
+      .attr('cy', (d) => d.y)
+      .attr('r', (d) => d.nebulaR)
+      .attr('opacity', (d) => (d.opacity ?? 1) * 0.9);
+
+    const vNodes = nodes.filter((n) => n.visible).sort((a, b) => Number(!!b.context) - Number(!!a.context) || a.depth - b.depth);
     const nodeSel = gNodes.selectAll('g.node').data(vNodes, (d) => d.id);
     nodeSel.exit().remove();
 
     const enter = nodeSel
       .enter()
       .append('g')
-      .attr('class', (d) => `node node-${d.type}${d.status === 'future' ? ' future' : ''}`)
+      .attr('class', (d) => nodeClass(d))
       .attr('data-id', (d) => d.id)
       .attr('data-type', (d) => d.type)
+      .attr('opacity', 0)
       .on('click', (event, d) => {
         event.stopPropagation();
         onNodeClick(d);
@@ -439,93 +722,230 @@
 
     enter.each(function (d) {
       const g = d3.select(this);
-      if (d.type === 'country') {
-        g.append('circle').attr('class', 'nebula').attr('r', d.nebulaR || 100);
-      }
       if (d.type === 'enterprise') {
-        g.append('circle').attr('class', 'core-glow').attr('r', 48);
-        g.append('circle').attr('class', 'core-ring').attr('r', 42);
-        g.append('circle').attr('class', 'core-disk').attr('r', 28);
-      } else if (d.type === 'machine') {
-        g.append('circle').attr('class', 'pulse-ring').attr('r', 26);
-        g.append('circle').attr('class', 'machine-disk').attr('r', d.r);
-      } else if (d.type === 'branch') {
-        g.append('circle').attr('class', 'branch-disk').attr('r', d.r);
+        g.append('circle').attr('class', 'core-outer-glow');
+        g.append('circle').attr('class', 'core-mid-glow');
+        g.append('circle').attr('class', 'core-body');
+        for (let i = 0; i < 8; i++) {
+          g.append('circle')
+            .attr('class', 'core-spark')
+            .attr('r', 1.2)
+            .attr('fill', '#e8f6ff')
+            .attr('opacity', 0.7)
+            .attr('data-i', i);
+        }
+        g.append('text').attr('class', 'core-wordmark').text('APOS');
+        g.append('circle').attr('class', 'hit-target');
       } else {
-        g.append('circle')
-          .attr('class', 'star-disk')
-          .attr('r', d.r)
-          .attr('fill', '#101824')
-          .attr('stroke', 'rgba(180,200,230,0.3)')
-          .attr('stroke-width', 1);
+        g.append('circle').attr('class', 'star-halo');
+        g.append('circle').attr('class', 'star-core');
+        g.append('circle').attr('class', 'pulse-ring');
+        g.append('circle').attr('class', 'hit-target');
+        const lab = g.append('g').attr('class', 'label-layer');
+        lab.append('text').attr('class', 'node-label');
       }
-      g.append('text').attr('class', 'node-label').attr('dy', (dd) => labelDy(dd));
     });
 
     const merged = enter.merge(nodeSel);
     merged
-      .attr('class', (d) => `node node-${d.type}${d.status === 'future' ? ' future' : ''}`)
-      .attr('transform', (d) => `translate(${d.x},${d.y})`);
+      .attr('class', (d) => nodeClass(d))
+      .attr('transform', (d) => `translate(${d.x},${d.y})`)
+      .attr('opacity', (d) => d.opacity ?? 1);
 
-    merged.select('.nebula').attr('r', (d) => d.nebulaR || 100);
-    merged.select('.core-disk').attr('r', (d) => (d.type === 'enterprise' ? Math.max(14, d.r * 0.75) : 0));
-    merged.select('.core-ring').attr('r', (d) => (d.type === 'enterprise' ? d.r + 6 : 0));
-    merged.select('.core-glow').attr('r', (d) => (d.type === 'enterprise' ? d.r + 12 : 0));
-
-    merged.select('.machine-disk').attr('r', (d) => d.r).attr('class', (d) => {
-      let cls = 'machine-disk';
-      if (d.status === 'offline') cls += ' offline';
-      if (d.status === 'maintenance') cls += ' maintenance';
-      if (d.alert === 'red') cls += ' alert-red';
-      else if (d.alert === 'amber') cls += ' alert-amber';
-      return cls;
+    merged.select('.core-outer-glow').attr('r', (d) => (d.type === 'enterprise' ? d.r * 2.6 : 0));
+    merged.select('.core-mid-glow').attr('r', (d) => (d.type === 'enterprise' ? d.r * 1.45 : 0));
+    merged.select('.core-body').attr('r', (d) => (d.type === 'enterprise' ? d.r : 0));
+    merged.select('.core-wordmark').attr('font-size', (d) => (d.r > 30 ? 15 : 11));
+    merged.selectAll('.core-spark').attr('transform', function () {
+      const i = +this.getAttribute('data-i');
+      const parent = d3.select(this.parentNode).datum();
+      const rr = (parent?.r || 40) * 1.15;
+      const a = (i / 8) * Math.PI * 2;
+      return `translate(${Math.cos(a) * rr},${Math.sin(a) * rr})`;
     });
 
-    merged.select('.pulse-ring').attr('r', (d) => d.r + 8);
+    merged
+      .select('.star-halo')
+      .attr('r', (d) => d.halo || d.r * 2.4)
+      .attr('fill', (d) => machineHaloUrl(d))
+      .attr('opacity', (d) => (d.context ? 0.45 : 0.85));
 
-    merged.select('.branch-disk').attr('r', (d) => d.r);
-    merged.select('.star-disk').attr('r', (d) => d.r);
+    merged
+      .select('.star-core')
+      .attr('r', (d) => Math.max(2.2, d.r * 0.45))
+      .attr('fill', (d) => machineCoreFill(d));
+
+    merged.select('.hit-target').attr('r', (d) => Math.max((d.halo || d.r) * 0.55, d.r + 12));
+    merged.select('.pulse-ring').attr('r', (d) => (d.halo || d.r) + 4);
+
+    // labels: offset in screen pixels via counter-scaled layer
+    merged.select('g.label-layer').attr('transform', () => {
+      const inv = 1 / (transform.k || 1);
+      return `scale(${inv})`;
+    });
 
     merged
       .select('text.node-label')
       .attr('class', (d) => {
         let cls = 'node-label';
+        if (d.labelMode === 'primary') cls += ' primary';
+        if (d.labelMode === 'context') cls += ' context';
+        if (d.labelMode === 'dim' || d.status === 'future') cls += ' dim';
         if (d.type === 'machine' || d.type === 'branch') cls += ' small';
-        if (d.status === 'future') cls += ' dim';
         return cls;
       })
-      .attr('dy', (d) => labelDy(d))
+      .attr('x', (d) => d.labelOx || 0)
+      .attr('y', (d) => d.labelOy || 20)
+      .attr('dy', '0.35em')
       .style('display', (d) => (d.labelVisible ? null : 'none'))
       .text((d) => d.label);
 
-    // alert pulse animation
+    // wordmark also counter-scaled
+    merged.select('text.core-wordmark').attr('transform', () => `scale(${1 / (transform.k || 1)})`);
+
     if (!reduceMotion) {
       merged.select('.pulse-ring').each(function (d) {
-        if (!d.alert) {
+        if (d.type !== 'machine' || !d.alert) {
           d3.select(this).attr('opacity', 0);
           return;
         }
-        const ring = d3.select(this);
-        ring
-          .attr('stroke', d.alert === 'red' ? '#c45c5c' : '#c9a227')
-          .attr('opacity', 0.6);
+        d3.select(this)
+          .attr('stroke', d.alert === 'red' ? '#d66a6a' : '#d4a84b')
+          .attr('opacity', 0.55);
       });
     }
-
-    drawSignalsStatic();
   }
 
-  function labelDy(d) {
-    if (d.type === 'enterprise') return d.r + 22;
-    if (d.type === 'country') return (d.nebulaR || 80) * 0.15 + d.r + 18;
-    return d.r + 16;
+  function interpolateNodes(alpha) {
+    nodes.forEach((n) => {
+      if (!n.visible) return;
+      const targetOp = n.context ? 0.55 : 1;
+      if (n._emerging) {
+        // stagger by angle-ish using id hash
+        const stagger = (hashId(n.id) % 8) * 0.04;
+        const local = Math.max(0, Math.min(1, (alpha - stagger) / (1 - stagger)));
+        const e = CAM_EASE(local);
+        n.x = n.x0 + (n.tx - n.x0) * e;
+        n.y = n.y0 + (n.ty - n.y0) * e;
+        n.opacity = e * targetOp;
+      } else {
+        n.x = n.x0 + (n.tx - n.x0) * alpha;
+        n.y = n.y0 + (n.ty - n.y0) * alpha;
+        n.opacity = n.op0 + (targetOp - n.op0) * alpha;
+      }
+    });
+  }
+
+  function hashId(id) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+
+  function captureOriginWorld(clickedNode) {
+    if (clickedNode) return { x: clickedNode.x, y: clickedNode.y };
+    return { x: 0, y: 0 };
+  }
+
+  /**
+   * Transition to a new focus: layout targets, seed expand-from-parent, animate camera + nodes.
+   */
+  function transitionToFocus(opts = {}) {
+    const { originNode = null, instant = false } = opts;
+    const origin = captureOriginWorld(originNode);
+
+    layoutTargets(currentFocus());
+    updateBreadcrumb();
+
+    // remember start poses
+    nodes.forEach((n) => {
+      if (!n.visible) return;
+      if (!n.wasVisible) {
+        n.x0 = origin.x;
+        n.y0 = origin.y;
+        n.op0 = 0;
+        n.x = origin.x;
+        n.y = origin.y;
+        n.opacity = 0;
+        n._emerging = true;
+      } else {
+        n.x0 = n.x;
+        n.y0 = n.y;
+        n.op0 = n.opacity ?? 1;
+        n._emerging = false;
+      }
+    });
+
+    const bbox = contentBBox();
+    const targetTransform = fitTransformForBBox(bbox);
+    const duration = instant || reduceMotion ? 0 : CAM_MS;
+
+    animating = true;
+    const startT = transform;
+
+    const finish = () => {
+      nodes.forEach((n) => {
+        if (!n.visible) return;
+        n.x = n.tx;
+        n.y = n.ty;
+        n.opacity = n.context ? 0.55 : 1;
+        n._emerging = false;
+      });
+      transform = targetTransform;
+      // sync d3-zoom internal state without emitting an extra animated transition
+      svg.call(zoomBehavior.transform, transform);
+      paintFrame(1);
+      applyLabelCounterScale();
+      animating = false;
+    };
+
+    if (duration === 0) {
+      finish();
+      return;
+    }
+
+    const zt = d3.interpolate(
+      { k: startT.k, x: startT.x, y: startT.y },
+      { k: targetTransform.k, x: targetTransform.x, y: targetTransform.y }
+    );
+
+    svg
+      .transition('camera')
+      .duration(duration)
+      .ease(CAM_EASE)
+      .tween('frame', () => (t) => {
+        const v = zt(t);
+        transform = d3.zoomIdentity.translate(v.x, v.y).scale(v.k);
+        gRoot.attr('transform', transform);
+        interpolateNodes(t);
+        paintFrame(t);
+        applyLabelCounterScale();
+      })
+      .on('end interrupt', finish);
+  }
+
+  function renderInstant() {
+    layoutTargets(currentFocus());
+    nodes.forEach((n) => {
+      if (!n.visible) return;
+      n.x = n.tx;
+      n.y = n.ty;
+      n.opacity = n.context ? 0.55 : 1;
+      n.wasVisible = true;
+    });
+    updateBreadcrumb();
+    const targetTransform = fitTransformForBBox(contentBBox());
+    transform = targetTransform;
+    svg.call(zoomBehavior.transform, transform);
+    paintFrame(1);
+    applyLabelCounterScale();
   }
 
   // ——— navigation ———
-  function pushFocus(next) {
+  function pushFocus(next, originNode) {
     focusStack.push(next);
     closeBranchCard();
-    animateToFocus();
+    transitionToFocus({ originNode });
   }
 
   function goBack() {
@@ -540,8 +960,12 @@
       return;
     }
     if (focusStack.length > 1) {
+      const leaving = currentFocus();
+      const origin = nodeById.get(
+        leaving.machineId || leaving.locationId || leaving.areaId || leaving.clientId || leaving.countryId
+      );
       focusStack.pop();
-      animateToFocus();
+      transitionToFocus({ originNode: origin || null });
     }
   }
 
@@ -549,49 +973,61 @@
     if (idx < 0 || idx >= focusStack.length) return;
     focusStack = focusStack.slice(0, idx + 1);
     closeBranchCard();
-    animateToFocus();
+    transitionToFocus({});
   }
 
   function onNodeClick(d) {
+    if (animating) return;
     if (d.status === 'future') return;
     const f = currentFocus();
 
-    if (d.type === 'country' && f.level === LEVEL.GALAXY) {
-      pushFocus({ level: LEVEL.COUNTRY, countryId: d.id });
-      return;
+    if (f.level === LEVEL.GALAXY) {
+      if (d.type === 'country') {
+        pushFocus({ level: LEVEL.COUNTRY, countryId: d.id }, d);
+        return;
+      }
+      if ((d.type === 'client' || d.type === 'area') && d.countryId) {
+        pushFocus({ level: LEVEL.COUNTRY, countryId: d.countryId }, d);
+        return;
+      }
     }
     if (d.type === 'client' && f.level === LEVEL.COUNTRY) {
-      pushFocus({ level: LEVEL.CLIENT, countryId: d.countryId, clientId: d.id });
+      pushFocus({ level: LEVEL.CLIENT, countryId: d.countryId, clientId: d.id }, d);
       return;
     }
     if (d.type === 'area' && f.level === LEVEL.CLIENT) {
-      pushFocus({
-        level: LEVEL.AREA,
-        countryId: d.countryId,
-        clientId: d.clientId,
-        areaId: d.id,
-      });
+      pushFocus({ level: LEVEL.AREA, countryId: d.countryId, clientId: d.clientId, areaId: d.id }, d);
+      return;
+    }
+    if (d.type === 'area' && f.level === LEVEL.COUNTRY && d.clientId) {
+      pushFocus({ level: LEVEL.CLIENT, countryId: d.countryId, clientId: d.clientId }, d);
       return;
     }
     if (d.type === 'location' && f.level === LEVEL.AREA) {
-      pushFocus({
-        level: LEVEL.LOCATION,
-        countryId: d.countryId,
-        clientId: d.clientId,
-        areaId: d.areaId,
-        locationId: d.id,
-      });
+      pushFocus(
+        {
+          level: LEVEL.LOCATION,
+          countryId: d.countryId,
+          clientId: d.clientId,
+          areaId: d.areaId,
+          locationId: d.id,
+        },
+        d
+      );
       return;
     }
     if (d.type === 'machine' && f.level === LEVEL.LOCATION) {
-      pushFocus({
-        level: LEVEL.MACHINE,
-        countryId: d.countryId,
-        clientId: d.clientId,
-        areaId: d.areaId,
-        locationId: d.locationId,
-        machineId: d.id,
-      });
+      pushFocus(
+        {
+          level: LEVEL.MACHINE,
+          countryId: d.countryId,
+          clientId: d.clientId,
+          areaId: d.areaId,
+          locationId: d.locationId,
+          machineId: d.id,
+        },
+        d
+      );
       return;
     }
     if (d.type === 'machine' && f.level === LEVEL.MACHINE && d.id === f.machineId) {
@@ -599,7 +1035,6 @@
       return;
     }
     if (d.type === 'branch') {
-      // Stay on the same machine level; annotate branch in-place (no duplicate crumb).
       focusStack[focusStack.length - 1] = { ...f, branchId: d.branchId };
       showBranchCard(d);
       updateBreadcrumb();
@@ -607,52 +1042,7 @@
     }
   }
 
-  function animateToFocus() {
-    const t = reduceMotion ? 0 : 650;
-    svg
-      .transition()
-      .duration(t)
-      .ease(d3.easeCubicInOut)
-      .call(zoomBehavior.transform, d3.zoomIdentity);
-    transform = d3.zoomIdentity;
-    render();
-  }
-
   function updateBreadcrumb() {
-    const crumbs = [{ label: 'APOS', index: 0 }];
-    focusStack.forEach((f, i) => {
-      if (i === 0) return;
-      if (f.countryId) {
-        const n = nodeById.get(f.countryId);
-        if (f.level === LEVEL.COUNTRY) crumbs.push({ label: n.label, index: i });
-      }
-      if (f.clientId && f.level >= LEVEL.CLIENT) {
-        const n = nodeById.get(f.clientId);
-        if (f.level === LEVEL.CLIENT || (f.level > LEVEL.CLIENT && crumbs[crumbs.length - 1]?.label !== n.label)) {
-          if (!crumbs.some((c) => c.label === n.label && c._id === n.id)) {
-            crumbs.push({ label: n.label, index: i, _id: n.id });
-          }
-        }
-      }
-      if (f.areaId && f.level >= LEVEL.AREA) {
-        const n = nodeById.get(f.areaId);
-        if (f.level === LEVEL.AREA) crumbs.push({ label: n.label, index: i });
-      }
-      if (f.locationId && f.level >= LEVEL.LOCATION) {
-        const n = nodeById.get(f.locationId);
-        if (f.level === LEVEL.LOCATION) crumbs.push({ label: n.label, index: i });
-      }
-      if (f.machineId && f.level >= LEVEL.MACHINE) {
-        const n = nodeById.get(f.machineId);
-        if (f.level === LEVEL.MACHINE) crumbs.push({ label: n.label, index: i });
-      }
-      if (f.branchId) {
-        const b = BRANCHES.find((x) => x.id === f.branchId);
-        crumbs.push({ label: b?.label || f.branchId, index: i });
-      }
-    });
-
-    // rebuild clean crumbs from stack
     const clean = [{ label: 'Galaxy', index: 0 }];
     for (let i = 1; i < focusStack.length; i++) {
       const f = focusStack[i];
@@ -688,17 +1078,13 @@
     if (prevBtn) prevBtn.disabled = focusStack.length <= 1 && branchCard.hidden;
   }
 
-  // ——— branch card ———
+  // ——— branch card / terminal ———
   function showBranchCard(branchNode) {
     const m = branchNode.machine || nodeById.get(branchNode.machineId);
-    const title = document.getElementById('branch-card-title');
+    document.getElementById('branch-card-title').textContent = `${m.label} · ${branchNode.label}`;
     const body = document.getElementById('branch-card-body');
-    const taskBtn = document.getElementById('branch-card-task');
-    title.textContent = `${m.label} · ${branchNode.label}`;
     body.replaceChildren();
-
-    const rows = branchRows(branchNode.branchKey, m);
-    rows.forEach(([k, v]) => {
+    branchRows(branchNode.branchKey, m).forEach(([k, v]) => {
       const row = document.createElement('div');
       row.className = 'card-row';
       const kk = document.createElement('span');
@@ -710,7 +1096,7 @@
       row.append(kk, vv);
       body.appendChild(row);
     });
-
+    const taskBtn = document.getElementById('branch-card-task');
     const canTask = branchNode.branchKey === 'operators' || branchNode.branchKey === 'technical';
     taskBtn.hidden = !canTask;
     taskBtn.onclick = () => {
@@ -767,7 +1153,6 @@
     branchCard.hidden = true;
   }
 
-  // ——— terminal ———
   let terminalContext = { person: null, machine: null };
 
   function openTerminalForMachine(machine, role) {
@@ -800,15 +1185,11 @@
       task: text,
     };
     try {
-      const res = await fetch('/api/tasks', {
+      await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      // stub: treat network failure as mock success
-      if (!res.ok && res.status !== 404) {
-        /* still mock success for demos */
-      }
     } catch {
       /* mock success */
     }
@@ -816,51 +1197,73 @@
     log.textContent = `> task dispatched to ${name}'s mobile inbox`;
   }
 
-  // ——— signals (canvas) ———
-  /** @type {{x0:number,y0:number,x1:number,y1:number,t:number,speed:number,color:string,life:number,bright:boolean}[]} */
+  // ——— canvas starfield + signals ———
   const pulses = [];
   let signalCtx;
   let starCtx;
   let stars = [];
-  let rafId = 0;
   let lastTs = 0;
 
   function resizeCanvases() {
     const w = stage.clientWidth;
     const h = stage.clientHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     [starCanvas, signalCanvas].forEach((c) => {
-      c.width = w;
-      c.height = h;
+      c.width = Math.floor(w * dpr);
+      c.height = Math.floor(h * dpr);
+      c.style.width = `${w}px`;
+      c.style.height = `${h}px`;
+      c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
     });
     signalCtx = signalCanvas.getContext('2d');
     starCtx = starCanvas.getContext('2d');
     seedStars(w, h);
-    drawStarfield();
   }
 
   function seedStars(w, h) {
     stars = [];
-    const n = Math.min(220, Math.floor((w * h) / 9000));
-    for (let i = 0; i < n; i++) {
-      stars.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        r: Math.random() * 1.1 + 0.2,
-        a: Math.random() * 0.45 + 0.1,
-      });
-    }
+    const dens = Math.floor((w * h) / 2800);
+    const pushLayer = (count, layer, rMin, rMax, aMin, aMax) => {
+      for (let i = 0; i < count; i++) {
+        stars.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: rMin + Math.random() * (rMax - rMin),
+          a: aMin + Math.random() * (aMax - aMin),
+          layer,
+          tw: Math.random() * Math.PI * 2,
+          twSpeed: 0.4 + Math.random() * 1.2,
+        });
+      }
+    };
+    pushLayer(Math.min(420, Math.floor(dens * 0.55)), 0.15, 0.25, 0.7, 0.12, 0.35);
+    pushLayer(Math.min(280, Math.floor(dens * 0.32)), 0.4, 0.4, 1.1, 0.22, 0.55);
+    pushLayer(Math.min(140, Math.floor(dens * 0.18)), 0.85, 0.6, 1.6, 0.35, 0.75);
   }
 
-  function drawStarfield() {
+  function drawStarfield(ts) {
     if (!starCtx) return;
-    const w = starCanvas.width;
-    const h = starCanvas.height;
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
     starCtx.clearRect(0, 0, w, h);
+    const px = -transform.x * 0.045;
+    const py = -transform.y * 0.045;
+    const t = (ts || performance.now()) / 1000;
     for (const s of stars) {
+      let x = ((s.x + px * s.layer) % w + w) % w;
+      let y = ((s.y + py * s.layer) % h + h) % h;
+      const twinkle = reduceMotion ? 1 : 0.72 + 0.28 * Math.sin(t * s.twSpeed + s.tw);
+      const alpha = s.a * twinkle;
       starCtx.beginPath();
-      starCtx.fillStyle = `rgba(200, 215, 235, ${s.a})`;
-      starCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      starCtx.fillStyle = `rgba(210, 225, 245, ${alpha})`;
+      starCtx.arc(x, y, s.r, 0, Math.PI * 2);
       starCtx.fill();
+      if (s.r > 1.1) {
+        starCtx.beginPath();
+        starCtx.fillStyle = `rgba(180, 210, 240, ${alpha * 0.25})`;
+        starCtx.arc(x, y, s.r * 2.2, 0, Math.PI * 2);
+        starCtx.fill();
+      }
     }
   }
 
@@ -871,20 +1274,15 @@
   function spawnPulse(fromId, toId, color, bright) {
     const a = nodeById.get(fromId);
     const b = nodeById.get(toId);
-    if (!a?.visible || !b?.visible) {
-      // still allow if endpoints exist in current layout
-      if (!a || !b) return;
-    }
-    if (!a.visible || !b.visible) return;
+    if (!a?.visible || !b?.visible) return;
     pulses.push({
       x0: a.x,
       y0: a.y,
       x1: b.x,
       y1: b.y,
       t: 0,
-      speed: bright ? 0.012 : 0.004,
+      speed: bright ? 0.014 : 0.0055,
       color,
-      life: 1,
       bright: !!bright,
     });
   }
@@ -893,45 +1291,54 @@
     const focus = currentFocus();
     const vLinks = visibleLinks().filter((l) => l.kind !== 'branch' || focus.level === LEVEL.MACHINE);
     if (!vLinks.length) return;
-    const pick = vLinks[Math.floor(Math.random() * vLinks.length)];
-    const s = typeof pick.source === 'string' ? pick.source : pick.source.id;
-    const t = typeof pick.target === 'string' ? pick.target : pick.target.id;
-    spawnPulse(s, t, 'rgba(200, 220, 240, 0.55)', false);
+    const n = focus.level === LEVEL.GALAXY ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const pick = vLinks[Math.floor(Math.random() * vLinks.length)];
+      const s = typeof pick.source === 'string' ? pick.source : pick.source.id;
+      const t = typeof pick.target === 'string' ? pick.target : pick.target.id;
+      spawnPulse(s, t, 'rgba(210, 230, 250, 0.85)', false);
+    }
   }
 
   function spawnEventPulse(kind, machineId) {
     const m = nodeById.get(machineId);
     if (!m) return;
+    const focus = currentFocus();
+    const bubble = (color) => {
+      if (m.visible) {
+        spawnPulse(m.parentId, machineId, color, true);
+        return;
+      }
+      let cur = m;
+      while (cur?.parentId) {
+        const parent = nodeById.get(cur.parentId);
+        if (parent?.visible && parent.parentId && nodeById.get(parent.parentId)?.visible) {
+          spawnPulse(parent.parentId, parent.id, color, true);
+          return;
+        }
+        cur = parent;
+      }
+      spawnAmbientCurrents();
+    };
     if (kind === 'transaction' || kind === 'restock') {
       const branchId = `${machineId}::${kind === 'restock' ? 'stock' : 'revenue'}`;
-      if (currentFocus().level === LEVEL.MACHINE && currentFocus().machineId === machineId) {
-        spawnPulse(machineId, branchId, 'rgba(220, 240, 255, 0.95)', true);
-      } else if (m.visible) {
-        spawnPulse(m.parentId, machineId, 'rgba(220, 240, 255, 0.9)', true);
-      }
+      if (focus.level === LEVEL.MACHINE && focus.machineId === machineId) {
+        spawnPulse(machineId, branchId, 'rgba(230, 245, 255, 0.98)', true);
+      } else bubble('rgba(220, 240, 255, 0.95)');
     } else if (kind === 'alert') {
       const branchId = `${machineId}::technical`;
-      if (currentFocus().level === LEVEL.MACHINE && currentFocus().machineId === machineId) {
-        spawnPulse(machineId, branchId, 'rgba(220, 100, 80, 0.95)', true);
-      } else if (m.visible) {
-        spawnPulse(m.parentId, machineId, 'rgba(201, 162, 39, 0.9)', true);
-      }
+      if (focus.level === LEVEL.MACHINE && focus.machineId === machineId) {
+        spawnPulse(machineId, branchId, 'rgba(230, 110, 90, 0.98)', true);
+      } else bubble('rgba(220, 150, 80, 0.95)');
     }
-  }
-
-  function drawSignalsStatic() {
-    /* layout changed — prune pulses tied to old coords by clearing soft */
   }
 
   function tickSignals(dt) {
-    if (!signalCtx || reduceMotion) {
-      if (signalCtx) signalCtx.clearRect(0, 0, signalCanvas.width, signalCanvas.height);
-      return;
-    }
-    const w = signalCanvas.width;
-    const h = signalCanvas.height;
+    if (!signalCtx) return;
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
     signalCtx.clearRect(0, 0, w, h);
-
+    if (reduceMotion) return;
     for (let i = pulses.length - 1; i >= 0; i--) {
       const p = pulses[i];
       p.t += p.speed * (dt / 16);
@@ -942,21 +1349,22 @@
       const x = p.x0 + (p.x1 - p.x0) * p.t;
       const y = p.y0 + (p.y1 - p.y0) * p.t;
       const s = worldToScreen(x, y);
-      const r = p.bright ? 2.4 : 1.2;
+      const r = p.bright ? 3.2 : 2.0;
       signalCtx.beginPath();
       signalCtx.fillStyle = p.color;
-      if (p.bright) {
-        signalCtx.shadowColor = p.color;
-        signalCtx.shadowBlur = 8;
-      } else {
-        signalCtx.shadowBlur = 0;
-      }
+      signalCtx.shadowColor = p.color;
+      signalCtx.shadowBlur = p.bright ? 12 : 6;
       signalCtx.arc(s.x, s.y, r, 0, Math.PI * 2);
       signalCtx.fill();
+      const tx = p.x0 + (p.x1 - p.x0) * Math.max(0, p.t - 0.08);
+      const ty = p.y0 + (p.y1 - p.y0) * Math.max(0, p.t - 0.08);
+      const ts = worldToScreen(tx, ty);
+      signalCtx.beginPath();
       signalCtx.shadowBlur = 0;
+      signalCtx.fillStyle = p.color.replace(/[\d.]+\)$/, '0.35)');
+      signalCtx.arc(ts.x, ts.y, r * 0.55, 0, Math.PI * 2);
+      signalCtx.fill();
     }
-
-    // subtle alert ring pulse on machines
     if (currentFocus().level >= LEVEL.LOCATION) {
       machines.forEach((m) => {
         if (!m.visible || !m.alert) return;
@@ -965,10 +1373,10 @@
         signalCtx.beginPath();
         signalCtx.strokeStyle =
           m.alert === 'red'
-            ? `rgba(196,92,92,${0.45 * (1 - phase)})`
-            : `rgba(201,162,39,${0.4 * (1 - phase)})`;
-        signalCtx.lineWidth = 1;
-        signalCtx.arc(s.x, s.y, (m.r + 6 + phase * 14) * transform.k, 0, Math.PI * 2);
+            ? `rgba(214,106,106,${0.5 * (1 - phase)})`
+            : `rgba(212,168,75,${0.45 * (1 - phase)})`;
+        signalCtx.lineWidth = 1.25;
+        signalCtx.arc(s.x, s.y, ((m.halo || m.r) + phase * 16) * transform.k, 0, Math.PI * 2);
         signalCtx.stroke();
       });
     }
@@ -977,26 +1385,21 @@
   function loop(ts) {
     const dt = lastTs ? ts - lastTs : 16;
     lastTs = ts;
+    drawStarfield(ts);
     tickSignals(dt);
-    rafId = requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
   }
 
-  // ——— mock events + red-flags poll ———
   function startEventTimers() {
     if (reduceMotion) return;
-    setInterval(() => spawnAmbientCurrents(), 1800);
+    setInterval(() => spawnAmbientCurrents(), 1100);
     setInterval(() => {
       if (!machines.length) return;
       const m = machines[Math.floor(Math.random() * machines.length)];
-      const kinds = ['transaction', 'restock', 'alert'];
-      const kind = kinds[Math.floor(Math.random() * kinds.length)];
-      // bias: only alert if machine has alert state
-      if (kind === 'alert' && !m.alert && m.status === 'active') {
-        spawnEventPulse('transaction', m.id);
-      } else {
-        spawnEventPulse(kind, m.id);
-      }
-    }, 4200);
+      const kind = ['transaction', 'restock', 'alert'][Math.floor(Math.random() * 3)];
+      if (kind === 'alert' && !m.alert && m.status === 'active') spawnEventPulse('transaction', m.id);
+      else spawnEventPulse(kind, m.id);
+    }, 3200);
   }
 
   async function pollRedFlags() {
@@ -1010,11 +1413,10 @@
         if (mid && nodeById.has(mid)) spawnEventPulse('alert', mid);
       });
     } catch {
-      /* fail silently */
+      /* silent */
     }
   }
 
-  // ——— UI wiring ———
   function wireUi() {
     document.querySelectorAll('.toggle-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1022,9 +1424,7 @@
           b.classList.toggle('active', b === btn);
           b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
         });
-        const dash = document.getElementById('dashboards-view');
-        const isDash = btn.dataset.view === 'dashboards';
-        dash.hidden = !isDash;
+        document.getElementById('dashboards-view').hidden = btn.dataset.view !== 'dashboards';
       });
     });
 
@@ -1032,53 +1432,59 @@
       btn.addEventListener('click', () => {
         const action = btn.dataset.action;
         if (action === 'zoom-in') {
-          svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.25);
+          svg.transition().duration(220).call(zoomBehavior.scaleBy, 1.25);
         } else if (action === 'zoom-out') {
-          svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.8);
+          svg.transition().duration(220).call(zoomBehavior.scaleBy, 0.8);
         } else if (action === 'reset') {
           focusStack = [{ level: LEVEL.GALAXY }];
           closeBranchCard();
           closeTerminal();
-          animateToFocus();
+          transitionToFocus({});
         }
       });
     });
 
     document.querySelector('.nav-chevron[data-dir="prev"]').addEventListener('click', goBack);
     document.querySelector('.nav-chevron[data-dir="next"]').addEventListener('click', () => {
-      // advance into first child when possible
+      if (animating) return;
       const f = currentFocus();
       if (f.level === LEVEL.GALAXY) {
         const kw = DATA.countries.find((c) => c.status === 'active');
-        if (kw) pushFocus({ level: LEVEL.COUNTRY, countryId: kw.id });
+        if (kw) pushFocus({ level: LEVEL.COUNTRY, countryId: kw.id }, nodeById.get(kw.id));
       } else if (f.level === LEVEL.COUNTRY) {
         const clients = nodes.filter((n) => n.type === 'client' && n.countryId === f.countryId && n.status === 'active');
-        if (clients[0]) pushFocus({ level: LEVEL.CLIENT, countryId: f.countryId, clientId: clients[0].id });
+        if (clients[0]) pushFocus({ level: LEVEL.CLIENT, countryId: f.countryId, clientId: clients[0].id }, clients[0]);
       } else if (f.level === LEVEL.CLIENT) {
         const areas = nodes.filter((n) => n.type === 'area' && n.clientId === f.clientId);
         if (areas[0])
-          pushFocus({ level: LEVEL.AREA, countryId: f.countryId, clientId: f.clientId, areaId: areas[0].id });
+          pushFocus({ level: LEVEL.AREA, countryId: f.countryId, clientId: f.clientId, areaId: areas[0].id }, areas[0]);
       } else if (f.level === LEVEL.AREA) {
         const locs = nodes.filter((n) => n.type === 'location' && n.areaId === f.areaId);
         if (locs[0])
-          pushFocus({
-            level: LEVEL.LOCATION,
-            countryId: f.countryId,
-            clientId: f.clientId,
-            areaId: f.areaId,
-            locationId: locs[0].id,
-          });
+          pushFocus(
+            {
+              level: LEVEL.LOCATION,
+              countryId: f.countryId,
+              clientId: f.clientId,
+              areaId: f.areaId,
+              locationId: locs[0].id,
+            },
+            locs[0]
+          );
       } else if (f.level === LEVEL.LOCATION) {
         const ms = nodes.filter((n) => n.type === 'machine' && n.locationId === f.locationId);
         if (ms[0])
-          pushFocus({
-            level: LEVEL.MACHINE,
-            countryId: f.countryId,
-            clientId: f.clientId,
-            areaId: f.areaId,
-            locationId: f.locationId,
-            machineId: ms[0].id,
-          });
+          pushFocus(
+            {
+              level: LEVEL.MACHINE,
+              countryId: f.countryId,
+              clientId: f.clientId,
+              areaId: f.areaId,
+              locationId: f.locationId,
+              machineId: ms[0].id,
+            },
+            ms[0]
+          );
       }
     });
 
@@ -1091,7 +1497,6 @@
         updateBreadcrumb();
       }
     });
-
     document.getElementById('terminal-close').addEventListener('click', closeTerminal);
     terminalOverlay.addEventListener('click', (e) => {
       if (e.target === terminalOverlay) closeTerminal();
@@ -1110,11 +1515,29 @@
 
     window.addEventListener('resize', () => {
       resizeCanvases();
-      render();
+      if (!animating) {
+        const t = fitTransformForBBox(contentBBox());
+        svg.transition().duration(reduceMotion ? 0 : 280).call(zoomBehavior.transform, t);
+      }
     });
   }
 
-  // ——— public test hooks ———
+  function waitForIdle() {
+    return new Promise((resolve) => {
+      const tick = () => {
+        if (!animating) resolve();
+        else requestAnimationFrame(tick);
+      };
+      tick();
+    });
+  }
+
+  function nodeScreenPos(id) {
+    const n = nodeById.get(id);
+    if (!n || !n.visible) return null;
+    return worldToScreen(n.x, n.y);
+  }
+
   window.APOS_SPACE_MAP = {
     getFocus: () => ({ ...currentFocus() }),
     getFocusStack: () => focusStack.map((f) => ({ ...f })),
@@ -1123,12 +1546,11 @@
       focusStack = [{ level: LEVEL.GALAXY }];
       closeBranchCard();
       closeTerminal();
-      animateToFocus();
+      transitionToFocus({ instant: reduceMotion });
     },
-    drillTo: (path) => {
-      focusStack = [{ level: LEVEL.GALAXY }];
-      path.forEach((step) => pushFocus(step));
-    },
+    waitForIdle,
+    nodeScreenPos,
+    getTransform: () => ({ k: transform.k, x: transform.x, y: transform.y }),
     openTerminal: (machineId, role) => {
       const m = nodeById.get(machineId);
       if (m) openTerminalForMachine(m, role || 'operator');
@@ -1139,19 +1561,24 @@
     pulseCount: () => pulses.length,
     machineCount: () => machines.length,
     spawnTestPulse: () => {
-      if (machines[0]) spawnEventPulse('transaction', machines[0].id);
+      const v = visibleLinks();
+      if (v.length) {
+        const pick = v[0];
+        const s = typeof pick.source === 'string' ? pick.source : pick.source.id;
+        const t = typeof pick.target === 'string' ? pick.target : pick.target.id;
+        spawnPulse(s, t, 'rgba(220, 240, 255, 0.95)', true);
+      } else if (machines[0]) spawnEventPulse('transaction', machines[0].id);
     },
     LEVEL,
   };
 
-  // ——— boot ———
   buildGraph();
   initSvg();
   wireUi();
   resizeCanvases();
-  render();
+  renderInstant();
   startEventTimers();
   pollRedFlags();
   setInterval(pollRedFlags, 30000);
-  if (!reduceMotion) rafId = requestAnimationFrame(loop);
+  requestAnimationFrame(loop);
 })();

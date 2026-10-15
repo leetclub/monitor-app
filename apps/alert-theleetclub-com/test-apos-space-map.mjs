@@ -25,6 +25,13 @@ if (!existsSync(ARTIFACTS_DIR)) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function waitIdle(page) {
+  await page.evaluate(async () => {
+    if (window.APOS_SPACE_MAP?.waitForIdle) await window.APOS_SPACE_MAP.waitForIdle();
+  });
+  await delay(80);
+}
+
 async function shot(page, name, browserName) {
   const path = join(ARTIFACTS_DIR, `${name}-${browserName}.png`);
   await page.screenshot({ path, fullPage: false });
@@ -32,18 +39,17 @@ async function shot(page, name, browserName) {
   return path;
 }
 
+async function clickNode(page, id) {
+  await page.locator(`[data-id="${id}"]`).click();
+  await waitIdle(page);
+}
+
 async function drillPath(page) {
-  // Kuwait → Leet → Shadadiya → KU COBA → KU-1 → Revenue
-  await page.locator('[data-id="country-kw"]').click();
-  await delay(800);
-  await page.locator('[data-id="client-leet"]').click();
-  await delay(800);
-  await page.locator('[data-id="area-shadadiya"]').click();
-  await delay(800);
-  await page.locator('[data-id="loc-ku-coba"]').click();
-  await delay(800);
-  await page.locator('[data-id="m-ku-1"]').click();
-  await delay(800);
+  await clickNode(page, 'country-kw');
+  await clickNode(page, 'client-leet');
+  await clickNode(page, 'area-shadadiya');
+  await clickNode(page, 'loc-ku-coba');
+  await clickNode(page, 'm-ku-1');
 }
 
 async function captureScreenshots(browserType, browserName) {
@@ -63,38 +69,33 @@ async function captureScreenshots(browserType, browserName) {
     return false;
   }
 
-  await delay(1200);
+  await delay(800);
   await page.evaluate(() => window.APOS_SPACE_MAP?.reset());
-  await delay(600);
+  await waitIdle(page);
   console.log('1. galaxy-full');
   await shot(page, 'galaxy-full', browserName);
 
-  await page.locator('[data-id="country-kw"]').click();
-  await delay(900);
+  await clickNode(page, 'country-kw');
   console.log('2. constellation-kuwait');
   await shot(page, 'constellation-kuwait', browserName);
 
-  await page.locator('[data-id="client-leet"]').click();
-  await delay(700);
-  await page.locator('[data-id="area-shadadiya"]').click();
-  await delay(700);
-  await page.locator('[data-id="loc-ku-coba"]').click();
-  await delay(900);
+  await clickNode(page, 'client-leet');
+  await clickNode(page, 'area-shadadiya');
+  await clickNode(page, 'loc-ku-coba');
   console.log('3. location-machines');
   await shot(page, 'location-machines', browserName);
 
-  await page.locator('[data-id="m-ku-1"]').click();
-  await delay(900);
+  await clickNode(page, 'm-ku-1');
   console.log('4. machine-branches');
   await shot(page, 'machine-branches', browserName);
 
   await page.locator('[data-id$="::revenue"]').click();
-  await delay(700);
+  await delay(400);
   console.log('5. branch-card');
   await shot(page, 'branch-card', browserName);
 
   await page.evaluate(() => window.APOS_SPACE_MAP.openTerminal('m-ku-1', 'operator'));
-  await delay(500);
+  await delay(400);
   console.log('6. terminal-popup');
   await shot(page, 'terminal-popup', browserName);
 
@@ -142,20 +143,18 @@ async function runTests(browserType, browserName) {
     return results;
   }
 
-  await delay(1000);
+  await delay(800);
 
   await test('boots with galaxy focus and APOS core', async () => {
     const focus = await page.evaluate(() => window.APOS_SPACE_MAP.getFocus());
     if (focus.level !== 0) throw new Error(`expected galaxy level 0, got ${focus.level}`);
-    const core = page.locator('[data-id="ent-apos"]');
-    if ((await core.count()) < 1) throw new Error('missing APOS core');
-    const kw = page.locator('[data-id="country-kw"]');
-    if ((await kw.count()) < 1) throw new Error('missing Kuwait');
+    if ((await page.locator('[data-id="ent-apos"]').count()) < 1) throw new Error('missing APOS core');
+    if ((await page.locator('[data-id="country-kw"]').count()) < 1) throw new Error('missing Kuwait');
   });
 
   await test('drill-down: galaxy → country → client → area → location → machine', async () => {
     await page.evaluate(() => window.APOS_SPACE_MAP.reset());
-    await delay(400);
+    await waitIdle(page);
     await drillPath(page);
     const focus = await page.evaluate(() => window.APOS_SPACE_MAP.getFocus());
     if (focus.level !== 5 || focus.machineId !== 'm-ku-1') {
@@ -165,9 +164,79 @@ async function runTests(browserType, browserName) {
     if (branches < 5) throw new Error(`expected 5 branches, got ${branches}`);
   });
 
+  await test('after click, focus node is near viewport center', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await clickNode(page, 'country-kw');
+    const info = await page.evaluate(() => {
+      const pos = window.APOS_SPACE_MAP.nodeScreenPos('country-kw');
+      const stage = document.getElementById('space-stage');
+      return {
+        pos,
+        w: stage.clientWidth,
+        h: stage.clientHeight,
+      };
+    });
+    if (!info.pos) throw new Error('no screen pos for country-kw');
+    const dx = Math.abs(info.pos.x - info.w / 2) / info.w;
+    const dy = Math.abs(info.pos.y - info.h / 2) / info.h;
+    // Country view centers the constellation; Kuwait sits slightly above center by design.
+    // Require within ~10% of viewport center on X and ~18% on Y (content framing).
+    if (dx > 0.1) throw new Error(`country-kw X offset ${(dx * 100).toFixed(1)}% > 10% (pos=${JSON.stringify(info.pos)})`);
+    if (dy > 0.18) throw new Error(`country-kw Y offset ${(dy * 100).toFixed(1)}% too far (pos=${JSON.stringify(info.pos)})`);
+
+    await clickNode(page, 'client-leet');
+    const clientInfo = await page.evaluate(() => {
+      const pos = window.APOS_SPACE_MAP.nodeScreenPos('client-leet');
+      const stage = document.getElementById('space-stage');
+      return { pos, w: stage.clientWidth, h: stage.clientHeight };
+    });
+    if (!clientInfo.pos) throw new Error('no screen pos for client-leet');
+    const cdx = Math.abs(clientInfo.pos.x - clientInfo.w / 2) / clientInfo.w;
+    const cdy = Math.abs(clientInfo.pos.y - clientInfo.h / 2) / clientInfo.h;
+    if (cdx > 0.1 || cdy > 0.1) {
+      throw new Error(
+        `client-leet not centered: dx=${(cdx * 100).toFixed(1)}% dy=${(cdy * 100).toFixed(1)}% pos=${JSON.stringify(clientInfo.pos)}`
+      );
+    }
+  });
+
+  await test('visible labels stay near their node balls', async () => {
+    const report = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll('g.node')];
+      const bad = [];
+      for (const g of nodes) {
+        const label = g.querySelector('text.node-label');
+        if (!label || label.style.display === 'none') continue;
+        const core =
+          g.querySelector('.star-core') || g.querySelector('.core-body') || g.querySelector('.hit-target');
+        if (!core) continue;
+        const nb = core.getBoundingClientRect();
+        const lb = label.getBoundingClientRect();
+        if (lb.width < 1 || lb.height < 1) continue;
+        const nx = nb.left + nb.width / 2;
+        const ny = nb.top + nb.height / 2;
+        const lx = lb.left + lb.width / 2;
+        const ly = lb.top + lb.height / 2;
+        const dist = Math.hypot(lx - nx, ly - ny);
+        // label should sit under the ball: within ~90px of node center
+        if (dist > 90) {
+          bad.push({ id: g.getAttribute('data-id'), dist: Math.round(dist) });
+        }
+      }
+      return { checked: nodes.length, bad };
+    });
+    if (report.bad.length) {
+      throw new Error(`misplaced labels: ${JSON.stringify(report.bad.slice(0, 5))}`);
+    }
+  });
+
   await test('branch click shows data card', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await drillPath(page);
     await page.locator('[data-id="m-ku-1::stock"]').click();
-    await delay(400);
+    await delay(300);
     const open = await page.evaluate(() => window.APOS_SPACE_MAP.isBranchCardOpen());
     if (!open) throw new Error('branch card not open');
     const title = await page.locator('#branch-card-title').textContent();
@@ -175,14 +244,11 @@ async function runTests(browserType, browserName) {
   });
 
   await test('signals canvas renders pulses', async () => {
-    await page.evaluate(() => {
-      window.APOS_SPACE_MAP.spawnTestPulse();
-    });
+    await page.evaluate(() => window.APOS_SPACE_MAP.spawnTestPulse());
     await delay(200);
     const count = await page.evaluate(() => window.APOS_SPACE_MAP.pulseCount());
     if (count < 1) throw new Error('no pulses after spawnTestPulse');
-    const canvas = page.locator('#signal-canvas');
-    if ((await canvas.count()) !== 1) throw new Error('signal canvas missing');
+    if ((await page.locator('#signal-canvas').count()) !== 1) throw new Error('signal canvas missing');
   });
 
   await test('terminal open + send mock task', async () => {
@@ -207,13 +273,13 @@ async function runTests(browserType, browserName) {
       window.APOS_SPACE_MAP.closeTerminal();
       window.APOS_SPACE_MAP.reset();
     });
-    await delay(400);
+    await waitIdle(page);
     await drillPath(page);
     let focus = await page.evaluate(() => window.APOS_SPACE_MAP.getFocus());
     if (focus.level !== 5) throw new Error(`setup failed, level ${focus.level}`);
 
     await page.keyboard.press('Escape');
-    await delay(500);
+    await waitIdle(page);
     focus = await page.evaluate(() => window.APOS_SPACE_MAP.getFocus());
     if (focus.level !== 4) throw new Error(`Esc should pop to location (4), got ${focus.level}`);
 
@@ -222,7 +288,7 @@ async function runTests(browserType, browserName) {
       const disabled = await page.locator('.nav-chevron[data-dir="prev"]').isDisabled();
       if (disabled) break;
       await page.locator('.nav-chevron[data-dir="prev"]').click();
-      await delay(400);
+      await waitIdle(page);
     }
     focus = await page.evaluate(() => window.APOS_SPACE_MAP.getFocus());
     if (focus.level !== 0) {
@@ -233,10 +299,6 @@ async function runTests(browserType, browserName) {
   await test('Map | Dashboards toggle', async () => {
     await page.locator('.toggle-btn[data-view="dashboards"]').click();
     await delay(200);
-    const hidden = await page.locator('#dashboards-view').getAttribute('hidden');
-    if (hidden !== null && hidden !== '') {
-      // getAttribute returns '' when present as boolean attribute in some browsers
-    }
     const isHidden = await page.locator('#dashboards-view').evaluate((el) => el.hidden);
     if (isHidden) throw new Error('dashboards view still hidden');
     await page.locator('.toggle-btn[data-view="map"]').click();
