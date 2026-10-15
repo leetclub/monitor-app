@@ -566,16 +566,19 @@ const TARGET_LEAVES_PER_DEPT = 80;
 /** Premium monochrome palette — single accent for focus/alerts only */
 const PREMIUM = {
   nodeFill: '#ffffff',
-  nodeStroke: 'rgba(58, 58, 69, 0.18)',
-  line: 'rgba(58, 58, 69, 0.12)',
+  nodeStroke: 'rgba(58, 58, 69, 0.22)',
+  line: 'rgba(58, 58, 69, 0.32)',
   lineFocus: 'url(#accent-stroke)',
   accent: '#e94e87',
   accentEnd: '#ff6b3d',
   alert: '#e11d48',
-  ink: 'rgba(58, 58, 69, 0.72)',
-  inkFaint: 'rgba(58, 58, 69, 0.055)',
-  particle: 'rgba(58, 58, 69, 0.22)',
-  particleAccent: 'rgba(233, 78, 135, 0.18)',
+  ink: 'rgba(45, 45, 55, 0.82)',
+  inkMuted: 'rgba(58, 58, 69, 0.55)',
+  inkFaint: 'rgba(58, 58, 69, 0.12)',
+  particle: 'rgba(58, 58, 69, 0.2)',
+  particleAccent: 'rgba(233, 78, 135, 0.14)',
+  /** Target visible L1+L2 tip nodes per department at default zoom */
+  fanTipsPerDept: 36,
 };
 
 const DEPT_LEAF_KINDS = {
@@ -671,32 +674,36 @@ function expandDepartmentTree(dept, liveMachines = []) {
   });
 
   const flatPool = pools.flat();
-  const attachPoints = listAttachmentPoints(tree);
-  let leafCount = countLeaves({ children: tree });
   let idx = 0;
   const rng = new SeededRandom(dept.id.split('').reduce((a, c) => a + c.charCodeAt(0), 42));
 
-  // Create branchlets under each attach point, then pack domain leaves under them
+  // Fan tips under L1 only → depth-2 visible at default (~25–40 tips/dept)
+  const l1Parents = flattenTree(tree).filter((n) => n.path.length === 1);
   const twigs = [];
-  attachPoints.forEach((ap) => {
+  const perL1 = Math.max(4, Math.ceil(PREMIUM.fanTipsPerDept / Math.max(1, l1Parents.length)));
+  l1Parents.forEach((ap) => {
     const parent = findNodeById(tree, ap.id);
     if (!parent) return;
     if (!parent.children) parent.children = [];
-    const twigCount = 1 + (rng.next() > 0.55 ? 1 : 0);
-    for (let t = 0; t < twigCount; t++) {
-      const twig = {
-        id: `${parent.id}__twig-${t}`,
+    const existing = parent.children.length;
+    const toAdd = Math.max(0, perL1 - existing);
+    for (let t = 0; t < toAdd; t++) {
+      const tip = {
+        id: `${parent.id}__tip-${t}`,
         label: `${parent.label || parent.id} · ${t + 1}`,
         metrics: { branch: true },
         children: [],
         _scaffold: true,
       };
-      parent.children.push(twig);
-      twigs.push(twig);
+      parent.children.push(tip);
     }
+    parent.children.forEach((c) => {
+      if (!c.children) c.children = [];
+      twigs.push(c);
+    });
   });
 
-  leafCount = 0;
+  let leafCount = 0;
   while (leafCount < TARGET_LEAVES_PER_DEPT && flatPool.length > 0 && twigs.length > 0) {
     const item = flatPool[idx % flatPool.length];
     idx++;
@@ -708,7 +715,7 @@ function expandDepartmentTree(dept, liveMachines = []) {
       metrics: { ...(item.metrics || {}), parent: twig.label },
       isDomainLeaf: true,
     });
-    leafCount = twigs.reduce((s, t) => s + t.children.length, 0);
+    leafCount = twigs.reduce((s, t) => s + (t.children ? t.children.length : 0), 0);
     if (idx > TARGET_LEAVES_PER_DEPT * 4) break;
   }
 
@@ -760,15 +767,20 @@ function layoutRadialTree(tree, hubX, hubY, baseAngle, angleSpread, rMin, rMax, 
     }
     const isLeaf = !node.children || node.children.length === 0;
     let radius;
-    if (isLeaf) {
-      // Fill nearly the full hub→label span (biased slightly outward)
+    if (isLeaf && d > 2) {
+      // Deep leaves (LOD) — fill hub→label span when zoomed in
       const u = rng.next();
-      const frac = 0.12 + Math.pow(u, 0.55) * 0.88;
-      radius = rMin + frac * span + (rng.next() - 0.5) * span * 0.035;
+      const frac = 0.35 + Math.pow(u, 0.55) * 0.65;
+      radius = rMin + frac * span + (rng.next() - 0.5) * span * 0.03;
+    } else if (d === 1) {
+      // L1 job hubs — mid fan (spread slightly)
+      radius = rMin + span * (0.28 + rng.next() * 0.18);
+    } else if (d === 2) {
+      // L2 tips — fill mid→outer toward faint labels (not a thin outer ring)
+      radius = rMin + span * (0.52 + rng.next() * 0.42);
     } else {
-      // Branch hubs stay inward so trunks read continuously
       const t = d / depth;
-      radius = rMin + Math.pow(t, 0.85) * span * 0.5 + (rng.next() - 0.5) * span * 0.025;
+      radius = rMin + Math.pow(t, 0.85) * span * 0.55 + (rng.next() - 0.5) * span * 0.02;
     }
     const aJitter = (rng.next() - 0.5) * 0.035;
     const angle = node._angle + aJitter;
@@ -864,9 +876,13 @@ class RadialOrgMapSingleWorld {
     accent.append('stop').attr('offset', '100%').attr('stop-color', PREMIUM.accentEnd);
 
     const coreGlow = this.defs.append('radialGradient').attr('id', 'core-glow');
-    coreGlow.append('stop').attr('offset', '0%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0.12);
-    coreGlow.append('stop').attr('offset', '70%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0.03);
+    coreGlow.append('stop').attr('offset', '0%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0.1);
+    coreGlow.append('stop').attr('offset', '55%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0.035);
     coreGlow.append('stop').attr('offset', '100%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0);
+
+    // Soft drop shadow for solid white nodes
+    const nodeShadow = this.defs.append('filter').attr('id', 'node-shadow').attr('x', '-40%').attr('y', '-40%').attr('width', '180%').attr('height', '180%');
+    nodeShadow.append('feDropShadow').attr('dx', 0).attr('dy', 1).attr('stdDeviation', 1.2).attr('flood-color', 'rgba(58,58,69,0.18)');
   }
 
   buildWorld() {
@@ -880,8 +896,9 @@ class RadialOrgMapSingleWorld {
     this.drawParticleCore();
 
     const count = APOS_DATA.departments.length;
-    const hubRing = Math.min(this.width, this.height) * 0.15;
-    const faintLabelRadius = Math.min(this.width, this.height) * 0.46;
+    // Map fills ~75% of the shorter viewport axis (outer extent ≈ 0.375 × min)
+    const hubRing = Math.min(this.width, this.height) * 0.12;
+    const faintLabelRadius = Math.min(this.width, this.height) * 0.44;
 
     APOS_DATA.departments.forEach((dept, i) => {
       const angle = (i * 2 * Math.PI) / count - Math.PI / 2;
@@ -902,10 +919,10 @@ class RadialOrgMapSingleWorld {
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .attr('fill', PREMIUM.inkFaint)
-        .attr('font-size', '42px')
+        .attr('font-size', '38px')
         .attr('font-weight', '300')
         .attr('font-family', 'Inter, sans-serif')
-        .attr('letter-spacing', '0.32em')
+        .attr('letter-spacing', '0.28em')
         .text(dept.label)
         .attr('class', 'faint-label');
 
@@ -917,7 +934,8 @@ class RadialOrgMapSingleWorld {
         .append('g')
         .attr('class', `tree-sector tree-${dept.id}`)
         .attr('data-dept', dept.id);
-      this.renderDenseSectorTree(treeGroup, dept, deptX, deptY, angle, faintLabelRadius - hubRing - 28);
+      // Fans reach almost to faint labels
+      this.renderDenseSectorTree(treeGroup, dept, deptX, deptY, angle, faintLabelRadius - hubRing - 18);
 
       const deptGroup = this.container.append('g').attr('class', 'department-node-group').attr('data-dept', dept.id);
 
@@ -926,9 +944,9 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 42)
+        .attr('r', 36)
         .attr('fill', 'url(#orb-glass)')
-        .attr('filter', 'url(#glow-soft)')
+        .attr('filter', 'url(#node-shadow)')
         .attr('class', 'dept-orb-outer')
         .style('pointer-events', 'none');
 
@@ -936,9 +954,9 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 42)
+        .attr('r', 36)
         .attr('fill', 'none')
-        .attr('stroke', 'rgba(58, 58, 69, 0.12)')
+        .attr('stroke', 'rgba(58, 58, 69, 0.16)')
         .attr('stroke-width', 1)
         .attr('class', 'dept-orbit')
         .style('pointer-events', 'none');
@@ -947,11 +965,11 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 43.5)
+        .attr('r', 37.5)
         .attr('fill', 'none')
         .attr('stroke', 'url(#accent-stroke)')
         .attr('stroke-width', 1)
-        .attr('stroke-opacity', 0.22)
+        .attr('stroke-opacity', 0.28)
         .attr('class', 'dept-accent-ring')
         .style('pointer-events', 'none');
 
@@ -959,9 +977,9 @@ class RadialOrgMapSingleWorld {
         deptGroup
           .append('path')
           .attr('d', ICON_PATHS[dept.icon])
-          .attr('transform', `translate(${deptX - 11}, ${deptY - 11}) scale(0.92)`)
+          .attr('transform', `translate(${deptX - 10}, ${deptY - 10}) scale(0.84)`)
           .attr('fill', 'none')
-          .attr('stroke', 'rgba(58, 58, 69, 0.55)')
+          .attr('stroke', 'rgba(58, 58, 69, 0.58)')
           .attr('stroke-width', 1.5)
           .attr('stroke-linecap', 'round')
           .attr('stroke-linejoin', 'round')
@@ -969,11 +987,27 @@ class RadialOrgMapSingleWorld {
           .style('pointer-events', 'none');
       }
 
+      // Small department name under orb
+      const labelOffset = 48;
+      deptGroup
+        .append('text')
+        .attr('x', deptX)
+        .attr('y', deptY + labelOffset)
+        .attr('text-anchor', 'middle')
+        .attr('fill', PREMIUM.inkMuted)
+        .attr('font-size', '9px')
+        .attr('font-weight', '500')
+        .attr('font-family', 'Inter, sans-serif')
+        .attr('letter-spacing', '0.16em')
+        .attr('class', 'dept-under-label')
+        .style('pointer-events', 'none')
+        .text(dept.label);
+
       deptGroup
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 46)
+        .attr('r', 40)
         .attr('fill', 'transparent')
         .attr('class', 'dept-click-target')
         .style('cursor', 'pointer')
@@ -986,7 +1020,7 @@ class RadialOrgMapSingleWorld {
         })
         .on('mouseout', () => {
           if (this.focusDeptId !== dept.id) {
-            deptGroup.select('.dept-accent-ring').transition().duration(180).attr('stroke-opacity', 0.35);
+            deptGroup.select('.dept-accent-ring').transition().duration(180).attr('stroke-opacity', 0.28);
           }
         });
     });
@@ -1005,9 +1039,9 @@ class RadialOrgMapSingleWorld {
    * Depth 1–2 always readable zoomed out; deeper fades in with zoom.
    */
   renderDenseSectorTree(group, dept, hubX, hubY, baseAngle, reach) {
-    const angleSpread = ((Math.PI * 2) / APOS_DATA.departments.length) * 0.88;
-    const rMin = 52;
-    const rMax = Math.max(rMin + 100, reach);
+    const angleSpread = ((Math.PI * 2) / APOS_DATA.departments.length) * 0.9;
+    const rMin = 44;
+    const rMax = Math.max(rMin + 120, reach);
     const seed = dept.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
     const tree = dept._expandedTree || expandDepartmentTree(dept, this.liveMachines);
     const positioned = layoutRadialTree(tree, hubX, hubY, baseAngle, angleSpread, rMin, rMax, seed);
@@ -1017,7 +1051,21 @@ class RadialOrgMapSingleWorld {
       this.nodeIndex.set(n.id, n);
     });
 
-    // Connectors split by depth for LOD (L1 always, L2 soft, deep hidden)
+    // Medium-density default fan: L1 + capped L2 (incl. scaffolds) ≈ 25–40 tips
+    const l1Nodes = positioned.filter((n) => !n.isDomainLeaf && n._depth === 1);
+    let l2All = positioned.filter((n) => !n.isDomainLeaf && n._depth === 2);
+    // Prefer real mids, then scaffolds; cap total L2 tips for elegant density
+    const l2Real = l2All.filter((n) => !n._scaffold);
+    const l2Scaffold = l2All.filter((n) => n._scaffold);
+    const tipBudget = Math.max(0, PREMIUM.fanTipsPerDept - l1Nodes.length);
+    const l2Nodes = [...l2Real, ...l2Scaffold].slice(0, Math.max(tipBudget, 18));
+    const l2Shown = new Set(l2Nodes.map((n) => n.id));
+
+    const deepMids = positioned.filter(
+      (n) => !n.isDomainLeaf && n._depth > 2 && n.children?.length && !l2Shown.has(n.id),
+    );
+    const leafNodes = positioned.filter((n) => n.isDomainLeaf || (!n.children?.length && n._depth > 2));
+
     const l1Edges = [];
     const l2Edges = [];
     const deepEdges = [];
@@ -1026,8 +1074,8 @@ class RadialOrgMapSingleWorld {
       const py = n._parent ? n._parent._y : hubY;
       const seg = `M${px},${py}L${n._x},${n._y}`;
       if (n._depth === 1) l1Edges.push(seg);
-      else if (n._depth === 2 && !n._scaffold) l2Edges.push(seg);
-      else deepEdges.push(seg);
+      else if (n._depth === 2 && l2Shown.has(n.id)) l2Edges.push(seg);
+      else if (n._depth >= 2) deepEdges.push(seg);
     });
 
     group
@@ -1035,7 +1083,7 @@ class RadialOrgMapSingleWorld {
       .attr('d', l1Edges.join(''))
       .attr('fill', 'none')
       .attr('stroke', PREMIUM.line)
-      .attr('stroke-width', 0.85)
+      .attr('stroke-width', 1.05)
       .attr('class', 'connector-group lod-l1')
       .style('pointer-events', 'none');
 
@@ -1044,10 +1092,9 @@ class RadialOrgMapSingleWorld {
       .attr('d', l2Edges.join(''))
       .attr('fill', 'none')
       .attr('stroke', PREMIUM.line)
-      .attr('stroke-width', 0.65)
+      .attr('stroke-width', 0.85)
       .attr('class', 'connector-group lod-l2')
-      .style('pointer-events', 'none')
-      .style('opacity', 0.4);
+      .style('pointer-events', 'none');
 
     group
       .append('path')
@@ -1059,7 +1106,6 @@ class RadialOrgMapSingleWorld {
       .style('pointer-events', 'none')
       .style('opacity', 0);
 
-    // Focus path overlay (accent) — empty until selection
     group
       .append('path')
       .attr('d', '')
@@ -1071,23 +1117,14 @@ class RadialOrgMapSingleWorld {
       .style('pointer-events', 'none')
       .style('opacity', 0);
 
-    // L1 = job hubs; L2 = real mid nodes only (no scaffold twigs — those stay in deep LOD)
-    const l1Nodes = positioned.filter((n) => !n.isDomainLeaf && n._depth === 1);
-    const l2Nodes = positioned.filter((n) => !n.isDomainLeaf && n._depth === 2 && !n._scaffold);
-    const deepMids = positioned.filter(
-      (n) => !n.isDomainLeaf && (n._scaffold || (n._depth > 2 && n.children?.length)),
-    );
-    const leafNodes = positioned.filter((n) => n.isDomainLeaf || (!n.children?.length && !n._scaffold && n._depth > 2));
-
     const midG = group.append('g').attr('class', 'mid-nodes lod-l1');
     l1Nodes.forEach((node) => {
-      const level = node._depth;
-      const nodeRadius = 5.5;
+      const nodeRadius = 5;
       const nodeGroup = midG
         .append('g')
         .attr('class', 'node-group')
         .attr('data-node-id', node.id)
-        .attr('data-depth', level);
+        .attr('data-depth', 1);
 
       const nodeCircle = nodeGroup
         .append('circle')
@@ -1097,6 +1134,7 @@ class RadialOrgMapSingleWorld {
         .attr('fill', PREMIUM.nodeFill)
         .attr('stroke', PREMIUM.nodeStroke)
         .attr('stroke-width', 1)
+        .attr('filter', 'url(#node-shadow)')
         .style('cursor', 'pointer');
 
       if (node.metrics?.status === 'red' || node.metrics?.status === 'amber') {
@@ -1124,9 +1162,10 @@ class RadialOrgMapSingleWorld {
         });
     });
 
-    const l2G = group.append('g').attr('class', 'mid-nodes-l2 lod-l2').style('opacity', 0.4);
+    // L2 tips always visible at default (medium density)
+    const l2G = group.append('g').attr('class', 'mid-nodes-l2 lod-l2');
     l2Nodes.forEach((node) => {
-      const nodeRadius = 3.2;
+      const nodeRadius = node._scaffold ? 3.0 : 3.8;
       const nodeGroup = l2G
         .append('g')
         .attr('class', 'node-group')
@@ -1140,6 +1179,7 @@ class RadialOrgMapSingleWorld {
         .attr('fill', PREMIUM.nodeFill)
         .attr('stroke', PREMIUM.nodeStroke)
         .attr('stroke-width', 0.9)
+        .attr('filter', 'url(#node-shadow)')
         .style('cursor', 'pointer');
       nodeGroup.on('click', (event) => {
         event.stopPropagation();
@@ -1151,8 +1191,7 @@ class RadialOrgMapSingleWorld {
       });
     });
 
-    // Deep branchlets (hidden until zoom)
-    const deepG = group.append('g').attr('class', 'deep-mids lod-deep').style('opacity', 0);
+    const deepG = group.append('g').attr('class', 'deep-mids lod-deep').style('opacity', 0).style('pointer-events', 'none');
     deepMids.forEach((node) => {
       deepG
         .append('circle')
@@ -1171,7 +1210,7 @@ class RadialOrgMapSingleWorld {
         });
     });
 
-    const leafG = group.append('g').attr('class', 'leaf-nodes lod-deep').style('opacity', 0);
+    const leafG = group.append('g').attr('class', 'leaf-nodes lod-deep').style('opacity', 0).style('pointer-events', 'none');
     const midIds = new Set([...l1Nodes, ...l2Nodes, ...deepMids].map((n) => n.id));
     const uniqueLeaves = leafNodes.filter((n) => n.isDomainLeaf || !midIds.has(n.id));
 
@@ -1194,14 +1233,13 @@ class RadialOrgMapSingleWorld {
       });
   }
 
-  /** LOD: zoomed out = core + depts + L1 fans; L2 then leaves fade in with zoom */
+  /** LOD: default = core + depts + L1/L2 medium fans; deep leaves on zoom */
   applyLod(scale) {
     const k = scale || 1;
-    // L2 mid branches appear gently from ~1.2x
-    const l2Opacity = Math.max(0.35, Math.min(1, 0.35 + (k - 1) * 0.5));
-    this.container.selectAll('.lod-l2').style('opacity', l2Opacity);
+    // L1+L2 always readable at default (medium-density fans)
+    this.container.selectAll('.lod-l1, .lod-l2').style('opacity', 1);
 
-    // Leaves / deep edges only when meaningfully zoomed in (≥2.0)
+    // Deep leaves only when meaningfully zoomed in (≥2.0)
     const deepOpacity = Math.max(0, Math.min(1, (k - 2.05) / 1.0));
     this.container.selectAll('.lod-deep').style('opacity', deepOpacity).style('pointer-events', deepOpacity > 0.2 ? 'all' : 'none');
     this.container.selectAll('.lod-deep-edges').style('opacity', deepOpacity * 0.7);
@@ -1338,27 +1376,30 @@ class RadialOrgMapSingleWorld {
   }
 
   drawParticleCore() {
-    const particleGroup = this.container.append('g').attr('class', 'particle-group');
     const cx = this.centerX;
     const cy = this.centerY;
 
-    particleGroup
+    // Soft halo (static)
+    this.container
       .append('circle')
       .attr('cx', cx)
       .attr('cy', cy)
-      .attr('r', 90)
+      .attr('r', 100)
       .attr('fill', 'url(#core-glow)')
+      .attr('class', 'core-halo')
       .style('pointer-events', 'none');
 
-    const particleCount = 180;
-    const coreRadius = 70;
+    const particleGroup = this.container.append('g').attr('class', 'particle-group');
+    const particleCount = 220;
+    const coreRadius = 78;
     const rng = new SeededRandom(12345);
 
     for (let i = 0; i < particleCount; i++) {
       const angle = rng.next() * Math.PI * 2;
-      const r = Math.pow(rng.next(), 0.8) * coreRadius;
-      const size = rng.next() * 1.1 + 0.25;
-      const useAccent = rng.next() > 0.94;
+      // Donut: keep center clearer for APOS wordmark
+      const r = 22 + Math.pow(rng.next(), 0.85) * (coreRadius - 22);
+      const size = rng.next() * 1.15 + 0.3;
+      const useAccent = rng.next() > 0.93;
       particleGroup
         .append('circle')
         .attr('cx', cx + r * Math.cos(angle))
@@ -1369,17 +1410,32 @@ class RadialOrgMapSingleWorld {
 
     particleGroup
       .transition()
-      .duration(64000)
+      .duration(72000)
       .ease(d3.easeLinear)
       .attrTween('transform', () => (t) => `rotate(${t * 360}, ${cx}, ${cy})`)
       .on('end', function repeat() {
         d3.select(this)
           .transition()
-          .duration(48000)
+          .duration(72000)
           .ease(d3.easeLinear)
           .attrTween('transform', () => (t) => `rotate(${t * 360}, ${cx}, ${cy})`)
           .on('end', repeat);
       });
+
+    // Clear APOS wordmark at core (does not rotate)
+    const labelG = this.container.append('g').attr('class', 'apos-core-label').style('pointer-events', 'none');
+    labelG
+      .append('text')
+      .attr('x', cx)
+      .attr('y', cy + 1)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', PREMIUM.accent)
+      .attr('font-size', '17px')
+      .attr('font-weight', '600')
+      .attr('font-family', 'Inter, sans-serif')
+      .attr('letter-spacing', '0.36em')
+      .text('APOS');
   }
 
   zoomToNode(node, deptIndex) {

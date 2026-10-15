@@ -457,6 +457,10 @@ body, html {
   pointer-events: none !important;
 }
 
+.lod-deep-edges {
+  pointer-events: none !important;
+}
+
 .lod-mid {
   opacity: 0.35;
 }

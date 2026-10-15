@@ -158,6 +158,29 @@ async function runBasicTests(browserType, browserName) {
     }
   });
 
+  await test('APOS wordmark at particle core', async () => {
+    const core = await page.locator('.apos-core-label text').textContent();
+    if (!core || !core.includes('APOS')) {
+      throw new Error('APOS core wordmark missing');
+    }
+  });
+
+  await test('Small department labels under orbs', async () => {
+    const under = await page.locator('.dept-under-label').count();
+    if (under < 8) {
+      throw new Error(`Expected 8 under-orb labels, found ${under}`);
+    }
+  });
+
+  await test('Medium-density L2 fans visible at default zoom', async () => {
+    await page.locator('[data-action="reset"]').click();
+    await delay(700);
+    const l2 = await page.locator('.lod-l2 .node-group').count();
+    if (l2 < 80) {
+      throw new Error(`Expected medium-density L2 nodes (≥80 across depts), found ${l2}`);
+    }
+  });
+
   await test('Department chevrons cycle camera', async () => {
     const nextBtn = page.locator('[data-dir="next"]');
     await nextBtn.click();
