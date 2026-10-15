@@ -3,7 +3,7 @@
 :root {
   --bg-0: #3b3a6b;
   --bg-1: #4a4880;
-  --bg-2: #2e2d55;
+  --bg-2: #1e1d3a;
   --ink: #f2f0fa;
   --ink-soft: rgba(242, 240, 250, 0.72);
   --ink-faint: rgba(242, 240, 250, 0.22);
@@ -38,6 +38,21 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
+
+
+.tree-app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.07;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.55) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.tree-app > * { position: relative; z-index: 1; }
 
 .tree-app {
   position: relative;
@@ -122,19 +137,94 @@ body {
 
 .tree-particles,
 .tree-signals,
+.tree-world {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.label-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+}
+
+.label-layer .hub-title {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.94);
+  text-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+  transition: color 280ms ease, opacity 280ms ease, font-size 280ms ease, font-weight 280ms ease;
+}
+
+.label-layer .hub-title.is-focus {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  text-shadow: 0 0 22px rgba(0, 0, 0, 0.55), 0 0 48px currentColor;
+}
+
+.label-layer .hub-title.teal { color: var(--teal); }
+.label-layer .hub-title.violet { color: var(--violet); }
+.label-layer .hub-title.rose,
+.label-layer .hub-title.pink { color: var(--rose); }
+.label-layer .hub-title.amber { color: var(--amber); }
+.label-layer .hub-title.sky { color: var(--sky); }
+
+.label-layer .hub-sub {
+  position: absolute;
+  transform: translate(-50%, 0);
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.label-layer .node-label-dom {
+  position: absolute;
+  transform: translate(-50%, 0);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.label-layer .node-label-dom.site {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.label-layer .node-label-dom.machine {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .tree-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-.tree-particles {
-  z-index: 0;
-  pointer-events: none;
-}
-
-.tree-svg {
   z-index: 1;
 }
 
@@ -532,19 +622,24 @@ body {
 }
 
 .node-label {
-  fill: rgba(255, 255, 255, 0.78);
+  fill: rgba(255, 255, 255, 0.9);
   font-family: var(--font);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-anchor: middle;
   pointer-events: none;
   user-select: none;
+  paint-order: stroke fill;
+  stroke: rgba(30, 29, 58, 0.75);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .node-label.small {
-  font-size: 9px;
-  fill: rgba(255, 255, 255, 0.68);
+  font-size: 10px;
+  font-weight: 500;
+  fill: rgba(255, 255, 255, 0.78);
 }
 
 .hit-target {
@@ -742,3 +837,30 @@ body {
     display: none;
   }
 }
+
+/* Canvas draws the rich world — keep SVG as hit/label layer only */
+.tree-svg .link,
+.tree-svg .star-core,
+.tree-svg .hub-visual,
+.tree-svg .pulse-ring,
+.tree-svg .art-dot,
+.tree-svg .core-glow,
+.tree-svg .core-disk,
+.tree-svg .core-wordmark,
+.tree-svg .bg-group,
+.tree-svg .alert-badge-wrap {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+.tree-svg .hit-target {
+  pointer-events: all;
+  fill: transparent;
+  stroke: none;
+  cursor: pointer;
+}
+.tree-svg text.node-label {
+  /* keep for tests / a11y; canvas also paints glow nodes */
+  pointer-events: none;
+}
+
+.label-layer .hub-title.muted { color: rgba(255,255,255,0.22) !important; }

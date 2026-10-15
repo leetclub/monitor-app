@@ -31,6 +31,18 @@ if (!existsSync(ARTIFACTS_DIR)) mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
+async function waitMapReady(page, timeout = 5000) {
+  await page.waitForFunction(() => {
+    const api = window.APOS_TREE_MAP;
+    if (!api || !window.__APOS_TREE_READY__) return false;
+    const s = api.getLinkDrawStats?.();
+    return s && s.count > 10;
+  }, { timeout });
+  // one paint frame
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
+
 async function waitIdle(page) {
   await page.evaluate(async () => {
     if (window.APOS_TREE_MAP?.waitForIdle) await window.APOS_TREE_MAP.waitForIdle();
@@ -55,10 +67,11 @@ async function capture(browserType, browserName) {
   console.log(`\nScreenshots — ${browserName.toUpperCase()}\n`);
   const browser = await browserType.launch({ headless: true });
   const page = await (await browser.newContext({ viewport: { width: 1920, height: 1080 } })).newPage();
-  await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
-  await delay(500);
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await waitMapReady(page);
   await page.evaluate(() => window.APOS_TREE_MAP.reset());
   await waitIdle(page);
+  await waitMapReady(page);
   console.log('1. tree-full');
   await shot(page, 'tree-full', browserName);
 
@@ -139,7 +152,8 @@ async function runTests(browserType, browserName) {
     }
   };
 
-  await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await waitMapReady(page);
   await delay(500);
 
   await test('boots with APOS core and brand hubs', async () => {
@@ -245,41 +259,46 @@ async function runTests(browserType, browserName) {
     if (!info.pill) throw new Error('expected pill badge rect');
   });
 
+  await test('full view hides machine-level nodes', async () => {
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await waitMapReady(page);
+    const info = await page.evaluate(() => ({
+      overview: window.APOS_TREE_MAP.isOverview(),
+      machines: window.APOS_TREE_MAP.countDrawnOfType('machine'),
+      locations: window.APOS_TREE_MAP.countDrawnOfType('location'),
+      areas: window.APOS_TREE_MAP.countDrawnOfType('area'),
+      hubs: window.APOS_TREE_MAP.countDrawnOfType('hub'),
+    }));
+    if (!info.overview) throw new Error(`expected overview ${JSON.stringify(info)}`);
+    if (info.machines !== 0) throw new Error(`machines visible at full: ${JSON.stringify(info)}`);
+    if (info.locations !== 0) throw new Error(`locations visible at full: ${JSON.stringify(info)}`);
+    if (info.areas < 3) throw new Error(`expected area nodes at full: ${JSON.stringify(info)}`);
+    if (info.hubs < 5) throw new Error(`expected hubs: ${JSON.stringify(info)}`);
+  });
+
+  await test('no link crossings at full view', async () => {
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    const crosses = await page.evaluate(() => window.APOS_TREE_MAP.countLinkCrossings());
+    if (crosses > 0) throw new Error(`link crossings at full view: ${crosses}`);
+  });
+
   await test('tree link paths visible with non-zero opacity (full + hub)', async () => {
     await page.evaluate(() => window.APOS_TREE_MAP.reset());
     await waitIdle(page);
-    const full = await page.evaluate(() => {
-      const paths = [...document.querySelectorAll('path.link')].filter((p) => {
-        const st = getComputedStyle(p);
-        return st.display !== 'none' && Number(st.opacity) > 0.05;
-      });
-      const opacities = paths.map((p) => Number(getComputedStyle(p).opacity));
-      return {
-        count: paths.length,
-        min: opacities.length ? Math.min(...opacities) : 0,
-        max: opacities.length ? Math.max(...opacities) : 0,
-      };
-    });
-    if (full.count < 20) throw new Error(`full view: expected many visible links, got ${JSON.stringify(full)}`);
-    if (full.min < 0.3 || full.max < 0.4) {
+    await delay(80); // one paint after settle
+    const full = await page.evaluate(() => window.APOS_TREE_MAP.getLinkDrawStats());
+    if (full.count < 12) throw new Error(`full view: expected hub→area links, got ${JSON.stringify(full)}`);
+    if (full.minOp < 0.3 || full.maxOp < 0.4) {
       throw new Error(`full view: link opacity too low ${JSON.stringify(full)}`);
     }
 
     await flyTo(page, 'client-leet');
-    const hub = await page.evaluate(() => {
-      const paths = [...document.querySelectorAll('path.link')].filter((p) => {
-        const st = getComputedStyle(p);
-        return st.display !== 'none' && Number(st.opacity) > 0.05 && !p.classList.contains('spine');
-      });
-      const opacities = paths.map((p) => Number(getComputedStyle(p).opacity));
-      return {
-        count: paths.length,
-        min: opacities.length ? Math.min(...opacities) : 0,
-        sample: opacities.slice(0, 5),
-      };
-    });
-    if (hub.count < 10) throw new Error(`hub view: expected tree links, got ${JSON.stringify(hub)}`);
-    if (hub.min < 0.25) throw new Error(`hub view: link opacity too low ${JSON.stringify(hub)}`);
+    await delay(80);
+    const hub = await page.evaluate(() => window.APOS_TREE_MAP.getLinkDrawStats());
+    if (hub.count < 5) throw new Error(`hub view: expected area+site links, got ${JSON.stringify(hub)}`);
+    if (hub.minOp < 0.25) throw new Error(`hub view: link opacity too low ${JSON.stringify(hub)}`);
   });
 
   await test('interrupted fly-to redirects without snap', async () => {
@@ -329,32 +348,46 @@ async function runTests(browserType, browserName) {
 async function recordFlow() {
   console.log('\nRecording flow-tree.webm\n');
   const browser = await chromium.launch({ headless: true });
+  // Warm load so scripts/fonts/canvas paint before the video starts (no blank intro)
+  {
+    const warmCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const warm = await warmCtx.newPage();
+    await warm.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await waitMapReady(warm);
+    await warmCtx.close();
+  }
   const context = await browser.newContext({
     viewport: { width: 1920, height: 1080 },
     recordVideo: { dir: ARTIFACTS_DIR, size: { width: 1920, height: 1080 } },
   });
   const page = await context.newPage();
-  await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
-  await delay(400);
+  await page.addInitScript(() => {
+    const s = document.createElement('style');
+    s.textContent = 'html,body{background:#3b3a6b!important}';
+    document.documentElement.appendChild(s);
+  });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await waitMapReady(page);
   await page.evaluate(() => window.APOS_TREE_MAP.reset());
   await waitIdle(page);
-  await delay(600);
+  await waitMapReady(page);
+  await delay(1400); // hold full ring + outer titles for compare-flow
   await flyTo(page, 'client-leet');
-  await delay(700);
+  await delay(1200); // hold hub fill frame
   await flyTo(page, 'area-shadadiya');
-  await delay(500);
+  await delay(700);
   await flyTo(page, 'loc-ku-coba');
-  await delay(500);
+  await delay(600);
   await flyTo(page, 'm-ku-1');
-  await delay(800);
+  await delay(900);
   await page.evaluate(() => window.APOS_TREE_MAP.flyTo('client-ee'));
-  await delay(200);
+  await delay(250);
   await page.evaluate(() => window.APOS_TREE_MAP.flyTo('client-leet'));
   await waitIdle(page);
-  await delay(600);
+  await delay(800);
   await page.evaluate(() => window.APOS_TREE_MAP.reset());
   await waitIdle(page);
-  await delay(500);
+  await delay(900);
   const vid = page.video();
   await context.close();
   await browser.close();
@@ -363,9 +396,20 @@ async function recordFlow() {
     const dest = join(ARTIFACTS_DIR, 'flow-tree.webm');
     try {
       const { execSync } = await import('child_process');
-      execSync(`ffmpeg -y -i "${raw}" -t 12 -c:v libvpx -b:v 1M -an "${dest}"`, { stdio: 'pipe' });
+      let ss = 0.15;
+      for (let t = 0; t < 8; t += 0.25) {
+        execSync(`ffmpeg -y -hide_banner -loglevel error -ss ${t} -i "${raw}" -frames:v 1 /tmp/apos-flow-probe.png`, { stdio: 'pipe' });
+        const avg = parseFloat(execSync(
+          `python3 -c "from PIL import Image; im=Image.open('/tmp/apos-flow-probe.png').convert('L'); d=list(im.getdata()); print(sum(d)/len(d))"`,
+          { encoding: 'utf8' }
+        ).trim());
+        if (avg < 200) { ss = Math.max(0, t); break; }
+      }
+      console.log(`   trim start ${ss.toFixed(2)}s`);
+      execSync(`ffmpeg -y -ss ${ss} -i "${raw}" -t 18 -c:v libvpx -b:v 1.4M -an "${dest}"`, { stdio: 'pipe' });
       console.log(`   🎬 ${dest}`);
-    } catch {
+    } catch (e) {
+      console.warn('trim/encode failed, raw copy', e.message || e);
       copyFileSync(raw, dest);
       console.log(`   🎬 ${dest} (raw copy)`);
     }
