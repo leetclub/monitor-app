@@ -249,10 +249,19 @@ async function runBasicTests(browserType, browserName) {
     await delay(300);
   });
 
-  await test('Node groups have SVG line icons (no emoji)', async () => {
-    const icons = await page.locator('.node-icon').count();
-    if (icons === 0) {
-      throw new Error('No SVG line icons found');
+  await test('Department orbs have monochrome SVG line icons (no emoji)', async () => {
+    const icons = await page.locator('.dept-icon').count();
+    if (icons < 8) {
+      throw new Error(`Expected 8 dept icons, found ${icons}`);
+    }
+  });
+
+  await test('Zoomed-out LOD hides deep leaves (opacity ~0)', async () => {
+    await page.locator('[data-action="reset"]').click();
+    await delay(800);
+    const opacity = await page.locator('.lod-deep').first().evaluate((el) => getComputedStyle(el).opacity);
+    if (parseFloat(opacity) > 0.15) {
+      throw new Error(`Expected deep LOD near 0 at default zoom, got ${opacity}`);
     }
   });
 

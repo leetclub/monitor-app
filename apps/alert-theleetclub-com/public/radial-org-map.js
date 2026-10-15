@@ -561,7 +561,22 @@ const DOMAIN = {
   ],
 };
 
-const TARGET_LEAVES_PER_DEPT = 110;
+const TARGET_LEAVES_PER_DEPT = 80;
+
+/** Premium monochrome palette — single accent for focus/alerts only */
+const PREMIUM = {
+  nodeFill: '#ffffff',
+  nodeStroke: 'rgba(58, 58, 69, 0.18)',
+  line: 'rgba(58, 58, 69, 0.12)',
+  lineFocus: 'url(#accent-stroke)',
+  accent: '#e94e87',
+  accentEnd: '#ff6b3d',
+  alert: '#e11d48',
+  ink: 'rgba(58, 58, 69, 0.72)',
+  inkFaint: 'rgba(58, 58, 69, 0.055)',
+  particle: 'rgba(58, 58, 69, 0.22)',
+  particleAccent: 'rgba(233, 78, 135, 0.18)',
+};
 
 const DEPT_LEAF_KINDS = {
   ingestion: ['machines', 'endpoints', 'products'],
@@ -667,7 +682,7 @@ function expandDepartmentTree(dept, liveMachines = []) {
     const parent = findNodeById(tree, ap.id);
     if (!parent) return;
     if (!parent.children) parent.children = [];
-    const twigCount = 2 + Math.floor(rng.next() * 2);
+    const twigCount = 1 + (rng.next() > 0.55 ? 1 : 0);
     for (let t = 0; t < twigCount; t++) {
       const twig = {
         id: `${parent.id}__twig-${t}`,
@@ -782,7 +797,10 @@ class RadialOrgMapSingleWorld {
     this.liveMachines = [];
     this.nodeIndex = new Map();
     this.activePath = new Set();
+    this.focusDeptId = null;
     this._builtOnce = false;
+    this._currentScale = 1;
+    this.labelLayer = null;
 
     this.defs = this.svg.append('defs');
     this.setupFilters();
@@ -791,9 +809,11 @@ class RadialOrgMapSingleWorld {
 
     this.zoom = d3
       .zoom()
-      .scaleExtent([0.25, 5])
+      .scaleExtent([0.35, 4.5])
       .on('zoom', (event) => {
         this.container.attr('transform', event.transform);
+        this._currentScale = event.transform.k;
+        this.applyLod(event.transform.k);
       });
 
     this.svg.call(this.zoom);
@@ -805,32 +825,54 @@ class RadialOrgMapSingleWorld {
 
     window.addEventListener('resize', () => this.handleResize());
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.closeCard();
+      if (e.key === 'Escape') {
+        this.closeCard();
+        this.clearFocus();
+      }
     });
     this.svg.on('click', (event) => {
-      if (event.target === this.svg.node()) this.closeCard();
+      if (event.target === this.svg.node()) {
+        this.closeCard();
+        this.clearFocus();
+      }
     });
   }
 
   setupFilters() {
-    const glowFilter = this.defs.append('filter').attr('id', 'glow-soft');
-    glowFilter.append('feGaussianBlur').attr('stdDeviation', 3).attr('result', 'coloredBlur');
-    const feMerge = glowFilter.append('feMerge');
-    feMerge.append('feMergeNode').attr('in', 'coloredBlur');
-    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+    this.defs.selectAll('*').remove();
 
-    // Department orb gradients
-    APOS_DATA.departments.forEach((dept) => {
-      const grad = this.defs.append('radialGradient').attr('id', `grad-${dept.id}`);
-      grad.append('stop').attr('offset', '0%').attr('stop-color', dept.color).attr('stop-opacity', 0.8);
-      grad.append('stop').attr('offset', '70%').attr('stop-color', dept.color).attr('stop-opacity', 0.4);
-      grad.append('stop').attr('offset', '100%').attr('stop-color', dept.color).attr('stop-opacity', 0.1);
-    });
+    const softGlow = this.defs.append('filter').attr('id', 'glow-soft').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
+    softGlow.append('feGaussianBlur').attr('stdDeviation', 2.5).attr('result', 'blur');
+    const merge = softGlow.append('feMerge');
+    merge.append('feMergeNode').attr('in', 'blur');
+    merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+    const accentGlow = this.defs.append('filter').attr('id', 'accent-glow').attr('x', '-80%').attr('y', '-80%').attr('width', '260%').attr('height', '260%');
+    accentGlow.append('feGaussianBlur').attr('stdDeviation', 4).attr('result', 'blur');
+    const am = accentGlow.append('feMerge');
+    am.append('feMergeNode').attr('in', 'blur');
+    am.append('feMergeNode').attr('in', 'SourceGraphic');
+
+    // Frosted white glass orb (shared by all departments)
+    const glass = this.defs.append('radialGradient').attr('id', 'orb-glass');
+    glass.append('stop').attr('offset', '0%').attr('stop-color', '#ffffff').attr('stop-opacity', 0.95);
+    glass.append('stop').attr('offset', '55%').attr('stop-color', '#f7f5fa').attr('stop-opacity', 0.75);
+    glass.append('stop').attr('offset', '100%').attr('stop-color', '#ebe8f0').attr('stop-opacity', 0.35);
+
+    const accent = this.defs.append('linearGradient').attr('id', 'accent-stroke').attr('x1', '0%').attr('y1', '0%').attr('x2', '100%').attr('y2', '100%');
+    accent.append('stop').attr('offset', '0%').attr('stop-color', PREMIUM.accent);
+    accent.append('stop').attr('offset', '100%').attr('stop-color', PREMIUM.accentEnd);
+
+    const coreGlow = this.defs.append('radialGradient').attr('id', 'core-glow');
+    coreGlow.append('stop').attr('offset', '0%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0.12);
+    coreGlow.append('stop').attr('offset', '70%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0.03);
+    coreGlow.append('stop').attr('offset', '100%').attr('stop-color', PREMIUM.accent).attr('stop-opacity', 0);
   }
 
   buildWorld() {
     this.container.selectAll('*').remove();
     this.nodeIndex = new Map();
+    this.activePath = new Set();
 
     document.getElementById('dept-name').textContent = 'APOS';
     document.getElementById('dept-subtitle').textContent = 'organizational map';
@@ -838,9 +880,8 @@ class RadialOrgMapSingleWorld {
     this.drawParticleCore();
 
     const count = APOS_DATA.departments.length;
-    const hubRing = Math.min(this.width, this.height) * 0.14;
-    // Faint labels sit near the viewport edge; trees fill almost to them
-    const faintLabelRadius = Math.min(this.width, this.height) * 0.49;
+    const hubRing = Math.min(this.width, this.height) * 0.15;
+    const faintLabelRadius = Math.min(this.width, this.height) * 0.46;
 
     APOS_DATA.departments.forEach((dept, i) => {
       const angle = (i * 2 * Math.PI) / count - Math.PI / 2;
@@ -860,11 +901,11 @@ class RadialOrgMapSingleWorld {
         .attr('y', faintLabelY)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
-        .attr('fill', 'rgba(45, 45, 58, 0.07)')
-        .attr('font-size', '52px')
+        .attr('fill', PREMIUM.inkFaint)
+        .attr('font-size', '42px')
         .attr('font-weight', '300')
-        .attr('letter-spacing', '0.22em')
-        .attr('text-transform', 'uppercase')
+        .attr('font-family', 'Inter, sans-serif')
+        .attr('letter-spacing', '0.32em')
         .text(dept.label)
         .attr('class', 'faint-label');
 
@@ -872,17 +913,22 @@ class RadialOrgMapSingleWorld {
       dept._expandedTree = expanded;
       dept._leafCount = countLeaves({ children: expanded });
 
-      const treeGroup = this.container.append('g').attr('class', `tree-${dept.id}`);
-      this.renderDenseSectorTree(treeGroup, dept, deptX, deptY, angle, faintLabelRadius - hubRing - 12);
+      const treeGroup = this.container
+        .append('g')
+        .attr('class', `tree-sector tree-${dept.id}`)
+        .attr('data-dept', dept.id);
+      this.renderDenseSectorTree(treeGroup, dept, deptX, deptY, angle, faintLabelRadius - hubRing - 28);
 
-      const deptGroup = this.container.append('g').attr('class', 'department-node-group');
+      const deptGroup = this.container.append('g').attr('class', 'department-node-group').attr('data-dept', dept.id);
 
+      // Frosted white glass orb + thin accent ring
       deptGroup
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 48)
-        .attr('fill', `url(#grad-${dept.id})`)
+        .attr('r', 42)
+        .attr('fill', 'url(#orb-glass)')
+        .attr('filter', 'url(#glow-soft)')
         .attr('class', 'dept-orb-outer')
         .style('pointer-events', 'none');
 
@@ -890,42 +936,33 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 34)
-        .attr('fill', dept.color)
-        .attr('fill-opacity', 0.18)
-        .attr('class', 'dept-orb-mid')
-        .style('pointer-events', 'none');
-
-      deptGroup
-        .append('circle')
-        .attr('cx', deptX)
-        .attr('cy', deptY)
-        .attr('r', 24)
-        .attr('fill', dept.color)
-        .attr('fill-opacity', 0.45)
-        .attr('class', 'dept-orb-core')
-        .style('pointer-events', 'none');
-
-      deptGroup
-        .append('circle')
-        .attr('cx', deptX)
-        .attr('cy', deptY)
-        .attr('r', 50)
+        .attr('r', 42)
         .attr('fill', 'none')
-        .attr('stroke', dept.color)
-        .attr('stroke-width', 1.5)
-        .attr('stroke-opacity', 0.35)
+        .attr('stroke', 'rgba(58, 58, 69, 0.12)')
+        .attr('stroke-width', 1)
         .attr('class', 'dept-orbit')
+        .style('pointer-events', 'none');
+
+      deptGroup
+        .append('circle')
+        .attr('cx', deptX)
+        .attr('cy', deptY)
+        .attr('r', 43.5)
+        .attr('fill', 'none')
+        .attr('stroke', 'url(#accent-stroke)')
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.22)
+        .attr('class', 'dept-accent-ring')
         .style('pointer-events', 'none');
 
       if (dept.icon && ICON_PATHS[dept.icon]) {
         deptGroup
           .append('path')
           .attr('d', ICON_PATHS[dept.icon])
-          .attr('transform', `translate(${deptX - 12}, ${deptY - 12}) scale(1)`)
+          .attr('transform', `translate(${deptX - 11}, ${deptY - 11}) scale(0.92)`)
           .attr('fill', 'none')
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 2)
+          .attr('stroke', 'rgba(58, 58, 69, 0.55)')
+          .attr('stroke-width', 1.5)
           .attr('stroke-linecap', 'round')
           .attr('stroke-linejoin', 'round')
           .attr('class', 'dept-icon')
@@ -936,7 +973,7 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 52)
+        .attr('r', 46)
         .attr('fill', 'transparent')
         .attr('class', 'dept-click-target')
         .style('cursor', 'pointer')
@@ -945,103 +982,131 @@ class RadialOrgMapSingleWorld {
           this.zoomToNode({ ...dept, isDept: true, metrics: { ...(dept.metrics || {}), leaves: dept._leafCount } }, i);
         })
         .on('mouseover', () => {
-          deptGroup.select('.dept-orb-core').transition().duration(200).attr('fill-opacity', 0.65);
+          deptGroup.select('.dept-accent-ring').transition().duration(180).attr('stroke-opacity', 0.85);
         })
         .on('mouseout', () => {
-          deptGroup.select('.dept-orb-core').transition().duration(200).attr('fill-opacity', 0.45);
+          if (this.focusDeptId !== dept.id) {
+            deptGroup.select('.dept-accent-ring').transition().duration(180).attr('stroke-opacity', 0.35);
+          }
         });
     });
 
+    this.labelLayer = this.container.append('g').attr('class', 'label-layer');
+    this.applyLod(this._currentScale || 1);
+
     if (!this._builtOnce) {
       this._builtOnce = true;
-      this.svg.transition().duration(600).call(this.zoom.transform, d3.zoomIdentity);
+      this.svg.transition().duration(500).call(this.zoom.transform, d3.zoomIdentity);
     }
   }
 
   /**
-   * Dense organic sector tree: leaf-weighted angles, radius from hub to faint labels,
-   * batched SVG paths + circles for performance (~90 leaves/dept).
+   * Monochrome sector tree with depth classes for LOD.
+   * Depth 1–2 always readable zoomed out; deeper fades in with zoom.
    */
   renderDenseSectorTree(group, dept, hubX, hubY, baseAngle, reach) {
-    const angleSpread = ((Math.PI * 2) / APOS_DATA.departments.length) * 0.97;
-    const rMin = 48;
-    const rMax = Math.max(rMin + 80, reach);
+    const angleSpread = ((Math.PI * 2) / APOS_DATA.departments.length) * 0.88;
+    const rMin = 52;
+    const rMax = Math.max(rMin + 100, reach);
     const seed = dept.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
     const tree = dept._expandedTree || expandDepartmentTree(dept, this.liveMachines);
     const positioned = layoutRadialTree(tree, hubX, hubY, baseAngle, angleSpread, rMin, rMax, seed);
 
     positioned.forEach((n) => {
-      n._deptColor = dept.color;
       n._deptId = dept.id;
       this.nodeIndex.set(n.id, n);
     });
 
-    // Batched connectors (single path)
-    const edgeParts = [];
+    // Connectors split by depth for LOD (L1 always, L2 soft, deep hidden)
+    const l1Edges = [];
+    const l2Edges = [];
+    const deepEdges = [];
     positioned.forEach((n) => {
       const px = n._parent ? n._parent._x : hubX;
       const py = n._parent ? n._parent._y : hubY;
-      edgeParts.push(`M${px},${py}L${n._x},${n._y}`);
+      const seg = `M${px},${py}L${n._x},${n._y}`;
+      if (n._depth === 1) l1Edges.push(seg);
+      else if (n._depth === 2 && !n._scaffold) l2Edges.push(seg);
+      else deepEdges.push(seg);
     });
+
     group
       .append('path')
-      .attr('d', edgeParts.join(''))
+      .attr('d', l1Edges.join(''))
       .attr('fill', 'none')
-      .attr('stroke', 'rgba(45, 45, 58, 0.18)')
-      .attr('stroke-width', 0.75)
-      .attr('class', 'connector-group')
+      .attr('stroke', PREMIUM.line)
+      .attr('stroke-width', 0.85)
+      .attr('class', 'connector-group lod-l1')
       .style('pointer-events', 'none');
 
-    const midNodes = positioned.filter(
-      (n) => !n.isDomainLeaf && (n.children?.length > 0 || n._depth <= 2),
-    );
-    const leafNodes = positioned.filter((n) => n.isDomainLeaf || (!n.children?.length && !n._scaffold));
+    group
+      .append('path')
+      .attr('d', l2Edges.join(''))
+      .attr('fill', 'none')
+      .attr('stroke', PREMIUM.line)
+      .attr('stroke-width', 0.65)
+      .attr('class', 'connector-group lod-l2')
+      .style('pointer-events', 'none')
+      .style('opacity', 0.4);
 
-    // Mid-level frosted discs with icons (incl. branchlets)
-    const midG = group.append('g').attr('class', 'mid-nodes');
-    midNodes.forEach((node) => {
+    group
+      .append('path')
+      .attr('d', deepEdges.join(''))
+      .attr('fill', 'none')
+      .attr('stroke', PREMIUM.line)
+      .attr('stroke-width', 0.5)
+      .attr('class', 'connector-group lod-deep-edges')
+      .style('pointer-events', 'none')
+      .style('opacity', 0);
+
+    // Focus path overlay (accent) — empty until selection
+    group
+      .append('path')
+      .attr('d', '')
+      .attr('fill', 'none')
+      .attr('stroke', 'url(#accent-stroke)')
+      .attr('stroke-width', 1.4)
+      .attr('stroke-linecap', 'round')
+      .attr('class', 'focus-path-stroke')
+      .style('pointer-events', 'none')
+      .style('opacity', 0);
+
+    // L1 = job hubs; L2 = real mid nodes only (no scaffold twigs — those stay in deep LOD)
+    const l1Nodes = positioned.filter((n) => !n.isDomainLeaf && n._depth === 1);
+    const l2Nodes = positioned.filter((n) => !n.isDomainLeaf && n._depth === 2 && !n._scaffold);
+    const deepMids = positioned.filter(
+      (n) => !n.isDomainLeaf && (n._scaffold || (n._depth > 2 && n.children?.length)),
+    );
+    const leafNodes = positioned.filter((n) => n.isDomainLeaf || (!n.children?.length && !n._scaffold && n._depth > 2));
+
+    const midG = group.append('g').attr('class', 'mid-nodes lod-l1');
+    l1Nodes.forEach((node) => {
       const level = node._depth;
-      const nodeRadius = level === 1 ? 8 : level === 2 ? 5 : 3.2;
-      const nodeGroup = midG.append('g').attr('class', 'node-group').attr('data-node-id', node.id);
+      const nodeRadius = 5.5;
+      const nodeGroup = midG
+        .append('g')
+        .attr('class', 'node-group')
+        .attr('data-node-id', node.id)
+        .attr('data-depth', level);
 
       const nodeCircle = nodeGroup
         .append('circle')
         .attr('cx', node._x)
         .attr('cy', node._y)
         .attr('r', nodeRadius)
-        .attr('fill', level === 1 ? dept.color : '#f8f6fc')
-        .attr('fill-opacity', level === 1 ? 0.75 : 0.85)
-        .attr('stroke', level === 1 ? dept.color : 'rgba(45, 45, 58, 0.28)')
-        .attr('stroke-width', level === 1 ? 1.8 : 1)
+        .attr('fill', PREMIUM.nodeFill)
+        .attr('stroke', PREMIUM.nodeStroke)
+        .attr('stroke-width', 1)
         .style('cursor', 'pointer');
 
-      if (node.metrics?.status) {
-        const statusColor =
-          node.metrics.status === 'green' ? '#10b981' : node.metrics.status === 'amber' ? '#f59e0b' : '#ef4444';
+      if (node.metrics?.status === 'red' || node.metrics?.status === 'amber') {
         nodeGroup
           .append('circle')
-          .attr('cx', node._x + nodeRadius * 0.7)
-          .attr('cy', node._y - nodeRadius * 0.7)
-          .attr('r', 2.5)
-          .attr('fill', statusColor)
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 0.8)
+          .attr('cx', node._x + nodeRadius * 0.85)
+          .attr('cy', node._y - nodeRadius * 0.85)
+          .attr('r', 2)
+          .attr('fill', node.metrics.status === 'red' ? PREMIUM.alert : PREMIUM.accentEnd)
           .attr('class', 'status-dot');
-      }
-
-      if (node.icon && ICON_PATHS[node.icon]) {
-        const iconSize = level === 1 ? 12 : 9;
-        nodeGroup
-          .append('path')
-          .attr('d', ICON_PATHS[node.icon])
-          .attr('transform', `translate(${node._x - iconSize / 2}, ${node._y - iconSize / 2}) scale(${iconSize / 24})`)
-          .attr('fill', 'none')
-          .attr('stroke', level === 1 ? '#fff' : 'rgba(45, 45, 58, 0.65)')
-          .attr('stroke-width', 1.6)
-          .attr('stroke-linecap', 'round')
-          .attr('stroke-linejoin', 'round')
-          .attr('class', 'node-icon')
-          .style('pointer-events', 'none');
       }
 
       nodeGroup
@@ -1050,29 +1115,64 @@ class RadialOrgMapSingleWorld {
           this.zoomToNode(node);
         })
         .on('mouseover', () => {
-          nodeCircle.transition().duration(120).attr('r', nodeRadius * 1.35);
-          nodeGroup
-            .append('text')
-            .attr('x', node._x)
-            .attr('y', node._y - nodeRadius - 7)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'rgba(45, 45, 58, 0.9)')
-            .attr('font-size', '10px')
-            .attr('font-weight', '600')
-            .attr('letter-spacing', '0.06em')
-            .attr('text-transform', 'uppercase')
-            .attr('class', 'hover-label')
-            .text(node.label);
+          nodeCircle.transition().duration(120).attr('stroke', PREMIUM.accent).attr('stroke-width', 1.4);
         })
         .on('mouseout', () => {
-          nodeCircle.transition().duration(120).attr('r', nodeRadius);
-          nodeGroup.select('.hover-label').remove();
+          if (!this.activePath.has(node.id)) {
+            nodeCircle.transition().duration(120).attr('stroke', PREMIUM.nodeStroke).attr('stroke-width', 1);
+          }
         });
     });
 
-    // Batched leaf circles (domain detail)
-    const leafG = group.append('g').attr('class', 'leaf-nodes');
-    const midIds = new Set(midNodes.map((n) => n.id));
+    const l2G = group.append('g').attr('class', 'mid-nodes-l2 lod-l2').style('opacity', 0.4);
+    l2Nodes.forEach((node) => {
+      const nodeRadius = 3.2;
+      const nodeGroup = l2G
+        .append('g')
+        .attr('class', 'node-group')
+        .attr('data-node-id', node.id)
+        .attr('data-depth', 2);
+      const nodeCircle = nodeGroup
+        .append('circle')
+        .attr('cx', node._x)
+        .attr('cy', node._y)
+        .attr('r', nodeRadius)
+        .attr('fill', PREMIUM.nodeFill)
+        .attr('stroke', PREMIUM.nodeStroke)
+        .attr('stroke-width', 0.9)
+        .style('cursor', 'pointer');
+      nodeGroup.on('click', (event) => {
+        event.stopPropagation();
+        this.zoomToNode(node);
+      });
+      nodeGroup.on('mouseover', () => nodeCircle.attr('stroke', PREMIUM.accent));
+      nodeGroup.on('mouseout', () => {
+        if (!this.activePath.has(node.id)) nodeCircle.attr('stroke', PREMIUM.nodeStroke);
+      });
+    });
+
+    // Deep branchlets (hidden until zoom)
+    const deepG = group.append('g').attr('class', 'deep-mids lod-deep').style('opacity', 0);
+    deepMids.forEach((node) => {
+      deepG
+        .append('circle')
+        .attr('class', 'node-group')
+        .attr('data-node-id', node.id)
+        .attr('cx', node._x)
+        .attr('cy', node._y)
+        .attr('r', 2.2)
+        .attr('fill', PREMIUM.nodeFill)
+        .attr('stroke', PREMIUM.nodeStroke)
+        .attr('stroke-width', 0.7)
+        .style('cursor', 'pointer')
+        .on('click', (event) => {
+          event.stopPropagation();
+          this.zoomToNode(node);
+        });
+    });
+
+    const leafG = group.append('g').attr('class', 'leaf-nodes lod-deep').style('opacity', 0);
+    const midIds = new Set([...l1Nodes, ...l2Nodes, ...deepMids].map((n) => n.id));
     const uniqueLeaves = leafNodes.filter((n) => n.isDomainLeaf || !midIds.has(n.id));
 
     leafG
@@ -1083,116 +1183,239 @@ class RadialOrgMapSingleWorld {
       .attr('data-node-id', (d) => d.id)
       .attr('cx', (d) => d._x)
       .attr('cy', (d) => d._y)
-      .attr('r', 2.8)
-      .attr('fill', (d) => {
-        const st = d.metrics?.status;
-        if (st === 'amber') return '#f59e0b';
-        if (st === 'red') return '#ef4444';
-        return dept.color;
-      })
-      .attr('fill-opacity', 0.72)
-      .attr('stroke', 'rgba(255,255,255,0.85)')
+      .attr('r', 1.6)
+      .attr('fill', (d) => (d.metrics?.status === 'red' ? PREMIUM.alert : PREMIUM.nodeFill))
+      .attr('stroke', PREMIUM.nodeStroke)
       .attr('stroke-width', 0.5)
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation();
         this.zoomToNode(d);
-      })
-      .on('mouseover', function (event, d) {
-        d3.select(this).transition().duration(100).attr('r', 4.5).attr('fill-opacity', 0.95);
-        leafG
-          .append('text')
-          .attr('x', d._x)
-          .attr('y', d._y - 8)
-          .attr('text-anchor', 'middle')
-          .attr('fill', 'rgba(45, 45, 58, 0.88)')
-          .attr('font-size', '9px')
-          .attr('font-weight', '600')
-          .attr('letter-spacing', '0.05em')
-          .attr('class', 'hover-label')
-          .text(d.label);
-      })
-      .on('mouseout', function () {
-        d3.select(this).transition().duration(100).attr('r', 2.8).attr('fill-opacity', 0.72);
-        leafG.selectAll('.hover-label').remove();
       });
+  }
 
-    // Tiny status dots on amber/red leaves
-    const statusLeaves = uniqueLeaves.filter((d) => d.metrics?.status === 'amber' || d.metrics?.status === 'red');
-    leafG
-      .selectAll('circle.status-leaf')
-      .data(statusLeaves, (d) => d.id + '-st')
-      .join('circle')
-      .attr('class', 'status-dot')
-      .attr('cx', (d) => d._x + 2.5)
-      .attr('cy', (d) => d._y - 2.5)
-      .attr('r', 1.6)
-      .attr('fill', (d) => (d.metrics.status === 'amber' ? '#f59e0b' : '#ef4444'))
-      .style('pointer-events', 'none');
+  /** LOD: zoomed out = core + depts + L1 fans; L2 then leaves fade in with zoom */
+  applyLod(scale) {
+    const k = scale || 1;
+    // L2 mid branches appear gently from ~1.2x
+    const l2Opacity = Math.max(0.35, Math.min(1, 0.35 + (k - 1) * 0.5));
+    this.container.selectAll('.lod-l2').style('opacity', l2Opacity);
+
+    // Leaves / deep edges only when meaningfully zoomed in (≥2.0)
+    const deepOpacity = Math.max(0, Math.min(1, (k - 2.05) / 1.0));
+    this.container.selectAll('.lod-deep').style('opacity', deepOpacity).style('pointer-events', deepOpacity > 0.2 ? 'all' : 'none');
+    this.container.selectAll('.lod-deep-edges').style('opacity', deepOpacity * 0.7);
+
+    // Dim non-focused sectors when zoomed into a department
+    if (this.focusDeptId && k > 1.2) {
+      this.container.selectAll('.tree-sector').each((d, i, nodes) => {
+        const el = d3.select(nodes[i]);
+        const id = el.attr('data-dept');
+        el.classed('dimmed', id !== this.focusDeptId).style('opacity', id === this.focusDeptId ? 1 : 0.12);
+      });
+      this.container.selectAll('.department-node-group').each((d, i, nodes) => {
+        const el = d3.select(nodes[i]);
+        const id = el.attr('data-dept');
+        const focused = id === this.focusDeptId;
+        el.style('opacity', focused ? 1 : 0.14);
+        el.select('.dept-accent-ring').attr('stroke-opacity', focused ? 0.9 : 0.12);
+      });
+    } else {
+      this.container.selectAll('.tree-sector').classed('dimmed', false).style('opacity', 1);
+      this.container.selectAll('.department-node-group').style('opacity', 1);
+      this.container.selectAll('.dept-accent-ring').attr('stroke-opacity', 0.28);
+    }
+
+    this.updateFocusLabels();
+  }
+
+  clearFocus() {
+    this.focusDeptId = null;
+    this.activePath = new Set();
+    this.selectedNode = null;
+    this.container.selectAll('.focus-path-stroke').attr('d', '').style('opacity', 0);
+    this.container.selectAll('.node-group circle').attr('stroke', PREMIUM.nodeStroke).attr('filter', null);
+    if (this.labelLayer) this.labelLayer.selectAll('*').remove();
+    this.applyLod(this._currentScale);
+  }
+
+  setFocusPath(node) {
+    this.activePath = new Set();
+    let cur = node;
+    while (cur && cur.id !== '__hub__') {
+      this.activePath.add(cur.id);
+      cur = cur._parent;
+    }
+    if (node.isDept) this.focusDeptId = node.id;
+    else if (node._deptId) this.focusDeptId = node._deptId;
+
+    this.container.selectAll('.focus-path-stroke').attr('d', '').style('opacity', 0);
+
+    if (!node.isDept && this.focusDeptId) {
+      const parts = [];
+      let n = node;
+      while (n && n._parent) {
+        parts.push(`M${n._parent._x},${n._parent._y}L${n._x},${n._y}`);
+        n = n._parent;
+      }
+      const dept = APOS_DATA.departments.find((d) => d.id === this.focusDeptId);
+      if (dept && node) {
+        // Root of this branch (depth 1) back to department hub
+        let root = node;
+        while (root._parent) root = root._parent;
+        parts.push(`M${dept._x},${dept._y}L${root._x},${root._y}`);
+      }
+      if (parts.length) {
+        this.container
+          .select(`.tree-${this.focusDeptId} .focus-path-stroke`)
+          .attr('d', parts.join(''))
+          .style('opacity', 0.85);
+      }
+    }
+
+    this.container.selectAll('[data-node-id]').each((d, i, nodes) => {
+      const el = d3.select(nodes[i]);
+      const id = el.attr('data-node-id');
+      const circle = el.select('circle').size() ? el.select('circle') : el;
+      if (circle.node() && circle.node().tagName === 'circle') {
+        if (this.activePath.has(id)) {
+          circle.attr('stroke', PREMIUM.accent).attr('stroke-width', 1.5).attr('filter', 'url(#accent-glow)');
+        } else {
+          circle.attr('stroke', PREMIUM.nodeStroke).attr('stroke-width', 1).attr('filter', null);
+        }
+      }
+    });
+
+    this.container.selectAll('.dept-accent-ring').attr('stroke-opacity', 0.35);
+    if (this.focusDeptId) {
+      this.container
+        .select(`.department-node-group[data-dept="${this.focusDeptId}"] .dept-accent-ring`)
+        .attr('stroke-opacity', 0.9);
+    }
+  }
+
+  updateFocusLabels() {
+    if (!this.labelLayer) return;
+    this.labelLayer.selectAll('*').remove();
+    if (!this.selectedNode || this._currentScale < 1.3) return;
+
+    const candidates = [];
+    const focus = this.selectedNode;
+    if (focus.label) candidates.push({ node: focus, primary: true });
+    const kids = focus.children || focus.tree || [];
+    kids.slice(0, 8).forEach((c) => {
+      const live = this.nodeIndex.get(c.id) || c;
+      if (live._x != null && live.label) candidates.push({ node: live, primary: false });
+    });
+
+    // Collision avoidance — keep max 12, no overlaps
+    const placed = [];
+    const maxLabels = 12;
+    for (const item of candidates) {
+      if (placed.length >= maxLabels) break;
+      const n = item.node;
+      const y = n._y - (item.primary ? 14 : 10);
+      const box = { x: n._x - 40, y: y - 8, w: 80, h: 14 };
+      const overlaps = placed.some(
+        (p) => !(box.x + box.w < p.x || p.x + p.w < box.x || box.y + box.h < p.y || p.y + p.h < box.y),
+      );
+      if (overlaps) continue;
+      placed.push(box);
+      this.labelLayer
+        .append('text')
+        .attr('x', n._x)
+        .attr('y', y)
+        .attr('text-anchor', 'middle')
+        .attr('fill', item.primary ? PREMIUM.ink : 'rgba(58, 58, 69, 0.45)')
+        .attr('font-size', item.primary ? '10px' : '9px')
+        .attr('font-weight', item.primary ? 500 : 400)
+        .attr('font-family', 'Inter, sans-serif')
+        .attr('letter-spacing', '0.12em')
+        .attr('text-transform', 'uppercase')
+        .attr('class', 'focus-label')
+        .text((n.label || '').slice(0, 28));
+    }
   }
 
   drawParticleCore() {
     const particleGroup = this.container.append('g').attr('class', 'particle-group');
-    const particleCount = 1500;
-    const coreRadius = 130;
+    const cx = this.centerX;
+    const cy = this.centerY;
 
+    particleGroup
+      .append('circle')
+      .attr('cx', cx)
+      .attr('cy', cy)
+      .attr('r', 90)
+      .attr('fill', 'url(#core-glow)')
+      .style('pointer-events', 'none');
+
+    const particleCount = 180;
+    const coreRadius = 70;
     const rng = new SeededRandom(12345);
 
     for (let i = 0; i < particleCount; i++) {
       const angle = rng.next() * Math.PI * 2;
-      const r = Math.pow(rng.next(), 0.7) * coreRadius;
-      const x = this.centerX + r * Math.cos(angle);
-      const y = this.centerY + r * Math.sin(angle);
-      const size = rng.next() * 2.5 + 0.5;
-      const colors = ['#e94e87', '#ff6b3d', '#4a9eff', '#8b5cf6'];
-      const color = colors[Math.floor(rng.next() * colors.length)];
-
+      const r = Math.pow(rng.next(), 0.8) * coreRadius;
+      const size = rng.next() * 1.1 + 0.25;
+      const useAccent = rng.next() > 0.94;
       particleGroup
         .append('circle')
-        .attr('cx', x)
-        .attr('cy', y)
+        .attr('cx', cx + r * Math.cos(angle))
+        .attr('cy', cy + r * Math.sin(angle))
         .attr('r', size)
-        .attr('fill', color)
-        .attr('fill-opacity', rng.next() * 0.4 + 0.2);
+        .attr('fill', useAccent ? PREMIUM.particleAccent : PREMIUM.particle);
     }
 
     particleGroup
       .transition()
-      .duration(20000)
+      .duration(64000)
       .ease(d3.easeLinear)
-      .attrTween('transform', () => {
-        return (t) => `rotate(${t * 360}, ${this.centerX}, ${this.centerY})`;
-      })
+      .attrTween('transform', () => (t) => `rotate(${t * 360}, ${cx}, ${cy})`)
       .on('end', function repeat() {
         d3.select(this)
           .transition()
-          .duration(20000)
+          .duration(48000)
           .ease(d3.easeLinear)
-          .attrTween('transform', () => {
-            return (t) => `rotate(${t * 360}, ${this.centerX}, ${this.centerY})`;
-          })
+          .attrTween('transform', () => (t) => `rotate(${t * 360}, ${cx}, ${cy})`)
           .on('end', repeat);
       });
   }
 
   zoomToNode(node, deptIndex) {
     this.selectedNode = node;
-    if (deptIndex !== undefined) {
-      this.currentDeptIndex = deptIndex;
+    if (deptIndex !== undefined) this.currentDeptIndex = deptIndex;
+    if (node.isDept) {
+      this.focusDeptId = node.id;
+      document.getElementById('dept-name').textContent = node.label;
+      document.getElementById('dept-subtitle').textContent = node.subtitle || '';
+    } else if (node._deptId) {
+      this.focusDeptId = node._deptId;
+      const dept = APOS_DATA.departments.find((d) => d.id === node._deptId);
+      if (dept) {
+        document.getElementById('dept-name').textContent = dept.label;
+        document.getElementById('dept-subtitle').textContent = node.label || '';
+        this.currentDeptIndex = APOS_DATA.departments.indexOf(dept);
+      }
     }
 
-    const scale = node.isDept ? 1.8 : node.path?.length === 1 ? 2.5 : 3.5;
-    const nodeX = node._x || (node.isDept ? node._x : this.centerX);
-    const nodeY = node._y || (node.isDept ? node._y : this.centerY);
+    this.setFocusPath(node);
+
+    const scale = node.isDept ? 1.65 : node._depth <= 1 ? 2.2 : node._depth <= 2 ? 2.8 : 3.4;
+    const nodeX = node._x;
+    const nodeY = node._y;
     const translateX = this.width / 2 - nodeX * scale;
     const translateY = this.height / 2 - nodeY * scale;
 
     this.svg
       .transition()
-      .duration(800)
-      .call(this.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
-
-    setTimeout(() => this.openCard(node), 850);
+      .duration(750)
+      .ease(d3.easeCubicInOut)
+      .call(this.zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale))
+      .on('end', () => {
+        this.applyLod(scale);
+        this.openCard(node);
+      });
   }
 
   openCard(node) {
@@ -1204,22 +1427,33 @@ class RadialOrgMapSingleWorld {
     const screenX = transform.applyX(cardX);
     const screenY = transform.applyY(cardY);
 
-    card.style.left = `${screenX + 60}px`;
-    card.style.top = `${screenY - 50}px`;
+    card.style.left = `${Math.min(this.width - 240, Math.max(16, screenX + 48))}px`;
+    card.style.top = `${Math.min(this.height - 160, Math.max(16, screenY - 40))}px`;
 
     document.getElementById('card-title').textContent = node.label || node.id;
-    const metricsHtml = node.metrics
-      ? Object.entries(node.metrics)
-          .map(([k, v]) => `<div class="metric-row"><span class="metric-key">${k}:</span> <span class="metric-value">${v}</span></div>`)
-          .join('')
-      : '<div class="metric-row"><span class="metric-value">No metrics</span></div>';
-    document.getElementById('card-metrics').innerHTML = metricsHtml;
 
+    // Max 3 metrics total (include child count as one of them when useful)
+    const skip = new Set(['kind', 'parent', 'branch', 'id', 'owner', 'site']);
+    const entries = node.metrics
+      ? Object.entries(node.metrics).filter(([k]) => !skip.has(k))
+      : [];
     const children =
       node._leafCount ||
       (node.children ? countLeaves(node) : 0) ||
       node.tree?.length ||
       0;
+    const top = entries.slice(0, 2);
+    if (children > 0) top.push(['children', children]);
+    while (top.length < 3 && entries[top.length]) {
+      /* pad from remaining if short */
+    }
+    const metricsHtml = top.length
+      ? top
+          .slice(0, 3)
+          .map(([k, v]) => `<div class="metric-row"><span class="metric-key">${k}</span><span class="metric-value">${v}</span></div>`)
+          .join('')
+      : '<div class="metric-row"><span class="metric-key">status</span><span class="metric-value">ok</span></div>';
+    document.getElementById('card-metrics').innerHTML = metricsHtml;
     document.getElementById('card-children').textContent = children;
 
     card.classList.add('open');
@@ -1228,7 +1462,6 @@ class RadialOrgMapSingleWorld {
   closeCard() {
     document.getElementById('data-card').classList.remove('open');
     document.getElementById('task-popover').classList.remove('open');
-    this.selectedNode = null;
   }
 
   cycleDepartment(direction) {
@@ -1253,7 +1486,10 @@ class RadialOrgMapSingleWorld {
 
     document.querySelector('[data-action="reset"]').addEventListener('click', () => {
       this.closeCard();
-      this.svg.transition().duration(800).call(this.zoom.transform, d3.zoomIdentity);
+      this.clearFocus();
+      document.getElementById('dept-name').textContent = 'APOS';
+      document.getElementById('dept-subtitle').textContent = 'organizational map';
+      this.svg.transition().duration(700).call(this.zoom.transform, d3.zoomIdentity);
     });
 
     document.querySelector('[data-dir="prev"]').addEventListener('click', () => {
