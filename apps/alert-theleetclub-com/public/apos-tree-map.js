@@ -15,26 +15,30 @@
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const THRESH = DATA.thresholds;
   const FLY_MS = reduceMotion ? 0 : 820;
-  const FIT = 0.82;
+  const FIT = 0.88;
 
-  // World geometry (camera fitted so hub ring ≈ 22% of viewport half-min)
-  const R_HUB = 210;
-  const HUB_SCREEN_R = 6; // ~12px diameter on screen via counter-scale
+  // World geometry — large hub ring so trees fill ~85% height (not a tiny centre clump)
+  const R_HUB = 340;
+  const HUB_SCREEN_R = 6; // ~12px diameter via counter-scale
+  const NODE_SCREEN_R = 3; // ~6px white dots
   const TREE = {
-    area: 110,
-    location: 88,
-    machine: 64,
-    branch: 34,
+    area: 200,
+    location: 165,
+    machine: 120,
+    branch: 48,
   };
+  // Labels sit just outside machine tips
+  const R_LABEL = R_HUB + TREE.area + TREE.location + TREE.machine + 44;
+  const R_OUTER = R_LABEL + 20;
 
   const LOD = {
     enterprise: { draw: 0.02, label: 0.05, labelMax: 2 },
     hub: { draw: 0.02, label: 0.05, labelMax: 8 },
-    area: { draw: 0.08, label: 0.55, labelMax: 10 },
-    location: { draw: 0.12, label: 1.1, labelMax: 16 },
-    machine: { draw: 0.18, label: 2.4, labelMax: 28 },
-    branch: { draw: 3.8, label: 5.0, labelMax: 48 },
-    artic: { draw: 0.08, label: 99, labelMax: 99 },
+    area: { draw: 0.05, label: 0.55, labelMax: 14 },
+    location: { draw: 0.08, label: 0.65, labelMax: 18 },
+    machine: { draw: 0.12, label: 3.4, labelMax: 40 },
+    branch: { draw: 3.6, label: 5.0, labelMax: 48 },
+    artic: { draw: 0.9, label: 99, labelMax: 99 },
   };
 
   const RING_COLORS = ['teal', 'violet', 'pink', 'teal', 'violet', 'pink', 'teal'];
@@ -80,42 +84,46 @@
   function placeFan(parent, kids, dist, spread, baseAngle) {
     const n = kids.length;
     if (!n) return;
-    const sweep = Math.min(spread, 0.4 + n * 0.32);
+    // Wide open fans — airy like the reference (not tight clumps)
+    const sweep = Math.min(spread, 0.55 + n * 0.38);
     kids.forEach((c, i) => {
       const a = baseAngle + ((i + 0.5) / n - 0.5) * sweep;
-      const jitter = ((hash(c.id) % 9) - 4) * 0.014;
-      const dJ = dist * (0.92 + (hash(c.id + 'd') % 5) * 0.025);
+      const jitter = ((hash(c.id) % 11) - 5) * 0.018;
+      const dJ = dist * (0.88 + (hash(c.id + 'd') % 7) * 0.035);
       c.x = parent.x + Math.cos(a + jitter) * dJ;
       c.y = parent.y + Math.sin(a + jitter) * dJ;
       c.angle = a + jitter;
+      c.labelOx = 0;
+      c.labelOy = 16;
     });
   }
 
+  /** Sparse mid-edge dots only (no side twigs) — keeps trees airy */
   function addArticulations(sId, tId) {
     const s = nodeById.get(sId);
     const t = nodeById.get(tId);
     if (!s || !t) return;
-    const steps = 3 + (hash(sId + tId) % 4);
-    for (let i = 1; i <= steps; i++) {
-      const u = i / (steps + 1);
-      const wobble = Math.sin(u * Math.PI) * 10 * (((hash(sId + i) % 7) - 3) / 3);
-      const dx = t.x - s.x;
-      const dy = t.y - s.y;
-      const nx = -dy;
-      const ny = dx;
-      const len = Math.hypot(nx, ny) || 1;
-      articulations.push({
-        id: `art-${sId}-${tId}-${i}`,
-        type: 'artic',
-        x: s.x + dx * u + (nx / len) * wobble,
-        y: s.y + dy * u + (ny / len) * wobble,
-        r: 2.2 + (hash(sId + i) % 4) * 0.55,
-        parentId: sId,
-        hubId: t.hubId || s.hubId || s.id,
-        depth: Math.min(s.depth, t.depth) + 0.5,
-        status: 'active',
-      });
-    }
+    // One mid-dot on longer edges only
+    const len = Math.hypot(t.x - s.x, t.y - s.y);
+    if (len < 90) return;
+    const u = 0.45 + (hash(sId + tId) % 3) * 0.05;
+    const wobble = (((hash(sId) % 5) - 2) / 2) * 8;
+    const dx = t.x - s.x;
+    const dy = t.y - s.y;
+    const nx = -dy;
+    const ny = dx;
+    const nlen = Math.hypot(nx, ny) || 1;
+    articulations.push({
+      id: `art-${sId}-${tId}`,
+      type: 'artic',
+      x: s.x + dx * u + (nx / nlen) * wobble,
+      y: s.y + dy * u + (ny / nlen) * wobble,
+      r: NODE_SCREEN_R,
+      parentId: sId,
+      hubId: t.hubId || s.hubId || s.id,
+      depth: Math.min(s.depth, t.depth) + 0.5,
+      status: 'active',
+    });
   }
 
   /**
@@ -244,11 +252,11 @@
       links.push({ source: core.id, target: hub.id, kind: 'spine' });
 
       if (def.status === 'future' || !def.areas.length) {
-        // Dim placeholder twigs so future hubs still read as trees on the ring
-        const twigs = 4 + (hash(def.id) % 3);
+        // Dim open placeholder fans (~9–12 nodes) — airy, not dense clumps
+        const twigs = 3;
         for (let i = 0; i < twigs; i++) {
-          const a = hub.outAngle + ((i + 0.5) / twigs - 0.5) * 0.7;
-          const dist = 55 + (hash(def.id + i) % 40);
+          const a = hub.outAngle + ((i + 0.5) / twigs - 0.5) * 1.05;
+          const dist = TREE.area * (0.7 + (hash(def.id + i) % 4) * 0.08);
           const id = `future-twig-${def.id}-${i}`;
           addNode({
             id,
@@ -258,16 +266,16 @@
             hubId: hub.id,
             depth: 2,
             status: 'future',
-            r: 2.2,
+            r: NODE_SCREEN_R,
             x: hub.x + Math.cos(a) * dist,
             y: hub.y + Math.sin(a) * dist,
             angle: a,
           });
           links.push({ source: hub.id, target: id, kind: 'tree' });
-          const tips = 2 + (hash(id) % 2);
-          for (let j = 0; j < tips; j++) {
-            const a2 = a + ((j + 0.5) / tips - 0.5) * 0.55;
+          for (let j = 0; j < 2; j++) {
+            const a2 = a + ((j + 0.5) / 2 - 0.5) * 0.55;
             const id2 = `${id}-t${j}`;
+            const d2 = TREE.location * (0.65 + (hash(id2) % 3) * 0.08);
             addNode({
               id: id2,
               type: 'location',
@@ -276,12 +284,28 @@
               hubId: hub.id,
               depth: 3,
               status: 'future',
-              r: 1.8,
-              x: hub.x + Math.cos(a) * dist + Math.cos(a2) * 36,
-              y: hub.y + Math.sin(a) * dist + Math.sin(a2) * 36,
+              r: NODE_SCREEN_R * 0.85,
+              x: hub.x + Math.cos(a) * dist + Math.cos(a2) * d2,
+              y: hub.y + Math.sin(a) * dist + Math.sin(a2) * d2,
               angle: a2,
             });
             links.push({ source: id, target: id2, kind: 'tree' });
+            // one tip machine-dot further out
+            const id3 = `${id2}-tip`;
+            addNode({
+              id: id3,
+              type: 'machine',
+              label: '',
+              parentId: id2,
+              hubId: hub.id,
+              depth: 4,
+              status: 'future',
+              r: NODE_SCREEN_R * 0.75,
+              x: hub.x + Math.cos(a) * dist + Math.cos(a2) * (d2 + TREE.machine * 0.45),
+              y: hub.y + Math.sin(a) * dist + Math.sin(a2) * (d2 + TREE.machine * 0.45),
+              angle: a2,
+            });
+            links.push({ source: id2, target: id3, kind: 'tree' });
           }
         }
         return;
@@ -301,7 +325,7 @@
             countryId: def.countryId,
             depth: 2,
             status: 'active',
-            r: 3.8,
+            r: NODE_SCREEN_R,
           };
           addNode(areaNode);
           links.push({ source: hub.id, target: area.id, kind: 'tree' });
@@ -319,7 +343,7 @@
             countryId: def.countryId,
             depth: def.areaHub ? 2 : 3,
             status: 'active',
-            r: 3.4,
+            r: NODE_SCREEN_R,
             address: loc.address,
           };
           addNode(ln);
@@ -347,7 +371,7 @@
               technical: m.technical,
               operators: m.operators,
               model: m.model,
-              r: 3.0,
+              r: NODE_SCREEN_R * 0.9,
             };
             mn.alert = computeAlert(mn);
             addNode(mn);
@@ -367,7 +391,7 @@
                 hubId: hub.id,
                 depth: mn.depth + 1,
                 status: 'active',
-                r: 2.5,
+                r: NODE_SCREEN_R * 0.85,
                 machine: mn,
               });
               links.push({ source: m.id, target: id, kind: 'leaf' });
@@ -376,15 +400,15 @@
         });
       });
 
-      // Place tree growing OUTWARD from hub (organic fans)
+      // Place tree growing OUTWARD from hub — wide open fans (~25–30% viewport)
       const firstKids = childrenOf.get(hub.id) || [];
-      placeFan(hub, firstKids, TREE.area, Math.PI * 1.05, hub.outAngle);
+      placeFan(hub, firstKids, TREE.area, Math.PI * 1.35, hub.outAngle);
       firstKids.forEach((kid) => {
         const next = childrenOf.get(kid.id) || [];
-        placeFan(kid, next, TREE.location, Math.PI * 0.95, kid.angle ?? hub.outAngle);
+        placeFan(kid, next, TREE.location, Math.PI * 1.2, kid.angle ?? hub.outAngle);
         next.forEach((loc) => {
           const ms = childrenOf.get(loc.id) || [];
-          placeFan(loc, ms, TREE.machine, Math.PI * 1.0, loc.angle ?? hub.outAngle);
+          placeFan(loc, ms, TREE.machine, Math.PI * 1.05, loc.angle ?? hub.outAngle);
           ms.forEach((m) => {
             const brs = childrenOf.get(m.id) || [];
             brs.forEach((b, bi) => {
@@ -397,48 +421,10 @@
       });
     });
 
-    // Decorative articulation dots along tree links (+ light side twigs for density)
+    // Sparse mid-edge dots only (no side twigs)
     links.forEach((l) => {
       if (l.kind === 'spine' || l.kind === 'leaf') return;
       addArticulations(l.source, l.target);
-      const s = nodeById.get(l.source);
-      const t = nodeById.get(l.target);
-      if (!s || !t || t.type === 'machine') return;
-      const twigs = 1 + (hash(l.target) % 2);
-      for (let i = 0; i < twigs; i++) {
-        const u = 0.35 + i * 0.25;
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const px = -dy / len;
-        const py = dx / len;
-        const side = i % 2 === 0 ? 1 : -1;
-        const bx = s.x + dx * u;
-        const by = s.y + dy * u;
-        const tw = 14 + (hash(l.target + i) % 10);
-        articulations.push({
-          id: `twig-${l.target}-${i}`,
-          type: 'artic',
-          x: bx + px * side * tw,
-          y: by + py * side * tw,
-          r: 2.0 + (hash(l.target + 't' + i) % 3) * 0.5,
-          parentId: s.id,
-          hubId: t.hubId || s.hubId || s.id,
-          depth: (s.depth + t.depth) / 2,
-          status: 'active',
-        });
-        articulations.push({
-          id: `twigm-${l.target}-${i}`,
-          type: 'artic',
-          x: bx + px * side * tw * 0.5,
-          y: by + py * side * tw * 0.5,
-          r: 1.5,
-          parentId: s.id,
-          hubId: t.hubId || s.hubId || s.id,
-          depth: (s.depth + t.depth) / 2,
-          status: 'active',
-        });
-      }
     });
   }
 
@@ -550,13 +536,23 @@
 
   function applyLod() {
     const k = transform.k;
+    const focus = nodeById.get(focusNodeId);
 
     nodes.forEach((n) => {
       const lod = LOD[n.type] || LOD.location;
       const kOk = k >= lod.draw;
       n.preview = false;
+      n.labelOx = n.labelOx || 0;
+      n.labelOy = n.labelOy || 16;
 
-      if (n.type === 'enterprise' || n.type === 'hub') {
+      if (n.type === 'enterprise') {
+        // Hide core when drilled into a hub (no spine/core under the hub label)
+        n.draw = overviewMode || focus?.type !== 'hub';
+        n.lodAlpha = overviewMode ? 1 : 0.15;
+        n.labelOn = false;
+        return;
+      }
+      if (n.type === 'hub') {
         n.draw = true;
         n.lodAlpha = n.status === 'future' ? 0.35 : 1;
         n.labelOn = false; // hub names are bg-labels
@@ -577,19 +573,66 @@
       if (onPath || parentOnPath) {
         n.draw = kOk;
         n.lodAlpha = n.status === 'future' ? 0.28 : 1;
-        const near = nodeScreenDistToCenter(n) < Math.min(stage.clientWidth, stage.clientHeight) * 0.5;
-        n.labelOn =
-          n.draw &&
-          n.status !== 'future' &&
-          !!n.label &&
-          k >= lod.label &&
-          k <= lod.labelMax &&
-          (near || onPath || overviewMode);
-        if (overviewMode && n.type === 'machine') n.labelOn = k >= 1.2 && near;
+        // Overview: hub labels only. Hub/drill: first-level areas + sites; machines on hover/deep zoom.
+        const focusedHubId =
+          focus?.type === 'hub' ? focus.id : focus?.hubId || null;
+        if (!n.label || n.status === 'future' || overviewMode) {
+          n.labelOn = false;
+        } else if (n.type === 'machine') {
+          n.labelOn = hoverId === n.id || (k >= lod.label && k <= lod.labelMax);
+        } else if (n.type === 'area') {
+          // First-level children of the focused hub
+          n.labelOn =
+            !!focusedHubId &&
+            n.hubId === focusedHubId &&
+            n.parentId === focusedHubId &&
+            k >= lod.label &&
+            k <= lod.labelMax;
+        } else if (n.type === 'location') {
+          // Sites: when focused on an area, or deeper zoom on a hub
+          const parent = nodeById.get(n.parentId);
+          n.labelOn =
+            !!focusedHubId &&
+            n.hubId === focusedHubId &&
+            k >= lod.label &&
+            k <= lod.labelMax &&
+            (focus?.type === 'area' ||
+              focus?.type === 'location' ||
+              (focus?.type === 'hub' && k >= 1.35) ||
+              parent?.type === 'hub');
+        } else {
+          n.labelOn = false;
+        }
         return;
       }
 
-      // faint one-level preview under collapsed hubs when drilled elsewhere
+      // Neighbouring hub trees peek at screen edges (compare-hub reference)
+      if (!overviewMode && focus?.type === 'hub') {
+        const idx = hubs.findIndex((h) => h.id === focus.id);
+        if (idx >= 0) {
+          const neighborIds = new Set([
+            hubs[(idx - 1 + hubs.length) % hubs.length]?.id,
+            hubs[(idx + 1) % hubs.length]?.id,
+          ]);
+          const nHub = n.type === 'hub' ? n.id : n.hubId;
+          if (neighborIds.has(nHub) && n.type !== 'branch' && n.status !== 'future') {
+            n.draw = n.type === 'hub' || n.type === 'area' || n.type === 'location' || n.type === 'machine';
+            n.preview = true;
+            n.lodAlpha = n.type === 'hub' ? 0.55 : 0.32;
+            n.labelOn = false;
+            return;
+          }
+          if (neighborIds.has(nHub) && n.status === 'future' && n.type !== 'branch') {
+            n.draw = true;
+            n.preview = true;
+            n.lodAlpha = 0.2;
+            n.labelOn = false;
+            return;
+          }
+        }
+      }
+
+      // faint one-level preview under other collapsed hubs
       const parent = n.parentId ? nodeById.get(n.parentId) : null;
       if (parent?.type === 'hub' && k >= lod.draw && n.type !== 'machine') {
         n.draw = true;
@@ -604,49 +647,93 @@
       n.labelOn = false;
     });
 
-    // articulations follow their hub's visibility
+    // articulations: hub view only (keep full view airy — structural nodes only)
     articulations.forEach((a) => {
-      const hubExpanded = expandedPath.has(a.hubId) || overviewMode;
-      a.draw = hubExpanded && k >= LOD.artic.draw;
-      a.lodAlpha = overviewMode ? 0.85 : expandedPath.has(a.hubId) ? 0.9 : 0.15;
+      const hubExpanded = expandedPath.has(a.hubId);
+      a.draw = !overviewMode && hubExpanded && k >= LOD.artic.draw;
+      a.lodAlpha = hubExpanded ? 0.75 : 0;
     });
 
+    resolveLabelCollisions();
     paintLod();
   }
 
+  /** Nudge first-level labels apart in screen space so they don't overlap */
+  function resolveLabelCollisions() {
+    const labeled = nodes.filter(
+      (n) => n.labelOn && n.draw && (n.type === 'area' || n.type === 'location') && n.label
+    );
+    labeled.forEach((n) => {
+      n.labelOx = 0;
+      n.labelOy = 18;
+    });
+    // Place along outward tangent, then push overlapping ones
+    labeled.sort((a, b) => (a.angle || 0) - (b.angle || 0));
+    const placed = [];
+    labeled.forEach((n, i) => {
+      const ang = n.angle ?? Math.atan2(n.y, n.x);
+      const side = i % 2 === 0 ? 1 : -1;
+      n.labelOx = Math.cos(ang + Math.PI / 2) * side * 10;
+      n.labelOy = 16 + (i % 3) * 2;
+      let sx = n.x * transform.k + transform.x + n.labelOx;
+      let sy = n.y * transform.k + transform.y + n.labelOy * (1 / Math.max(transform.k, 0.01)) * transform.k;
+      // label is counter-scaled so offset in world≈screen/k; use screen boxes ~70x14
+      for (let guard = 0; guard < 6; guard++) {
+        let hit = false;
+        for (const p of placed) {
+          if (Math.abs(sx - p.sx) < 72 && Math.abs(sy - p.sy) < 16) {
+            n.labelOy += 14;
+            sy += 14;
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) break;
+      }
+      placed.push({ sx, sy });
+    });
+  }
+
   function hubLabelWorld(d) {
-    // Overview: labels beyond the tree (outer ring). Drill-in on this hub: under hub (inward).
-    const focused = !overviewMode && expandedPath.has(d.id) && focusNodeId === d.id;
-    if (focused) {
+    // Overview: just outside the tree. Hub drill-in: directly under the hub orb.
+    const focused =
+      !overviewMode && (focusNodeId === d.id || (expandedPath.has(d.id) && nodeById.get(focusNodeId)?.hubId === d.id));
+    if (focused || (!overviewMode && focusNodeId === d.id)) {
       const inward = d.outAngle + Math.PI;
       return {
-        x: d.x + Math.cos(inward) * 42,
-        y: d.y + Math.sin(inward) * 42,
+        x: d.x + Math.cos(inward) * 48,
+        y: d.y + Math.sin(inward) * 48,
       };
     }
-    const labelR = R_HUB + 260;
     return {
-      x: Math.cos(d.outAngle) * labelR,
-      y: Math.sin(d.outAngle) * labelR,
+      x: Math.cos(d.outAngle) * R_LABEL,
+      y: Math.sin(d.outAngle) * R_LABEL,
     };
   }
 
   function applyLabelCounterScale() {
     const inv = 1 / (transform.k || 1);
-    gNodes.selectAll('g.label-layer').attr('transform', `scale(${inv})`);
+    gNodes.selectAll('g.label-layer').attr('transform', function (d) {
+      const ox = d.labelOx || 0;
+      const oy = d.labelOy || 16;
+      return `scale(${inv}) translate(${ox},${oy})`;
+    });
     gNodes.selectAll('text.core-wordmark').attr('transform', `scale(${inv})`);
-    // Keep hub orbs ~12px on screen
+    // Keep hub orbs ~12px and tree nodes ~6px on screen
     gNodes.selectAll('g.node-hub').each(function () {
       d3.select(this).select('g.hub-visual').attr('transform', `scale(${inv})`);
     });
-    // Soft-cap node screen size when deeply zoomed
-    const soft = transform.k > 2 ? 2 / transform.k : 1;
-    gNodes.selectAll('g.node-area, g.node-location, g.node-machine, g.node-branch').each(function () {
+    gNodes.selectAll('g.node-area, g.node-location, g.node-machine, g.node-branch').each(function (d) {
       const g = d3.select(this);
-      g.select('circle.star-core').attr('transform', soft === 1 ? null : `scale(${soft})`);
-      g.select('circle.pulse-ring').attr('transform', soft === 1 ? null : `scale(${soft})`);
+      const base = d.r || NODE_SCREEN_R;
+      const s = (NODE_SCREEN_R / base) * inv;
+      g.select('circle.star-core').attr('transform', `scale(${s})`);
+      g.select('circle.pulse-ring').attr('transform', `scale(${s})`);
     });
-    gArts.selectAll('circle.art-dot').attr('r', (d) => d.r * soft);
+    gArts.selectAll('circle.art-dot').attr('transform', function (d) {
+      const s = inv;
+      return `translate(${d.x},${d.y}) scale(${s}) translate(${-d.x},${-d.y})`;
+    });
     gBg.selectAll('g.bg-group').attr('transform', function (d) {
       const p = hubLabelWorld(d);
       return `translate(${p.x},${p.y}) scale(${inv})`;
@@ -665,7 +752,9 @@
       })
       .each(function (d) {
         const g = d3.select(this);
-        g.select('.bg-label').text(d.bgLabel || d.label);
+        g.select('.bg-label')
+          .attr('class', `bg-label ${d.ring || ''}`)
+          .text(d.bgLabel || d.label);
         const sub = (d.subtitle || '').toLowerCase().replace(/\s+/g, ' ');
         g.select('.bg-sub').text(sub);
       });
@@ -680,7 +769,8 @@
         const t = nodeById.get(d.target);
         const dx = t.x - s.x;
         const dy = t.y - s.y;
-        const bend = d.kind === 'spine' ? 0.02 : 0.12 + (hash(d.target) % 5) * 0.02;
+        // Clean thin lines — slight organic bend, spines nearly straight
+        const bend = d.kind === 'spine' ? 0.015 : 0.06 + (hash(d.target) % 4) * 0.015;
         const mx = (s.x + t.x) / 2 - dy * bend;
         const my = (s.y + t.y) / 2 + dx * bend;
         return `M${s.x},${s.y}Q${mx},${my} ${t.x},${t.y}`;
@@ -738,7 +828,6 @@
           lab
             .append('text')
             .attr('class', 'node-label small')
-            .attr('y', d.r + 12)
             .attr('dy', '0.35em')
             .text(d.label);
         }
@@ -771,13 +860,15 @@
     gLinks.selectAll('path.link').each(function (d) {
       const s = nodeById.get(d.source);
       const t = nodeById.get(d.target);
-      const show = s?.draw && t?.draw;
+      // Hide core→hub spines when drilled in (no long line under hub)
+      let show = !!(s?.draw && t?.draw);
+      if (d.kind === 'spine' && !overviewMode) show = false;
       const onPath = rootPathIds.has(d.source) && rootPathIds.has(d.target);
       d3.select(this)
         .style('display', show ? null : 'none')
         .classed('on-path', onPath)
         .classed('dim', !!(s?.preview || t?.preview))
-        .style('opacity', show ? Math.min(s.lodAlpha, t.lodAlpha) : 0);
+        .style('opacity', show ? Math.min(s.lodAlpha, t.lodAlpha) * (d.kind === 'spine' ? 0.7 : 1) : 0);
     });
 
     gArts.selectAll('circle.art-dot').each(function (d) {
@@ -786,10 +877,17 @@
         .attr('opacity', d.draw ? d.lodAlpha : 0);
     });
 
-    gBg.selectAll('g.bg-group').style('opacity', (d) => {
-      if (d.status === 'future') return 0.28;
-      if (!overviewMode && !expandedPath.has(d.id) && transform.k > 1.4) return 0.15;
-      return 1;
+    gBg.selectAll('g.bg-group').each(function (d) {
+      const g = d3.select(this);
+      const focused = !overviewMode && (focusNodeId === d.id || nodeById.get(focusNodeId)?.hubId === d.id);
+      let op = 1;
+      if (d.status === 'future') op = overviewMode ? 0.38 : 0.1;
+      else if (!overviewMode && !expandedPath.has(d.id) && focusNodeId !== d.id) op = 0.1;
+      g.style('opacity', op);
+      const lab = g.select('.bg-label');
+      lab.classed('accent', !!focused).classed('muted', !focused && !overviewMode);
+      // Keep ring colour class for accent fills
+      RING_COLORS.forEach((c) => lab.classed(c, d.ring === c));
     });
   }
 
@@ -812,22 +910,33 @@
     const kids = collectDescendants(node, depth).filter((c) => c.type !== 'branch' || node.type === 'machine');
     const pts = [node, ...kids];
     if (node.type === 'hub') {
-      // tree tip along outAngle + label under hub
-      const tipR = TREE.area + TREE.location + TREE.machine * 0.6;
+      const tipR = TREE.area + TREE.location + TREE.machine * 0.45;
       pts.push({
         x: node.x + Math.cos(node.outAngle) * tipR,
         y: node.y + Math.sin(node.outAngle) * tipR,
         r: 12,
       });
       const lbl = hubLabelWorld(node);
-      pts.push({ x: lbl.x, y: lbl.y, r: 28 });
+      pts.push({ x: lbl.x, y: lbl.y, r: 36 });
+      // Include neighbouring hubs so they peek at the edges (compare-hub)
+      const idx = hubs.findIndex((h) => h.id === node.id);
+      if (idx >= 0) {
+        [-1, 1].forEach((di) => {
+          const nb = hubs[(idx + di + hubs.length) % hubs.length];
+          pts.push({
+            x: (node.x + nb.x) * 0.55,
+            y: (node.y + nb.y) * 0.55,
+            r: 20,
+          });
+        });
+      }
     }
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
     pts.forEach((n) => {
-      const pad = (n.r || 4) + 22;
+      const pad = (n.r || 4) + 28;
       minX = Math.min(minX, n.x - pad);
       maxX = Math.max(maxX, n.x + pad);
       minY = Math.min(minY, n.y - pad);
@@ -837,7 +946,7 @@
   }
 
   function fullExtent() {
-    const pad = R_HUB + 300;
+    const pad = R_OUTER;
     return { x: -pad, y: -pad, w: pad * 2, h: pad * 2 };
   }
 
@@ -846,21 +955,22 @@
     const H = stage.clientHeight || 800;
     const kx = (W * FIT) / Math.max(bbox.w, 1);
     const ky = (H * FIT) / Math.max(bbox.h, 1);
-    let k = Math.max(0.2, Math.min(36, Math.min(kx, ky)));
-    // Galaxy: force hub ring ≈ 22% of viewport half-min
+    let k = Math.max(0.15, Math.min(36, Math.min(kx, ky)));
+    // Galaxy: constellation diameter ≈ 85% of stage height
     if (centerNode?.type === 'enterprise') {
-      const halfMin = Math.min(W, H) / 2;
-      k = (0.22 * halfMin) / R_HUB;
+      k = (0.455 * H) / R_OUTER;
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(0, 0);
     }
-    // Hub drill-in: bias so hub sits lower and tree fills the view (like compare-hub)
+    // Hub drill-in: hub lower-centre, tree fills view, core off-screen, neighbours at edges
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
     let cy = centerNode ? centerNode.y : bbox.y + bbox.h / 2;
     if (centerNode?.type === 'hub') {
-      const tipR = TREE.area + TREE.location * 0.55;
-      cx = centerNode.x + Math.cos(centerNode.outAngle) * tipR * 0.45;
-      cy = centerNode.y + Math.sin(centerNode.outAngle) * tipR * 0.45;
-      k = Math.min(k, 2.8);
+      const tipR = TREE.area + TREE.location * 0.7;
+      // Bias camera into the tree so core/spines leave the frame
+      cx = centerNode.x + Math.cos(centerNode.outAngle) * tipR * 0.62;
+      cy = centerNode.y + Math.sin(centerNode.outAngle) * tipR * 0.62;
+      const treeH = TREE.area + TREE.location + TREE.machine * 0.55 + 40;
+      k = Math.min(k * 0.95, (0.82 * H) / treeH);
     }
     return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
   }
@@ -1171,7 +1281,9 @@
       pctx.fill();
     }
 
-    // project core particles through current zoom (core at world 0,0)
+    // Core particles only in overview — hide in hub drill-in (no glowing ball under hub)
+    if (!overviewMode) return;
+
     const t = (ts || 0) / 1000;
     const cx = transform.x;
     const cy = transform.y;

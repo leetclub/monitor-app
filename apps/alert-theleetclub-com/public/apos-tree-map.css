@@ -271,11 +271,28 @@ body {
   fill: rgba(255, 255, 255, 0.85);
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: 28px;
+  font-size: 30px;
   letter-spacing: 0.22em;
   text-anchor: middle;
   pointer-events: none;
   user-select: none;
+}
+
+/* Hub drill-in: label in hub accent colour (like SALES in the reference) */
+.bg-label.accent.teal {
+  fill: var(--teal);
+}
+
+.bg-label.accent.violet {
+  fill: var(--violet);
+}
+
+.bg-label.accent.pink {
+  fill: var(--pink);
+}
+
+.bg-label.muted {
+  fill: rgba(255, 255, 255, 0.2);
 }
 
 .bg-sub {
@@ -329,6 +346,7 @@ body {
 
 .star-core {
   fill: #ffffff;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.55));
 }
 
 .star-core.alert {
@@ -339,7 +357,8 @@ body {
 }
 
 .art-dot {
-  fill: rgba(255, 255, 255, 0.88);
+  fill: rgba(255, 255, 255, 0.9);
+  filter: drop-shadow(0 0 2.5px rgba(255, 255, 255, 0.45));
   pointer-events: none;
 }
 
@@ -358,39 +377,39 @@ body {
 
 .link {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.5);
-  stroke-width: 1;
+  stroke: rgba(255, 255, 255, 0.48);
+  stroke-width: 0.9;
   stroke-linecap: round;
 }
 
 .link.spine {
-  stroke: rgba(255, 255, 255, 0.28);
-  stroke-width: 1;
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 0.85;
 }
 
 .link.on-path {
-  stroke: rgba(255, 255, 255, 0.82);
-  stroke-width: 1.25;
+  stroke: rgba(255, 255, 255, 0.72);
+  stroke-width: 1.05;
 }
 
 .link.dim {
-  stroke: rgba(255, 255, 255, 0.22);
+  stroke: rgba(255, 255, 255, 0.18);
 }
 
 .node-label {
-  fill: rgba(255, 255, 255, 0.88);
+  fill: rgba(255, 255, 255, 0.78);
   font-family: var(--font);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-anchor: middle;
   pointer-events: none;
   user-select: none;
 }
 
 .node-label.small {
-  font-size: 10px;
-  fill: rgba(255, 255, 255, 0.7);
+  font-size: 9px;
+  fill: rgba(255, 255, 255, 0.68);
 }
 
 .hit-target {
