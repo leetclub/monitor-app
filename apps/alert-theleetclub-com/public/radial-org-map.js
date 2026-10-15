@@ -559,7 +559,7 @@ class RadialOrgMapSingleWorld {
         .attr('x', faintLabelX)
         .attr('y', faintLabelY)
         .attr('text-anchor', 'middle')
-        .attr('fill', 'rgba(45, 45, 58, 0.08)')
+        .attr('fill', 'rgba(45, 45, 58, 0.06)')
         .attr('font-size', '56px')
         .attr('font-weight', '300')
         .attr('letter-spacing', '0.25em')
@@ -660,19 +660,23 @@ class RadialOrgMapSingleWorld {
     const angleSpread = (Math.PI * 2) / APOS_DATA.departments.length * 0.85;
     const startAngle = baseAngle - angleSpread / 2;
 
-    const innerRadius = 60;
-    const maxRadius = Math.min(this.width, this.height) * 0.20;
+    // Much larger radius to reach faint labels
+    const innerRadius = 70;
+    const maxRadius = Math.min(this.width, this.height) * 0.38;
+
+    // Increase node count per level for density
+    const nodesPerLevel = [8, 24, 60, 120];
 
     allNodes.forEach((node) => {
       const level = node.path.length;
-      const radiusJitter = (rng.next() - 0.5) * 15;
-      const radiusBase = innerRadius + (level / 4) * maxRadius;
+      const radiusJitter = (rng.next() - 0.5) * 20;
+      const radiusBase = innerRadius + (level / 4.5) * maxRadius;
       const radius = radiusBase + radiusJitter;
 
       const siblingsAtLevel = allNodes.filter((n) => n.path.length === level);
       const indexAtLevel = siblingsAtLevel.indexOf(node);
       const angleStep = angleSpread / (siblingsAtLevel.length + 1);
-      const angleJitter = (rng.next() - 0.5) * angleStep * 0.4;
+      const angleJitter = (rng.next() - 0.5) * angleStep * 0.5;
       const angle = startAngle + angleStep * (indexAtLevel + 1) + angleJitter;
 
       const x = centerX + radius * Math.cos(angle);
@@ -692,7 +696,7 @@ class RadialOrgMapSingleWorld {
             .attr('y1', parent._y)
             .attr('x2', x)
             .attr('y2', y)
-            .attr('stroke', 'rgba(245, 245, 247, 0.2)')
+            .attr('stroke', 'rgba(45, 45, 58, 0.15)')
             .attr('stroke-width', 0.8)
             .attr('class', 'connector-group')
             .attr('data-parent-id', parent.id)
@@ -705,25 +709,30 @@ class RadialOrgMapSingleWorld {
           .attr('y1', centerY)
           .attr('x2', x)
           .attr('y2', y)
-          .attr('stroke', 'rgba(245, 245, 247, 0.3)')
+          .attr('stroke', 'rgba(45, 45, 58, 0.2)')
           .attr('stroke-width', 1.2)
           .attr('class', 'connector-group')
           .attr('data-parent-id', dept.id)
           .attr('data-child-id', node.id);
       }
 
-      const nodeRadius = level === 1 ? 8 : level === 2 ? 5 : 3;
+      const nodeRadius = level === 1 ? 9 : level === 2 ? 6 : 3.5;
       const nodeGroup = group.append('g').attr('class', 'node-group').attr('data-node-id', node.id);
+
+      const nodeFill = level === 1 ? dept.color : level === 2 ? '#f5f5f7' : '#f5f5f7';
+      const nodeFillOpacity = level === 1 ? 0.7 : level === 2 ? 0.5 : 0.8;
+      const nodeStroke = level === 1 ? dept.color : level === 2 ? 'rgba(45, 45, 58, 0.3)' : 'rgba(45, 45, 58, 0.2)';
+      const nodeStrokeWidth = level === 1 ? 2 : level === 2 ? 1 : 0.5;
 
       const nodeCircle = nodeGroup
         .append('circle')
         .attr('cx', x)
         .attr('cy', y)
         .attr('r', nodeRadius)
-        .attr('fill', level === 1 ? dept.color : level === 2 ? '#f5f5f7' : '#f5f5f7')
-        .attr('fill-opacity', level === 1 ? 0.6 : level === 2 ? 0.4 : 0.7)
-        .attr('stroke', level === 1 ? dept.color : 'none')
-        .attr('stroke-width', level === 1 ? 1.5 : 0)
+        .attr('fill', nodeFill)
+        .attr('fill-opacity', nodeFillOpacity)
+        .attr('stroke', nodeStroke)
+        .attr('stroke-width', nodeStrokeWidth)
         .attr('filter', level === 3 ? 'url(#glow-soft)' : 'none')
         .style('cursor', 'pointer');
 
@@ -749,8 +758,8 @@ class RadialOrgMapSingleWorld {
           .attr('d', ICON_PATHS[node.icon])
           .attr('transform', `translate(${x - iconSize / 2}, ${y - iconSize / 2}) scale(${iconSize / 24})`)
           .attr('fill', 'none')
-          .attr('stroke', level === 1 ? '#fff' : 'rgba(45, 45, 58, 0.6)')
-          .attr('stroke-width', 1.5)
+          .attr('stroke', level === 1 ? '#fff' : 'rgba(45, 45, 58, 0.7)')
+          .attr('stroke-width', 1.8)
           .attr('stroke-linecap', 'round')
           .attr('stroke-linejoin', 'round')
           .attr('class', 'node-icon')
@@ -770,7 +779,7 @@ class RadialOrgMapSingleWorld {
               .attr('x', x)
               .attr('y', y - nodeRadius - 8)
               .attr('text-anchor', 'middle')
-              .attr('fill', 'rgba(255, 255, 255, 0.9)')
+              .attr('fill', 'rgba(45, 45, 58, 0.9)')
               .attr('font-size', '11px')
               .attr('font-weight', '600')
               .attr('letter-spacing', '0.05em')
@@ -789,7 +798,7 @@ class RadialOrgMapSingleWorld {
   drawParticleCore() {
     const particleGroup = this.container.append('g').attr('class', 'particle-group');
     const particleCount = 1500;
-    const coreRadius = 120;
+    const coreRadius = 130;
 
     const rng = new SeededRandom(12345);
 
@@ -799,7 +808,7 @@ class RadialOrgMapSingleWorld {
       const x = this.centerX + r * Math.cos(angle);
       const y = this.centerY + r * Math.sin(angle);
       const size = rng.next() * 2.5 + 0.5;
-      const colors = ['#e94e87', '#ff6b3d', '#4a9eff'];
+      const colors = ['#e94e87', '#ff6b3d', '#4a9eff', '#8b5cf6'];
       const color = colors[Math.floor(rng.next() * colors.length)];
 
       particleGroup
@@ -808,7 +817,7 @@ class RadialOrgMapSingleWorld {
         .attr('cy', y)
         .attr('r', size)
         .attr('fill', color)
-        .attr('fill-opacity', rng.next() * 0.5 + 0.3);
+        .attr('fill-opacity', rng.next() * 0.4 + 0.2);
     }
 
     particleGroup

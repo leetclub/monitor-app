@@ -12,8 +12,8 @@ body, html {
   height: 100%;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-  background: linear-gradient(135deg, #30303a 0%, #1e1e28 50%, #2d2d3a 100%);
-  color: #f5f5f7;
+  background: linear-gradient(135deg, #f5f0ff 0%, #ede8f8 40%, #e8e0f5 100%);
+  color: #2d2d3a;
 }
 
 .app-container {
@@ -35,7 +35,7 @@ body, html {
   align-items: center;
   justify-content: space-between;
   padding: 0 32px;
-  background: linear-gradient(180deg, rgba(30, 30, 40, 0.85) 0%, rgba(30, 30, 40, 0) 100%);
+  background: linear-gradient(180deg, rgba(245, 240, 255, 0.95) 0%, rgba(245, 240, 255, 0) 100%);
   backdrop-filter: blur(8px);
   z-index: 100;
 }
@@ -55,10 +55,10 @@ body, html {
 
 .toggle-btn {
   padding: 8px 16px;
-  background: rgba(245, 245, 247, 0.08);
-  border: 1px solid rgba(245, 245, 247, 0.15);
+  background: rgba(45, 45, 58, 0.05);
+  border: 1px solid rgba(45, 45, 58, 0.15);
   border-radius: 6px;
-  color: rgba(245, 245, 247, 0.7);
+  color: rgba(45, 45, 58, 0.7);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -67,8 +67,8 @@ body, html {
 }
 
 .toggle-btn:hover {
-  background: rgba(245, 245, 247, 0.15);
-  color: #f5f5f7;
+  background: rgba(45, 45, 58, 0.1);
+  color: #2d2d3a;
 }
 
 .toggle-btn.active {
@@ -82,8 +82,7 @@ body, html {
   position: relative;
   flex: 1;
   overflow: hidden;
-  background: linear-gradient(135deg, #564269 0%, #3a3547 40%, #2d2d3a 100%);
-  background-blend-mode: overlay;
+  background: radial-gradient(circle at center, #f5f0ff 0%, #ede8f8 50%, #ddd0f0 100%);
 }
 
 .org-map-canvas {
@@ -110,10 +109,10 @@ body, html {
 .zoom-btn {
   width: 40px;
   height: 40px;
-  background: rgba(30, 30, 40, 0.7);
-  border: 1px solid rgba(245, 245, 247, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(45, 45, 58, 0.2);
   border-radius: 8px;
-  color: #f5f5f7;
+  color: #2d2d3a;
   font-size: 20px;
   font-weight: 400;
   cursor: pointer;
@@ -125,7 +124,7 @@ body, html {
 }
 
 .zoom-btn:hover {
-  background: rgba(233, 78, 135, 0.3);
+  background: rgba(233, 78, 135, 0.15);
   border-color: #e94e87;
 }
 
@@ -139,20 +138,20 @@ body, html {
   align-items: center;
   gap: 24px;
   z-index: 100;
-  background: rgba(30, 30, 40, 0.6);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(8px);
   padding: 12px 20px;
   border-radius: 12px;
-  border: 1px solid rgba(245, 245, 247, 0.15);
+  border: 1px solid rgba(45, 45, 58, 0.15);
 }
 
 .nav-chevron {
   width: 36px;
   height: 36px;
-  background: rgba(245, 245, 247, 0.1);
-  border: 1px solid rgba(245, 245, 247, 0.2);
+  background: rgba(45, 45, 58, 0.08);
+  border: 1px solid rgba(45, 45, 58, 0.2);
   border-radius: 6px;
-  color: #f5f5f7;
+  color: #2d2d3a;
   font-size: 24px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -162,7 +161,7 @@ body, html {
 }
 
 .nav-chevron:hover {
-  background: rgba(233, 78, 135, 0.3);
+  background: rgba(233, 78, 135, 0.15);
   border-color: #e94e87;
 }
 
@@ -184,7 +183,7 @@ body, html {
 .dept-subtitle {
   font-size: 12px;
   font-weight: 400;
-  color: rgba(245, 245, 247, 0.5);
+  color: rgba(45, 45, 58, 0.5);
   letter-spacing: 0.05em;
 }
 
@@ -192,12 +191,12 @@ body, html {
 .data-card {
   position: absolute;
   width: 280px;
-  background: rgba(30, 30, 40, 0.95);
-  border: 1px solid rgba(245, 245, 247, 0.25);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(45, 45, 58, 0.25);
   border-radius: 12px;
   padding: 16px;
   backdrop-filter: blur(12px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   z-index: 200;
   opacity: 0;
   pointer-events: none;
@@ -217,7 +216,7 @@ body, html {
   height: 24px;
   background: none;
   border: none;
-  color: rgba(245, 245, 247, 0.6);
+  color: rgba(45, 45, 58, 0.6);
   font-size: 20px;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -232,7 +231,7 @@ body, html {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #f5f5f7;
+  color: #2d2d3a;
   margin-bottom: 12px;
   padding-right: 28px;
 }
@@ -243,7 +242,7 @@ body, html {
   gap: 6px;
   margin-bottom: 12px;
   padding: 10px;
-  background: rgba(245, 245, 247, 0.05);
+  background: rgba(45, 45, 58, 0.05);
   border-radius: 6px;
 }
 
@@ -254,14 +253,14 @@ body, html {
 }
 
 .metric-key {
-  color: rgba(245, 245, 247, 0.5);
+  color: rgba(45, 45, 58, 0.5);
   margin-right: 6px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .metric-value {
-  color: #f5f5f7;
+  color: #2d2d3a;
   font-weight: 500;
 }
 
@@ -270,12 +269,12 @@ body, html {
   align-items: center;
   justify-content: space-between;
   padding-top: 12px;
-  border-top: 1px solid rgba(245, 245, 247, 0.15);
+  border-top: 1px solid rgba(45, 45, 58, 0.15);
 }
 
 .card-children-info {
   font-size: 12px;
-  color: rgba(245, 245, 247, 0.6);
+  color: rgba(45, 45, 58, 0.6);
 }
 
 .new-task-link {
@@ -298,12 +297,12 @@ body, html {
   left: 50%;
   transform: translate(-50%, -50%);
   width: 360px;
-  background: rgba(30, 30, 40, 0.98);
-  border: 1px solid rgba(245, 245, 247, 0.25);
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(45, 45, 58, 0.25);
   border-radius: 12px;
   padding: 20px;
   backdrop-filter: blur(16px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
   z-index: 300;
   opacity: 0;
   pointer-events: none;
@@ -323,7 +322,7 @@ body, html {
   height: 24px;
   background: none;
   border: none;
-  color: rgba(245, 245, 247, 0.6);
+  color: rgba(45, 45, 58, 0.6);
   font-size: 20px;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -338,7 +337,7 @@ body, html {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #f5f5f7;
+  color: #2d2d3a;
   margin-bottom: 16px;
 }
 
@@ -351,17 +350,17 @@ body, html {
 .task-input {
   width: 100%;
   padding: 10px;
-  background: rgba(245, 245, 247, 0.05);
-  border: 1px solid rgba(245, 245, 247, 0.2);
+  background: rgba(45, 45, 58, 0.05);
+  border: 1px solid rgba(45, 45, 58, 0.2);
   border-radius: 6px;
-  color: #f5f5f7;
+  color: #2d2d3a;
   font-size: 13px;
   font-family: inherit;
   resize: vertical;
 }
 
 .task-input::placeholder {
-  color: rgba(245, 245, 247, 0.4);
+  color: rgba(45, 45, 58, 0.4);
 }
 
 .form-row {
@@ -375,7 +374,7 @@ body, html {
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
-  color: rgba(245, 245, 247, 0.6);
+  color: rgba(45, 45, 58, 0.6);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -383,16 +382,16 @@ body, html {
 .form-input,
 .form-select {
   padding: 8px;
-  background: rgba(245, 245, 247, 0.05);
-  border: 1px solid rgba(245, 245, 247, 0.2);
+  background: rgba(45, 45, 58, 0.05);
+  border: 1px solid rgba(45, 45, 58, 0.2);
   border-radius: 6px;
-  color: #f5f5f7;
+  color: #2d2d3a;
   font-size: 13px;
   font-family: inherit;
 }
 
 .form-input::placeholder {
-  color: rgba(245, 245, 247, 0.4);
+  color: rgba(45, 45, 58, 0.4);
 }
 
 .submit-btn {
