@@ -553,6 +553,7 @@
   /** At overview: all hubs expanded. On drill: only clicked path. */
   let expandedPath = new Set();
   let overviewMode = true;
+  let openBranchId = null;
 
   function allHubIds() {
     return hubs.map((h) => h.id);
@@ -1031,6 +1032,7 @@
     const want = new Set();
     nodes.forEach((n) => {
       if (!n.labelOn || !n.draw || !n.label || n.ancestorOnly) return;
+      if (openBranchId && n.id === openBranchId) return; // card shows this name
       want.add(n.id);
       let el = root.querySelector(`[data-nid="${n.id}"]`);
       if (!el) {
@@ -1693,9 +1695,11 @@
     taskBtn.onclick = () =>
       openTask(m, branchNode.branchKey === 'technical' ? 'technician' : 'operator');
     leafCard.hidden = false;
+    openBranchId = branchNode.id;
     const hubId = branchNode.hubId || m?.hubId;
     leafCard.dataset.accent = (UTILS && UTILS.HUB_ACCENT[hubId]) || 'teal';
     positionLeafCard(branchNode);
+    syncDomLabels();
   }
 
   /** Place card on the freer side of the clicked node; thin leader line; never over siblings */
@@ -1721,7 +1725,7 @@
       });
       return sc;
     }
-    const gap = 28;
+    const gap = 36;
     const candidates = [
       { left: s.x + gap, top: s.y - cardH / 2 },
       { left: s.x - cardW - gap, top: s.y - cardH / 2 },
@@ -1821,8 +1825,10 @@
 
   function closeLeafCard() {
     leafCard.hidden = true;
+    openBranchId = null;
     const leader = document.getElementById('leaf-card-leader');
     if (leader) leader.style.display = 'none';
+    syncDomLabels();
   }
 
   let taskCtx = {};
