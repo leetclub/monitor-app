@@ -122,8 +122,12 @@ async function captureScreenshots(browserType, browserName) {
   await shot(page, 'zoomed-out-after-drill', browserName);
 
   if (browserName === 'chromium') {
-    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await page.evaluate(() => {
+      window.APOS_MAP_GEMINI?.closeInspector?.();
+      window.APOS_SPACE_MAP.reset();
+    });
     await waitIdle(page);
+    await delay(200);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-full.png'), fullPage: false });
     console.log('   📸 space-level-full.png');
     await flyTo(page, 'country-kw');
@@ -168,6 +172,37 @@ async function captureScreenshots(browserType, browserName) {
     await waitIdle(page);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-pan-zoom-stress.png'), fullPage: false });
     console.log('   📸 space-pan-zoom-stress.png');
+
+    // Gemini: hover arcs + hex mode
+    await page.evaluate(() => {
+      window.APOS_MAP_GEMINI?.closeInspector?.();
+      window.APOS_SPACE_MAP.reset();
+    });
+    await waitIdle(page);
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-id="country-kw"]') || document.querySelector('[data-id="client-ee"]');
+      if (el) el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    });
+    await delay(350);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-hover-arcs.png'), fullPage: false });
+    console.log('   📸 space-hover-arcs.png');
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-id="country-kw"]');
+      if (el) el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+    });
+    await page.evaluate(() => {
+      window.APOS_MAP_GEMINI?.closeInspector?.();
+      window.APOS_MAP_GEMINI?.setLayoutMode?.('hex') || window.APOS_SPACE_MAP.setLayoutMode('hex');
+    });
+    await delay(750);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-hex-mode.png'), fullPage: false });
+    console.log('   📸 space-hex-mode.png');
+    await page.evaluate(() => {
+      window.APOS_MAP_GEMINI?.setLayoutMode?.('radial') || window.APOS_SPACE_MAP.setLayoutMode('radial');
+    });
+    await delay(700);
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
   }
 
   await browser.close();
@@ -381,7 +416,32 @@ async function runTests(browserType, browserName) {
     }
   });
 
-  await test('back navigation via Esc and chevron', async () => {
+  
+  await test('map page nav links present', async () => {
+    const n = await page.locator('.map-page-nav a').count();
+    if (n < 3) throw new Error(`nav ${n}`);
+  });
+
+  await test('gemini inspector opens on fly', async () => {
+    await flyTo(page, 'client-ee');
+    await delay(500);
+    const open = await page.evaluate(() => document.getElementById('inspector-drawer')?.classList.contains('is-open'));
+    if (!open) throw new Error('inspector closed');
+    await page.evaluate(() => window.APOS_MAP_GEMINI?.closeInspector?.() || window.APOS_SPACE_MAP.closeInspector?.());
+  });
+
+  await test('hex layout mode toggles', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await page.evaluate(() => window.APOS_SPACE_MAP.setLayoutMode('hex'));
+    await delay(650);
+    const mode = await page.evaluate(() => window.APOS_SPACE_MAP.getLayoutMode?.() || document.querySelector('#space-stage')?.dataset.layoutMode);
+    if (mode !== 'hex') throw new Error(`mode ${mode}`);
+    await page.evaluate(() => window.APOS_SPACE_MAP.setLayoutMode('radial'));
+    await delay(650);
+  });
+
+await test('back navigation via Esc and chevron', async () => {
     await page.evaluate(() => {
       window.APOS_SPACE_MAP.closeTerminal();
       window.APOS_SPACE_MAP.closeBranchCard();

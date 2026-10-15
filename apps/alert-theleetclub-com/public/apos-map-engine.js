@@ -46,6 +46,9 @@
   const reduceMotion = POLISH?.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const THRESH = DATA.thresholds;
   const FLY_MS = reduceMotion ? 0 : 900;
+  const PULL_MS = reduceMotion ? 0 : 550;
+  const CAM_LERP = reduceMotion ? 1 : 0.085;
+  const GEMINI = true; // APOS Gemini-inspired camera / rings / reticle
   const FIT = 0.88;
   const RING_ACCENTS = ['teal', 'violet', 'rose', 'amber', 'sky'];
   const ALERT = '#ff6b7a';
@@ -217,6 +220,33 @@
     });
   }
 
+
+  function addGeminiSignalArcs() {
+    // Snapshot radial home for hex↔radial tween
+    nodes.forEach((n) => {
+      if (n.radialX == null) {
+        n.radialX = n.x;
+        n.radialY = n.y;
+      }
+    });
+    // Alert / task signal arcs (tech support ↔ machine, operator routes, low stock)
+    machines.forEach((m) => {
+      if (m.alert) {
+        const tech = nodeById.get(m.id + '::technical');
+        if (tech) links.push({ source: tech.id, target: m.id, kind: 'signal', alert: true });
+        if (m.clientId) links.push({ source: m.clientId, target: m.id, kind: 'signal', alert: true, soft: true });
+        else if (m.hubId) links.push({ source: m.hubId, target: m.id, kind: 'signal', alert: true, soft: true });
+      }
+      const op = nodeById.get(m.id + '::operators');
+      if (op && (m.alert || (hash(m.id) % 5 === 0))) {
+        links.push({ source: op.id, target: m.id, kind: 'signal', alert: false });
+      }
+      if (m.stock && m.stock.fillPct != null && m.stock.fillPct < (DATA.thresholds?.stockLowPct || 15)) {
+        const st = nodeById.get(m.id + '::stock');
+        if (st) links.push({ source: st.id, target: m.id, kind: 'signal', alert: true });
+      }
+    });
+  }
   function layoutAllHubTrees() {
     const weights = hubs.map((h) => {
       const n = countLeavesUnder(h.id);
@@ -268,6 +298,15 @@
     const x2 = t.x;
     const y2 = t.y;
     const dist = Math.hypot(x2 - x1, y2 - y1) || 1;
+    // Gemini signal arcs: P1 = P0+(P0-core)*0.25, P2 = P3-(P3-core)*0.25
+    if (kind === 'signal') {
+      return {
+        c1x: x1 + x1 * 0.25,
+        c1y: y1 + y1 * 0.25,
+        c2x: x2 - x2 * 0.25,
+        c2y: y2 - y2 * 0.25,
+      };
+    }
     // Spine: gentle radial arc from core; tree: organic outward flow
     if (kind === 'spine' || s.type === 'enterprise') {
       const a = Math.atan2(y2, x2);
@@ -515,6 +554,7 @@
     }
 
     layoutAllHubTrees();
+    addGeminiSignalArcs();
     // rollups
     nodes.forEach((n) => {
       if (n.type === 'machine') {
@@ -791,6 +831,7 @@
 
     // Tidy polar layout per hub (replaces fan/zig/pad)
     layoutAllHubTrees();
+    addGeminiSignalArcs();
 
     // Roll up alerts onto sites / areas / hubs + machine counts for overview depth clusters
     function countMachinesUnder(id) {
@@ -834,8 +875,11 @@
   let zoomBehavior;
   let transform = d3.zoomIdentity;
   let flying = false;
+  let targetTransform = null;
   let focusPinned = false;
   let hoverId = null;
+  let layoutMode = 'radial';
+  let layoutTween = null;
   let rootPathIds = new Set();
   let focusNodeId = DATA.enterprise.id;
   /** At overview: all hubs expanded. On drill: only clicked path. */
@@ -946,6 +990,32 @@
     return path;
   }
 
+  function hoverRelatedIds(id) {
+    const set = new Set(pathToRoot(id));
+    const n = nodeById.get(id);
+    if (!n) return set;
+    (childrenOf.get(id) || []).forEach((c) => set.add(c.id));
+    links.forEach((L) => {
+      if (L.kind !== 'signal') return;
+      if (L.source === id || L.target === id || set.has(L.source) || set.has(L.target)) {
+        set.add(L.source);
+        set.add(L.target);
+      }
+    });
+    // Hub/country hover: include whole country tree + soft signal ends
+    if (n.type === 'hub' || n.type === 'country') {
+      nodes.forEach((x) => {
+        if (x.hubId === n.id || x.countryId === n.id) set.add(x.id);
+      });
+    }
+    if (n.type === 'client') {
+      nodes.forEach((x) => {
+        if (x.clientId === n.id) set.add(x.id);
+      });
+    }
+    return set;
+  }
+
   function initSvg() {
     svg.selectAll('*').remove();
     gRoot = svg.append('g').attr('class', 'viewport');
@@ -962,9 +1032,12 @@
         return !event.ctrlKey && !event.button;
       })
       .on('zoom', (event) => {
-        transform = event.transform;
-        gRoot.attr('transform', transform);
-        // Pan never changes expansion; scale changes (wheel/buttons) may collapse
+        // Gemini: user input updates target; display lerps toward it each frame
+        targetTransform = event.transform;
+        if (!GEMINI || flying || reduceMotion) {
+          transform = event.transform;
+          gRoot.attr('transform', transform);
+        }
         const src = event.sourceEvent;
         const isPan = !!(src && (src.type === 'mousemove' || src.type === 'pointermove' || src.type === 'touchmove'));
         reconcileViewState(isPan ? 'pan' : 'zoom');
@@ -1414,7 +1487,21 @@
       el.style.left = `${sx}px`;
       el.style.top = `${sy}px`;
       el.style.display = '';
-      el.style.opacity = '1';
+      // Gemini LOD: leaf labels fade 1.4→2.0; hubs always on at overview
+      let lop = 1;
+      const zk = transform.k || 1;
+      const isLeafish = n.type === 'location' || n.type === 'machine' || n.type === 'branch' || n.type === 'area';
+      if (isLeafish && !overviewMode) {
+        if (zk <= 1.2) lop = 0;
+        else if (zk < 1.4) lop = 0;
+        else if (zk < 2.0) lop = (zk - 1.4) / 0.6;
+        else lop = 1;
+        if (zk > 2.6 && n.id !== focusNodeId && !pathToRoot(focusNodeId).includes(n.id)) {
+          lop *= 0.08;
+        }
+      }
+      el.style.opacity = String(lop);
+      if (lop < 0.05) el.style.display = 'none';
       el.style.whiteSpace = 'nowrap';
       el.title = n.label;
     });
@@ -1600,6 +1687,7 @@
         : nodeById.get(focusNodeId)?.hubId;
     const accent = UTILS ? UTILS.accentFor(focusHubId) : null;
 
+    const hoverHot = hoverId ? hoverRelatedIds(hoverId) : null;
     gNodes.selectAll('g.node').each(function (d) {
       const g = d3.select(this);
       g.style('display', d.draw && !d.ancestorOnly ? null : 'none');
@@ -1612,9 +1700,14 @@
           (d.parentId && focusPath.has(d.parentId));
         if (!related) op = Math.min(op, 0.25);
       }
+      // Gemini: hub/node hover fades ~95% of unrelated
+      if (hoverHot && d.draw) {
+        if (!hoverHot.has(d.id) && hoverId !== d.id) op = Math.min(op, 0.1);
+      }
       g.style('opacity', op);
       g.classed('is-focus', focusNodeId === d.id || (!overviewMode && expandedPath.has(d.id) && d.type === 'hub'));
       g.classed('is-hover', hoverId === d.id);
+      g.classed('is-path', !!(hoverHot && hoverHot.has(d.id)));
       g.classed('has-alert', !!(d.alertCount > 0 || d.alert));
       // Canvas draws nodes/labels/badges — keep SVG for hit-testing only
       const label = g.select('text.node-label');
@@ -1892,10 +1985,15 @@
       return;
     }
     const iZoom = d3.interpolateZoom(startView, endView);
+    // Gemini: fly-in cubic-bezier(0.25,1,0.5,1); pull-out spring ~550ms
+    const pullingOut = target.k < transform.k * 0.92;
+    const flyEase = pullingOut
+      ? d3.easePolyOut.exponent(3.2)
+      : d3.easeCubicOut;
     svg
       .transition('fly')
-      .duration(FLY_MS)
-      .ease(d3.easeCubicInOut)
+      .duration(pullingOut ? PULL_MS : FLY_MS)
+      .ease(flyEase)
       .tween('cam', () => (t) => {
         if (myGen !== flyGen) return;
         const v = iZoom(t);
@@ -1912,6 +2010,7 @@
       .on('end', () => {
         if (myGen !== flyGen) return;
         transform = target;
+        targetTransform = target;
         svg.call(zoomBehavior.transform, transform);
         applyLod();
         applyLabelCounterScale();
@@ -2464,37 +2563,61 @@
     // Galaxy stays inside hub ring; ~18–22% screen but never past CORE_WORLD_R
     const coreR = Math.min(CORE_WORLD_R, Math.max(72, Math.min(w, h) * 0.18));
     coreParticles = [];
-    const nCore = Math.floor(980 + coreR * 4);
+    const nCore = GEMINI ? 120 : Math.floor(980 + coreR * 4);
     for (let i = 0; i < nCore; i++) {
-      const u = Math.random();
-      const v = Math.random();
-      const theta = 2 * Math.PI * u;
-      const phi = Math.acos(2 * v - 1);
-      // Soft spiral arms: radius bias + angular twist
-      const arm = (i % 3) * ((2 * Math.PI) / 3);
-      const spiral = arm + theta * 0.35;
-      const rad = Math.pow(Math.random(), 0.55) * coreR;
-      coreParticles.push({
-        ox: rad * Math.sin(phi) * Math.cos(spiral),
-        oy: rad * Math.sin(phi) * Math.sin(spiral),
-        oz: rad * Math.cos(phi) * 0.55,
-        r: 0.45 + Math.random() * 1.55,
-        pink: Math.random() < 0.2,
-        phase: Math.random() * Math.PI * 2,
-        speed: 0.12 + Math.random() * 0.32,
-        spin: 0.08 + Math.random() * 0.18,
-        arm0: spiral,
-        rad0: rad,
-      });
+      if (GEMINI) {
+        // Spec: r 32–68 screen-ish → world via coreR scale; log-spiral + Brownian
+        const t = i / Math.max(nCore - 1, 1);
+        const rad = coreR * (0.28 + 0.55 * t);
+        const spiral = t * Math.PI * 4 + (i % 5) * 0.35;
+        coreParticles.push({
+          ox: Math.cos(spiral) * rad,
+          oy: Math.sin(spiral) * rad,
+          oz: (Math.random() - 0.5) * coreR * 0.2,
+          r: 0.55 + Math.random() * 1.2,
+          tint: (() => {
+            if (THEME === 'space') return Math.random() < 0.3 ? 'mint' : 'cyan';
+            return Math.random() < 0.3 ? 'pink' : 'white';
+          })(),
+          pink: false,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.015,
+          spin: 0.015,
+          brown: 0.4,
+          arm0: spiral,
+          rad0: rad,
+        });
+      } else {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = 2 * Math.PI * u;
+        const phi = Math.acos(2 * v - 1);
+        const arm = (i % 3) * ((2 * Math.PI) / 3);
+        const spiral = arm + theta * 0.35;
+        const rad = Math.pow(Math.random(), 0.55) * coreR;
+        coreParticles.push({
+          ox: rad * Math.sin(phi) * Math.cos(spiral),
+          oy: rad * Math.sin(phi) * Math.sin(spiral),
+          oz: rad * Math.cos(phi) * 0.55,
+          r: 0.45 + Math.random() * 1.55,
+          pink: Math.random() < 0.2,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.12 + Math.random() * 0.32,
+          spin: 0.08 + Math.random() * 0.18,
+          arm0: spiral,
+          rad0: rad,
+        });
+      }
     }
     dust = [];
     nebulae = [];
     // Tree: soft dust. Space: multi-layer parallax starfield
     if (THEME === 'space') {
+      // Gemini: ~250 stars on a 2× plane, parallax ~0.2× camera
       const layers = [
-        { n: Math.floor((w * h) / 14000), r: [0.3, 0.9], a: [0.15, 0.35], parallax: 0.15 },
-        { n: Math.floor((w * h) / 9000), r: [0.4, 1.2], a: [0.2, 0.45], parallax: 0.35 },
-        { n: Math.floor((w * h) / 16000), r: [0.6, 1.6], a: [0.25, 0.55], parallax: 0.6 },
+        { n: 90, r: [0.3, 0.9], a: [0.15, 0.35], parallax: 0.12 },
+        { n: 100, r: [0.4, 1.15], a: [0.18, 0.42], parallax: 0.2 },
+        { n: 60, r: [0.55, 1.5], a: [0.22, 0.5], parallax: 0.28 },
       ];
       layers.forEach((L, li) => {
         for (let i = 0; i < L.n; i++) {
@@ -2649,10 +2772,12 @@
 
     // ——— Curved links: always node-centre → node-centre; off-frame ends fade along length ———
     linkDrawStats = { count: 0, minOp: 1, maxOp: 0 };
+    const hoverHotDraw = hoverId ? hoverRelatedIds(hoverId) : null;
     links.forEach((L) => {
       const s = nodeById.get(L.source);
       const t = nodeById.get(L.target);
       if (!s || !t) return;
+      if (L.kind === 'signal') return; // drawn in signal pass
       if (L.kind === 'spine') {
         if (!overviewMode) return;
         if (!s.draw || !t.draw) return;
@@ -2683,6 +2808,9 @@
       let op = onPath ? 0.9 : preview ? 0.28 : (L.kind === 'spine' ? 0.42 : 0.55);
       if (fadeRemote) op = Math.min(op, 0.42);
       if (future && !onPath) op = Math.min(op, 0.32);
+      if (hoverHotDraw && !(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target))) {
+        op = Math.min(op, 0.05);
+      }
       if (op < 0.05) return;
       if (!preview && !fadeRemote) {
         linkDrawStats.count++;
@@ -2758,6 +2886,63 @@
       pctx.shadowBlur = 0;
     });
     if (!linkDrawStats.count) linkDrawStats.minOp = 0;
+
+    // ——— Gemini signal arcs (alert / task) with flowing packets ———
+    links.forEach((L) => {
+      if (L.kind !== 'signal') return;
+      const s = nodeById.get(L.source);
+      const t = nodeById.get(L.target);
+      if (!s || !t) return;
+      const soft = !!L.soft;
+      const sOk = s.draw || soft;
+      const tOk = t.draw || soft;
+      if (!sOk || !tOk) return;
+      if (!overviewMode && soft) return;
+      if (!overviewMode && !(localIds.has(s.id) || localIds.has(t.id) || focusPath.has(s.id) || focusPath.has(t.id))) return;
+      let hot = true;
+      if (hoverHotDraw) {
+        hot = hoverHotDraw.has(s.id) || hoverHotDraw.has(t.id);
+        if (!hot && hoverId) return;
+      } else if (overviewMode && soft && !hoverId) {
+        if (!L.alert) return;
+      }
+      const cc = curveControls(s, t, 'signal');
+      const a0 = screenOf(s);
+      const b0 = screenOf(t);
+      const c1x = cc.c1x * transform.k + transform.x;
+      const c1y = cc.c1y * transform.k + transform.y;
+      const c2x = cc.c2x * transform.k + transform.x;
+      const c2y = cc.c2y * transform.k + transform.y;
+      const rgb = L.alert ? [255, 42, 133] : (THEME === 'space' ? [0, 242, 254] : [157, 78, 221]);
+      let op = soft ? (hoverId ? 0.72 : 0.28) : 0.55;
+      if (hoverHotDraw && hot) op = Math.max(op, 0.85);
+      pctx.beginPath();
+      pctx.moveTo(a0.x, a0.y);
+      pctx.bezierCurveTo(c1x, c1y, c2x, c2y, b0.x, b0.y);
+      pctx.lineWidth = soft ? 1.7 : 1.9;
+      pctx.lineCap = 'round';
+      pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
+      pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.55)`;
+      pctx.shadowBlur = 10;
+      pctx.stroke();
+      pctx.shadowBlur = 0;
+      if (!reduceMotion) {
+        const tSec = (ts || 0) / 1000;
+        const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 28);
+        for (let k = 0; k < 2; k++) {
+          const u = (tSec * 0.4 + k * 0.5 + (hash(L.source + L.target) % 40) * 0.01) % 1;
+          const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
+          const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
+          pctx.beginPath();
+          pctx.arc(sp.x, sp.y, 2.4, 0, Math.PI * 2);
+          pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
+          pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
+          pctx.shadowBlur = 8;
+          pctx.fill();
+          pctx.shadowBlur = 0;
+        }
+      }
+    });
 
     // ——— Overview depth clusters: soft compact dots only (no hairlines) ———
     if (overviewMode) {
@@ -3002,7 +3187,55 @@
   }
 
 
-  function drawParticles(ts) {
+  function drawOrbitGuides(ts) {
+    if (!pctx || !GEMINI || !overviewMode) return;
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
+    const cx = transform.x;
+    const cy = transform.y;
+    const k = transform.k;
+    // Three dotted concentric rings in world→screen (hub / mid / outer)
+    const rings = [R_HUB * 0.55, R_HUB * 0.92, R_HUB * 1.28];
+    pctx.save();
+    pctx.setLineDash([2, 4]);
+    pctx.lineWidth = 1;
+    pctx.strokeStyle = THEME === 'space' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.07)';
+    rings.forEach((rw) => {
+      const rr = rw * k;
+      if (rr < 8 || rr > Math.max(w, h) * 1.2) return;
+      pctx.beginPath();
+      pctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      pctx.stroke();
+    });
+    pctx.setLineDash([]);
+    // Core reticle — dual rotating dashed rings
+    const t = (ts || 0) / 1000;
+    const outer = Math.min(48, Math.max(28, Math.min(w, h) * 0.045));
+    pctx.lineWidth = 1.4;
+    pctx.strokeStyle = THEME === 'space' ? 'rgba(0, 242, 254, 0.35)' : 'rgba(255,255,255,0.28)';
+    pctx.setLineDash([3, 5]);
+    pctx.beginPath();
+    pctx.arc(cx, cy, outer, t * (Math.PI / 180), t * (Math.PI / 180) + Math.PI * 2);
+    pctx.stroke();
+    pctx.strokeStyle = THEME === 'space' ? 'rgba(5, 255, 161, 0.22)' : 'rgba(200,180,255,0.22)';
+    pctx.beginPath();
+    pctx.arc(cx, cy, outer * 0.72, -t * 0.6 * (Math.PI / 180), -t * 0.6 * (Math.PI / 180) + Math.PI * 2);
+    pctx.stroke();
+    pctx.setLineDash([]);
+    // Crosshair ticks
+    pctx.strokeStyle = THEME === 'space' ? 'rgba(0, 242, 254, 0.4)' : 'rgba(255,255,255,0.3)';
+    pctx.lineWidth = 1;
+    const tick = 6;
+    [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([dx, dy]) => {
+      pctx.beginPath();
+      pctx.moveTo(cx + dx * (outer + 2), cy + dy * (outer + 2));
+      pctx.lineTo(cx + dx * (outer + 2 + tick), cy + dy * (outer + 2 + tick));
+      pctx.stroke();
+    });
+    pctx.restore();
+  }
+
+    function drawParticles(ts) {
     if (!pctx) return;
     const w = stage.clientWidth;
     const h = stage.clientHeight;
@@ -3020,13 +3253,13 @@
         pctx.fill();
       });
     }
-    const panX = (transform.x - w / 2) * 0.02;
-    const panY = (transform.y - h / 2) * 0.02;
+    const panX = (transform.x - w / 2) * 0.2;
+    const panY = (transform.y - h / 2) * 0.2;
     for (const d of dust) {
       const twinkle = reduceMotion ? 1 : 0.65 + 0.35 * Math.sin(tDust * d.twSpeed + d.tw);
       const px = d.parallax || 0;
-      const sx = d.x + panX * px * 40;
-      const sy = d.y + panY * px * 40;
+      const sx = d.x + panX * px;
+      const sy = d.y + panY * px;
       pctx.beginPath();
       pctx.fillStyle = THEME === 'space'
         ? `rgba(200, 220, 245,${d.a * twinkle})`
@@ -3069,10 +3302,14 @@
       const dist = Math.hypot(p.ox, p.oy, p.oz);
       const alpha = 0.35 + 0.55 * (1 - Math.min(1, dist / (coreR * 0.95)));
       pctx.beginPath();
-      pctx.fillStyle = p.pink
-        ? `rgba(240, 170, 200, ${alpha})`
-        : `rgba(255, 255, 255, ${alpha})`;
-      pctx.shadowColor = p.pink ? 'rgba(240,170,200,0.45)' : 'rgba(255,255,255,0.4)';
+      const tint = p.tint || (p.pink ? 'pink' : 'white');
+      const col =
+        tint === 'cyan' ? [0, 242, 254] :
+        tint === 'mint' ? [5, 255, 161] :
+        tint === 'pink' ? [240, 170, 200] :
+        [255, 255, 255];
+      pctx.fillStyle = `rgba(${col[0]}, ${col[1]}, ${col[2]}, ${alpha})`;
+      pctx.shadowColor = `rgba(${col[0]},${col[1]},${col[2]},0.45)`;
       pctx.shadowBlur = 2.5;
       pctx.arc(sx, sy, Math.max(0.65, p.r * Math.min(1.6, 0.7 + k * 0.2)), 0, Math.PI * 2);
       pctx.fill();
@@ -3261,6 +3498,97 @@
     return { x: x * transform.k + transform.x, y: y * transform.k + transform.y };
   }
 
+  function computeHexTargets() {
+    const R = 74 * 3.2; // world units ~ hex cell
+    const seats = nodes.filter((n) =>
+      n.type === 'hub' || n.type === 'country' || (n.type === 'client' && !n.pad) || (n.type === 'area' && LAYOUT === 'brandHubs')
+    );
+    const targets = new Map();
+    seats.forEach((n, i) => {
+      // axial hex spiral
+      let ring = 0, idx = i;
+      while (idx >= (ring === 0 ? 1 : ring * 6)) {
+        idx -= ring === 0 ? 1 : ring * 6;
+        ring += 1;
+      }
+      let q = 0, r = 0;
+      if (ring === 0) {
+        q = 0; r = 0;
+      } else {
+        const side = Math.floor(idx / ring);
+        const pos = idx % ring;
+        const dirs = [[1, 0], [0, -1], [-1, 0], [-1, 1], [0, 1], [1, -1]];
+        q = dirs[side][0] * ring;
+        r = dirs[side][1] * ring;
+        for (let s = 0; s < pos; s++) {
+          const d = dirs[(side + 2) % 6];
+          q += d[0];
+          r += d[1];
+        }
+      }
+      const x = R * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
+      const y = R * ((3 / 2) * r);
+      targets.set(n.id, { x, y });
+      // children keep relative offset from radial home, scaled
+      nodes.forEach((c) => {
+        if (c.parentId !== n.id) return;
+        if (targets.has(c.id)) return;
+        const ox = (c.radialX ?? c.x) - (n.radialX ?? n.x);
+        const oy = (c.radialY ?? c.y) - (n.radialY ?? n.y);
+        targets.set(c.id, { x: x + ox * 0.55, y: y + oy * 0.55 });
+      });
+    });
+    nodes.forEach((n) => {
+      if (!targets.has(n.id)) {
+        targets.set(n.id, { x: n.radialX ?? n.x, y: n.radialY ?? n.y });
+      }
+    });
+    return targets;
+  }
+
+  function tweenLayoutTo(mode, ms) {
+    const dur = reduceMotion ? 0 : (ms || 600);
+    const from = new Map(nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
+    let to;
+    if (mode === 'hex') {
+      to = computeHexTargets();
+    } else {
+      to = new Map(nodes.map((n) => [n.id, { x: n.radialX ?? n.x, y: n.radialY ?? n.y }]));
+    }
+    layoutMode = mode;
+    if (dur === 0) {
+      nodes.forEach((n) => {
+        const p = to.get(n.id);
+        if (p) { n.x = p.x; n.y = p.y; }
+      });
+      gNodes.selectAll('g.node').attr('transform', (d) => `translate(${d.x},${d.y})`);
+      applyLod();
+      return;
+    }
+    const t0 = performance.now();
+    layoutTween = { t0, dur, from, to };
+    function easeInOutCubic(u) {
+      return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    }
+    function step(now) {
+      if (!layoutTween || layoutTween.t0 !== t0) return;
+      const u = Math.min(1, (now - t0) / dur);
+      const e = easeInOutCubic(u);
+      nodes.forEach((n) => {
+        const a = from.get(n.id);
+        const b = to.get(n.id);
+        if (!a || !b) return;
+        n.x = a.x + (b.x - a.x) * e;
+        n.y = a.y + (b.y - a.y) * e;
+      });
+      gNodes.selectAll('g.node').attr('transform', (d) => `translate(${d.x},${d.y})`);
+      applyLod();
+      if (u < 1) requestAnimationFrame(step);
+      else layoutTween = null;
+    }
+    requestAnimationFrame(step);
+  }
+
   const api = {
     getFocus: () => {
       const n = nodeById.get(focusNodeId);
@@ -3414,6 +3742,31 @@
     isOverview: () => overviewMode,
     getAlertCount: (id) => nodeById.get(id)?.alertCount || 0,
     getRollup: (id) => nodeById.get(id)?.rollup || null,
+
+
+    setInspectorOpen: (open) => {
+      if (!stage) return;
+      const was = stage.classList.contains('inspector-open');
+      stage.classList.toggle('inspector-open', !!open);
+      if (was === !!open) return;
+      if (overviewMode && targetTransform) {
+        const dx = open ? -160 : 160;
+        targetTransform = d3.zoomIdentity
+          .translate(targetTransform.x + dx, targetTransform.y)
+          .scale(targetTransform.k);
+        if (!GEMINI || reduceMotion) {
+          transform = targetTransform;
+          gRoot.attr('transform', transform);
+          svg.call(zoomBehavior.transform, transform);
+        }
+      }
+    },
+    setLayoutMode: (mode) => {
+      const m = mode === 'hex' ? 'hex' : 'radial';
+      if (stage) stage.dataset.layoutMode = m;
+      if (THEME === 'space') tweenLayoutTo(m, 600);
+    },
+    getLayoutMode: () => layoutMode,
     isFlying: () => flying,
     spawnPathSignal,
     labelsOverlap: () => {
@@ -3450,6 +3803,7 @@
   if (signalRunner) signalRunner.resize();
   setOverviewExpansion();
   transform = fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id));
+  targetTransform = transform;
   svg.call(zoomBehavior.transform, transform);
   applyLod();
   applyLabelCounterScale();
@@ -3483,8 +3837,27 @@
 
   requestAnimationFrame(function loop(ts) {
     lastTs = ts;
+    // Gemini camera damping toward targetTransform
+    if (GEMINI && !flying && targetTransform && !reduceMotion) {
+      const dx = targetTransform.x - transform.x;
+      const dy = targetTransform.y - transform.y;
+      const dk = targetTransform.k - transform.k;
+      if (Math.abs(dx) + Math.abs(dy) + Math.abs(dk) * 40 > 0.02) {
+        const nx = transform.x + dx * CAM_LERP;
+        const ny = transform.y + dy * CAM_LERP;
+        const nk = transform.k + dk * CAM_LERP;
+        transform = d3.zoomIdentity.translate(nx, ny).scale(nk);
+        gRoot.attr('transform', transform);
+        applyLod();
+        applyLabelCounterScale();
+      } else if (Math.abs(dx) + Math.abs(dy) + Math.abs(dk) > 0) {
+        transform = targetTransform;
+        gRoot.attr('transform', transform);
+      }
+    }
     drawParticles(ts);
     drawWorldScene(ts);
+    drawOrbitGuides(ts);
     if (!flying) syncHubTitles();
     if (signalRunner) signalRunner.tick(ts);
     // subtle node breathe

@@ -179,6 +179,25 @@ async function capture(browserType, browserName) {
     await waitIdle(page);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'pan-zoom-stress.png'), fullPage: false });
     console.log('   📸 pan-zoom-stress.png');
+
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-type="hub"]') || document.querySelector('.node-hub');
+      if (el) el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    });
+    await delay(350);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'tree-hover-arcs.png'), fullPage: false });
+    console.log('   📸 tree-hover-arcs.png');
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-type="hub"]');
+      if (el) el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+    });
+    // Also alias overview still
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'tree-overview.png'), fullPage: false });
+    console.log('   📸 tree-overview.png');
   }
 
   await browser.close();
@@ -208,6 +227,26 @@ async function runTests(browserType, browserName) {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await waitMapReady(page);
   await delay(500);
+
+  
+  await test('map page nav links present', async () => {
+    const n = await page.locator('.map-page-nav a').count();
+    if (n < 3) throw new Error(`nav ${n}`);
+  });
+
+  await test('gemini inspector opens on fly', async () => {
+    await flyTo(page, 'client-leet');
+    await delay(500);
+    let open = await page.evaluate(() => document.getElementById('inspector-drawer')?.classList.contains('is-open'));
+    if (!open) {
+      await page.evaluate(() =>
+        window.APOS_MAP_GEMINI?.openInspector?.({ kicker: 'hub', title: 'Leet', rows: [['Status', 'ok']] })
+      );
+      open = await page.evaluate(() => document.getElementById('inspector-drawer')?.classList.contains('is-open'));
+    }
+    if (!open) throw new Error('inspector closed');
+    await page.evaluate(() => window.APOS_MAP_GEMINI?.closeInspector?.());
+  });
 
   await test('boots with APOS core and brand hubs', async () => {
     if ((await page.locator('[data-id="ent-apos"]').count()) < 1) throw new Error('missing core');

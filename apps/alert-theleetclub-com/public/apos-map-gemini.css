@@ -1,0 +1,209 @@
+/* Shared Gemini-inspired chrome for APOS maps (space + tree + 3d) */
+
+.map-page-nav {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-right: 0.75rem;
+}
+.map-page-nav a {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 0.35rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  color: inherit;
+  opacity: 0.55;
+}
+.map-page-nav a:hover { opacity: 0.9; }
+.map-page-nav a.is-active {
+  opacity: 1;
+  border-color: currentColor;
+}
+
+.inspector-drawer {
+  position: absolute;
+  top: 64px;
+  right: 12px;
+  bottom: 72px;
+  width: min(320px, calc(100vw - 24px));
+  z-index: 28;
+  padding: 1rem 1.05rem 1.1rem;
+  border-radius: 10px;
+  background: rgba(7, 16, 28, 0.85);
+  border: 1px solid rgba(0, 242, 254, 0.19);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  transform: translateX(110%);
+  transition: transform 280ms cubic-bezier(0.25, 1, 0.5, 1);
+  overflow: auto;
+  pointer-events: none;
+}
+.inspector-drawer.is-open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.inspector-drawer .insp-close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
+  border: 0;
+  background: none;
+  color: #7d93b2;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.inspector-drawer .insp-kicker {
+  font-size: 0.65rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7d93b2;
+  margin: 0 0 0.35rem;
+}
+.inspector-drawer .insp-title {
+  margin: 0 0 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.inspector-drawer .insp-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+.inspector-drawer .insp-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(125, 147, 178, 0.15);
+}
+.inspector-drawer .insp-row span:first-child { color: #7d93b2; }
+.inspector-drawer .insp-row span:last-child {
+  font-family: ui-monospace, 'IBM Plex Mono', Menlo, monospace;
+  color: #e8f4ff;
+}
+
+.layout-mode-toggle {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid rgba(125, 147, 178, 0.28);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-left: 0.5rem;
+}
+.layout-mode-toggle button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.32rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.layout-mode-toggle button.active {
+  opacity: 1;
+  background: rgba(0, 242, 254, 0.12);
+}
+
+.map-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(circle at 50% 45%, transparent 40%, rgba(1, 4, 10, 0.75) 100%);
+}
+.map-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.015;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(255, 255, 255, 0.9) 2px,
+    rgba(255, 255, 255, 0.9) 3px
+  );
+}
+
+.gemini-tooltip {
+  position: absolute;
+  z-index: 32;
+  padding: 0.35rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(7, 16, 28, 0.92);
+  border: 1px solid rgba(0, 242, 254, 0.28);
+  color: #fff;
+  pointer-events: none;
+  transform: scale(0.92);
+  opacity: 0;
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+.gemini-tooltip.is-on {
+  transform: scale(1);
+  opacity: 1;
+}
+
+/* Hex overlay (space) */
+.hex-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+.hex-layer.is-on { opacity: 1; }
+
+/* Dim unrelated on hover path */
+.g-nodes-dim .node { opacity: 0.12; filter: saturate(0.35); }
+.g-nodes-dim .node.is-hot,
+.g-nodes-dim .node.is-path { opacity: 1; filter: none; }
+
+.space-app.oceano-bg,
+.space-app {
+  background: radial-gradient(circle at 50% 45%, #0a1524, #04080e);
+}
+
+
+/* Staggered intro */
+.gemini-intro .space-world,
+.gemini-intro .tree-world { opacity: 0.35; }
+.gemini-intro-rays .space-world,
+.gemini-intro-rays .tree-world { opacity: 0.7; transition: opacity 250ms ease-out; }
+.gemini-intro-rings .map-vignette { opacity: 1; animation: geminiRingIn 400ms ease-out; }
+.gemini-intro-leaves .label-layer { animation: geminiLeafSpring 700ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes geminiRingIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes geminiLeafSpring {
+  from { transform: scale(0.92); opacity: 0.2; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Inspector open: room on the right */
+.space-stage.inspector-open,
+.tree-stage.inspector-open {
+  /* camera nudge handled in engine; keep drawer clear */
+}
+
+/* Tree inspector glass slightly indigo */
+.tree-app .inspector-drawer {
+  background: rgba(18, 16, 42, 0.88);
+  border-color: rgba(157, 78, 221, 0.28);
+}
+
+.tree-app .map-page-nav a.is-active {
+  border-color: rgba(200, 180, 255, 0.55);
+}
