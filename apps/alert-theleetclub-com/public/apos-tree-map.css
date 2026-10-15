@@ -662,6 +662,7 @@ body {
 }
 
 /* Leaf card — dark glass on indigo */
+.tree-app > .leaf-card,
 .leaf-card {
   position: absolute;
   left: 50%;

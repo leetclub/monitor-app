@@ -150,7 +150,7 @@ async function captureScreenshots(browserType, browserName) {
       const el = document.querySelector('[data-id="m-ee-4::revenue"]') || document.querySelector('[data-id^="m-ee-4::"]');
       if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    await delay(280);
+    await delay(500);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-branch-card.png'), fullPage: false });
     console.log('   📸 space-level-branch-card.png');
     await page.evaluate(() => window.APOS_SPACE_MAP.openTerminal('m-ee-4', 'operator'));
@@ -433,17 +433,27 @@ async function runTests(browserType, browserName) {
       const parentLink = links.find((L) => L.source === 'client-ee' || L.target === 'client-ee');
       const childLinks = links.filter((L) => (L.source === area || L.target === area) && L.source !== 'client-ee' && L.target !== 'client-ee');
       const within2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= 2.05;
-      const hubPos = api.nodeScreenPos('client-ee');
-      const parentOk = parentLink && areaPos && hubPos && (
-        (parentLink.source === area && within2(parentLink.sourceScreen, areaPos) && within2(parentLink.targetScreen, hubPos)) ||
-        (parentLink.target === area && within2(parentLink.targetScreen, areaPos) && within2(parentLink.sourceScreen, hubPos))
+      const parentAttached = parentLink && areaPos && (
+        within2(parentLink.sourceScreen, areaPos) || within2(parentLink.targetScreen, areaPos)
       );
+      const stubLen = parentLink
+        ? Math.hypot(
+            parentLink.sourceScreen.x - parentLink.targetScreen.x,
+            parentLink.sourceScreen.y - parentLink.targetScreen.y
+          )
+        : 0;
       const childOk = childLinks.length > 0 && childLinks.every((L) => {
         const s = api.nodeScreenPos(L.source);
         const t = api.nodeScreenPos(L.target);
         return s && t && within2(L.sourceScreen, s) && within2(L.targetScreen, t);
       });
-      return { focus: api.getFocus(), parentOk, childOk, childCount: childLinks.length };
+      return {
+        focus: api.getFocus(),
+        parentOk: !!parentAttached && stubLen > 0 && stubLen <= 60,
+        stubLen: Math.round(stubLen),
+        childOk,
+        childCount: childLinks.length,
+      };
     });
     if (info.focus.id !== 'area-ee-farwaniya') throw new Error(JSON.stringify(info.focus));
     if (!info.parentOk) throw new Error(`parent link broken: ${JSON.stringify(info)}`);

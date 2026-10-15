@@ -161,7 +161,7 @@ async function capture(browserType, browserName) {
       const el = document.querySelector('[data-id="m-ee-4::revenue"]') || document.querySelector('[data-id^="m-ee-4::"]');
       if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    await delay(280);
+    await delay(500);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-branch-card.png'), fullPage: false });
     console.log('   📸 level-branch-card.png');
 
@@ -407,16 +407,19 @@ async function runTests(browserType, browserName) {
       const childLinks = links.filter((L) => L.source === area || L.target === area)
         .filter((L) => L.source !== 'client-ee' && L.target !== 'client-ee');
       const within2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= 2.05;
+      // Parent link is a short faded stub: local end must sit on the area centre
       const parentOk = parentLink && areaPos && (
         (parentLink.source === area && within2(parentLink.sourceScreen, areaPos)) ||
-        (parentLink.target === area && within2(parentLink.targetScreen, areaPos))
+        (parentLink.target === area && within2(parentLink.targetScreen, areaPos)) ||
+        (parentLink.sourceLocal && within2(parentLink.sourceScreen, areaPos)) ||
+        (parentLink.targetLocal && within2(parentLink.targetScreen, areaPos))
       );
-      // Parent endpoint should be exact hub centre too
-      const hubPos = api.nodeScreenPos('client-ee');
-      const parentHubOk = parentLink && hubPos && (
-        (parentLink.source === 'client-ee' && within2(parentLink.sourceScreen, hubPos)) ||
-        (parentLink.target === 'client-ee' && within2(parentLink.targetScreen, hubPos))
-      );
+      const stubLen = parentLink
+        ? Math.hypot(
+            parentLink.sourceScreen.x - parentLink.targetScreen.x,
+            parentLink.sourceScreen.y - parentLink.targetScreen.y
+          )
+        : 0;
       const childOk = childLinks.length > 0 && childLinks.every((L) => {
         const s = api.nodeScreenPos(L.source);
         const t = api.nodeScreenPos(L.target);
@@ -424,7 +427,8 @@ async function runTests(browserType, browserName) {
       });
       return {
         focus,
-        parentOk: !!(parentOk && parentHubOk),
+        parentOk: !!parentOk && stubLen > 0 && stubLen <= 60,
+        stubLen: Math.round(stubLen),
         childOk,
         childCount: childLinks.length,
         parentLink: parentLink ? { s: parentLink.source, t: parentLink.target } : null,

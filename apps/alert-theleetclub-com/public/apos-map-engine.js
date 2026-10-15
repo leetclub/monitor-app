@@ -50,25 +50,36 @@
   const RING_ACCENTS = ['teal', 'violet', 'rose', 'amber', 'sky'];
   const ALERT = '#ff6b7a';
 
-  // World geometry — large hub ring so trees fill ~85% height (not a tiny centre clump)
-  const R_HUB = 260;
-  // Spec §3–4 + review: overview nodes compact; deep/hub zoom uses large glowing discs ~10–14px
+  // World geometry — tree: compact brand ring; space: countries ~30% screen radius
+  const R_HUB = LAYOUT === 'countryTree' ? 900 : 260;
   const HUB_SCREEN_R = 18;
   const NODE_SCREEN_R = 5.5;
-  const NODE_R_BY_TYPE = { area: 7.2, location: 5.8, machine: 5.4, branch: 5.0, artic: 3.2 };
-  const DEEP_NODE_R = { area: 16, location: 15, machine: 15, branch: 14, artic: 5.5 };
+  const NODE_R_BY_TYPE = { area: 7.2, location: 5.8, machine: 5.4, branch: 5.0, artic: 3.2, client: 7.2 };
+  const DEEP_NODE_R = { area: 16, location: 15, machine: 15, branch: 14, artic: 5.5, client: 16 };
   const DEEP_HUB_R = 18;
-  const TREE = {
-    area: 220,       // ~69% of title radius — room for titles outside, no edge hairlines
-    location: 170,
-    machine: 130,
-    branch: 92,
-  };
+  const TREE = LAYOUT === 'countryTree'
+    ? {
+        // First hop under country = brands (client uses area slot in typeDist)
+        area: 380,
+        location: 240,
+        machine: 170,
+        branch: 110,
+      }
+    : {
+        area: 220,
+        location: 170,
+        machine: 130,
+        branch: 92,
+      };
   const FAN_TARGET_R = TREE.area + TREE.location + TREE.machine * 0.85;
-  const TITLE_PAD = 220; // clear of area nodes + pills + labels
+  // Space titles sit just outside brand tips; keep R_TITLE tight so enterprise
+  // fit can pin hubs at ~30% without maxK clamp eating the ring.
+  const TITLE_PAD = LAYOUT === 'countryTree' ? 90 : 220;
   const R_TITLE = R_HUB + TREE.area + TITLE_PAD;
   const R_LABEL = R_HUB + TREE.area + TREE.location + TREE.machine + 44;
   const R_OUTER = R_LABEL + 20;
+  // Core galaxy must stay inside the hub ring (world units)
+  const CORE_WORLD_R = R_HUB * (LAYOUT === 'countryTree' ? 0.20 : 0.42);
 
   const LOD = {
     enterprise: { draw: 0.02, label: 0.05, labelMax: 2 },
@@ -148,7 +159,7 @@
     const xSpan = Math.max(x1 - x0, 1e-6);
     const typeDist = LAYOUT === 'countryTree'
       ? {
-          client: TREE.area * 0.72,
+          client: TREE.area * 1.2,
           area: TREE.area + TREE.location * 0.55,
           location: TREE.area + TREE.location + TREE.machine * 0.35,
           machine: TREE.area + TREE.location + TREE.machine * 0.85,
@@ -315,7 +326,7 @@
         type: 'country',
         label: country.label,
         bgLabel: (country.code || country.label).toUpperCase(),
-        subtitle: isFuture ? (country.planned ? 'planned market' : 'future market') : 'brands · sites · machines',
+        subtitle: isFuture ? 'planned' : 'brands · sites · machines',
         status: isFuture ? 'future' : 'active',
         parentId: core.id,
         countryId: country.id,
@@ -959,9 +970,17 @@
       if (!el) {
         el = document.createElement('div');
         el.dataset.hub = h.id;
+        el.className = 'hub-title-wrap';
         el.innerHTML = `<div class="hub-title"></div><div class="hub-sub"></div>`;
         root.appendChild(el);
       }
+      el.style.position = 'absolute';
+      el.style.left = '0';
+      el.style.top = '0';
+      el.style.width = '0';
+      el.style.height = '0';
+      el.style.overflow = 'visible';
+      el.style.pointerEvents = 'none';
       const title = el.querySelector('.hub-title');
       const sub = el.querySelector('.hub-sub');
       const focused = !overviewMode && (focusHubId === h.id || focusNodeId === h.id);
@@ -991,7 +1010,7 @@
       if (!focused) {
         // Push past area tips/labels/pills along the ray
         let push = 18;
-        const areas = (childrenOf.get(h.id) || []).filter((c) => c.type === 'area' && c.draw && c.label);
+        const areas = (childrenOf.get(h.id) || []).filter((c) => (c.type === 'area' || c.type === 'client') && c.draw && c.label);
         for (let guard = 0; guard < 8; guard++) {
           const tx = s.x + ax * push;
           const ty = s.y + ay * push;
@@ -1008,11 +1027,16 @@
           if (!hit) break;
           push += 14;
         }
-        title.style.left = `${s.x + ax * push}px`;
-        title.style.top = `${s.y + ay * push}px`;
+        let tx = s.x + ax * push;
+        let ty = s.y + ay * push;
+        // Keep titles inside the stage (never under the app header / off the left edge)
+        tx = Math.max(56, Math.min(stage.clientWidth - 56, tx));
+        ty = Math.max(28, Math.min(stage.clientHeight - 36, ty));
+        title.style.left = `${tx}px`;
+        title.style.top = `${ty}px`;
         title.style.transform = 'translate(-50%, -50%)';
-        sub.style.left = `${s.x + ax * push}px`;
-        sub.style.top = `${s.y + ay * push + 24}px`;
+        sub.style.left = `${tx}px`;
+        sub.style.top = `${ty + 22}px`;
         sub.style.transform = 'translate(-50%, 0)';
       } else {
         title.style.left = `${s.x}px`;
@@ -1085,8 +1109,9 @@
         const overviewLeaf = (n.type === 'area' || n.type === 'client') && expandedPath.has(n.id);
         if (overviewLeaf) {
           n.draw = true;
-          n.lodAlpha = n.status === 'future' ? 0.45 : 1;
-          n.labelOn = !!(n.label && n.status !== 'future');
+          n.lodAlpha = n.status === 'future' || n.comingSoon ? 0.5 : 1;
+          // Brands (incl. Park coming-soon) keep labels at overview
+          n.labelOn = !!n.label;
         } else {
           n.draw = false;
           n.lodAlpha = 0;
@@ -1580,18 +1605,12 @@
         .attr('opacity', d.draw ? d.lodAlpha : 0);
     });
 
-    gBg.selectAll('g.bg-group').each(function (d) {
-      const g = d3.select(this);
-      const focused = !overviewMode && (focusNodeId === d.id || nodeById.get(focusNodeId)?.hubId === d.id);
-      let op = 1;
-      if (d.status === 'future') op = overviewMode ? 0.38 : 0.1;
-      else if (!overviewMode && !expandedPath.has(d.id) && focusNodeId !== d.id) op = 0.1;
-      g.style('opacity', op);
-      const lab = g.select('.bg-label');
-      lab.classed('accent', !!focused).classed('muted', !focused && !overviewMode);
-      // Keep ring colour class for accent fills
-      RING_ACCENTS.forEach((c) => lab.classed(c, d.ring === c));
-    });
+    // SVG bg-labels disabled — DOM hub titles are the single source of truth
+    // (prevents stray clipped subtitle fragments under the header).
+    // Hide both the group and the <text> nodes: Chromium getComputedStyle on
+    // nested SVG text still reports display:block when only the parent is none.
+    gBg.selectAll('g.bg-group').style('opacity', 0).style('display', 'none');
+    gBg.selectAll('text.bg-label').style('opacity', 0).style('display', 'none');
   }
 
   // ——— camera ———
@@ -1647,12 +1666,28 @@
   function subtreeExtent(node) {
     const locals = localFrameNodes(node);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // ~label clearance in world units (labels sit outward ~40–90 screen-px)
+    const labelPad = 55 / Math.max(transform?.k || 1, 0.35);
     locals.forEach((n) => {
-      minX = Math.min(minX, n.x);
-      maxX = Math.max(maxX, n.x);
-      minY = Math.min(minY, n.y);
-      maxY = Math.max(maxY, n.y);
+      minX = Math.min(minX, n.x - labelPad);
+      maxX = Math.max(maxX, n.x + labelPad);
+      minY = Math.min(minY, n.y - labelPad);
+      maxY = Math.max(maxY, n.y + labelPad);
     });
+    // Focus title + child labels — pad evenly so the visual block centres in the viewport
+    if (node && node.type !== 'hub' && node.type !== 'country' && node.type !== 'enterprise') {
+      const titlePad = 64 / Math.max(transform?.k || 1, 0.35);
+      // Symmetric vertical pad (title under focus + labels above children)
+      maxY = Math.max(maxY, node.y + titlePad);
+      minY = Math.min(minY, node.y - titlePad);
+      locals.forEach((n) => {
+        if (n.id === node.id) return;
+        maxX = Math.max(maxX, n.x + labelPad * 1.1);
+        minX = Math.min(minX, n.x - labelPad * 1.1);
+        maxY = Math.max(maxY, n.y + labelPad);
+        minY = Math.min(minY, n.y - labelPad);
+      });
+    }
     if (node.type === 'hub') {
       const tipR = TREE.area + TREE.location;
       const tx = node.x + Math.cos(node.outAngle) * tipR;
@@ -1693,7 +1728,15 @@
     let k = Math.max(0.15, Math.min(36, Math.min(kx, ky)));
     // Full ring: outer titles reach ~90% of stage height (and width)
     if (centerNode?.type === 'enterprise') {
-      k = Math.min((0.92 * H) / (2 * R_TITLE), (0.92 * W) / (2 * R_TITLE));
+      if (LAYOUT === 'countryTree') {
+        // Countries on a ring at ~30% of stage; titles must stay on-screen
+        const minDim = Math.min(W, H);
+        k = (0.30 * minDim) / R_HUB;
+        const maxK = (0.48 * minDim) / R_TITLE;
+        k = Math.max(0.12, Math.min(k, maxK));
+      } else {
+        k = Math.min((0.92 * H) / (2 * R_TITLE), (0.92 * W) / (2 * R_TITLE));
+      }
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k);
     }
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
@@ -1709,16 +1752,22 @@
       return d3.zoomIdentity.translate(hubSX, hubSY).scale(k).translate(-centerNode.x, -centerNode.y);
     }
     if (centerNode && (centerNode.type === 'client' || centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
+      // Scale from padded bbox (labels/titles); centre on the disc cluster itself
       const span = Math.max(bbox.w, bbox.h, 36);
       const minDim = Math.min(W, H);
-      const target = centerNode.type === 'client' ? 0.7 * minDim : 0.75 * minDim;
+      const target = 0.68 * minDim;
       k = target / span;
-      k = Math.max(centerNode.type === 'client' ? 1.6 : 2.5, Math.min(k, 80));
-      // Prefer geometric centre of local frame, bias toward focus node so it sits near viewport centre
-      cx = bbox.x + bbox.w / 2;
-      cy = bbox.y + bbox.h / 2;
-      cx = cx * 0.55 + centerNode.x * 0.45;
-      cy = cy * 0.55 + centerNode.y * 0.45;
+      k = Math.max(centerNode.type === 'client' ? 1.5 : 2.2, Math.min(k, 80));
+      const locals = localFrameNodes(centerNode);
+      if (locals.length) {
+        let sx = 0, sy = 0;
+        locals.forEach((n) => { sx += n.x; sy += n.y; });
+        cx = sx / locals.length;
+        cy = sy / locals.length;
+      } else {
+        cx = bbox.x + bbox.w / 2;
+        cy = bbox.y + bbox.h / 2;
+      }
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
     }
     return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
@@ -2049,55 +2098,121 @@
     const hubId = branchNode.hubId || m?.hubId;
     leafCard.dataset.accent = (UTILS && UTILS.HUB_ACCENT[hubId]) || 'teal';
     positionLeafCard(branchNode);
+    // Re-measure after paint (double rAF) so cardH is real and discs are avoided
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (openBranchId === branchNode.id && !leafCard.hidden) positionLeafCard(branchNode);
+      });
+    });
     syncDomLabels();
   }
 
-  /** Place card on the freer side of the clicked node; thin leader line; never over siblings */
+  /** Place card near the clicked node; thin leader; never cover any node disc */
   function positionLeafCard(branchNode) {
     const W = stage.clientWidth || 1200;
     const H = stage.clientHeight || 800;
-    const s = worldToScreen(branchNode.x, branchNode.y);
+    // Card is a sibling of the stage under the app shell — convert stage→app coords
+    const stageRect = stage.getBoundingClientRect();
+    const app = leafCard.offsetParent || leafCard.parentElement || document.body;
+    const appRect = app.getBoundingClientRect();
+    const ox = stageRect.left - appRect.left;
+    const oy = stageRect.top - appRect.top;
+    const s0 = worldToScreen(branchNode.x, branchNode.y);
+    const s = { x: s0.x, y: s0.y }; // stage-local for collision + leader
     const cardW = Math.min(340, W - 32);
-    const cardH = Math.min(260, leafCard.offsetHeight || 220);
-    const siblings = (childrenOf.get(branchNode.parentId) || []).filter((c) => c.type === 'branch' && c.draw);
-    const sibScreen = siblings.map((c) => worldToScreen(c.x, c.y));
-    // Score left vs right placement by free space and sibling overlap
-    function score(left, top) {
-      let sc = 0;
-      // prefer keeping card on-screen
-      if (left < 12 || left + cardW > W - 12) sc -= 80;
-      if (top < 56 || top + cardH > H - 64) sc -= 80;
-      // free horizontal space
-      sc += left + cardW / 2 > W / 2 ? (W - (left + cardW)) : left;
-      // penalize covering other branch nodes
-      sibScreen.forEach((p) => {
-        if (p.x >= left - 8 && p.x <= left + cardW + 8 && p.y >= top - 8 && p.y <= top + cardH + 8) sc -= 120;
+    const cardH = Math.min(320, Math.max(160, leafCard.offsetHeight || 220));
+    // Visible disc + soft glow halo — card must clear the glowing orb, not just the core
+    const CLEAR = 28;
+    const discs = [];
+    nodes.forEach((n) => {
+      if (!n.draw || n.ancestorOnly || n.lodAlpha < 0.05 || n.pad) return;
+      const p = worldToScreen(n.x, n.y);
+      // Skip far off-stage discs (collapsed/unfocused machines)
+      if (p.x < -80 || p.y < -80 || p.x > W + 80 || p.y > H + 80) return;
+      const core = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
+      const rr = Math.max(22, core + CLEAR);
+      discs.push({ x: p.x, y: p.y, r: rr, id: n.id });
+    });
+    function discHits(left, top) {
+      let hits = 0;
+      let near = 0;
+      discs.forEach((d) => {
+        const cx = Math.max(left, Math.min(d.x, left + cardW));
+        const cy = Math.max(top, Math.min(d.y, top + cardH));
+        const dist = Math.hypot(d.x - cx, d.y - cy);
+        if (dist < d.r) hits += 1;
+        else if (dist < d.r + 22) near += 1;
       });
+      return { hits, near };
+    }
+    function score(left, top) {
+      const { hits, near } = discHits(left, top);
+      // Hard preference: zero disc intersections
+      let sc = hits === 0 ? 10000 : -hits * 2000;
+      sc -= near * 120;
+      if (left < 12 || left + cardW > W - 12) sc -= 200;
+      if (top < 12 || top + cardH > H - 12) sc -= 200;
+      // Prefer near the branch (short leader) and inward of the fan
+      const ccx = left + cardW / 2;
+      const ccy = top + cardH / 2;
+      sc -= Math.hypot(ccx - s.x, ccy - s.y) * 0.15;
       return sc;
     }
-    const gap = 36;
-    const candidates = [
-      { left: s.x + gap, top: s.y - cardH / 2 },
-      { left: s.x - cardW - gap, top: s.y - cardH / 2 },
-      { left: s.x - cardW / 2, top: s.y + gap + 16 },
-      { left: s.x - cardW / 2, top: s.y - cardH - gap },
-    ];
+    const parent = branchNode.parentId ? nodeById.get(branchNode.parentId) : null;
+    const pScreen = parent ? worldToScreen(parent.x, parent.y) : null;
+    const inwardLeft = pScreen ? pScreen.x < s.x : true;
+    const gaps = [56, 72, 96, 128, 168, 210];
+    const candidates = [];
+    gaps.forEach((gap) => {
+      const sides = inwardLeft
+        ? [
+            { left: s.x - cardW - gap, top: s.y - cardH / 2 },
+            { left: s.x - cardW - gap, top: s.y - cardH - gap * 0.35 },
+            { left: s.x - cardW - gap, top: s.y + gap * 0.35 },
+            { left: s.x + gap, top: s.y - cardH / 2 },
+          ]
+        : [
+            { left: s.x + gap, top: s.y - cardH / 2 },
+            { left: s.x + gap, top: s.y - cardH - gap * 0.35 },
+            { left: s.x + gap, top: s.y + gap * 0.35 },
+            { left: s.x - cardW - gap, top: s.y - cardH / 2 },
+          ];
+      sides.forEach((c) => candidates.push(c));
+      candidates.push(
+        { left: s.x - cardW / 2, top: s.y - cardH - gap },
+        { left: s.x - cardW / 2, top: s.y + gap },
+        { left: s.x + gap, top: s.y - cardH - gap },
+        { left: s.x - cardW - gap, top: s.y - cardH - gap },
+        { left: s.x + gap, top: s.y + gap },
+        { left: s.x - cardW - gap, top: s.y + gap }
+      );
+    });
+    // Dense grid fallback around the node (covers crowded branch fans)
+    for (let ang = 0; ang < Math.PI * 2; ang += Math.PI / 10) {
+      for (let rad = 80; rad <= 260; rad += 40) {
+        candidates.push({
+          left: s.x + Math.cos(ang) * rad - cardW / 2,
+          top: s.y + Math.sin(ang) * rad - cardH / 2,
+        });
+      }
+    }
     let best = candidates[0];
     let bestScore = -Infinity;
     candidates.forEach((c) => {
       c.left = Math.max(12, Math.min(W - cardW - 12, c.left));
-      c.top = Math.max(56, Math.min(H - cardH - 56, c.top));
+      c.top = Math.max(12, Math.min(H - cardH - 12, c.top));
       const sc = score(c.left, c.top);
       if (sc > bestScore) {
         bestScore = sc;
         best = c;
       }
     });
-    leafCard.style.left = `${best.left}px`;
-    leafCard.style.top = `${best.top}px`;
+    // Write in app-shell coordinates (header offset)
+    leafCard.style.left = `${best.left + ox}px`;
+    leafCard.style.top = `${best.top + oy}px`;
     leafCard.style.transform = 'none';
     leafCard.style.width = `${cardW}px`;
-    // Leader line from node to nearest card edge
+    // Leader line from node to nearest card edge (stage-local)
     let leader = document.getElementById('leaf-card-leader');
     if (!leader) {
       leader = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -2251,8 +2366,8 @@
     pctx = particleCanvas.getContext('2d');
     pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Galaxy radius ≈ 18–22% of min viewport (was ~42px ≈ 5%)
-    const coreR = Math.max(72, Math.min(w, h) * 0.2);
+    // Galaxy stays inside hub ring; ~18–22% screen but never past CORE_WORLD_R
+    const coreR = Math.min(CORE_WORLD_R, Math.max(72, Math.min(w, h) * 0.18));
     coreParticles = [];
     const nCore = Math.floor(980 + coreR * 4);
     for (let i = 0; i < nCore; i++) {
@@ -2471,31 +2586,54 @@
       const fadeRemote = !overviewMode && !(sLocal && tLocal);
 
       let op = onPath ? 0.9 : preview ? 0.28 : (L.kind === 'spine' ? 0.42 : 0.55);
-      if (fadeRemote) op = Math.max(op, 0.55);
+      if (fadeRemote) op = Math.min(op, 0.42);
       if (future && !onPath) op = Math.min(op, 0.32);
       if (op < 0.05) return;
-      if (!preview) {
+      if (!preview && !fadeRemote) {
         linkDrawStats.count++;
-        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, fadeRemote ? op * 0.35 : op);
+        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op);
+        linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
+      } else if (!preview && fadeRemote) {
+        linkDrawStats.count++;
+        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op * 0.5);
         linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
       }
 
-      const ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
+      let ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
+      let c1x, c1y, c2x, c2y;
       const cc = curveControls(s, t, L.kind);
-      const c1x = cc.c1x * transform.k + transform.x;
-      const c1y = cc.c1y * transform.k + transform.y;
-      const c2x = cc.c2x * transform.k + transform.x;
-      const c2y = cc.c2y * transform.k + transform.y;
+      if (fadeRemote) {
+        // Short faded stub from the on-frame node toward the off-frame ancestor
+        const localIsS = sLocal;
+        const from = localIsS ? a0 : b0;
+        const to = localIsS ? b0 : a0;
+        const dx = to.x - from.x, dy = to.y - from.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const stubLen = Math.min(52, Math.max(28, len * 0.16));
+        ax = from.x;
+        ay = from.y;
+        bx = from.x + (dx / len) * stubLen;
+        by = from.y + (dy / len) * stubLen;
+        c1x = ax + (bx - ax) * 0.35;
+        c1y = ay + (by - ay) * 0.35;
+        c2x = ax + (bx - ax) * 0.7;
+        c2y = ay + (by - ay) * 0.7;
+      } else {
+        c1x = cc.c1x * transform.k + transform.x;
+        c1y = cc.c1y * transform.k + transform.y;
+        c2x = cc.c2x * transform.k + transform.x;
+        c2y = cc.c2y * transform.k + transform.y;
+      }
 
-      const fromHub = s.type === 'hub' || t.type === 'hub';
-      const hubNode = s.type === 'hub' ? s : (t.type === 'hub' ? t : null);
+      const fromHub = s.type === 'hub' || t.type === 'hub' || s.type === 'country' || t.type === 'country';
+      const hubNode = (s.type === 'hub' || s.type === 'country') ? s : ((t.type === 'hub' || t.type === 'country') ? t : null);
       const firstHopRgb = hubNode ? accentRgb(hubNode.ring || 'teal') : null;
       let rgb = [255, 255, 255];
-      let lineW = L.kind === 'spine' ? 1.1 : 1.3;
-      if (onPath && accent) {
+      let lineW = L.kind === 'spine' ? 1.1 : fadeRemote ? 1.1 : 1.3;
+      if (onPath && accent && !fadeRemote) {
         rgb = accent;
         lineW = 2;
-      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview) {
+      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview && !fadeRemote) {
         rgb = firstHopRgb;
         lineW = 1.45;
         op = Math.min(0.72, op + 0.1);
@@ -2509,15 +2647,9 @@
       pctx.shadowBlur = 0;
 
       if (fadeRemote) {
-        // Continuous centre-to-centre curve with length-wise alpha falloff toward off-frame end
-        const localIsS = sLocal;
-        const g = pctx.createLinearGradient(
-          localIsS ? ax : bx, localIsS ? ay : by,
-          localIsS ? bx : ax, localIsS ? by : ay
-        );
+        const g = pctx.createLinearGradient(ax, ay, bx, by);
         g.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`);
-        g.addColorStop(0.45, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op * 0.45})`);
-        g.addColorStop(0.78, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op * 0.12})`);
+        g.addColorStop(0.55, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op * 0.35})`);
         g.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
         pctx.strokeStyle = g;
       } else {
@@ -2815,8 +2947,8 @@
     const cx = transform.x;
     const cy = transform.y;
     const k = transform.k;
-    const coreR = Math.max(72, Math.min(w, h) * 0.2);
-    // Soft bloom behind enlarged galaxy (~2.5× prior)
+    const coreR = Math.min(CORE_WORLD_R, Math.max(72, Math.min(w, h) * 0.18));
+    // Soft bloom behind galaxy — kept inside hub ring
     pctx.beginPath();
     const bloomR = coreR * 1.15 * Math.max(0.9, Math.min(1.4, k));
     const coreBloom = pctx.createRadialGradient(cx, cy, 6, cx, cy, bloomR);
@@ -3109,14 +3241,29 @@
         const onPath = focusPath.has(L.source) && focusPath.has(L.target);
         if (!sLocal && !tLocal && !onPath) return;
         if (!(sLocal || tLocal || onPath)) return;
+        let sourceScreen = worldToScreen(s.x, s.y);
+        let targetScreen = worldToScreen(t.x, t.y);
+        const stub = !overviewMode && !(sLocal && tLocal) && (sLocal || tLocal);
+        if (stub) {
+          const localIsS = sLocal;
+          const from = localIsS ? sourceScreen : targetScreen;
+          const to = localIsS ? targetScreen : sourceScreen;
+          const dx = to.x - from.x, dy = to.y - from.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const stubLen = Math.min(52, Math.max(28, len * 0.16));
+          const end = { x: from.x + (dx / len) * stubLen, y: from.y + (dy / len) * stubLen };
+          if (localIsS) { sourceScreen = from; targetScreen = end; }
+          else { targetScreen = from; sourceScreen = end; }
+        }
         out.push({
           source: L.source,
           target: L.target,
           kind: L.kind,
-          sourceScreen: worldToScreen(s.x, s.y),
-          targetScreen: worldToScreen(t.x, t.y),
+          sourceScreen,
+          targetScreen,
           sourceLocal: sLocal,
           targetLocal: tLocal,
+          stub: !!stub,
         });
       });
       return out;
@@ -3176,10 +3323,18 @@
     spawnPathSignal,
     labelsOverlap: () => {
       if (!POLISH) return false;
-      const els = [
-        ...document.querySelectorAll('text.node-label'),
-        ...document.querySelectorAll('text.bg-label'),
-      ];
+      // Only live node labels — SVG bg-labels are permanently hidden (DOM titles)
+      const els = [...document.querySelectorAll('text.node-label')].filter((el) => {
+        if (!el.textContent || !String(el.textContent).trim()) return false;
+        let p = el;
+        while (p) {
+          const st = window.getComputedStyle(p);
+          if (st.display === 'none' || Number(st.opacity) < 0.15) return false;
+          p = p.parentElement;
+          if (p && (p.id === 'tree-svg' || p.id === 'space-svg' || p.tagName === 'svg')) break;
+        }
+        return true;
+      });
       return POLISH.labelBBoxOverlaps(els, 2);
     },
     sampleLabelOverlaps: async (ks) => {

@@ -480,6 +480,7 @@ body {
 }
 
 /* Branch data card — brief overlay, higher contrast */
+.space-app > .branch-card,
 .branch-card {
   position: absolute;
   left: 50%;
@@ -813,24 +814,49 @@ body {
   font-weight: 600;
   color: rgba(180, 255, 210, 0.95);
 }
-.hub-title-dom {
+.label-layer .hub-titles {
   position: absolute;
-  transform: translate(-50%, -50%);
-  text-align: center;
+  inset: 0;
   pointer-events: none;
 }
-.hub-title-dom .hub-title-main {
-  font-size: 15px;
+.label-layer .hub-title {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-ui);
   font-weight: 600;
-  letter-spacing: 0.22em;
-  color: rgba(238, 244, 250, 0.9);
-}
-.hub-title-dom .hub-title-sub {
-  font-size: 9px;
-  letter-spacing: 0.14em;
+  font-size: 22px;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
   text-transform: uppercase;
-  color: rgba(122, 135, 153, 0.85);
-  margin-top: 2px;
+  white-space: nowrap;
+  color: rgba(238, 244, 250, 0.92);
+  text-shadow: 0 0 16px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.label-layer .hub-title.is-focus {
+  font-size: 34px;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+}
+.label-layer .hub-title.muted {
+  color: rgba(170, 200, 235, 0.28) !important;
+}
+.label-layer .hub-title.teal { color: #7ec8c4; }
+.label-layer .hub-title.violet { color: #b8a0e8; }
+.label-layer .hub-title.rose,
+.label-layer .hub-title.pink { color: #e8a0b8; }
+.label-layer .hub-title.amber { color: #e8c078; }
+.label-layer .hub-title.sky { color: #7ec8e8; }
+.label-layer .hub-sub {
+  position: absolute;
+  transform: translate(-50%, 0);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(170, 200, 235, 0.45);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .focus-title {
   position: absolute;
