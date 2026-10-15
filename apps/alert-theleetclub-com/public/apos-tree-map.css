@@ -201,7 +201,7 @@ body {
   position: absolute;
   transform: translate(-50%, -50%);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.88);
@@ -884,7 +884,7 @@ body {
 .focus-title-main {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 28px;
+  font-size: 30px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   text-shadow: 0 0 16px rgba(0,0,0,0.55);

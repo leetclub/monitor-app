@@ -27,8 +27,8 @@
   const HUB_SCREEN_R = 18;
   const NODE_SCREEN_R = 5.5;
   const NODE_R_BY_TYPE = { area: 7.2, location: 5.8, machine: 5.4, branch: 5.0, artic: 3.2 };
-  const DEEP_NODE_R = { area: 12.5, location: 11.5, machine: 11, branch: 9, artic: 5.5 };
-  const DEEP_HUB_R = 20;
+  const DEEP_NODE_R = { area: 16, location: 15, machine: 15, branch: 14, artic: 5.5 };
+  const DEEP_HUB_R = 18;
   const TREE = {
     area: 220,       // ~69% of title radius — room for titles outside, no edge hairlines
     location: 170,
@@ -156,15 +156,17 @@
         const kids = childrenOf.get(n.id) || [];
         const brs = kids.filter((c) => c.type === 'branch');
         const parent = n.parentId ? nodeById.get(n.parentId) : null;
-        // Open away from parent (~200° fan)
-        const away = parent
-          ? Math.atan2(n.y - parent.y, n.x - parent.x)
-          : n.angle != null
+        // Symmetric ~200° fan around outward direction (machine.angle)
+        const outward =
+          n.angle != null
             ? n.angle
-            : hub.outAngle;
+            : parent
+              ? Math.atan2(n.y - parent.y, n.x - parent.x)
+              : hub.outAngle;
         const sweep = (200 * Math.PI) / 180;
+        const nB = Math.max(brs.length, 1);
         brs.forEach((b, bi) => {
-          const ang = away - sweep / 2 + ((bi + 0.5) / Math.max(brs.length, 1)) * sweep;
+          const ang = outward - sweep / 2 + ((bi + 0.5) / nB) * sweep;
           b.x = n.x + Math.cos(ang) * TREE.branch;
           b.y = n.y + Math.sin(ang) * TREE.branch;
           b.angle = ang;
@@ -642,7 +644,7 @@
 
     zoomBehavior = d3
       .zoom()
-      .scaleExtent([0.15, 40])
+      .scaleExtent([0.12, 80])
       .filter((event) => {
         if (event.type === 'dblclick') return false;
         return !event.ctrlKey && !event.button;
@@ -750,9 +752,14 @@
         sub.style.top = `${s.y + 34}px`;
         sub.style.transform = 'translate(-50%, 0)';
       }
-      const op = h.status === 'future' ? (overviewMode ? 0.72 : (focused ? 0.75 : 0.14)) : (overviewMode || focused ? 1 : 0.14);
+      const deepDrill = !overviewMode && focus && focus.type !== 'hub' && focus.type !== 'enterprise';
+      const op = deepDrill
+        ? 0
+        : h.status === 'future'
+          ? (overviewMode ? 0.72 : (focused ? 0.75 : 0.14))
+          : (overviewMode || focused ? 1 : 0.14);
       el.style.opacity = String(op);
-      el.style.display = h.draw === false ? 'none' : '';
+      el.style.display = deepDrill || h.draw === false ? 'none' : '';
     });
   }
 
@@ -777,23 +784,24 @@
         if (overviewMode) {
           n.draw = true;
           n.lodAlpha = n.status === 'future' ? 0.7 : 1;
-        } else if (focusHubId === n.id || focus?.id === n.id) {
+        } else if (focus?.type === 'hub' && focus.id === n.id) {
+          // Only the focused hub is a visible disc
           n.draw = true;
           n.lodAlpha = 1;
-        } else if (focusPathHasHubNeighbor(focusHubId, n.id)) {
+        } else if (focus?.type === 'hub' && focusPathHasHubNeighbor(focus.id, n.id)) {
           n.draw = true;
           n.preview = true;
-          n.lodAlpha = 0.35;
+          n.lodAlpha = 0.3;
         } else if (pathToRoot(focusNodeId).includes(n.id)) {
-          // Ancestor hub on path — keep for stub, mark off-frame
+          // Ancestor hub: invisible (stubs only) — no edge peek
           n.draw = true;
           n.ancestorOnly = true;
-          n.lodAlpha = 0.2;
+          n.lodAlpha = 0;
         } else {
           n.draw = false;
           n.lodAlpha = 0;
         }
-        n.labelOn = false; // DOM hub titles
+        n.labelOn = false;
         return;
       }
       if (n.pad || n.type === 'artic') {
@@ -853,7 +861,7 @@
           if (pathToRoot(focusNodeId).includes(n.id)) {
             n.draw = true;
             n.ancestorOnly = true;
-            n.lodAlpha = 0.15;
+            n.lodAlpha = 0;
             n.labelOn = false;
             return;
           }
@@ -872,7 +880,8 @@
         return;
       }
 
-      if (focusHubId) {
+      // Neighbor peeks only at hub focus (never pollute area/site/machine frames)
+      if (focus?.type === 'hub' && focusHubId) {
         const idx = hubs.findIndex((h) => h.id === focusHubId);
         if (idx >= 0) {
           const neighborIds = new Set([
@@ -919,7 +928,7 @@
   function nodeScreenRadius(n) {
     const deep = !overviewMode;
     if (n.type === 'hub') return deep ? DEEP_HUB_R : HUB_SCREEN_R;
-    if (n.type === 'branch') return deep ? 10 : 5;
+    if (n.type === 'branch') return deep ? (DEEP_NODE_R.branch || 14) : 5;
     if (n.type === 'enterprise') return 8;
     return deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
   }
@@ -1236,8 +1245,8 @@
 
     gNodes.selectAll('g.node').each(function (d) {
       const g = d3.select(this);
-      g.style('display', d.draw ? null : 'none');
-      let op = d.draw ? d.lodAlpha : 0;
+      g.style('display', d.draw && !d.ancestorOnly ? null : 'none');
+      let op = d.draw && !d.ancestorOnly ? d.lodAlpha : 0;
       // Unrelated branches dim to ~25% when drilled
       if (!overviewMode && d.draw && !focusPath.has(d.id) && !d.preview) {
         const related =
@@ -1342,42 +1351,38 @@
 
   function subtreeExtent(node) {
     const locals = localFrameNodes(node);
-    const pts = locals.map((n) => ({ x: n.x, y: n.y, r: 14 }));
-    // Include outward label room (~42 world units past each tip)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     locals.forEach((n) => {
-      const ang = n.angle != null ? n.angle : Math.atan2(n.y - node.y, n.x - node.x);
-      pts.push({
-        x: n.x + Math.cos(ang) * 48,
-        y: n.y + Math.sin(ang) * 48,
-        r: 20,
-      });
+      minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y);
+      maxY = Math.max(maxY, n.y);
     });
     if (node.type === 'hub') {
       const tipR = TREE.area + TREE.location;
-      pts.push({
-        x: node.x + Math.cos(node.outAngle) * tipR,
-        y: node.y + Math.sin(node.outAngle) * tipR,
-        r: 24,
-      });
+      const tx = node.x + Math.cos(node.outAngle) * tipR;
+      const ty = node.y + Math.sin(node.outAngle) * tipR;
+      minX = Math.min(minX, tx, node.x);
+      maxX = Math.max(maxX, tx, node.x);
+      minY = Math.min(minY, ty, node.y);
+      maxY = Math.max(maxY, ty, node.y);
+      // Hub title inward
       const inward = node.outAngle + Math.PI;
-      pts.push({
-        x: node.x + Math.cos(inward) * 56,
-        y: node.y + Math.sin(inward) * 56,
-        r: 40,
-      });
-    } else {
-      // Focus title under node
-      pts.push({ x: node.x, y: node.y + 56, r: 28 });
+      const hx = node.x + Math.cos(inward) * 50;
+      const hy = node.y + Math.sin(inward) * 50;
+      minX = Math.min(minX, hx);
+      maxX = Math.max(maxX, hx);
+      minY = Math.min(minY, hy);
+      maxY = Math.max(maxY, hy);
     }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    pts.forEach((n) => {
-      const pad = (n.r || 4) + 28;
-      minX = Math.min(minX, n.x - pad);
-      maxX = Math.max(maxX, n.x + pad);
-      minY = Math.min(minY, n.y - pad);
-      maxY = Math.max(maxY, n.y + pad);
-    });
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    // Tight world pad — label clearance handled as screen margin in fitTransform
+    const pad = node.type === 'hub' ? 36 : 24;
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      w: Math.max(48, maxX - minX + pad * 2),
+      h: Math.max(48, maxY - minY + pad * 2),
+    };
   }
 
   function fullExtent() {
@@ -1408,11 +1413,13 @@
       return d3.zoomIdentity.translate(hubSX, hubSY).scale(k).translate(-centerNode.x, -centerNode.y);
     }
     if (centerNode && (centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      // Centre the focused subtree bbox (incl. labels) at ~65–70% fill
-      const spanW = Math.max(bbox.w, 80);
-      const spanH = Math.max(bbox.h, 80);
-      k = Math.min((0.68 * W) / spanW, (0.68 * H) / spanH);
-      k = Math.max(0.85, Math.min(k, 28));
+      // Larger side of subtree → ~65% of the smaller viewport edge (labels get ~48px screen margin)
+      const span = Math.max(bbox.w, bbox.h, 36);
+      const minDim = Math.min(W, H);
+      // Aim ~75% on node bbox so node+labels land ~65–70% of minDim
+      const target = 0.75 * minDim;
+      k = target / span;
+      k = Math.max(2.5, Math.min(k, 80));
       cx = bbox.x + bbox.w / 2;
       cy = bbox.y + bbox.h / 2;
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
@@ -2218,7 +2225,7 @@
       let r;
       if (n.type === 'hub') r = deep ? DEEP_HUB_R : HUB_SCREEN_R;
       else if (n.type === 'enterprise') r = 0;
-      else if (n.type === 'branch') r = deep ? 10 : 5;
+      else if (n.type === 'branch') r = deep ? (DEEP_NODE_R.branch || 14) : 5;
       else r = deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
       r *= grow;
       const alpha = (n.lodAlpha || 1) * (n.preview ? 0.85 : 1);
