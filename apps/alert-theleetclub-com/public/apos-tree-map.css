@@ -864,3 +864,67 @@ body {
 }
 
 .label-layer .hub-title.muted { color: rgba(255,255,255,0.22) !important; }
+
+
+/* Focused node title (area / site / machine) — accent under orb */
+.focus-title {
+  position: absolute;
+  transform: translate(-50%, 0);
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+.focus-title-main {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(0,0,0,0.55);
+}
+.focus-title-main.teal { color: var(--teal); }
+.focus-title-main.violet { color: var(--violet); }
+.focus-title-main.rose, .focus-title-main.pink { color: var(--rose); }
+.focus-title-main.amber { color: var(--amber); }
+.focus-title-main.sky { color: var(--sky); }
+.focus-title-sub {
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-top: 2px;
+}
+
+.label-layer .node-label-dom {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow:
+    0 0 6px rgba(20, 18, 45, 1),
+    0 0 10px rgba(20, 18, 45, 0.9),
+    0 1px 4px rgba(0, 0, 0, 0.85),
+    1px 0 3px rgba(20, 18, 45, 0.95),
+    -1px 0 3px rgba(20, 18, 45, 0.95),
+    0 -1px 3px rgba(20, 18, 45, 0.95);
+  transform: translate(-50%, 0);
+  white-space: nowrap;
+}
+.label-layer .node-label-dom.type-area {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+.label-layer .node-label-dom.type-branch {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.9);
+}
+.label-layer .node-label-dom.type-machine {
+  font-size: 12px;
+}
+.label-layer .node-label-dom.type-location {
+  font-size: 12px;
+}

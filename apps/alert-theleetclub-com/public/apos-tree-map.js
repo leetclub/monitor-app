@@ -22,22 +22,23 @@
   const ALERT = '#ff6b7a';
 
   // World geometry — large hub ring so trees fill ~85% height (not a tiny centre clump)
-  const R_HUB = 340;
+  const R_HUB = 260;
   // Spec §3–4 + review: overview nodes compact; deep/hub zoom uses large glowing discs ~10–14px
-  const HUB_SCREEN_R = 13;
+  const HUB_SCREEN_R = 18;
   const NODE_SCREEN_R = 5.5;
-  const NODE_R_BY_TYPE = { area: 6.0, location: 5.6, machine: 5.2, branch: 4.6, artic: 3.2 };
-  const DEEP_NODE_R = { area: 13.5, location: 12.5, machine: 11.5, branch: 9.5, artic: 5.5 };
-  const DEEP_HUB_R = 16;
+  const NODE_R_BY_TYPE = { area: 7.2, location: 5.8, machine: 5.4, branch: 5.0, artic: 3.2 };
+  const DEEP_NODE_R = { area: 12.5, location: 11.5, machine: 11, branch: 9, artic: 5.5 };
+  const DEEP_HUB_R = 20;
   const TREE = {
-    area: 200,
-    location: 165,
-    machine: 120,
-    branch: 48,
+    area: 300,       // areas sit farther out so overview feels full (~65% of title radius)
+    location: 170,
+    machine: 130,
+    branch: 78,
   };
-  // Target radial extent so every hub with a real tree fills a similar open fan
   const FAN_TARGET_R = TREE.area + TREE.location + TREE.machine * 0.85;
-  // Labels sit just outside machine tips
+  // Titles outside area ring; areas ≈ 65% of title radius from core
+  const TITLE_PAD = 160;
+  const R_TITLE = R_HUB + TREE.area + TITLE_PAD;
   const R_LABEL = R_HUB + TREE.area + TREE.location + TREE.machine + 44;
   const R_OUTER = R_LABEL + 20;
 
@@ -155,8 +156,10 @@
       const seatBranches = (n) => {
         const kids = childrenOf.get(n.id) || [];
         const brs = kids.filter((c) => c.type === 'branch');
+        const base = n.angle != null ? n.angle : hub.outAngle;
+        const sweep = Math.PI * 1.15; // even labelled arc in front of machine
         brs.forEach((b, bi) => {
-          const ang = (n.angle || hub.outAngle) - 0.55 + ((bi + 0.5) / brs.length) * 1.1;
+          const ang = base - sweep / 2 + ((bi + 0.5) / Math.max(brs.length, 1)) * sweep;
           b.x = n.x + Math.cos(ang) * TREE.branch;
           b.y = n.y + Math.sin(ang) * TREE.branch;
           b.angle = ang;
@@ -496,9 +499,22 @@
     // Tidy polar layout per hub (replaces fan/zig/pad)
     layoutAllHubTrees();
 
-    // Roll up alerts onto sites / areas / hubs
+    // Roll up alerts onto sites / areas / hubs + machine counts for overview depth clusters
+    function countMachinesUnder(id) {
+      let n = 0;
+      const walk = (nid) => {
+        (childrenOf.get(nid) || []).forEach((c) => {
+          if (c.pad) return;
+          if (c.type === 'machine') n += 1;
+          else if (c.type !== 'branch' && c.type !== 'artic') walk(c.id);
+        });
+      };
+      walk(id);
+      return n;
+    }
     nodes.forEach((n) => {
       if (n.type === 'machine' || n.type === 'branch' || n.type === 'enterprise' || n.type === 'artic') return;
+      n.machineCount = countMachinesUnder(n.id);
       if (!UTILS) {
         n.alertCount = 0;
         return;
@@ -683,8 +699,7 @@
         wx = h.x + Math.cos(inward) * 34;
         wy = h.y + Math.sin(inward) * 34;
       } else {
-        // Past area tips only (full view hides deeper levels)
-        const titleR = R_HUB + TREE.area + 72;
+        const titleR = R_TITLE;
         wx = Math.cos(h.outAngle) * titleR;
         wy = Math.sin(h.outAngle) * titleR;
       }
@@ -719,46 +734,58 @@
   }
 
   function applyLod() {
-    const k = transform.k;
     const focus = nodeById.get(focusNodeId);
     const focusHubId = focus?.type === 'hub' ? focus.id : focus?.hubId || null;
 
     nodes.forEach((n) => {
       n.preview = false;
       n.labelOx = n.labelOx || 0;
-      n.labelOy = n.labelOy || 16;
+      n.labelOy = n.labelOy || 18;
+      n.ancestorOnly = false;
 
       if (n.type === 'enterprise') {
-        n.draw = overviewMode || focus?.type !== 'hub';
-        n.lodAlpha = overviewMode ? 1 : 0.12;
+        // Never show core under a drilled hub (avoids spine-to-edge look)
+        n.draw = overviewMode;
+        n.lodAlpha = overviewMode ? 1 : 0;
         n.labelOn = false;
         return;
       }
       if (n.type === 'hub') {
-        n.draw = true;
-        n.lodAlpha = n.status === 'future' ? (overviewMode ? 0.65 : 0.35) : 1;
-        n.labelOn = false;
+        if (overviewMode) {
+          n.draw = true;
+          n.lodAlpha = n.status === 'future' ? 0.7 : 1;
+        } else if (focusHubId === n.id || focus?.id === n.id) {
+          n.draw = true;
+          n.lodAlpha = 1;
+        } else if (focusPathHasHubNeighbor(focusHubId, n.id)) {
+          n.draw = true;
+          n.preview = true;
+          n.lodAlpha = 0.35;
+        } else if (pathToRoot(focusNodeId).includes(n.id)) {
+          // Ancestor hub on path — keep for stub, mark off-frame
+          n.draw = true;
+          n.ancestorOnly = true;
+          n.lodAlpha = 0.2;
+        } else {
+          n.draw = false;
+          n.lodAlpha = 0;
+        }
+        n.labelOn = false; // DOM hub titles
         return;
       }
-      if (n.pad) {
-        n.draw = false;
-        n.lodAlpha = 0;
-        n.labelOn = false;
-        return;
-      }
-      if (n.type === 'artic') {
+      if (n.pad || n.type === 'artic') {
         n.draw = false;
         n.lodAlpha = 0;
         n.labelOn = false;
         return;
       }
 
-      // ——— Full view: areas only (plus stub hints drawn separately) ———
+      // ——— Full view: areas only + readable labels ———
       if (overviewMode) {
         if (n.type === 'area' && expandedPath.has(n.id)) {
           n.draw = true;
-          n.lodAlpha = n.status === 'future' ? 0.4 : 1;
-          n.labelOn = false;
+          n.lodAlpha = n.status === 'future' ? 0.45 : 1;
+          n.labelOn = !!(n.label && n.status !== 'future');
         } else {
           n.draw = false;
           n.lodAlpha = 0;
@@ -767,7 +794,7 @@
         return;
       }
 
-      // ——— Drilled: progressive path expansion ———
+      // ——— Drilled ———
       if (n.type === 'branch') {
         const show = expandedPath.has(n.id) && focus?.type === 'machine' && n.parentId === focus.id;
         n.draw = show;
@@ -778,26 +805,50 @@
 
       const onPath = expandedPath.has(n.id);
       if (onPath) {
+        // Ancestors above focus: draw faintly for stub links only
+        const isFocus = n.id === focus.id;
+        const isChildOfFocus = n.parentId === focus.id;
+        const underFocusHub =
+          focus.type === 'hub' &&
+          n.hubId === focus.id &&
+          (n.type === 'area' || n.type === 'location');
+        const underFocusArea =
+          focus.type === 'area' &&
+          (n.parentId === focus.id || (n.type === 'location' && n.areaId === focus.id));
+        const underFocusLoc =
+          focus.type === 'location' &&
+          (n.parentId === focus.id || (n.type === 'machine' && n.locationId === focus.id));
+        // No sibling sites/machines in-frame — they floated without parent links
+        const local =
+          isFocus ||
+          isChildOfFocus ||
+          underFocusHub ||
+          underFocusArea ||
+          underFocusLoc;
+
+        if (!local) {
+          if (pathToRoot(focusNodeId).includes(n.id)) {
+            n.draw = true;
+            n.ancestorOnly = true;
+            n.lodAlpha = 0.15;
+            n.labelOn = false;
+            return;
+          }
+          n.draw = false;
+          n.lodAlpha = 0;
+          n.labelOn = false;
+          return;
+        }
+
         n.draw = true;
         n.lodAlpha = n.status === 'future' ? 0.35 : 1;
+        // Every visible local node with a name gets a label (focus uses accent title)
         if (!n.label || n.status === 'future') n.labelOn = false;
-        else if (n.type === 'area') {
-          n.labelOn = n.hubId === focusHubId && focus?.type === 'hub';
-        } else if (n.type === 'location') {
-          n.labelOn =
-            n.hubId === focusHubId &&
-            (focus?.type === 'hub' ||
-              focus?.type === 'area' ||
-              focus?.type === 'location' ||
-              focus?.id === n.id ||
-              focus?.parentId === n.id);
-        } else if (n.type === 'machine') {
-          n.labelOn = hoverId === n.id || focus?.id === n.id || focus?.parentId === n.id;
-        } else n.labelOn = false;
+        else if (isFocus) n.labelOn = false; // focus title handled separately
+        else n.labelOn = true;
         return;
       }
 
-      // Neighbour hubs: peek areas only (no deep clutter)
       if (focusHubId) {
         const idx = hubs.findIndex((h) => h.id === focusHubId);
         if (idx >= 0) {
@@ -808,7 +859,7 @@
           if (neighborIds.has(n.hubId) && n.type === 'area') {
             n.draw = true;
             n.preview = true;
-            n.lodAlpha = 0.28;
+            n.lodAlpha = 0.22;
             n.labelOn = false;
             return;
           }
@@ -828,34 +879,41 @@
     resolveLabelCollisions();
     paintLod();
     syncHubTitles();
+    syncDomLabels();
+    syncFocusTitle();
+    renderBreadcrumb(focusNodeId);
   }
 
-  /** Nudge first-level labels apart in screen space so they don't overlap */
+  function focusPathHasHubNeighbor(focusHubId, hubId) {
+    if (!focusHubId) return false;
+    const idx = hubs.findIndex((h) => h.id === focusHubId);
+    if (idx < 0) return false;
+    const a = hubs[(idx - 1 + hubs.length) % hubs.length]?.id;
+    const b = hubs[(idx + 1) % hubs.length]?.id;
+    return hubId === a || hubId === b;
+  }
+
+  /** Place labels on the outward side of each node; nudge to avoid collisions (screen space). */
   function resolveLabelCollisions() {
-    const labeled = nodes.filter(
-      (n) => n.labelOn && n.draw && (n.type === 'area' || n.type === 'location') && n.label
-    );
+    const labeled = nodes.filter((n) => n.labelOn && n.draw && n.label && !n.ancestorOnly);
     labeled.forEach((n) => {
-      n.labelOx = 0;
-      n.labelOy = 18;
+      const ang = n.angle != null ? n.angle : Math.atan2(n.y, n.x);
+      // Outward along the curve, slightly past the disc (screen px via DOM sync)
+      n._labelAng = ang;
+      n.labelOx = Math.cos(ang) * 14;
+      n.labelOy = Math.sin(ang) * 14 + 10;
     });
-    // Place along outward tangent, then push overlapping ones
-    labeled.sort((a, b) => (a.angle || 0) - (b.angle || 0));
+    labeled.sort((a, b) => (a._labelAng || 0) - (b._labelAng || 0));
     const placed = [];
-    labeled.forEach((n, i) => {
-      const ang = n.angle ?? Math.atan2(n.y, n.x);
-      const side = i % 2 === 0 ? 1 : -1;
-      n.labelOx = Math.cos(ang + Math.PI / 2) * side * 10;
-      n.labelOy = 16 + (i % 3) * 2;
+    labeled.forEach((n) => {
       let sx = n.x * transform.k + transform.x + n.labelOx;
-      let sy = n.y * transform.k + transform.y + n.labelOy * (1 / Math.max(transform.k, 0.01)) * transform.k;
-      // label is counter-scaled so offset in world≈screen/k; use screen boxes ~70x14
-      for (let guard = 0; guard < 6; guard++) {
+      let sy = n.y * transform.k + transform.y + n.labelOy;
+      for (let guard = 0; guard < 8; guard++) {
         let hit = false;
         for (const p of placed) {
-          if (Math.abs(sx - p.sx) < 72 && Math.abs(sy - p.sy) < 16) {
-            n.labelOy += 14;
-            sy += 14;
+          if (Math.abs(sx - p.sx) < 78 && Math.abs(sy - p.sy) < 15) {
+            n.labelOy += 13;
+            sy += 13;
             hit = true;
             break;
           }
@@ -863,18 +921,77 @@
         if (!hit) break;
       }
       placed.push({ sx, sy });
+      n._labelSx = sx;
+      n._labelSy = sy;
     });
   }
 
-  function hubLabelWorld(d) {
-    const focused =
-      !overviewMode && (focusNodeId === d.id || (expandedPath.has(d.id) && nodeById.get(focusNodeId)?.hubId === d.id));
-    if (focused || (!overviewMode && focusNodeId === d.id)) {
-      const inward = d.outAngle + Math.PI;
-      return { x: d.x + Math.cos(inward) * 58, y: d.y + Math.sin(inward) * 58 };
+  /** DOM labels — fixed 12–13px readable type with halo (not SVG counter-scale) */
+  function syncDomLabels() {
+    const layer = document.getElementById('label-layer');
+    if (!layer) return;
+    let root = layer.querySelector('.node-labels');
+    if (!root) {
+      root = document.createElement('div');
+      root.className = 'node-labels';
+      layer.appendChild(root);
     }
-    const titleR = R_HUB + TREE.area + 72;
-    return { x: Math.cos(d.outAngle) * titleR, y: Math.sin(d.outAngle) * titleR };
+    const want = new Set();
+    nodes.forEach((n) => {
+      if (!n.labelOn || !n.draw || !n.label || n.ancestorOnly) return;
+      want.add(n.id);
+      let el = root.querySelector(`[data-nid="${n.id}"]`);
+      if (!el) {
+        el = document.createElement('div');
+        el.dataset.nid = n.id;
+        el.className = 'node-label-dom';
+        root.appendChild(el);
+      }
+      el.textContent = n.label;
+      el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}`;
+      const sx = n._labelSx != null ? n._labelSx : n.x * transform.k + transform.x + (n.labelOx || 0);
+      const sy = n._labelSy != null ? n._labelSy : n.y * transform.k + transform.y + (n.labelOy || 16);
+      el.style.left = `${sx}px`;
+      el.style.top = `${sy}px`;
+      el.style.display = '';
+      el.style.opacity = '1';
+    });
+    root.querySelectorAll('[data-nid]').forEach((el) => {
+      if (!want.has(el.dataset.nid)) el.style.display = 'none';
+    });
+  }
+
+  /** Focused node title under orb in accent colour (hubs use syncHubTitles) */
+  function syncFocusTitle() {
+    const layer = document.getElementById('label-layer');
+    if (!layer) return;
+    let el = layer.querySelector('.focus-title');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'focus-title';
+      el.innerHTML = `<div class="focus-title-main"></div><div class="focus-title-sub"></div>`;
+      layer.appendChild(el);
+    }
+    const focus = nodeById.get(focusNodeId);
+    if (overviewMode || !focus || focus.type === 'hub' || focus.type === 'enterprise' || focus.type === 'branch') {
+      el.style.display = 'none';
+      return;
+    }
+    const main = el.querySelector('.focus-title-main');
+    const sub = el.querySelector('.focus-title-sub');
+    main.textContent = focus.label || '';
+    sub.textContent = focus.type === 'machine' ? 'machine' : focus.type === 'location' ? 'site' : focus.type;
+    const hub = nodeById.get(focus.hubId);
+    const ring = hub?.ring || 'teal';
+    main.className = `focus-title-main ${ring}`;
+    const s = worldToScreen(focus.x, focus.y);
+    el.style.display = '';
+    el.style.left = `${s.x}px`;
+    el.style.top = `${s.y + 28}px`;
+  }
+
+  function hubLabelWorld(d) {
+    return { x: Math.cos(d.outAngle) * R_TITLE, y: Math.sin(d.outAngle) * R_TITLE };
   }
 
   function applyLabelCounterScale() {
@@ -991,7 +1108,7 @@
           const hv = el.append('g').attr('class', 'hub-visual');
           hv.append('circle').attr('class', `hub-ring ${d.ring}`).attr('r', HUB_SCREEN_R + 5);
           hv.append('circle').attr('class', 'hub-disk').attr('r', HUB_SCREEN_R);
-          el.append('circle').attr('class', 'hit-target').attr('r', 24);
+          el.append('circle').attr('class', 'hit-target').attr('r', 30);
         } else {
           el.append('circle').attr('class', 'pulse-ring').attr('r', d.r + 6);
           el.append('circle')
@@ -1037,39 +1154,23 @@
       g.classed('is-focus', focusNodeId === d.id || (!overviewMode && expandedPath.has(d.id) && d.type === 'hub'));
       g.classed('is-hover', hoverId === d.id);
       g.classed('has-alert', !!(d.alertCount > 0 || d.alert));
+      // Canvas draws nodes/labels/badges — keep SVG for hit-testing only
       const label = g.select('text.node-label');
-      if (!label.empty()) {
-        label.style('opacity', d.labelOn ? 1 : 0).style('display', d.labelOn ? null : 'none');
-      }
-      // Alert count pill badge (top-right of node)
+      if (!label.empty()) label.style('opacity', 0).style('display', 'none');
+      g.select('circle.star-core').style('opacity', 0);
+      g.select('circle.pulse-ring').style('opacity', 0);
+      g.select('g.hub-visual').style('opacity', 0);
+      g.select('g.core-visual').style('opacity', 0);
       let badge = g.select('g.alert-badge-wrap');
-      if (d.alertCount > 0 && d.draw && (d.type === 'hub' || d.type === 'area' || d.type === 'location') && !d.pad) {
-        if (badge.empty()) {
-          badge = g.append('g').attr('class', 'alert-badge-wrap');
-          badge.append('rect').attr('class', 'alert-badge-bg').attr('rx', 7).attr('ry', 7);
-          badge.append('text').attr('class', 'alert-badge-text');
-        }
-        const txt = String(d.alertCount);
-        const tw = Math.max(14, 8 + txt.length * 6);
-        badge.select('rect.alert-badge-bg').attr('width', tw).attr('height', 14).attr('x', -tw / 2).attr('y', -7);
-        badge.select('text.alert-badge-text').text(txt);
-        badge.style('display', null);
-      } else if (!badge.empty()) {
-        badge.style('display', 'none');
-      }
-      if (d.type === 'machine' && d.alert && !reduceMotion) {
-        g.select('.pulse-ring').attr('opacity', 0.55);
-      } else {
-        g.select('.pulse-ring').attr('opacity', 0);
-      }
+      if (!badge.empty()) badge.style('display', 'none');
     });
 
     gLinks.selectAll('path.link').each(function (d) {
       const s = nodeById.get(d.source);
       const t = nodeById.get(d.target);
-      // Hide core→hub spines when drilled in (no long line under hub)
-      let show = !!(s?.draw && t?.draw);
+      let show = !!(s?.draw && t?.draw) && !s?.ancestorOnly && !t?.ancestorOnly;
       if (d.kind === 'spine' && !overviewMode) show = false;
+      if (!overviewMode && (s?.type === 'enterprise' || t?.type === 'enterprise')) show = false;
       const onPath = focusPath.has(d.source) && focusPath.has(d.target);
       const el = d3.select(this);
       // Constant screen opacity ~50% for tree lines (CSS stroke is near-white; do not multiply by 0.35)
@@ -1122,52 +1223,47 @@
     return out;
   }
 
-  function subtreeExtent(node) {
-    // Frame only what progressive LOD will show
+  function localFrameNodes(node) {
+    const pts = [node];
     const kids = (childrenOf.get(node.id) || []).filter((c) => !c.pad && c.type !== 'artic');
-    const showBranches = node.type === 'machine';
-    const visibleKids = kids.filter((c) => (c.type !== 'branch') || showBranches);
-    const extra = [];
-    // Hub: areas + sites; area/location: one more generation
-    if (node.type === 'hub' || node.type === 'area' || node.type === 'location') {
-      visibleKids.forEach((c) => {
-        (childrenOf.get(c.id) || []).forEach((g) => {
-          if (!g.pad && g.type !== 'branch' && g.type !== 'artic') {
-            if (node.type === 'hub' && g.type !== 'location') return;
-            extra.push(g);
-          }
+    if (node.type === 'hub') {
+      kids.forEach((area) => {
+        if (area.type !== 'area' && area.type !== 'location') return;
+        pts.push(area);
+        (childrenOf.get(area.id) || []).forEach((loc) => {
+          if (loc.type === 'location' && !loc.pad) pts.push(loc);
         });
       });
+    } else if (node.type === 'area') {
+      kids.filter((c) => c.type === 'location').forEach((loc) => pts.push(loc));
+    } else if (node.type === 'location') {
+      kids.filter((c) => c.type === 'machine').forEach((m) => pts.push(m));
+    } else if (node.type === 'machine') {
+      kids.filter((c) => c.type === 'branch').forEach((b) => pts.push(b));
     }
-    const pts = [node, ...visibleKids, ...extra];
+    return pts;
+  }
+
+  function subtreeExtent(node) {
+    const pts = localFrameNodes(node).map((n) => ({ x: n.x, y: n.y, r: n.r || 8 }));
     if (node.type === 'hub') {
-      const tipR = FAN_TARGET_R;
+      const tipR = TREE.area + TREE.location;
       pts.push({
         x: node.x + Math.cos(node.outAngle) * tipR,
         y: node.y + Math.sin(node.outAngle) * tipR,
-        r: 16,
+        r: 20,
       });
-      const lbl = hubLabelWorld(node);
-      pts.push({ x: lbl.x, y: lbl.y, r: 40 });
-      // Light neighbour peek only (don't inflate extent — keeps tree filling ~70%)
-      const idx = hubs.findIndex((h) => h.id === node.id);
-      if (idx >= 0) {
-        [-1, 1].forEach((di) => {
-          const nb = hubs[(idx + di + hubs.length) % hubs.length];
-          pts.push({
-            x: node.x + (nb.x - node.x) * 0.22,
-            y: node.y + (nb.y - node.y) * 0.22,
-            r: 8,
-          });
-        });
-      }
+      // title under hub inward
+      const inward = node.outAngle + Math.PI;
+      pts.push({
+        x: node.x + Math.cos(inward) * 50,
+        y: node.y + Math.sin(inward) * 50,
+        r: 36,
+      });
     }
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     pts.forEach((n) => {
-      const pad = (n.r || 4) + 28;
+      const pad = (n.r || 4) + 36;
       minX = Math.min(minX, n.x - pad);
       maxX = Math.max(maxX, n.x + pad);
       minY = Math.min(minY, n.y - pad);
@@ -1177,8 +1273,7 @@
   }
 
   function fullExtent() {
-    // Overview extent: hub ring + area ring + outer titles
-    const pad = R_HUB + TREE.area + 140;
+    const pad = R_TITLE + 80;
     return { x: -pad, y: -pad, w: pad * 2, h: pad * 2 };
   }
 
@@ -1190,26 +1285,32 @@
     let k = Math.max(0.15, Math.min(36, Math.min(kx, ky)));
     // Full ring: outer titles reach ~90% of stage height (and width)
     if (centerNode?.type === 'enterprise') {
-      const titleR = R_HUB + TREE.area + 72;
-      k = Math.min((0.90 * H) / (2 * titleR), (0.90 * W) / (2 * titleR));
+      k = Math.min((0.92 * H) / (2 * R_TITLE), (0.92 * W) / (2 * R_TITLE));
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k);
     }
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
     let cy = centerNode ? centerNode.y : bbox.y + bbox.h / 2;
     if (centerNode?.type === 'hub') {
-      // Hub near inward edge; areas+sites fill ~70% of stage
-      const fanR = TREE.area + TREE.location * 0.95;
-      k = (0.72 * Math.min(W, H)) / (fanR + 36);
+      const fanR = TREE.area + TREE.location * 0.85;
+      k = (0.78 * Math.min(W, H)) / (fanR + 40);
       const along = centerNode.outAngle || -Math.PI / 2;
-      // Hub near the inward edge; fan fills the centre ~70%+ of the frame
-      const hubSX = W / 2 - Math.cos(along) * (Math.min(W, H) * 0.32);
-      const hubSY = H / 2 - Math.sin(along) * (Math.min(W, H) * 0.32);
+      // Hub near inward edge; tree grows into frame centre
+      const hubSX = W / 2 - Math.cos(along) * (Math.min(W, H) * 0.28);
+      const hubSY = H / 2 - Math.sin(along) * (Math.min(W, H) * 0.28);
       return d3.zoomIdentity.translate(hubSX, hubSY).scale(k).translate(-centerNode.x, -centerNode.y);
     }
     if (centerNode && (centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      // Fill ~70% with subtree; keep parent hub peeking if present
-      k = Math.min(k, (0.70 * Math.min(W, H)) / Math.max(Math.min(bbox.w, bbox.h), 80));
-      k = Math.max(k, 1.8);
+      const span = Math.max(bbox.w, bbox.h, 100);
+      k = (0.72 * Math.min(W, H)) / span;
+      k = Math.max(1.0, Math.min(k, 28));
+      cx = bbox.x + bbox.w / 2;
+      cy = bbox.y + bbox.h / 2;
+      // Nudge so focus sits slightly toward inward edge, children fill centre
+      const out = centerNode.angle != null ? centerNode.angle : Math.atan2(centerNode.y, centerNode.x);
+      const nudge = Math.min(bbox.w, bbox.h) * 0.12;
+      cx -= Math.cos(out) * nudge * 0.35;
+      cy -= Math.sin(out) * nudge * 0.35;
+      return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
     }
     return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
   }
@@ -1695,60 +1796,143 @@
 
   /** Spec §4–6: canvas composite of links, nodes, badges, glow on the world canvas */
   let linkDrawStats = { count: 0, minOp: 1, maxOp: 0 };
+
+  function drawBranchGlyph(ctx, x, y, s, key, alpha) {
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,255,255,${0.95 * alpha})`;
+    ctx.fillStyle = `rgba(255,255,255,${0.95 * alpha})`;
+    ctx.lineWidth = Math.max(1.4, s * 0.14);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (key === 'revenue') {
+      ctx.moveTo(x - s * 0.35, y + s * 0.3);
+      ctx.lineTo(x - s * 0.1, y - s * 0.05);
+      ctx.lineTo(x + s * 0.05, y + s * 0.1);
+      ctx.lineTo(x + s * 0.35, y - s * 0.3);
+    } else if (key === 'operators') {
+      ctx.arc(x, y - s * 0.18, s * 0.18, 0, Math.PI * 2);
+      ctx.moveTo(x - s * 0.32, y + s * 0.35);
+      ctx.quadraticCurveTo(x, y + s * 0.05, x + s * 0.32, y + s * 0.35);
+    } else if (key === 'technical') {
+      ctx.moveTo(x - s * 0.25, y + s * 0.25);
+      ctx.lineTo(x + s * 0.1, y - s * 0.1);
+      ctx.arc(x + s * 0.18, y - s * 0.18, s * 0.16, 0.2 * Math.PI, 1.6 * Math.PI);
+    } else if (key === 'stock') {
+      ctx.strokeRect(x - s * 0.28, y - s * 0.22, s * 0.56, s * 0.5);
+      ctx.moveTo(x - s * 0.28, y - s * 0.05); ctx.lineTo(x + s * 0.28, y - s * 0.05);
+    } else {
+      // contract
+      ctx.strokeRect(x - s * 0.28, y - s * 0.32, s * 0.56, s * 0.64);
+      ctx.moveTo(x - s * 0.14, y - s * 0.1); ctx.lineTo(x + s * 0.14, y - s * 0.1);
+      ctx.moveTo(x - s * 0.14, y + s * 0.08); ctx.lineTo(x + s * 0.18, y + s * 0.08);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawWorldScene(ts) {
     if (!pctx || !particleCanvas) return;
     const w = stage.clientWidth;
     const h = stage.clientHeight;
-    // particles already cleared/drawn; we layer structure with additive glow
     pctx.save();
+    const focus = nodeById.get(focusNodeId);
     const focusPath = new Set(pathToRoot(focusNodeId));
-    const focusHubId = nodeById.get(focusNodeId)?.type === 'hub' ? focusNodeId : nodeById.get(focusNodeId)?.hubId;
+    const focusHubId = focus?.type === 'hub' ? focus.id : focus?.hubId;
     const accent = focusHubId ? accentRgb((UTILS && UTILS.HUB_ACCENT[focusHubId]) || nodeById.get(focusHubId)?.ring || 'teal') : null;
+    const localIds = new Set((focus ? localFrameNodes(focus) : []).map((n) => n.id));
 
-    // Curved organic links (cubic Bézier flowing outward)
+    // ——— Curved links (full for local; short faded stubs toward off-frame ancestors) ———
     linkDrawStats = { count: 0, minOp: 1, maxOp: 0 };
     links.forEach((L) => {
       const s = nodeById.get(L.source);
       const t = nodeById.get(L.target);
-      if (!s?.draw || !t?.draw) return;
-      if (L.kind === 'spine' && !overviewMode) return;
-      const a = screenOf(s);
-      const b = screenOf(t);
+      if (!s || !t) return;
+      if (L.kind === 'spine') {
+        if (!overviewMode) return;
+        if (!s.draw || !t.draw) return;
+      } else {
+        if (!s.draw && !t.draw) return;
+      }
+      // Never draw enterprise/core links when drilled (removes LEET→bottom spine)
+      if (!overviewMode && (s.type === 'enterprise' || t.type === 'enterprise')) return;
+      if (!overviewMode && focus?.type === 'hub' && L.kind === 'spine') return;
+
+      const sLocal = (localIds.has(s.id) || (overviewMode && s.draw && !s.preview)) && !s.ancestorOnly;
+      const tLocal = (localIds.has(t.id) || (overviewMode && t.draw && !t.preview)) && !t.ancestorOnly;
+      const bothLocal = sLocal && tLocal;
+
+      // Skip pure ancestor–ancestor / off-frame links (they run to corners)
+      if (!overviewMode && !bothLocal) {
+        if (!sLocal && !tLocal) return;
+        // keep only if one end is local (will draw as stub)
+      }
+
+      const a0 = screenOf(s);
+      const b0 = screenOf(t);
       const onPath = focusPath.has(L.source) && focusPath.has(L.target);
       const preview = !!(s.preview || t.preview);
       const future = s.status === 'future' || t.status === 'future';
-      let op = onPath ? 0.92 : preview ? 0.3 : (L.kind === 'spine' ? 0.45 : 0.52);
-      if (future && !onPath) op = Math.min(op, 0.35);
+
+      let ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
+      let stub = false;
+      if (!overviewMode && !bothLocal) {
+        // Short faded stub from the local node toward the off-frame end
+        const localIsS = localIds.has(s.id) && !s.ancestorOnly;
+        const from = localIsS ? a0 : b0;
+        const to = localIsS ? b0 : a0;
+        const dx = to.x - from.x, dy = to.y - from.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const stubLen = Math.min(42, len * 0.22);
+        ax = from.x;
+        ay = from.y;
+        bx = from.x + (dx / len) * stubLen;
+        by = from.y + (dy / len) * stubLen;
+        stub = true;
+      }
+
+      let op = onPath ? 0.9 : preview ? 0.28 : (L.kind === 'spine' ? 0.42 : 0.55);
+      if (stub) op = Math.min(op, 0.28);
+      if (future && !onPath) op = Math.min(op, 0.32);
       if (op < 0.05) return;
-      if (!preview) {
+      if (!preview && !stub) {
         linkDrawStats.count++;
         linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op);
         linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
       }
+
       const cc = curveControls(s, t, L.kind);
-      const c1 = { x: cc.c1x * transform.k + transform.x, y: cc.c1y * transform.k + transform.y };
-      const c2 = { x: cc.c2x * transform.k + transform.x, y: cc.c2y * transform.k + transform.y };
+      let c1x = cc.c1x * transform.k + transform.x;
+      let c1y = cc.c1y * transform.k + transform.y;
+      let c2x = cc.c2x * transform.k + transform.x;
+      let c2y = cc.c2y * transform.k + transform.y;
+      if (stub) {
+        c1x = ax + (bx - ax) * 0.35;
+        c1y = ay + (by - ay) * 0.35;
+        c2x = ax + (bx - ax) * 0.7;
+        c2y = ay + (by - ay) * 0.7;
+      }
       pctx.beginPath();
-      pctx.moveTo(a.x, a.y);
-      pctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
+      pctx.moveTo(ax, ay);
+      pctx.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by);
       const fromHub = s.type === 'hub' || t.type === 'hub';
       const hubNode = s.type === 'hub' ? s : (t.type === 'hub' ? t : null);
       const firstHopRgb = hubNode ? accentRgb(hubNode.ring || 'teal') : null;
-      if (onPath && accent) {
+      if (onPath && accent && !stub) {
         pctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${op})`;
         pctx.lineWidth = 2;
-        pctx.shadowColor = `rgba(${accent[0]},${accent[1]},${accent[2]},0.5)`;
+        pctx.shadowColor = `rgba(${accent[0]},${accent[1]},${accent[2]},0.45)`;
         pctx.shadowBlur = 5;
-      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview) {
-        pctx.strokeStyle = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},${Math.min(0.72, op + 0.12)})`;
-        pctx.lineWidth = 1.4;
-        pctx.shadowColor = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},0.3)`;
+      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview && !stub) {
+        pctx.strokeStyle = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},${Math.min(0.72, op + 0.1)})`;
+        pctx.lineWidth = 1.45;
+        pctx.shadowColor = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},0.28)`;
         pctx.shadowBlur = 3;
       } else {
         pctx.strokeStyle = `rgba(255,255,255,${op})`;
-        pctx.lineWidth = L.kind === 'spine' ? 1.1 : 1.3;
-        pctx.shadowColor = 'rgba(255,255,255,0.22)';
-        pctx.shadowBlur = preview ? 0 : 2;
+        pctx.lineWidth = L.kind === 'spine' ? 1.1 : stub ? 1.05 : 1.3;
+        pctx.shadowColor = 'rgba(255,255,255,0.2)';
+        pctx.shadowBlur = preview || stub ? 0 : 2;
       }
       pctx.lineCap = 'round';
       pctx.stroke();
@@ -1756,63 +1940,110 @@
     });
     if (!linkDrawStats.count) linkDrawStats.minOp = 0;
 
-    // Overview: faint short stubs beyond areas (hint that more depth exists)
+    // ——— Overview depth clusters (tiny dim dots sized by machine count) ———
     if (overviewMode) {
       nodes.forEach((n) => {
-        if (n.type !== 'area' || !n.draw || !n.stubHint) return;
+        if (n.type !== 'area' || !n.draw) return;
         const p = screenOf(n);
         const ang = n.angle != null ? n.angle : Math.atan2(n.y, n.x);
-        const hint = Math.min(3, n.stubHint | 0);
-        for (let i = 0; i < hint; i++) {
-          const a = ang + ((i + 0.5) / hint - 0.5) * 0.55;
-          const len = 18 + (i % 2) * 8;
-          const x2 = p.x + Math.cos(a) * len;
-          const y2 = p.y + Math.sin(a) * len;
-          const cx = p.x + Math.cos(ang) * len * 0.5;
-          const cy = p.y + Math.sin(ang) * len * 0.5;
+        const mc = n.machineCount || n.stubHint || 2;
+        const nDots = Math.min(14, Math.max(4, Math.round(2 + Math.sqrt(mc) * 1.8)));
+        const spread = 0.7 + Math.min(0.5, mc * 0.03);
+        for (let i = 0; i < nDots; i++) {
+          const t = (i + 0.5) / nDots - 0.5;
+          const a = ang + t * spread;
+          const dist = 16 + (hash(n.id + ':' + i) % 7) * 2.2 + (i % 3) * 3;
+          const jitter = ((hash(n.id + 'j' + i) % 5) - 2) * 1.2;
+          const x = p.x + Math.cos(a) * dist + Math.cos(a + Math.PI / 2) * jitter;
+          const y = p.y + Math.sin(a) * dist + Math.sin(a + Math.PI / 2) * jitter;
+          const rr = 1.1 + (i % 3) * 0.35;
           pctx.beginPath();
-          pctx.moveTo(p.x, p.y);
-          pctx.quadraticCurveTo(cx, cy, x2, y2);
-          pctx.strokeStyle = 'rgba(255,255,255,0.32)';
-          pctx.lineWidth = 1.05;
-          pctx.stroke();
-          pctx.beginPath();
-          pctx.arc(x2, y2, 2.0, 0, Math.PI * 2);
-          pctx.fillStyle = 'rgba(255,255,255,0.4)';
+          pctx.arc(x, y, rr, 0, Math.PI * 2);
+          pctx.fillStyle = `rgba(255,255,255,${0.14 + (i % 4) * 0.04})`;
           pctx.fill();
         }
+        // Soft halo behind cluster
+        const halo = pctx.createRadialGradient(p.x + Math.cos(ang) * 22, p.y + Math.sin(ang) * 22, 2, p.x + Math.cos(ang) * 22, p.y + Math.sin(ang) * 22, 36);
+        halo.addColorStop(0, 'rgba(255,255,255,0.08)');
+        halo.addColorStop(1, 'rgba(255,255,255,0)');
+        pctx.fillStyle = halo;
+        pctx.beginPath();
+        pctx.arc(p.x + Math.cos(ang) * 22, p.y + Math.sin(ang) * 22, 36, 0, Math.PI * 2);
+        pctx.fill();
       });
     }
 
-    // Nodes
+    // ——— Gentle signal particles along visible curves ———
+    if (!reduceMotion) {
+      const tSec = (ts || 0) / 1000;
+      links.forEach((L, li) => {
+        const s = nodeById.get(L.source);
+        const t = nodeById.get(L.target);
+        if (!s?.draw || !t?.draw || s.preview || t.preview || s.ancestorOnly || t.ancestorOnly) return;
+        if (L.kind === 'spine' && !overviewMode) return;
+        if (!overviewMode && (s.type === 'enterprise' || t.type === 'enterprise')) return;
+        if (!overviewMode && !(localIds.has(s.id) && localIds.has(t.id))) return;
+        const cc = curveControls(s, t, L.kind);
+        const phase = (tSec * 0.35 + (hash(L.source + L.target) % 100) * 0.01) % 1;
+        for (let k = 0; k < 2; k++) {
+          const u = (phase + k * 0.45) % 1;
+          const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 20);
+          const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
+          const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
+          pctx.beginPath();
+          pctx.arc(sp.x, sp.y, overviewMode ? 1.8 : 1.5, 0, Math.PI * 2);
+          pctx.fillStyle = `rgba(230,245,255,${0.4 + 0.3 * Math.sin(tSec * 3 + li)})`;
+          pctx.fill();
+        }
+      });
+      // Legacy pulses — never draw core/spine segments when drilled (causes edge “spine”)
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.t += p.speed;
+        if (p.t > 1.15) { pulses.splice(i, 1); continue; }
+        if (p.t < 0) continue;
+        if (!overviewMode) {
+          const nearCore = Math.hypot(p.x0, p.y0) < 40 || Math.hypot(p.x1, p.y1) < 40;
+          if (nearCore) continue;
+        }
+        const u = Math.max(0, Math.min(1, p.t));
+        const x = p.x0 + (p.x1 - p.x0) * u;
+        const y = p.y0 + (p.y1 - p.y0) * u;
+        const sp = screenOf({ x, y });
+        pctx.beginPath();
+        pctx.arc(sp.x, sp.y, p.bright ? 2.4 : 1.6, 0, Math.PI * 2);
+        pctx.fillStyle = p.color;
+        pctx.fill();
+      }
+    }
+
+    // ——— Nodes ———
     nodes.forEach((n) => {
-      if (!n.draw || n.lodAlpha < 0.05) return;
+      if (!n.draw || n.lodAlpha < 0.05 || n.ancestorOnly) return;
       const p = screenOf(n);
       const grow = n.grow == null ? 1 : n.grow;
-      // Spec §4 + review: deep zoom uses ~10–14px glowing discs
       const deep = !overviewMode;
       let r;
       if (n.type === 'hub') r = deep ? DEEP_HUB_R : HUB_SCREEN_R;
       else if (n.type === 'enterprise') r = 0;
+      else if (n.type === 'branch') r = deep ? 10 : 5;
       else r = deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
       r *= grow;
       const alpha = (n.lodAlpha || 1) * (n.preview ? 0.85 : 1);
       if (n.type === 'enterprise') {
-        // dense core already from particles; soft disc
-        const grd = pctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 36);
+        const grd = pctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 40);
         grd.addColorStop(0, 'rgba(255,255,255,0.55)');
         grd.addColorStop(0.35, 'rgba(255,255,255,0.18)');
         grd.addColorStop(1, 'rgba(255,255,255,0)');
         pctx.fillStyle = grd;
         pctx.beginPath();
-        pctx.arc(p.x, p.y, 36, 0, Math.PI * 2);
+        pctx.arc(p.x, p.y, 40, 0, Math.PI * 2);
         pctx.fill();
         pctx.fillStyle = 'rgba(255,255,255,0.95)';
         pctx.font = '600 13px "Cormorant Garamond", Georgia, serif';
         pctx.textAlign = 'center';
         pctx.textBaseline = 'middle';
-        pctx.letterSpacing = '0.28em';
-        pctx.globalAlpha = overviewMode ? 0.9 : 0.25;
+        pctx.globalAlpha = overviewMode ? 0.9 : 0;
         pctx.fillText('APOS', p.x, p.y);
         pctx.globalAlpha = 1;
         return;
@@ -1821,95 +2052,134 @@
         const rgb = accentRgb(n.ring || 'teal');
         const breathe = reduceMotion ? 1 : 1 + Math.sin(ts / 1400 + (n.angle || 0)) * 0.015;
         const rr = (deep ? DEEP_HUB_R : HUB_SCREEN_R) * breathe;
-        const focusedHub = focusNodeId === n.id || (!overviewMode && expandedPath.has(n.id));
-        const bloom = pctx.createRadialGradient(p.x, p.y, rr * 0.2, p.x, p.y, rr + 14);
+        const focusedHub = focusNodeId === n.id || (!overviewMode && n.id === focusHubId);
+        const bloom = pctx.createRadialGradient(p.x, p.y, rr * 0.2, p.x, p.y, rr + 18);
         bloom.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.55 * alpha})`);
-        bloom.addColorStop(0.55, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.18 * alpha})`);
+        bloom.addColorStop(0.55, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.2 * alpha})`);
         bloom.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
         pctx.fillStyle = bloom;
         pctx.beginPath();
-        pctx.arc(p.x, p.y, rr + 14, 0, Math.PI * 2);
+        pctx.arc(p.x, p.y, rr + 18, 0, Math.PI * 2);
         pctx.fill();
         pctx.beginPath();
-        pctx.arc(p.x, p.y, rr + 4, 0, Math.PI * 2);
-        pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(focusedHub ? 0.95 : 0.8) * alpha})`;
-        pctx.lineWidth = focusedHub ? 2.8 : 2.2;
+        pctx.arc(p.x, p.y, rr + 5, 0, Math.PI * 2);
+        pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(focusedHub ? 0.95 : 0.82) * alpha})`;
+        pctx.lineWidth = focusedHub ? 3 : 2.4;
         pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.75)`;
         pctx.shadowBlur = 14;
         pctx.stroke();
         pctx.shadowBlur = 0;
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.72 * alpha})`;
+        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.78 * alpha})`;
         pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.7)`;
         pctx.shadowBlur = 12;
         pctx.fill();
         pctx.beginPath();
-        pctx.arc(p.x, p.y, rr * 0.48, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.92 * alpha})`;
+        pctx.arc(p.x, p.y, rr * 0.5, 0, Math.PI * 2);
+        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.95 * alpha})`;
         pctx.shadowBlur = 6;
         pctx.fill();
         pctx.shadowBlur = 0;
         drawHubGlyph(pctx, p.x, p.y, rr * 0.62, n.id, alpha);
-      } else {
-        const isAlert = !!(n.alert || (n.type === 'machine' && n.alert));
-        const hoverScale = hoverId === n.id ? 1.3 : 1;
-        const rr = r * hoverScale;
-        const areaAccent = n.type === 'area' ? accentRgb(n.ring || nodeById.get(n.hubId)?.ring || 'teal') : null;
-        const halo = pctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.2);
-        if (isAlert) halo.addColorStop(0, 'rgba(255,107,122,0.45)');
-        else if (areaAccent) halo.addColorStop(0, `rgba(${areaAccent[0]},${areaAccent[1]},${areaAccent[2]},${0.4 * alpha})`);
-        else halo.addColorStop(0, `rgba(255,255,255,${0.35 * alpha})`);
+      } else if (n.type === 'branch') {
+        const rr = r * (hoverId === n.id ? 1.2 : 1);
+        const halo = pctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.4);
+        halo.addColorStop(0, `rgba(255,255,255,${0.35 * alpha})`);
         halo.addColorStop(1, 'rgba(255,255,255,0)');
         pctx.fillStyle = halo;
         pctx.beginPath();
-        pctx.arc(p.x, p.y, rr * 2.2, 0, Math.PI * 2);
+        pctx.arc(p.x, p.y, rr * 2.4, 0, Math.PI * 2);
         pctx.fill();
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        if (isAlert) {
-          pctx.fillStyle = ALERT;
-          pctx.shadowColor = 'rgba(255,107,122,0.85)';
-        } else if (areaAccent) {
-          pctx.fillStyle = `rgba(${areaAccent[0]},${areaAccent[1]},${areaAccent[2]},${0.92 * alpha})`;
-          pctx.shadowColor = `rgba(${areaAccent[0]},${areaAccent[1]},${areaAccent[2]},0.7)`;
-        } else {
-          pctx.fillStyle = `rgba(255,255,255,${0.97 * alpha})`;
-          pctx.shadowColor = 'rgba(255,255,255,0.7)';
-        }
-        pctx.shadowBlur = hoverId === n.id ? 16 : 8;
+        pctx.fillStyle = `rgba(255,255,255,${0.96 * alpha})`;
+        pctx.shadowColor = 'rgba(255,255,255,0.65)';
+        pctx.shadowBlur = 8;
         pctx.fill();
         pctx.shadowBlur = 0;
+        if (accent) {
+          pctx.beginPath();
+          pctx.arc(p.x, p.y, rr + 2.2, 0, Math.PI * 2);
+          pctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${0.75 * alpha})`;
+          pctx.lineWidth = 1.6;
+          pctx.stroke();
+        }
+        drawBranchGlyph(pctx, p.x, p.y, rr * 0.7, n.branchKey, alpha);
+      } else {
+        // Consistent: white disc + soft glow; status as thin ring (not offset dot)
+        const hoverScale = hoverId === n.id ? 1.25 : 1;
+        const rr = r * hoverScale;
+        const isAlert = !!(n.alert || (n.type === 'machine' && n.alert));
+        const isMaint =
+          n.status === 'maintenance' ||
+          (n.type === 'machine' && (n.technical?.openTickets || 0) > 0 && !isAlert);
+        const halo = pctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.4);
+        halo.addColorStop(0, `rgba(255,255,255,${0.4 * alpha})`);
+        halo.addColorStop(1, 'rgba(255,255,255,0)');
+        pctx.fillStyle = halo;
+        pctx.beginPath();
+        pctx.arc(p.x, p.y, rr * 2.4, 0, Math.PI * 2);
+        pctx.fill();
+        pctx.beginPath();
+        pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+        pctx.fillStyle = `rgba(255,255,255,${0.97 * alpha})`;
+        pctx.shadowColor = 'rgba(255,255,255,0.45)';
+        pctx.shadowBlur = hoverId === n.id ? 10 : 5;
+        pctx.fill();
+        pctx.shadowBlur = 0;
+        if (isAlert || isMaint) {
+          pctx.beginPath();
+          pctx.arc(p.x, p.y, rr + 2.5, 0, Math.PI * 2);
+          pctx.strokeStyle = isAlert ? `rgba(255,107,122,${0.95 * alpha})` : `rgba(232,192,120,${0.95 * alpha})`;
+          pctx.lineWidth = 2.2;
+          pctx.stroke();
+        } else if (n.type === 'area' && overviewMode) {
+          const rgb = accentRgb(nodeById.get(n.hubId)?.ring || 'teal');
+          pctx.beginPath();
+          pctx.arc(p.x, p.y, rr + 2, 0, Math.PI * 2);
+          pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.55 * alpha})`;
+          pctx.lineWidth = 1.5;
+          pctx.stroke();
+        }
         if (hoverId === n.id) {
           pctx.beginPath();
-          pctx.arc(p.x, p.y, rr * 1.4, 0, Math.PI * 2);
-          pctx.strokeStyle = 'rgba(255,255,255,0.6)';
-          pctx.lineWidth = 1.4;
+          pctx.arc(p.x, p.y, rr * 1.45, 0, Math.PI * 2);
+          pctx.strokeStyle = 'rgba(255,255,255,0.55)';
+          pctx.lineWidth = 1.3;
           pctx.stroke();
         }
       }
-      // Alert pill badge
-      if (n.alertCount > 0 && (n.type === 'hub' || n.type === 'area' || n.type === 'location') && !n.pad) {
+
+      // Tidy rollup pills (not glitchy offset dots)
+      if (
+        n.alertCount > 0 &&
+        (n.type === 'hub' || n.type === 'area' || n.type === 'location') &&
+        !n.pad &&
+        !n.preview
+      ) {
         const txt = String(n.alertCount);
-        const tw = Math.max(14, 8 + txt.length * 6);
-        const bx = p.x + 11;
-        const by = p.y - 10;
+        const tw = Math.max(16, 9 + txt.length * 6);
+        const bx = p.x + r * 0.55 + 10;
+        const by = p.y - r * 0.55 - 6;
+        const x0 = bx - tw / 2, y0 = by - 6, bw = tw, bh = 12, rad = 6;
         pctx.beginPath();
-        // round rect
-        const x0 = bx - tw / 2, y0 = by - 7, w = tw, h = 14, rad = 7;
         pctx.moveTo(x0 + rad, y0);
-        pctx.arcTo(x0 + w, y0, x0 + w, y0 + h, rad);
-        pctx.arcTo(x0 + w, y0 + h, x0, y0 + h, rad);
-        pctx.arcTo(x0, y0 + h, x0, y0, rad);
-        pctx.arcTo(x0, y0, x0 + w, y0, rad);
+        pctx.arcTo(x0 + bw, y0, x0 + bw, y0 + bh, rad);
+        pctx.arcTo(x0 + bw, y0 + bh, x0, y0 + bh, rad);
+        pctx.arcTo(x0, y0 + bh, x0, y0, rad);
+        pctx.arcTo(x0, y0, x0 + bw, y0, rad);
         pctx.closePath();
         pctx.fillStyle = ALERT;
+        pctx.shadowColor = 'rgba(255,107,122,0.45)';
+        pctx.shadowBlur = 4;
         pctx.fill();
+        pctx.shadowBlur = 0;
         pctx.fillStyle = '#fff';
-        pctx.font = '700 10px Manrope, sans-serif';
+        pctx.font = '700 8px Manrope, sans-serif';
         pctx.textAlign = 'center';
         pctx.textBaseline = 'middle';
-        pctx.fillText(txt, bx, by);
+        pctx.fillText(txt, bx, by + 0.5);
       }
     });
     pctx.restore();
@@ -2090,12 +2360,13 @@
       const a = nodeById.get(pathIds[i]);
       const b = nodeById.get(pathIds[i + 1]);
       if (!a || !b) continue;
+      if (!overviewMode && (a.type === 'enterprise' || b.type === 'enterprise')) continue;
       pulses.push({
         x0: a.x, y0: a.y, x1: b.x, y1: b.y,
         t: -i * 0.08, speed: 0.014, color, bright: true,
       });
     }
-    if (signalRunner) signalRunner.spawnPath(pathIds, color, true);
+    if (signalRunner && overviewMode) signalRunner.spawnPath(pathIds, color, true);
   }
 
   function startSignalTimers() {
@@ -2188,7 +2459,7 @@
     LOD,
     getLinkDrawStats: () => ({ ...linkDrawStats }),
     countLinkCrossings: () => countLinkCrossings(),
-    countDrawnOfType: (type) => nodes.filter((n) => n.type === type && n.draw && !n.preview && n.lodAlpha > 0.05).length,
+    countDrawnOfType: (type) => nodes.filter((n) => n.type === type && n.draw && !n.preview && !n.ancestorOnly && n.lodAlpha > 0.05).length,
     isOverview: () => overviewMode,
     getAlertCount: (id) => nodeById.get(id)?.alertCount || 0,
     getRollup: (id) => nodeById.get(id)?.rollup || null,

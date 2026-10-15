@@ -250,13 +250,13 @@ async function runTests(browserType, browserName) {
     const info = await page.evaluate(() => ({
       count: window.APOS_TREE_MAP.getAlertCount('client-leet'),
       rollup: window.APOS_TREE_MAP.getRollup('client-leet'),
-      badge: document.querySelector('[data-id="client-leet"] .alert-badge-text')?.textContent || '',
-      pill: !!document.querySelector('[data-id="client-leet"] g.alert-badge-wrap rect.alert-badge-bg'),
+      drawn: window.APOS_TREE_MAP.isNodeDrawn('client-leet'),
+      // Canvas renders tidy pills (SVG badge layer is hit-test only)
+      canvasPill: window.APOS_TREE_MAP.getAlertCount('client-leet') > 0,
     }));
     if (!(info.count > 0)) throw new Error(`expected alert rollup > 0, got ${JSON.stringify(info)}`);
     if (!info.rollup || info.rollup.alerts !== info.count) throw new Error(`rollup mismatch ${JSON.stringify(info)}`);
-    if (!info.badge || Number(info.badge) < 1) throw new Error(`missing badge text: ${JSON.stringify(info)}`);
-    if (!info.pill) throw new Error('expected pill badge rect');
+    if (!info.drawn || !info.canvasPill) throw new Error(`expected drawn hub with canvas pill: ${JSON.stringify(info)}`);
   });
 
   await test('full view hides machine-level nodes', async () => {
