@@ -287,8 +287,29 @@ body {
 }
 
 .node.is-hover .star-halo,
-.node.is-hover .core-mid-glow {
-  filter: brightness(1.35);
+.node.is-hover .core-mid-glow,
+.node.is-hover .star-core,
+.node.is-hover .core-body {
+  transform: scale(1.3);
+  transform-box: fill-box;
+  transform-origin: center;
+  filter: brightness(1.35) drop-shadow(0 0 10px rgba(200, 230, 255, 0.55));
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.node.is-hover text.node-label {
+  fill: rgba(255, 255, 255, 0.95);
+  opacity: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node.is-hover .star-halo,
+  .node.is-hover .core-mid-glow,
+  .node.is-hover .star-core,
+  .node.is-hover .core-body {
+    transform: none;
+    transition: none;
+  }
 }
 
 .node.on-path .star-core,
@@ -480,6 +501,13 @@ body {
   cursor: pointer;
 }
 
+.branch-card[data-accent='teal'] .card-title { color: #6ed4d0; }
+.branch-card[data-accent='violet'] .card-title { color: #b8a0e8; }
+.branch-card[data-accent='rose'] .card-title,
+.branch-card[data-accent='pink'] .card-title { color: #e8a0b8; }
+.branch-card[data-accent='amber'] .card-title { color: #e8c078; }
+.branch-card[data-accent='sky'] .card-title { color: #7ec8e8; }
+
 .card-title {
   margin: 0 0 0.85rem;
   font-size: 0.85rem;
@@ -657,6 +685,47 @@ body {
   font-size: 0.72rem;
   color: var(--term-green);
   opacity: 0.9;
+}
+
+.map-tooltip {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(8, 14, 28, 0.92);
+  border: 1px solid rgba(120, 180, 220, 0.25);
+  color: #e8f0fa;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  max-width: 220px;
+}
+
+.map-tooltip[hidden] {
+  display: none !important;
+}
+
+.map-tooltip strong {
+  display: block;
+  font-weight: 600;
+}
+
+.map-tooltip span {
+  display: block;
+  margin-top: 0.15rem;
+  color: rgba(200, 220, 240, 0.65);
+  font-size: 0.65rem;
+}
+
+.alert-badge {
+  fill: #ff6b7a;
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.node.has-alert .star-core {
+  filter: drop-shadow(0 0 5px rgba(255, 107, 122, 0.5));
 }
 
 @media (max-width: 640px) {

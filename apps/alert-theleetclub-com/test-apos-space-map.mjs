@@ -7,10 +7,10 @@
  */
 
 import { chromium, firefox } from 'playwright';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
-const BASE_URL = 'http://localhost:8767/apos-space-map.html';
+const BASE_URL = process.env.SPACE_MAP_URL || 'http://127.0.0.1:8767/apos-space-map.html';
 const ARTIFACTS_DIR = join(
   process.env.HOME || process.env.USERPROFILE,
   '.cursor',
@@ -379,8 +379,106 @@ async function runTests(browserType, browserName) {
     if (n < 8) throw new Error(`expected >=8 machines, got ${n}`);
   });
 
+  await test('rollup alert badge on client/location', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await flyTo(page, 'client-leet');
+    const info = await page.evaluate(() => ({
+      count: window.APOS_SPACE_MAP.getAlertCount('client-leet'),
+      rollup: window.APOS_SPACE_MAP.getRollup('client-leet'),
+      badge: document.querySelector('[data-id="client-leet"] text.alert-badge')?.textContent || '',
+    }));
+    if (!(info.count > 0)) throw new Error(`expected alert rollup > 0, got ${JSON.stringify(info)}`);
+    if (!info.rollup || info.rollup.alerts !== info.count) throw new Error(`rollup mismatch ${JSON.stringify(info)}`);
+    if (!info.badge || Number(info.badge) < 1) throw new Error(`missing badge text: ${JSON.stringify(info)}`);
+  });
+
+  await test('interrupted fly-to redirects without snap', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await page.evaluate(() => window.APOS_SPACE_MAP.flyTo('country-kw'));
+    await delay(120);
+    const mid = await page.evaluate(() => ({
+      flying: window.APOS_SPACE_MAP.isFlying(),
+      t: window.APOS_SPACE_MAP.getTransform(),
+    }));
+    if (!mid.flying) throw new Error('expected mid-flight after first flyTo');
+    await page.evaluate(() => window.APOS_SPACE_MAP.flyTo('client-leet'));
+    await delay(80);
+    const mid2 = await page.evaluate(() => ({
+      flying: window.APOS_SPACE_MAP.isFlying(),
+      t: window.APOS_SPACE_MAP.getTransform(),
+    }));
+    const dx = Math.abs(mid2.t.x - mid.t.x) + Math.abs(mid2.t.y - mid.t.y);
+    if (dx > 1200) throw new Error(`suspected snap mid-redirect dx=${dx}`);
+    await waitIdle(page);
+    const focus = await page.evaluate(() => window.APOS_SPACE_MAP.getFocus());
+    if (focus.id !== 'client-leet' && focus.clientId !== 'client-leet') {
+      throw new Error(`expected client-leet after interrupt, got ${JSON.stringify(focus)}`);
+    }
+  });
+
+  await test('labels do not overlap at 3 zoom levels', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await flyTo(page, 'country-kw');
+    const samples = await page.evaluate(async () =>
+      window.APOS_SPACE_MAP.sampleLabelOverlaps([0.3, 1.2, 3.5])
+    );
+    const bad = samples.filter((s) => s.overlap);
+    if (bad.length) throw new Error(`label overlaps: ${JSON.stringify(bad)}`);
+  });
+
   await browser.close();
   return results;
+}
+
+async function recordFlow() {
+  console.log('\nRecording flow-space.webm\n');
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    recordVideo: { dir: ARTIFACTS_DIR, size: { width: 1920, height: 1080 } },
+  });
+  const page = await context.newPage();
+  await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+  await delay(400);
+  await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+  await waitIdle(page);
+  await delay(500);
+  await flyTo(page, 'country-kw');
+  await delay(500);
+  await flyTo(page, 'client-leet');
+  await delay(500);
+  await flyTo(page, 'area-shadadiya');
+  await delay(400);
+  await flyTo(page, 'loc-ku-coba');
+  await delay(400);
+  await flyTo(page, 'm-ku-1');
+  await delay(700);
+  await page.evaluate(() => window.APOS_SPACE_MAP.flyTo('client-ee'));
+  await delay(180);
+  await page.evaluate(() => window.APOS_SPACE_MAP.flyTo('client-leet'));
+  await waitIdle(page);
+  await delay(500);
+  await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+  await waitIdle(page);
+  await delay(400);
+  const vid = page.video();
+  await context.close();
+  await browser.close();
+  if (vid) {
+    const raw = await vid.path();
+    const dest = join(ARTIFACTS_DIR, 'flow-space.webm');
+    try {
+      const { execSync } = await import('child_process');
+      execSync(`ffmpeg -y -i "${raw}" -t 12 -c:v libvpx -b:v 1M -an "${dest}"`, { stdio: 'pipe' });
+      console.log(`   🎬 ${dest}`);
+    } catch {
+      copyFileSync(raw, dest);
+      console.log(`   🎬 ${dest} (raw copy)`);
+    }
+  }
 }
 
 async function main() {
@@ -393,6 +491,7 @@ async function main() {
     await captureScreenshots(b.type, b.name);
     all.push(await runTests(b.type, b.name));
   }
+  await recordFlow();
   console.log('\n' + '='.repeat(60));
   console.log('SUMMARY');
   console.log('='.repeat(60));

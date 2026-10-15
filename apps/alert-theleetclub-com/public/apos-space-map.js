@@ -12,9 +12,11 @@
     return;
   }
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const UTILS = window.APOS_MAP_UTILS;
+  const POLISH = window.APOS_MAP_POLISH;
+  const reduceMotion = POLISH?.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const THRESH = DATA.thresholds;
-  const FLY_MS = reduceMotion ? 0 : 800;
+  const FLY_MS = reduceMotion ? 0 : 900;
   const FIT = 0.78;
 
   // World ring radii (parent → children)
@@ -85,13 +87,7 @@
   }
 
   function computeAlert(m) {
-    const stockLow = (m.stock?.fillPct ?? 100) < THRESH.stockLowPct;
-    const offlineLong = m.status === 'offline' && (m.offlineHours || 0) > THRESH.offlineHours;
-    const revBase = m.revenue?.baseline || 1;
-    const revLow = ((m.revenue?.today ?? revBase) / revBase) * 100 < THRESH.revenueBelowBaselinePct;
-    if (offlineLong || m.status === 'offline') return 'red';
-    if (stockLow || revLow || m.status === 'maintenance') return 'amber';
-    return null;
+    return UTILS ? UTILS.computeAlert(m) : null;
   }
 
   function placeChildren(parent, kids, ringR, startAngle) {
@@ -141,6 +137,9 @@
         parentId: core.id,
         depth: 1,
         code: country.code,
+        planned: !!country.planned,
+        comingSoon: !!country.comingSoon,
+        accent: (UTILS && UTILS.HUB_ACCENT[country.id]) || null,
       };
       addNode(cNode);
       cNode.x = Math.cos(a) * RING.country;
@@ -163,6 +162,9 @@
           parentId: country.id,
           countryId: country.id,
           depth: 2,
+          planned: !!client.planned,
+          comingSoon: !!client.comingSoon,
+          accent: (UTILS && UTILS.HUB_ACCENT[client.id]) || null,
         };
         addNode(cl);
         links.push({ source: country.id, target: client.id, kind: 'constellation' });
@@ -177,7 +179,7 @@
             countryId: country.id,
             clientId: client.id,
             depth: 3,
-            status: 'active',
+            status: client.status === 'future' ? 'future' : 'active',
           };
           addNode(ar);
           links.push({ source: client.id, target: area.id, kind: 'constellation' });
@@ -195,7 +197,7 @@
               clientId: client.id,
               areaId: area.id,
               depth: 4,
-              status: 'active',
+              status: client.status === 'future' ? 'future' : 'active',
             };
             addNode(ln);
             links.push({ source: area.id, target: loc.id, kind: 'constellation' });
@@ -286,6 +288,18 @@
       });
     });
 
+    // Roll up alerts onto locations / areas / clients / countries
+    nodes.forEach((n) => {
+      if (n.type === 'machine' || n.type === 'branch' || n.type === 'enterprise') return;
+      if (!UTILS) {
+        n.alertCount = 0;
+        return;
+      }
+      const r = UTILS.rollup(n, childrenOf);
+      n.alertCount = r.alerts;
+      n.rollup = r;
+    });
+
     resolveLabelOffsets();
   }
 
@@ -293,6 +307,28 @@
     nodes.forEach((n) => {
       n.labelOx = 0;
       n.labelOy = (n.halo || n.r * 2) * 0.55 + 14;
+    });
+    // Screen-space collision nudge for country/client labels at overview
+    const labeled = nodes
+      .filter((n) => n.type === 'country' || n.type === 'client')
+      .sort((a, b) => (a.angle || 0) - (b.angle || 0));
+    const placed = [];
+    labeled.forEach((n, i) => {
+      n.labelOx = (i % 2 === 0 ? 1 : -1) * 8;
+      let sy = n.labelOy;
+      for (let guard = 0; guard < 5; guard++) {
+        let hit = false;
+        for (const p of placed) {
+          if (Math.abs(n.x - p.x) < 90 && Math.abs(n.y + sy - (p.y + p.oy)) < 18) {
+            sy += 14;
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) break;
+      }
+      n.labelOy = sy;
+      placed.push({ x: n.x, y: n.y, oy: sy });
     });
   }
 
@@ -533,14 +569,42 @@
 
   function applyLabelCounterScale() {
     const inv = 1 / (transform.k || 1);
-    gNodes.selectAll('g.label-layer').attr('transform', `scale(${inv})`);
+    gNodes.selectAll('g.label-layer').attr('transform', function (d) {
+      const ox = d.labelOx || 0;
+      const oy = d.labelOy || 18;
+      return `scale(${inv}) translate(${ox},${oy})`;
+    });
     gNodes.selectAll('text.core-wordmark').attr('transform', `scale(${inv})`);
   }
 
-  function setHover(id) {
+  const tooltipEl = document.getElementById('map-tooltip');
+
+  function showTooltip(event, d) {
+    if (!tooltipEl || !d || d.type === 'enterprise') return;
+    let stat = '';
+    if (d.rollup) stat = `${d.rollup.online}/${d.rollup.total} online · ${d.rollup.alerts} alerts`;
+    else if (d.type === 'machine') {
+      stat = d.alert ? `alert · ${d.status}` : d.status;
+    } else if (d.type === 'branch') {
+      stat = d.label;
+    }
+    tooltipEl.hidden = false;
+    tooltipEl.innerHTML = `<strong>${d.label || d.id}</strong>${stat ? `<span>${stat}</span>` : ''}`;
+    const stageBox = stage.getBoundingClientRect();
+    tooltipEl.style.left = `${event.clientX - stageBox.left + 12}px`;
+    tooltipEl.style.top = `${event.clientY - stageBox.top + 12}px`;
+  }
+
+  function hideTooltip() {
+    if (tooltipEl) tooltipEl.hidden = true;
+  }
+
+  function setHover(id, event) {
     hoverId = id;
     rootPathIds = id ? new Set(pathToRoot(id)) : new Set();
     paintLod();
+    if (id && event) showTooltip(event, nodeById.get(id));
+    else hideTooltip();
   }
 
   function paintWorldOnce() {
@@ -587,7 +651,8 @@
             event.stopPropagation();
             onNodeClick(d);
           })
-          .on('mouseenter', (event, d) => setHover(d.id))
+          .on('mouseenter', (event, d) => setHover(d.id, event))
+          .on('mousemove', (event, d) => showTooltip(event, d))
           .on('mouseleave', () => setHover(null));
 
         g.each(function (d) {
@@ -623,8 +688,6 @@
             lab
               .append('text')
               .attr('class', 'node-label')
-              .attr('x', d.labelOx || 0)
-              .attr('y', d.labelOy || 18)
               .attr('dy', '0.35em')
               .text(d.label);
           }
@@ -638,17 +701,25 @@
 
   function paintLod() {
     const k = transform.k;
+    const focusPath = new Set(pathToRoot(focusNodeId));
+    const focusNode = nodeById.get(focusNodeId);
+    const accentId = focusNode?.clientId || focusNode?.id;
+    const accent = UTILS ? UTILS.accentFor(accentId) : null;
 
     gNodes.selectAll('g.node').each(function (d) {
       const g = d3.select(this);
       const show = d.draw;
-      const alpha = show ? d.lodAlpha : 0;
+      let alpha = show ? d.lodAlpha : 0;
       const hovered = hoverId === d.id;
-      const onPath = rootPathIds.has(d.id);
+      const onPath = focusPath.has(d.id) || rootPathIds.has(d.id);
+      if (show && focusNodeId !== DATA.enterprise.id && !onPath && d.depth > 1) {
+        alpha = Math.min(alpha, 0.25);
+      }
       g.style('display', show || d.depth <= 1 ? null : alpha < 0.05 ? 'none' : null);
       g.style('opacity', show ? (hovered ? 1 : onPath ? Math.max(alpha, 0.85) : alpha) : 0);
       g.classed('is-hover', hovered);
       g.classed('on-path', onPath && !hovered);
+      g.classed('has-alert', !!(d.alertCount > 0 || d.alert));
 
       const label = g.select('text.node-label');
       if (!label.empty()) {
@@ -658,12 +729,28 @@
         else cls += ' small';
         if (d.status === 'future') cls += ' dim';
         if (d.depth >= 3 && k < (LOD[d.type]?.label || 1) * 1.3) cls += ' context';
-        label.attr('class', cls).style('opacity', d.labelOn ? 1 : 0).style('display', d.labelOn ? null : 'none');
+        if (onPath && (d.type === 'country' || d.type === 'client')) cls += ' accent';
+        label.attr('class', cls).style('opacity', d.labelOn || hovered ? 1 : 0).style('display', d.labelOn || hovered ? null : 'none');
+        if (onPath && accent && (d.type === 'country' || d.type === 'client')) {
+          label.style('fill', accent.stroke);
+        } else {
+          label.style('fill', null);
+        }
+      }
+
+      let badge = g.select('text.alert-badge');
+      if (d.alertCount > 0 && show && d.type !== 'machine' && d.type !== 'branch') {
+        if (badge.empty()) {
+          badge = g.append('text').attr('class', 'alert-badge').attr('dy', '-0.85em').attr('dx', '0.9em');
+        }
+        badge.text(String(d.alertCount)).style('display', null);
+      } else if (!badge.empty()) {
+        badge.style('display', 'none');
       }
 
       if (d.type === 'machine') {
         g.select('.pulse-ring')
-          .attr('stroke', d.alert === 'red' ? '#d66a6a' : d.alert === 'amber' ? '#d4a84b' : 'none')
+          .attr('stroke', d.alert === 'red' ? '#ff6b7a' : d.alert === 'amber' ? '#d4a84b' : 'none')
           .attr('opacity', d.alert && !reduceMotion ? 0.5 : 0);
       }
     });
@@ -672,11 +759,13 @@
       const s = nodeById.get(d.source);
       const t = nodeById.get(d.target);
       const show = s?.draw && t?.draw;
-      const onPath = rootPathIds.has(d.source) && rootPathIds.has(d.target);
+      const onPath = (focusPath.has(d.source) && focusPath.has(d.target)) || (rootPathIds.has(d.source) && rootPathIds.has(d.target));
       const el = d3.select(this);
       el.style('display', show ? null : 'none');
       el.classed('on-path', onPath);
-      el.style('opacity', show ? (onPath ? 0.75 : Math.min(s.lodAlpha, t.lodAlpha) * 0.9) : 0);
+      el.style('opacity', show ? (onPath ? 0.85 : Math.min(s.lodAlpha, t.lodAlpha) * 0.35) : 0);
+      if (onPath && accent) el.style('stroke', accent.stroke);
+      else el.style('stroke', null);
     });
 
     gNebulae.selectAll('circle.nebula').style('opacity', (d) => {
@@ -750,32 +839,45 @@
 
   let focusPinned = false;
 
+  let flyGen = 0;
   function flyToTransform(target, done) {
+    flying = true;
+    flyGen += 1;
+    const myGen = flyGen;
+    svg.interrupt('fly');
+    const W = stage.clientWidth || 1200;
+    const H = stage.clientHeight || 800;
     if (FLY_MS === 0) {
       transform = target;
       svg.call(zoomBehavior.transform, transform);
       applyLod();
       applyLabelCounterScale();
       renderBreadcrumb(focusNodeId);
+      flying = false;
       if (done) done();
       return;
     }
-    flying = true;
-    const start = { k: transform.k, x: transform.x, y: transform.y };
-    const end = { k: target.k, x: target.x, y: target.y };
-    const zt = d3.interpolate(start, end);
+    const startView = [(W / 2 - transform.x) / transform.k, (H / 2 - transform.y) / transform.k, W / transform.k];
+    const endView = [(W / 2 - target.x) / target.k, (H / 2 - target.y) / target.k, W / target.k];
+    const iZoom = d3.interpolateZoom(startView, endView);
     svg
       .transition('fly')
       .duration(FLY_MS)
       .ease(d3.easeCubicInOut)
       .tween('cam', () => (t) => {
-        const v = zt(t);
-        transform = d3.zoomIdentity.translate(v.x, v.y).scale(v.k);
+        if (myGen !== flyGen) return;
+        const v = iZoom(t);
+        const k = W / v[2];
+        transform = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-v[0], -v[1]);
         gRoot.attr('transform', transform);
         applyLod();
         applyLabelCounterScale();
       })
-      .on('end interrupt', () => {
+      .on('interrupt', () => {
+        flying = false;
+      })
+      .on('end', () => {
+        if (myGen !== flyGen) return;
         transform = target;
         svg.call(zoomBehavior.transform, transform);
         applyLod();
@@ -786,11 +888,100 @@
       });
   }
 
+  function growFocusedChildren(node) {
+    if (reduceMotion || !gNodes) return;
+    const kids = (childrenOf.get(node.id) || []).filter((c) => c.type !== 'branch');
+    kids.forEach((c, i) => {
+      const sel = gNodes.select(`[data-id="${c.id}"]`);
+      if (sel.empty()) return;
+      sel
+        .interrupt()
+        .attr('transform', `translate(${c.x},${c.y}) scale(0.4)`)
+        .style('opacity', 0)
+        .transition()
+        .delay(i * 40)
+        .duration(280)
+        .ease(d3.easeCubicOut)
+        .attr('transform', `translate(${c.x},${c.y}) scale(1)`)
+        .style('opacity', c.lodAlpha ?? 1);
+    });
+  }
+
+  function showStatusCard(node) {
+    const title = document.getElementById('branch-card-title');
+    const body = document.getElementById('branch-card-body');
+    title.textContent = node.label;
+    body.replaceChildren();
+    const rows = node.comingSoon
+      ? [
+          ['Status', 'Coming soon'],
+          ['Note', 'Pilot hardware reserved — go-live pending'],
+        ]
+      : [
+          ['Status', 'Planned'],
+          ['Note', 'Expansion roadmap — no live machines yet'],
+        ];
+    rows.forEach(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'card-row';
+      const kk = document.createElement('span');
+      kk.className = 'k';
+      kk.textContent = k;
+      const vv = document.createElement('span');
+      vv.className = 'v';
+      vv.textContent = v;
+      row.append(kk, vv);
+      body.appendChild(row);
+    });
+    document.getElementById('branch-card-task').hidden = true;
+    branchCard.hidden = false;
+    branchCard.dataset.accent = node.accent || (UTILS && UTILS.HUB_ACCENT[node.id]) || 'sky';
+  }
+
+  function showRollupCard(node) {
+    if (!UTILS) return;
+    const r = UTILS.rollup(node, childrenOf);
+    const title = document.getElementById('branch-card-title');
+    const body = document.getElementById('branch-card-body');
+    title.textContent = node.label;
+    body.replaceChildren();
+    UTILS.kpiRows(r).forEach(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'card-row';
+      const kk = document.createElement('span');
+      kk.className = 'k';
+      kk.textContent = k;
+      const vv = document.createElement('span');
+      vv.className = 'v';
+      vv.textContent = v;
+      row.append(kk, vv);
+      body.appendChild(row);
+    });
+    document.getElementById('branch-card-task').hidden = true;
+    branchCard.hidden = false;
+    const accentKey =
+      node.accent ||
+      (UTILS.HUB_ACCENT[node.clientId || node.id]) ||
+      'teal';
+    branchCard.dataset.accent = accentKey;
+  }
+
   function flyToNode(node) {
+    if (node.type === 'enterprise') {
+      flyToGalaxy();
+      return;
+    }
+    if (node.comingSoon || node.planned || (node.status === 'future' && (node.type === 'country' || node.type === 'client'))) {
+      showStatusCard(node);
+    } else if (node.type === 'country' || node.type === 'client' || node.type === 'area' || node.type === 'location') {
+      // rollup shown from click handler; keep open if already status
+    } else {
+      closeBranchCard();
+    }
     setExpandedTo(node.id);
     focusPinned = true;
-    closeBranchCard();
-    applyLod(); // collapse previous sibling trees before camera moves
+    applyLod();
+    growFocusedChildren(node);
     const bbox = subtreeExtent(node);
     flyToTransform(fitTransform(bbox, node));
   }
@@ -873,8 +1064,8 @@
   }
 
   function onNodeClick(d) {
-    if (flying) return;
-    if (d.status === 'future' && d.depth > 1) return;
+    // Interruptible: a new click mid-flight redirects smoothly
+    if (d.status === 'future' && d.depth > 1 && !d.comingSoon && d.type !== 'client' && d.type !== 'country') return;
     if (d.type === 'branch') {
       setExpandedTo(d.machineId);
       focusPinned = true;
@@ -883,10 +1074,14 @@
       renderBreadcrumb(d.machineId);
       return;
     }
-    if (d.type === 'machine' && transform.k >= LOD.branch.draw * 0.85) {
-      // already deep — open terminal on second intent via branch; first click still flies
+    if (d.comingSoon || d.planned || (d.status === 'future' && (d.type === 'country' || d.type === 'client'))) {
+      flyToNode(d);
+      return;
     }
     flyToNode(d);
+    if (d.type === 'country' || d.type === 'client' || d.type === 'area' || d.type === 'location') {
+      if (d.status === 'active') showRollupCard(d);
+    }
   }
 
   // ——— branch card / terminal ———
@@ -914,6 +1109,8 @@
       openTerminalForMachine(m, branchNode.branchKey === 'technical' ? 'technician' : 'operator');
     };
     branchCard.hidden = false;
+    const hubId = m?.clientId || branchNode.clientId;
+    branchCard.dataset.accent = (UTILS && UTILS.HUB_ACCENT[hubId]) || 'teal';
   }
 
   function branchRows(key, m) {
@@ -1103,16 +1300,15 @@
   function spawnEventPulse(kind, machineId) {
     const m = nodeById.get(machineId);
     if (!m) return;
-    if (kind === 'transaction' || kind === 'restock') {
-      const branchId = `${machineId}::${kind === 'restock' ? 'stock' : 'revenue'}`;
-      if (nodeById.get(branchId)?.draw) spawnPulse(machineId, branchId, 'rgba(230, 245, 255, 0.98)', true);
-      else if (m.draw) spawnPulse(m.parentId, machineId, 'rgba(220, 240, 255, 0.95)', true);
-      else spawnAmbientCurrents();
-    } else if (kind === 'alert') {
-      const branchId = `${machineId}::technical`;
-      if (nodeById.get(branchId)?.draw) spawnPulse(machineId, branchId, 'rgba(230, 110, 90, 0.98)', true);
-      else if (m.draw) spawnPulse(m.parentId, machineId, 'rgba(220, 150, 80, 0.95)', true);
-      else spawnAmbientCurrents();
+    const path = pathToRoot(machineId);
+    const alertLike = kind === 'alert';
+    const color = alertLike ? 'rgba(255, 107, 122, 0.95)' : 'rgba(230, 245, 255, 0.95)';
+    // Travel machine → root along the actual path
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i];
+      const b = path[i + 1];
+      const delay = i * 90;
+      setTimeout(() => spawnPulse(a, b, color, true), delay);
     }
   }
 
@@ -1155,8 +1351,9 @@
     if (reduceMotion) return;
     setInterval(spawnAmbientCurrents, 1100);
     setInterval(() => {
-      if (!machines.length) return;
-      const m = machines[Math.floor(Math.random() * machines.length)];
+      const live = machines.filter((m) => m.status !== 'planned' && m.status !== 'future');
+      if (!live.length) return;
+      const m = live[Math.floor(Math.random() * live.length)];
       const kind = ['transaction', 'restock', 'alert'][Math.floor(Math.random() * 3)];
       if (kind === 'alert' && !m.alert && m.status === 'active') spawnEventPulse('transaction', m.id);
       else spawnEventPulse(kind, m.id);
@@ -1219,7 +1416,38 @@
           closeTerminal();
           return;
         }
+        if (!branchCard.hidden) {
+          closeBranchCard();
+          return;
+        }
         flyOut();
+        return;
+      }
+      if (e.key === 'Enter') {
+        const kids = (childrenOf.get(focusNodeId) || []).filter(
+          (c) => c.type !== 'branch' && c.status !== 'future'
+        );
+        if (kids[0]) flyToNode(kids[0]);
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const cur = nodeById.get(focusNodeId);
+        if (!cur) return;
+        if (cur.type === 'enterprise' || cur.depth <= 1) {
+          const countries = nodes.filter((n) => n.type === 'country');
+          const idx = Math.max(0, countries.findIndex((n) => n.id === focusNodeId));
+          const next =
+            countries[(idx + (e.key === 'ArrowRight' ? 1 : -1) + countries.length) % countries.length];
+          if (next) flyToNode(next);
+          return;
+        }
+        const siblings = (childrenOf.get(cur.parentId) || []).filter((c) => c.type !== 'branch');
+        if (siblings.length < 2) return;
+        const si = siblings.findIndex((s) => s.id === cur.id);
+        const nxt =
+          siblings[(si + (e.key === 'ArrowRight' ? 1 : -1) + siblings.length) % siblings.length];
+        if (nxt) flyToNode(nxt);
       }
     });
 
@@ -1316,6 +1544,22 @@
     spawnTestPulse: () => {
       const drawable = links.filter((l) => nodeById.get(l.source)?.draw && nodeById.get(l.target)?.draw);
       if (drawable[0]) spawnPulse(drawable[0].source, drawable[0].target, 'rgba(220,240,255,0.95)', true);
+    },
+    getAlertCount: (id) => nodeById.get(id)?.alertCount || 0,
+    getRollup: (id) => nodeById.get(id)?.rollup || null,
+    isFlying: () => flying,
+    labelsOverlap: () => {
+      if (!POLISH) return false;
+      return POLISH.labelBBoxOverlaps([...document.querySelectorAll('text.node-label')], 2);
+    },
+    sampleLabelOverlaps: async (ks) => {
+      const out = [];
+      for (const k of ks || [0.3, 1.2, 3.5]) {
+        setZoomK(k);
+        await new Promise((r) => requestAnimationFrame(r));
+        out.push({ k, overlap: window.APOS_SPACE_MAP.labelsOverlap() });
+      }
+      return out;
     },
     LEVEL: {
       GALAXY: 0,

@@ -344,6 +344,84 @@ window.APOS_SPACE_DATA = {
                       technical: { openTickets: 0, lastMaintenance: '2026-10-03', history: ['OK'] },
                       operators: { lastVisit: '2026-10-13 12:00', log: ['OK'] },
                     },
+                    {
+                      id: 'm-ee-2',
+                      label: 'EE-2',
+                      model: 'Vendon Pro 360',
+                      status: 'active',
+                      operatorId: 'person-op-ahmed',
+                      technicianId: 'person-tech-khaled',
+                      revenue: { today: 88.5, dailyAvg: 140, monthly: 3100, cashPct: 48, digitalPct: 52, baseline: 135 },
+                      stock: { fillPct: 14, topProducts: ['Espresso', 'Water'], peakHours: '12:00–14:00' },
+                      contract: { vendor: 'Vendon', lease: '24 mo', renewal: '2027-01-15' },
+                      technical: { openTickets: 1, lastMaintenance: '2026-09-28', history: ['Low stock'] },
+                      operators: { lastVisit: '2026-10-14 10:20', log: ['Flagged fill'] },
+                    },
+                  ],
+                },
+                {
+                  id: 'loc-ee-salwa',
+                  label: 'EE Salwa',
+                  address: 'Salwa Block 7',
+                  lat: 29.295,
+                  lng: 48.055,
+                  machines: [
+                    {
+                      id: 'm-ee-3',
+                      label: 'EE-3',
+                      model: 'Vendon Compact',
+                      status: 'offline',
+                      offlineHours: 4.2,
+                      operatorId: 'person-op-yousef',
+                      technicianId: 'person-tech-bader',
+                      revenue: { today: 8.0, dailyAvg: 95, monthly: 1800, cashPct: 60, digitalPct: 40, baseline: 90 },
+                      stock: { fillPct: 48, topProducts: ['Tea'], peakHours: '08:00–10:00' },
+                      contract: { vendor: 'Vendon', lease: '24 mo', renewal: '2026-12-20' },
+                      technical: { openTickets: 2, lastMaintenance: '2026-09-10', history: ['Modem swap pending'] },
+                      operators: { lastVisit: '2026-10-12 16:00', log: ['Offline reported'] },
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              id: 'area-ee-farwaniya',
+              label: 'Farwaniya',
+              areaManagerId: 'person-am-shad',
+              locations: [
+                {
+                  id: 'loc-ee-farwaniya',
+                  label: 'EE Farwaniya',
+                  address: 'Farwaniya Co-op',
+                  lat: 29.277,
+                  lng: 47.958,
+                  machines: [
+                    {
+                      id: 'm-ee-4',
+                      label: 'EE-4',
+                      model: 'Vendon Pro 360',
+                      status: 'active',
+                      operatorId: 'person-op-ahmed',
+                      technicianId: 'person-tech-khaled',
+                      revenue: { today: 198.0, dailyAvg: 175, monthly: 4200, cashPct: 40, digitalPct: 60, baseline: 170 },
+                      stock: { fillPct: 66, topProducts: ['Latte', 'Cookie'], peakHours: '17:00–20:00' },
+                      contract: { vendor: 'Vendon', lease: '36 mo', renewal: '2027-11-01' },
+                      technical: { openTickets: 0, lastMaintenance: '2026-10-06', history: ['OK'] },
+                      operators: { lastVisit: '2026-10-15 09:00', log: ['Restock'] },
+                    },
+                    {
+                      id: 'm-ee-5',
+                      label: 'EE-5',
+                      model: 'Vendon Compact',
+                      status: 'maintenance',
+                      operatorId: 'person-op-yousef',
+                      technicianId: 'person-tech-bader',
+                      revenue: { today: 0, dailyAvg: 70, monthly: 1400, cashPct: 50, digitalPct: 50, baseline: 65 },
+                      stock: { fillPct: 35, topProducts: ['Americano'], peakHours: '11:00–13:00' },
+                      contract: { vendor: 'Vendon', lease: '24 mo', renewal: '2027-04-01' },
+                      technical: { openTickets: 1, lastMaintenance: '2026-10-15', history: ['Pump service'] },
+                      operators: { lastVisit: '2026-10-14 11:30', log: ['Tech on site'] },
+                    },
                   ],
                 },
               ],
@@ -355,7 +433,73 @@ window.APOS_SPACE_DATA = {
           label: 'Park',
           brand: 'Park Mall',
           status: 'future',
-          areas: [],
+          comingSoon: true,
+          areas: [
+            {
+              id: 'area-park-mall',
+              label: 'Park Mall',
+              areaManagerId: null,
+              locations: [
+                {
+                  id: 'loc-park-l1',
+                  label: 'Park L1 Food Court',
+                  address: 'The Park Mall, Level 1',
+                  lat: 29.305,
+                  lng: 48.02,
+                  machines: [
+                    {
+                      id: 'm-park-1',
+                      label: 'PARK-1',
+                      model: 'Vendon Pro 360',
+                      status: 'planned',
+                      operatorId: null,
+                      technicianId: null,
+                      revenue: { today: 0, dailyAvg: 0, monthly: 0, cashPct: 0, digitalPct: 100, baseline: 200 },
+                      stock: { fillPct: 0, topProducts: ['TBD'], peakHours: 'TBD' },
+                      contract: { vendor: 'Vendon', lease: 'pending', renewal: 'TBD' },
+                      technical: { openTickets: 0, lastMaintenance: '—', history: [] },
+                      operators: { lastVisit: '—', log: [] },
+                    },
+                    {
+                      id: 'm-park-2',
+                      label: 'PARK-2',
+                      model: 'Vendon Compact',
+                      status: 'planned',
+                      operatorId: null,
+                      technicianId: null,
+                      revenue: { today: 0, dailyAvg: 0, monthly: 0, cashPct: 0, digitalPct: 100, baseline: 120 },
+                      stock: { fillPct: 0, topProducts: ['TBD'], peakHours: 'TBD' },
+                      contract: { vendor: 'Vendon', lease: 'pending', renewal: 'TBD' },
+                      technical: { openTickets: 0, lastMaintenance: '—', history: [] },
+                      operators: { lastVisit: '—', log: [] },
+                    },
+                  ],
+                },
+                {
+                  id: 'loc-park-cinema',
+                  label: 'Park Cinema Lobby',
+                  address: 'The Park Mall, Cinema wing',
+                  lat: 29.306,
+                  lng: 48.021,
+                  machines: [
+                    {
+                      id: 'm-park-3',
+                      label: 'PARK-3',
+                      model: 'Vendon Pro 360',
+                      status: 'planned',
+                      operatorId: null,
+                      technicianId: null,
+                      revenue: { today: 0, dailyAvg: 0, monthly: 0, cashPct: 0, digitalPct: 100, baseline: 180 },
+                      stock: { fillPct: 0, topProducts: ['TBD'], peakHours: 'TBD' },
+                      contract: { vendor: 'Vendon', lease: 'pending', renewal: 'TBD' },
+                      technical: { openTickets: 0, lastMaintenance: '—', history: [] },
+                      operators: { lastVisit: '—', log: [] },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -364,6 +508,7 @@ window.APOS_SPACE_DATA = {
       label: 'Saudi Arabia',
       code: 'SA',
       status: 'future',
+      planned: true,
       opsManagerId: null,
       clients: [],
     },
@@ -372,6 +517,7 @@ window.APOS_SPACE_DATA = {
       label: 'UAE',
       code: 'AE',
       status: 'future',
+      planned: true,
       opsManagerId: null,
       clients: [],
     },
@@ -385,3 +531,97 @@ window.APOS_SPACE_BRANCHES = [
   { id: 'stock', label: 'Stock', key: 'stock' },
   { id: 'contract', label: 'Contract', key: 'contract' },
 ];
+
+/** Shared accents + rollup helpers for tree-map and space-map */
+window.APOS_MAP_UTILS = (function () {
+  const THRESH = () => window.APOS_SPACE_DATA.thresholds;
+  const ACCENTS = {
+    teal: { key: 'teal', stroke: '#6ed4d0', fill: 'rgba(110, 212, 208, 0.92)', soft: 'rgba(110, 212, 208, 0.28)' },
+    violet: { key: 'violet', stroke: '#b8a0e8', fill: 'rgba(184, 160, 232, 0.92)', soft: 'rgba(184, 160, 232, 0.28)' },
+    rose: { key: 'rose', stroke: '#e8a0b8', fill: 'rgba(232, 160, 184, 0.92)', soft: 'rgba(232, 160, 184, 0.28)' },
+    amber: { key: 'amber', stroke: '#e8c078', fill: 'rgba(232, 192, 120, 0.92)', soft: 'rgba(232, 192, 120, 0.28)' },
+    sky: { key: 'sky', stroke: '#7ec8e8', fill: 'rgba(126, 200, 232, 0.92)', soft: 'rgba(126, 200, 232, 0.28)' },
+  };
+  const HUB_ACCENT = {
+    'client-leet': 'teal',
+    'client-ee': 'violet',
+    'client-park': 'rose',
+    'country-sa': 'amber',
+    'country-ae': 'sky',
+  };
+  const ALERT = '#ff6b7a';
+
+  function accentFor(hubId) {
+    return ACCENTS[HUB_ACCENT[hubId] || 'teal'];
+  }
+
+  function computeAlert(m) {
+    if (!m || m.status === 'planned' || m.status === 'future') return null;
+    const t = THRESH();
+    const stockLow = (m.stock?.fillPct ?? 100) < t.stockLowPct;
+    const offlineLong = m.status === 'offline' && (m.offlineHours || 0) > t.offlineHours;
+    const revBase = m.revenue?.baseline || 1;
+    const revLow = ((m.revenue?.today ?? revBase) / revBase) * 100 < t.revenueBelowBaselinePct;
+    if (offlineLong || m.status === 'offline') return 'red';
+    if (stockLow || revLow || m.status === 'maintenance') return 'amber';
+    return null;
+  }
+
+  function walkMachines(node, childrenOf) {
+    const out = [];
+    const walk = (id) => {
+      (childrenOf.get(id) || []).forEach((c) => {
+        if (c.type === 'machine') out.push(c);
+        else if (c.type !== 'branch') walk(c.id);
+      });
+    };
+    if (node.type === 'machine') out.push(node);
+    else walk(node.id);
+    return out;
+  }
+
+  function rollup(node, childrenOf) {
+    const ms = walkMachines(node, childrenOf);
+    const total = ms.length;
+    const online = ms.filter((m) => m.status === 'active').length;
+    const alerts = ms.filter((m) => computeAlert(m)).length;
+    const revenueToday = ms.reduce((s, m) => s + (m.revenue?.today || 0), 0);
+    const productCounts = {};
+    ms.forEach((m) => {
+      (m.stock?.topProducts || []).forEach((p) => {
+        productCounts[p] = (productCounts[p] || 0) + 1;
+      });
+    });
+    const topProduct =
+      Object.entries(productCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
+    return {
+      total,
+      online,
+      alerts,
+      revenueToday: Math.round(revenueToday * 10) / 10,
+      topProduct,
+      tint: alerts > 0,
+    };
+  }
+
+  function kpiRows(rollupData, currency) {
+    const cur = currency || window.APOS_SPACE_DATA.meta.currency || 'KWD';
+    return [
+      ['Revenue today', `${rollupData.revenueToday} ${cur}`],
+      ['Machines online', `${rollupData.online} / ${rollupData.total}`],
+      ['Open alerts', String(rollupData.alerts)],
+      ['Top product', rollupData.topProduct],
+    ];
+  }
+
+  return {
+    ACCENTS,
+    HUB_ACCENT,
+    ALERT,
+    accentFor,
+    computeAlert,
+    walkMachines,
+    rollup,
+    kpiRows,
+  };
+})();

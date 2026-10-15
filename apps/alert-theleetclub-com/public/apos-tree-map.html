@@ -26,6 +26,8 @@
     <main class="tree-stage" id="tree-stage">
       <canvas id="tree-particles" class="tree-particles" aria-hidden="true"></canvas>
       <svg id="tree-svg" class="tree-svg" role="img" aria-label="APOS hierarchy tree map"></svg>
+      <canvas id="tree-signals" class="tree-signals" aria-hidden="true"></canvas>
+      <div class="map-tooltip" id="map-tooltip" hidden></div>
       <div class="zoom-controls" aria-label="Zoom">
         <button type="button" class="zoom-btn" data-action="zoom-in" title="Zoom in">+</button>
         <button type="button" class="zoom-btn" data-action="zoom-out" title="Zoom out">−</button>
@@ -71,6 +73,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="apos-space-map-data.js"></script>
+  <script src="apos-map-polish.js"></script>
   <script src="apos-tree-map.js"></script>
 </body>
 </html>

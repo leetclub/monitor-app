@@ -12,10 +12,13 @@
     return;
   }
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const UTILS = window.APOS_MAP_UTILS;
+  const POLISH = window.APOS_MAP_POLISH;
+  const reduceMotion = POLISH?.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const THRESH = DATA.thresholds;
-  const FLY_MS = reduceMotion ? 0 : 820;
+  const FLY_MS = reduceMotion ? 0 : 900;
   const FIT = 0.88;
+  const RING_ACCENTS = ['teal', 'violet', 'rose', 'amber', 'sky'];
 
   // World geometry — large hub ring so trees fill ~85% height (not a tiny centre clump)
   const R_HUB = 340;
@@ -41,8 +44,6 @@
     artic: { draw: 0.9, label: 99, labelMax: 99 },
   };
 
-  const RING_COLORS = ['teal', 'violet', 'pink', 'teal', 'violet', 'pink', 'teal'];
-
   const people = DATA.people;
   const nodes = [];
   const links = [];
@@ -66,13 +67,7 @@
   }
 
   function computeAlert(m) {
-    const stockLow = (m.stock?.fillPct ?? 100) < THRESH.stockLowPct;
-    const offlineLong = m.status === 'offline' && (m.offlineHours || 0) > THRESH.offlineHours;
-    const revBase = m.revenue?.baseline || 1;
-    const revLow = ((m.revenue?.today ?? revBase) / revBase) * 100 < THRESH.revenueBelowBaselinePct;
-    if (offlineLong || m.status === 'offline') return 'red';
-    if (stockLow || revLow || m.status === 'maintenance') return 'amber';
-    return null;
+    return UTILS ? UTILS.computeAlert(m) : null;
   }
 
   function hash(s) {
@@ -161,16 +156,18 @@
       hubDefs.push({
         id: client.id,
         label: client.label.toUpperCase(),
-        subtitle: isFuture
-          ? client.status === 'future'
-            ? 'coming soon'
-            : 'testing zone'
-          : (client.brand || client.label).toLowerCase() + ' · sites · machines',
-        status: isFuture ? 'future' : 'active',
+        subtitle: client.comingSoon
+          ? 'coming soon'
+          : isFuture
+            ? 'testing zone'
+            : (client.brand || client.label).toLowerCase() + ' · sites · machines',
+        status: client.status === 'future' ? 'future' : 'active',
         areas,
         clientId: client.id,
         countryId: kw.id,
         bgLabel: client.label.toUpperCase(),
+        comingSoon: !!client.comingSoon,
+        planned: !!client.planned,
       });
     });
     DATA.countries
@@ -179,12 +176,13 @@
         hubDefs.push({
           id: c.id,
           label: c.label.toUpperCase(),
-          subtitle: 'future market',
+          subtitle: c.planned ? 'planned market' : 'future market',
           status: 'future',
           areas: [],
           clientId: null,
           countryId: c.id,
           bgLabel: (c.code || c.label).toUpperCase(),
+          planned: !!c.planned,
         });
       });
 
@@ -242,17 +240,19 @@
         clientId: def.clientId,
         depth: 1,
         r: 6,
-        ring: RING_COLORS[i % RING_COLORS.length],
+        ring: (UTILS && UTILS.HUB_ACCENT[def.id]) || RING_ACCENTS[i % RING_ACCENTS.length],
         outAngle: a,
         x: Math.cos(a) * R_HUB,
         y: Math.sin(a) * R_HUB,
+        comingSoon: !!def.comingSoon,
+        planned: !!def.planned,
       };
       addNode(hub);
       hubs.push(hub);
       links.push({ source: core.id, target: hub.id, kind: 'spine' });
 
-      if (def.status === 'future' || !def.areas.length) {
-        // Dim open placeholder fans (~9–12 nodes) — airy, not dense clumps
+      // SA/AE etc: no areas — airy placeholder twigs only
+      if ((def.status === 'future' || def.planned) && !def.areas.length) {
         const twigs = 3;
         for (let i = 0; i < twigs; i++) {
           const a = hub.outAngle + ((i + 0.5) / twigs - 0.5) * 1.05;
@@ -324,7 +324,7 @@
             clientId: def.clientId,
             countryId: def.countryId,
             depth: 2,
-            status: 'active',
+            status: def.status === 'future' ? 'future' : 'active',
             r: NODE_SCREEN_R,
           };
           addNode(areaNode);
@@ -342,7 +342,7 @@
             clientId: def.clientId,
             countryId: def.countryId,
             depth: def.areaHub ? 2 : 3,
-            status: 'active',
+            status: def.status === 'future' ? 'future' : 'active',
             r: NODE_SCREEN_R,
             address: loc.address,
           };
@@ -425,6 +425,18 @@
     links.forEach((l) => {
       if (l.kind === 'spine' || l.kind === 'leaf') return;
       addArticulations(l.source, l.target);
+    });
+
+    // Roll up alerts onto sites / areas / hubs
+    nodes.forEach((n) => {
+      if (n.type === 'machine' || n.type === 'branch' || n.type === 'enterprise' || n.type === 'artic') return;
+      if (!UTILS) {
+        n.alertCount = 0;
+        return;
+      }
+      const r = UTILS.rollup(n, childrenOf);
+      n.alertCount = r.alerts;
+      n.rollup = r;
     });
   }
 
@@ -797,14 +809,17 @@
           event.stopPropagation();
           onNodeClick(d);
         })
-        .on('mouseenter', (_, d) => {
+        .on('mouseenter', (event, d) => {
           hoverId = d.id;
           rootPathIds = new Set(pathToRoot(d.id));
           paintLod();
+          showTooltip(event, d);
         })
+        .on('mousemove', (event, d) => showTooltip(event, d))
         .on('mouseleave', () => {
           hoverId = null;
           rootPathIds = new Set();
+          hideTooltip();
           paintLod();
         });
 
@@ -840,15 +855,46 @@
   }
 
   function paintLod() {
+    const focusPath = new Set(pathToRoot(focusNodeId));
+    const focusHubId =
+      nodeById.get(focusNodeId)?.type === 'hub'
+        ? focusNodeId
+        : nodeById.get(focusNodeId)?.hubId;
+    const accent = UTILS ? UTILS.accentFor(focusHubId) : null;
+
     gNodes.selectAll('g.node').each(function (d) {
       const g = d3.select(this);
       g.style('display', d.draw ? null : 'none');
-      g.style('opacity', d.draw ? d.lodAlpha : 0);
+      let op = d.draw ? d.lodAlpha : 0;
+      // Unrelated branches dim to ~25% when drilled
+      if (!overviewMode && d.draw && !focusPath.has(d.id) && !d.preview) {
+        const related =
+          d.hubId === focusHubId ||
+          d.id === focusHubId ||
+          (d.parentId && focusPath.has(d.parentId));
+        if (!related) op = Math.min(op, 0.25);
+      }
+      g.style('opacity', op);
       g.classed('is-focus', focusNodeId === d.id || (!overviewMode && expandedPath.has(d.id) && d.type === 'hub'));
       g.classed('is-hover', hoverId === d.id);
+      g.classed('has-alert', !!(d.alertCount > 0 || d.alert));
       const label = g.select('text.node-label');
       if (!label.empty()) {
         label.style('opacity', d.labelOn ? 1 : 0).style('display', d.labelOn ? null : 'none');
+      }
+      // Alert count badge
+      let badge = g.select('text.alert-badge');
+      if (d.alertCount > 0 && d.draw && (d.type === 'hub' || d.type === 'area' || d.type === 'location')) {
+        if (badge.empty()) {
+          badge = g
+            .append('text')
+            .attr('class', 'alert-badge')
+            .attr('dy', '-0.7em')
+            .attr('dx', '0.85em');
+        }
+        badge.text(String(d.alertCount)).style('display', null);
+      } else if (!badge.empty()) {
+        badge.style('display', 'none');
       }
       if (d.type === 'machine' && d.alert && !reduceMotion) {
         g.select('.pulse-ring').attr('opacity', 0.55);
@@ -863,12 +909,14 @@
       // Hide core→hub spines when drilled in (no long line under hub)
       let show = !!(s?.draw && t?.draw);
       if (d.kind === 'spine' && !overviewMode) show = false;
-      const onPath = rootPathIds.has(d.source) && rootPathIds.has(d.target);
-      d3.select(this)
-        .style('display', show ? null : 'none')
+      const onPath = focusPath.has(d.source) && focusPath.has(d.target);
+      const el = d3.select(this);
+      el.style('display', show ? null : 'none')
         .classed('on-path', onPath)
-        .classed('dim', !!(s?.preview || t?.preview))
-        .style('opacity', show ? Math.min(s.lodAlpha, t.lodAlpha) * (d.kind === 'spine' ? 0.7 : 1) : 0);
+        .classed('dim', !!(s?.preview || t?.preview) || (!overviewMode && !onPath && show))
+        .style('opacity', show ? (onPath ? 0.9 : Math.min(s.lodAlpha, t.lodAlpha) * (d.kind === 'spine' ? 0.7 : 0.35)) : 0);
+      if (onPath && accent) el.style('stroke', accent.stroke);
+      else el.style('stroke', null);
     });
 
     gArts.selectAll('circle.art-dot').each(function (d) {
@@ -887,7 +935,7 @@
       const lab = g.select('.bg-label');
       lab.classed('accent', !!focused).classed('muted', !focused && !overviewMode);
       // Keep ring colour class for accent fills
-      RING_COLORS.forEach((c) => lab.classed(c, d.ring === c));
+      RING_ACCENTS.forEach((c) => lab.classed(c, d.ring === c));
     });
   }
 
@@ -975,32 +1023,46 @@
     return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
   }
 
+  let flyGen = 0;
+
   function flyToTransform(target, done) {
+    flying = true;
+    flyGen += 1;
+    const myGen = flyGen;
+    svg.interrupt('fly');
+    const W = stage.clientWidth || 1200;
+    const H = stage.clientHeight || 800;
+    const startView = [(W / 2 - transform.x) / transform.k, (H / 2 - transform.y) / transform.k, W / transform.k];
+    const endView = [(W / 2 - target.x) / target.k, (H / 2 - target.y) / target.k, W / target.k];
     if (FLY_MS === 0) {
       transform = target;
       svg.call(zoomBehavior.transform, transform);
       applyLod();
       applyLabelCounterScale();
       renderBreadcrumb(focusNodeId);
+      flying = false;
       if (done) done();
       return;
     }
-    flying = true;
-    const start = { k: transform.k, x: transform.x, y: transform.y };
-    const end = { k: target.k, x: target.x, y: target.y };
-    const zt = d3.interpolate(start, end);
+    const iZoom = d3.interpolateZoom(startView, endView);
     svg
       .transition('fly')
       .duration(FLY_MS)
       .ease(d3.easeCubicInOut)
       .tween('cam', () => (t) => {
-        const v = zt(t);
-        transform = d3.zoomIdentity.translate(v.x, v.y).scale(v.k);
+        if (myGen !== flyGen) return;
+        const v = iZoom(t);
+        const k = W / v[2];
+        transform = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-v[0], -v[1]);
         gRoot.attr('transform', transform);
         applyLod();
         applyLabelCounterScale();
       })
-      .on('end interrupt', () => {
+      .on('interrupt', () => {
+        flying = false;
+      })
+      .on('end', () => {
+        if (myGen !== flyGen) return;
         transform = target;
         svg.call(zoomBehavior.transform, transform);
         applyLod();
@@ -1016,10 +1078,15 @@
       flyToGalaxy();
       return;
     }
+    // Coming soon / planned hubs: show card, still fly
+    if (node.type === 'hub' && (node.comingSoon || node.planned || node.status === 'future')) {
+      showStatusCard(node);
+    }
     setExpandedTo(node.id);
     focusPinned = true;
-    closeLeafCard();
+    if (!(node.comingSoon || node.planned)) closeLeafCard();
     applyLod();
+    growFocusedChildren(node);
     flyToTransform(fitTransform(subtreeExtent(node), node));
   }
 
@@ -1101,15 +1168,101 @@
     renderBreadcrumb(id);
   }
 
+  function growFocusedChildren(node) {
+    if (reduceMotion || !gNodes) return;
+    const kids = (childrenOf.get(node.id) || []).filter((c) => c.type !== 'branch');
+    kids.forEach((c, i) => {
+      const sel = gNodes.select(`[data-id="${c.id}"]`);
+      if (sel.empty()) return;
+      sel
+        .interrupt()
+        .attr('transform', `translate(${c.x},${c.y}) scale(0.4)`)
+        .style('opacity', 0)
+        .transition()
+        .delay(i * 40)
+        .duration(280)
+        .ease(d3.easeCubicOut)
+        .attr('transform', `translate(${c.x},${c.y}) scale(1)`)
+        .style('opacity', c.lodAlpha ?? 1);
+    });
+  }
+
+  function showStatusCard(hub) {
+    const title = document.getElementById('leaf-card-title');
+    const body = document.getElementById('leaf-card-body');
+    title.textContent = hub.bgLabel || hub.label;
+    body.replaceChildren();
+    const childCount = (childrenOf.get(hub.id) || []).filter((c) => c.type === 'area' || c.type === 'location').length;
+    const rows = hub.comingSoon
+      ? [
+          ['Status', 'Coming soon'],
+          ['Sites', String(childCount || 'reserved')],
+          ['Note', 'Pilot hardware reserved — go-live pending'],
+        ]
+      : [
+          ['Status', 'Planned'],
+          ['Note', 'Expansion roadmap — no live machines yet'],
+        ];
+    rows.forEach(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'card-row';
+      const kk = document.createElement('span');
+      kk.className = 'k';
+      kk.textContent = k;
+      const vv = document.createElement('span');
+      vv.className = 'v';
+      vv.textContent = v;
+      row.append(kk, vv);
+      body.appendChild(row);
+    });
+    document.getElementById('leaf-card-task').hidden = true;
+    leafCard.hidden = false;
+    leafCard.dataset.accent = hub.ring || 'teal';
+  }
+
+  function showRollupCard(node) {
+    if (!UTILS) return;
+    const r = UTILS.rollup(node, childrenOf);
+    const title = document.getElementById('leaf-card-title');
+    const body = document.getElementById('leaf-card-body');
+    title.textContent = node.label || node.bgLabel;
+    body.replaceChildren();
+    UTILS.kpiRows(r).forEach(([k, v]) => {
+      const row = document.createElement('div');
+      row.className = 'card-row';
+      const kk = document.createElement('span');
+      kk.className = 'k';
+      kk.textContent = k;
+      const vv = document.createElement('span');
+      vv.className = 'v';
+      vv.textContent = v;
+      row.append(kk, vv);
+      body.appendChild(row);
+    });
+    document.getElementById('leaf-card-task').hidden = true;
+    leafCard.hidden = false;
+    const hubId = node.type === 'hub' ? node.id : node.hubId;
+    leafCard.dataset.accent = (UTILS.HUB_ACCENT[hubId] || node.ring || 'teal');
+  }
+
   function onNodeClick(d) {
-    if (flying) return;
-    if (d.status === 'future') return;
+    // Interruptible: allow click mid-flight to redirect
+    if (d.status === 'future' && d.type !== 'hub') return;
     if (d.type === 'branch') {
       setExpandedTo(d.machineId);
       focusPinned = true;
       applyLod();
       showLeafCard(d);
       renderBreadcrumb(d.machineId);
+      return;
+    }
+    if (d.type === 'hub' && (d.comingSoon || d.planned || d.status === 'future')) {
+      flyToNode(d);
+      return;
+    }
+    if (d.type === 'area' || d.type === 'location' || d.type === 'hub') {
+      flyToNode(d);
+      if (d.type !== 'hub' || d.status === 'active') showRollupCard(d);
       return;
     }
     flyToNode(d);
@@ -1133,9 +1286,13 @@
       row.append(kk, vv);
       body.appendChild(row);
     });
-    document.getElementById('leaf-card-task').onclick = () =>
+    const taskBtn = document.getElementById('leaf-card-task');
+    taskBtn.hidden = false;
+    taskBtn.onclick = () =>
       openTask(m, branchNode.branchKey === 'technical' ? 'technician' : 'operator');
     leafCard.hidden = false;
+    const hubId = branchNode.hubId || m?.hubId;
+    leafCard.dataset.accent = (UTILS && UTILS.HUB_ACCENT[hubId]) || 'teal';
   }
 
   function branchRows(key, m) {
@@ -1345,10 +1502,38 @@
           return;
         }
         flyOut();
+        return;
+      }
+      if (e.key === 'Enter') {
+        const cur = nodeById.get(focusNodeId);
+        const kids = (childrenOf.get(focusNodeId) || []).filter((c) => c.status !== 'future' && c.type !== 'branch');
+        if (kids[0]) flyToNode(kids[0]);
+        else if (cur?.type === 'machine') {
+          const br = (childrenOf.get(cur.id) || [])[0];
+          if (br) onNodeClick(br);
+        }
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const cur = nodeById.get(focusNodeId);
+        if (!cur) return;
+        if (cur.type === 'hub' || overviewMode) {
+          const idx = hubs.findIndex((h) => h.id === (cur.type === 'hub' ? cur.id : focusNodeId));
+          const next = hubs[(idx + (e.key === 'ArrowRight' ? 1 : -1) + hubs.length) % hubs.length];
+          if (next) flyToNode(next);
+          return;
+        }
+        const siblings = (childrenOf.get(cur.parentId) || []).filter((c) => c.type === cur.type);
+        const si = siblings.findIndex((s) => s.id === cur.id);
+        if (si < 0 || siblings.length < 2) return;
+        const nxt = siblings[(si + (e.key === 'ArrowRight' ? 1 : -1) + siblings.length) % siblings.length];
+        if (nxt) flyToNode(nxt);
       }
     });
     window.addEventListener('resize', () => {
       resizeParticles();
+      if (signalRunner) signalRunner.resize();
       if (!flying) {
         if (overviewMode) {
           transform = fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id));
@@ -1357,6 +1542,56 @@
         applyLod();
       }
     });
+  }
+
+  const tooltipEl = document.getElementById('map-tooltip');
+  function showTooltip(event, d) {
+    if (!tooltipEl || !d || d.type === 'enterprise') return;
+    let stat = '';
+    if (d.rollup) stat = `${d.rollup.online}/${d.rollup.total} online · ${d.rollup.alerts} alerts`;
+    else if (d.type === 'machine') {
+      const alert = d.alert ? ` · ${d.alert}` : '';
+      stat = `${d.revenue?.today ?? '—'} KWD today${alert}`;
+    } else if (d.subtitle) stat = d.subtitle;
+    tooltipEl.hidden = false;
+    tooltipEl.innerHTML = `<strong>${d.label || d.bgLabel || d.id}</strong>${stat ? `<span>${stat}</span>` : ''}`;
+    const stageBox = stage.getBoundingClientRect();
+    tooltipEl.style.left = `${event.clientX - stageBox.left + 12}px`;
+    tooltipEl.style.top = `${event.clientY - stageBox.top + 12}px`;
+  }
+  function hideTooltip() {
+    if (tooltipEl) tooltipEl.hidden = true;
+  }
+
+  // Signals along machine → root
+  const signalCanvas = document.getElementById('tree-signals');
+  let signalRunner = null;
+  if (signalCanvas && POLISH) {
+    signalRunner = POLISH.createSignalRunner({
+      canvas: signalCanvas,
+      getNode: (id) => nodeById.get(id),
+      worldToScreen: (x, y) => worldToScreen(x, y),
+      reduceMotion,
+    });
+  }
+
+  function spawnPathSignal(machineId, kind) {
+    if (!signalRunner) return;
+    const path = pathToRoot(machineId);
+    const color =
+      kind === 'alert' ? 'rgba(255, 107, 122, 0.95)' : 'rgba(240, 248, 255, 0.9)';
+    signalRunner.spawnPath(path, color, true);
+  }
+
+  function startSignalTimers() {
+    if (reduceMotion || !signalRunner) return;
+    setInterval(() => {
+      if (!machines.length) return;
+      const m = machines[Math.floor(Math.random() * machines.length)];
+      if (m.status === 'planned' || m.status === 'future') return;
+      const kind = m.alert && Math.random() < 0.45 ? 'alert' : 'transaction';
+      spawnPathSignal(m.id, kind);
+    }, 2800);
   }
 
   function waitForIdle() {
@@ -1435,12 +1670,34 @@
     isLeafCardOpen: () => !leafCard.hidden,
     machineCount: () => machines.length,
     LOD,
+    getAlertCount: (id) => nodeById.get(id)?.alertCount || 0,
+    getRollup: (id) => nodeById.get(id)?.rollup || null,
+    isFlying: () => flying,
+    spawnPathSignal,
+    labelsOverlap: () => {
+      if (!POLISH) return false;
+      const els = [
+        ...document.querySelectorAll('text.node-label'),
+        ...document.querySelectorAll('text.bg-label'),
+      ];
+      return POLISH.labelBBoxOverlaps(els, 2);
+    },
+    sampleLabelOverlaps: async (ks) => {
+      const out = [];
+      for (const k of ks || [0.45, 1.0, 2.2]) {
+        setZoomK(k);
+        await new Promise((r) => requestAnimationFrame(r));
+        out.push({ k, overlap: window.APOS_TREE_MAP.labelsOverlap() });
+      }
+      return out;
+    },
   };
 
   buildWorld();
   initSvg();
   wireUi();
   resizeParticles();
+  if (signalRunner) signalRunner.resize();
   paintWorldOnce();
   setOverviewExpansion();
   transform = fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id));
@@ -1448,10 +1705,20 @@
   applyLod();
   applyLabelCounterScale();
   renderBreadcrumb(DATA.enterprise.id);
+  startSignalTimers();
 
   requestAnimationFrame(function loop(ts) {
     lastTs = ts;
     drawParticles(ts);
+    if (signalRunner) signalRunner.tick(ts);
+    // subtle node breathe
+    if (!reduceMotion && gNodes && overviewMode) {
+      const breathe = 1 + Math.sin(ts / 1400) * 0.012;
+      gNodes.selectAll('g.node-hub g.hub-visual').attr('transform', function () {
+        const inv = 1 / (transform.k || 1);
+        return `scale(${inv * breathe})`;
+      });
+    }
     requestAnimationFrame(loop);
   });
 })();
