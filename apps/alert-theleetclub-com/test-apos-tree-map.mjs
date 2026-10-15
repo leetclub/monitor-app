@@ -10,7 +10,7 @@ import { chromium, firefox } from 'playwright';
 import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
-const BASE_URL = 'http://localhost:8767/apos-tree-map.html';
+const BASE_URL = process.env.TREE_MAP_URL || 'http://127.0.0.1:8777/apos-tree-map.html';
 const ARTIFACTS_DIR = join(
   process.env.HOME || process.env.USERPROFILE,
   '.cursor',
@@ -71,7 +71,10 @@ async function capture(browserType, browserName) {
     window.APOS_TREE_MAP.setZoomK(Math.max(window.APOS_TREE_MAP.getTransform().k, need));
   });
   await delay(120);
-  await page.locator('[data-id="m-ku-1::revenue"]').click({ force: true });
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-id="m-ku-1::revenue"]');
+    if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
   await delay(300);
   console.log('3. tree-leaf-card');
   await shot(page, 'tree-leaf-card', browserName);
@@ -87,8 +90,8 @@ async function capture(browserType, browserName) {
   // Side-by-side compares (chromium only writes compare-* once)
   if (browserName === 'chromium') {
     const pairs = [
-      ['tree-full-chromium.png', 'f_16.jpg', 'compare-full.png'],
-      ['tree-hub-chromium.png', 'f_02.jpg', 'compare-hub.png'],
+      ['tree-full-chromium.png', 'grid.jpg', 'compare-full.png'],
+      ['tree-hub-chromium.png', 'f_03.jpg', 'compare-hub.png'],
       ['tree-leaf-card-chromium.png', 'f_12.jpg', 'compare-leaf.png'],
     ];
     for (const [ours, refName, out] of pairs) {
@@ -96,12 +99,11 @@ async function capture(browserType, browserName) {
       const right = existsSync(join(ASSETS, refName))
         ? join(ASSETS, refName)
         : join(REF_DIR, 'ref-01.png');
-      // Compose with ffmpeg hstack when possible
       const outPath = join(ARTIFACTS_DIR, out);
       try {
         const { execSync } = await import('child_process');
         execSync(
-          `ffmpeg -y -i "${left}" -i "${right}" -filter_complex "[0:v]scale=960:-1[a];[1:v]scale=960:-1[b];[a][b]hstack=inputs=2" "${outPath}"`,
+          `ffmpeg -y -i "${left}" -i "${right}" -filter_complex "[0:v]scale=-1:540[a];[1:v]scale=-1:540[b];[a][b]hstack=inputs=2" -update 1 "${outPath}"`,
           { stdio: 'pipe' }
         );
         console.log(`   📸 ${outPath}`);
@@ -210,7 +212,10 @@ async function runTests(browserType, browserName) {
     await page.evaluate(() => {
       window.APOS_TREE_MAP.setZoomK(Math.max(window.APOS_TREE_MAP.getTransform().k, window.APOS_TREE_MAP.LOD.branch.draw * 1.2));
     });
-    await page.locator('[data-id="m-ku-1::stock"]').click({ force: true });
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-id="m-ku-1::stock"]');
+      if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     await delay(200);
     if (!(await page.evaluate(() => window.APOS_TREE_MAP.isLeafCardOpen()))) throw new Error('no card');
     await page.locator('#leaf-card-task').click();
