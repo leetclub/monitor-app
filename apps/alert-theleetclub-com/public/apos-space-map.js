@@ -315,6 +315,8 @@
   let hoverId = null;
   let rootPathIds = new Set();
   let focusNodeId = DATA.enterprise.id;
+  /** Ancestors + focus: only these nodes may reveal their full child trees */
+  let expandedPath = new Set([DATA.enterprise.id]);
 
   function initSvg() {
     svg.selectAll('*').remove();
@@ -434,7 +436,28 @@
     return Math.hypot(sx - cx, sy - cy);
   }
 
-  /** Update draw/label flags from current k — no layout changes */
+  function pathToRoot(id) {
+    const path = [];
+    let cur = nodeById.get(id);
+    while (cur) {
+      path.push(cur.id);
+      cur = cur.parentId ? nodeById.get(cur.parentId) : null;
+    }
+    return path;
+  }
+
+  function setExpandedTo(nodeId) {
+    expandedPath = new Set(pathToRoot(nodeId));
+    focusNodeId = nodeId;
+  }
+
+  /**
+   * LOD + expansion:
+   * - Zoom gates how deep you're allowed to see.
+   * - Only the expanded path (clicked node + ancestors) reveals full child trees.
+   * - Siblings stay collapsed stars; nearby non-expanded parents may show a faint
+   *   one-level preview (never a full deep tree).
+   */
   function applyLod() {
     const k = transform.k;
     const [vcx, vcy] = viewportCenterWorld();
@@ -443,24 +466,66 @@
     nodes.forEach((n) => {
       const lod = LOD[n.type] || LOD.location;
       const dist = Math.hypot(n.x - vcx, n.y - vcy);
-      const inVicinity = dist < viewR * 1.35 || n.type === 'enterprise' || n.type === 'country';
-      const pastDraw = k >= lod.draw;
-      n.draw = pastDraw && (inVicinity || n.depth <= 2 || k < lod.draw * 3);
-      // always keep shallow nodes drawable when zoomed out
-      if (n.depth <= 1) n.draw = k >= lod.draw;
-      if (n.depth === 2 && k >= lod.draw * 0.7) n.draw = true;
-      if (n.status === 'future' && n.depth > 1) n.draw = k >= lod.draw && k < 3;
+      const kOk = k >= lod.draw;
+      n.preview = false;
 
-      const labelOk = k >= lod.label && k <= lod.labelMax;
-      const near = nodeScreenDistToCenter(n) < Math.min(stage.clientWidth, stage.clientHeight) * 0.42;
-      n.labelOn = n.draw && labelOk && (near || n.depth <= 1 || (n.depth === 2 && k < 2));
+      // Shallow galaxy layer: always zoom-gated, never needs expansion
+      if (n.depth <= 2) {
+        n.draw = kOk || (n.depth <= 1 && k >= lod.draw * 0.5);
+        if (n.status === 'future' && n.depth > 1) n.draw = kOk && k < 4;
+        let a = 1;
+        if (k < lod.draw * 1.3) a = Math.max(0.2, (k - lod.draw * 0.4) / (lod.draw * 0.9));
+        n.lodAlpha = n.status === 'future' ? a * 0.4 : a;
+        const labelOk = k >= lod.label && k <= lod.labelMax;
+        const near = nodeScreenDistToCenter(n) < Math.min(stage.clientWidth, stage.clientHeight) * 0.45;
+        n.labelOn = n.draw && labelOk && (near || n.depth <= 1 || (n.depth === 2 && k < 2.5));
+        return;
+      }
 
-      // soft fade near thresholds
-      let a = 1;
-      if (k < lod.draw * 1.4) a = Math.max(0.15, (k - lod.draw * 0.5) / (lod.draw * 0.9));
-      if (n.depth >= 3 && dist > viewR) a *= 0.35;
-      n.lodAlpha = Math.max(0, Math.min(1, a));
-      if (n.status === 'future') n.lodAlpha *= 0.4;
+      const onPath = expandedPath.has(n.id);
+      const parentOnPath = n.parentId && expandedPath.has(n.parentId);
+
+      // Full reveal: node itself on path, or direct child of an expanded ancestor
+      if (onPath || parentOnPath) {
+        n.draw = kOk;
+        let a = 1;
+        if (k < lod.draw * 1.35) a = Math.max(0.2, (k - lod.draw * 0.45) / (lod.draw * 0.9));
+        if (dist > viewR * 1.5) a *= 0.45;
+        n.lodAlpha = a;
+        const labelOk = k >= lod.label && k <= lod.labelMax;
+        const near = nodeScreenDistToCenter(n) < Math.min(stage.clientWidth, stage.clientHeight) * 0.45;
+        n.labelOn = n.draw && labelOk && (near || onPath);
+        return;
+      }
+
+      // One-level faint preview under a visible non-expanded parent (never deep trees)
+      const parent = n.parentId ? nodeById.get(n.parentId) : null;
+      const parentIsShallowOrExpanded =
+        parent && (parent.depth <= 2 || expandedPath.has(parent.parentId) || expandedPath.has(parent.id));
+      // Preview only the immediate children of collapsed siblings that sit under an
+      // expanded grandparent — and never for machines/branches (those need focus).
+      const allowPreview =
+        parent &&
+        parent.depth >= 2 &&
+        parent.depth <= 3 &&
+        n.depth <= 4 &&
+        n.type !== 'machine' &&
+        n.type !== 'branch' &&
+        (expandedPath.has(parent.parentId) || parent.depth === 2) &&
+        k >= lod.draw * 1.15 &&
+        dist < viewR * 1.1;
+
+      if (allowPreview) {
+        n.draw = true;
+        n.preview = true;
+        n.lodAlpha = 0.22;
+        n.labelOn = false;
+        return;
+      }
+
+      n.draw = false;
+      n.lodAlpha = 0;
+      n.labelOn = false;
     });
 
     paintLod();
@@ -470,16 +535,6 @@
     const inv = 1 / (transform.k || 1);
     gNodes.selectAll('g.label-layer').attr('transform', `scale(${inv})`);
     gNodes.selectAll('text.core-wordmark').attr('transform', `scale(${inv})`);
-  }
-
-  function pathToRoot(id) {
-    const path = [];
-    let cur = nodeById.get(id);
-    while (cur) {
-      path.push(cur.id);
-      cur = cur.parentId ? nodeById.get(cur.parentId) : null;
-    }
-    return path;
   }
 
   function setHover(id) {
@@ -732,18 +787,20 @@
   }
 
   function flyToNode(node) {
-    focusNodeId = node.id;
+    setExpandedTo(node.id);
     focusPinned = true;
     closeBranchCard();
+    applyLod(); // collapse previous sibling trees before camera moves
     const bbox = subtreeExtent(node);
     flyToTransform(fitTransform(bbox, node));
   }
 
   function flyToGalaxy() {
-    focusNodeId = DATA.enterprise.id;
+    setExpandedTo(DATA.enterprise.id);
     focusPinned = true;
     closeBranchCard();
     closeTerminal();
+    applyLod();
     flyToTransform(fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id)));
   }
 
@@ -819,9 +876,11 @@
     if (flying) return;
     if (d.status === 'future' && d.depth > 1) return;
     if (d.type === 'branch') {
-      focusNodeId = d.machineId;
+      setExpandedTo(d.machineId);
+      focusPinned = true;
+      applyLod();
       showBranchCard(d);
-      updateBreadcrumbFromView();
+      renderBreadcrumb(d.machineId);
       return;
     }
     if (d.type === 'machine' && transform.k >= LOD.branch.draw * 0.85) {
@@ -1242,6 +1301,8 @@
     },
     isNodeDrawn,
     visibleDrawnTypes,
+    getExpandedPath: () => [...expandedPath],
+    isExpanded: (id) => expandedPath.has(id),
     openTerminal: (machineId, role) => {
       const m = nodeById.get(machineId);
       if (m) openTerminalForMachine(m, role || 'operator');

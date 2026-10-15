@@ -212,6 +212,37 @@ async function runTests(browserType, browserName) {
     if (report.length) throw new Error(`misplaced labels: ${JSON.stringify(report.slice(0, 5))}`);
   });
 
+  await test('clicking a machine expands only that location path (not sibling locations)', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    // Fly into KU-3 Engineering under loc-ku-coba
+    await flyTo(page, 'm-ku-3');
+    const state = await page.evaluate(() => {
+      const drawn = (id) => window.APOS_SPACE_MAP.isNodeDrawn(id);
+      return {
+        focus: window.APOS_SPACE_MAP.getFocus(),
+        expanded: window.APOS_SPACE_MAP.getExpandedPath(),
+        ku3: drawn('m-ku-3'),
+        ku1: drawn('m-ku-1'), // sibling machine same location — ok
+        mew1: drawn('m-mew-1'), // other location — must NOT be drawn
+        jg21: drawn('m-jg2-1'),
+        mar1: drawn('m-mar-1'),
+        ee1: drawn('m-ee-1'),
+        locCoba: drawn('loc-ku-coba'),
+        locMew: drawn('loc-mew-zahra'),
+      };
+    });
+    if (state.focus.id !== 'm-ku-3' && state.focus.machineId !== 'm-ku-3') {
+      throw new Error(`expected focus m-ku-3, got ${JSON.stringify(state.focus)}`);
+    }
+    if (!state.ku3) throw new Error('KU-3 should be drawn');
+    if (state.mew1 || state.jg21 || state.mar1 || state.ee1) {
+      throw new Error(`other-location machines leaked: ${JSON.stringify(state)}`);
+    }
+    // sibling location hub may exist as collapsed star, but not its machines
+    if (state.locMew && state.mew1) throw new Error('MEW location expanded incorrectly');
+  });
+
   await test('wheel zoom-out after drill reveals siblings and other brands', async () => {
     await page.evaluate(() => window.APOS_SPACE_MAP.reset());
     await waitIdle(page);

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APOS Tree Map | Leet Alert</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="apos-tree-map.css">
+  <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+  <div class="tree-app" id="tree-app">
+    <header class="tree-top">
+      <div class="brand-mark" aria-label="APOS">
+        <span class="brand-word">APOS</span>
+        <span class="brand-sub">operations tree</span>
+      </div>
+      <div class="view-toggle" role="tablist" aria-label="View mode">
+        <button type="button" class="toggle-btn active" data-view="map" role="tab" aria-selected="true">Map</button>
+        <button type="button" class="toggle-btn" data-view="dashboards" role="tab" aria-selected="false">Dashboards</button>
+      </div>
+    </header>
+
+    <main class="tree-stage" id="tree-stage">
+      <canvas id="tree-particles" class="tree-particles" aria-hidden="true"></canvas>
+      <svg id="tree-svg" class="tree-svg" role="img" aria-label="APOS hierarchy tree map"></svg>
+      <div class="zoom-controls" aria-label="Zoom">
+        <button type="button" class="zoom-btn" data-action="zoom-in" title="Zoom in">+</button>
+        <button type="button" class="zoom-btn" data-action="zoom-out" title="Zoom out">−</button>
+        <button type="button" class="zoom-btn" data-action="reset" title="Full map">○</button>
+      </div>
+      <div class="dashboards-placeholder" id="dashboards-view" hidden>
+        <p>Dashboards view — wire live panels here.</p>
+      </div>
+    </main>
+
+    <nav class="crumb-pill" aria-label="Hierarchy navigation">
+      <button type="button" class="nav-chevron" data-dir="prev" title="Go back" aria-label="Previous">‹</button>
+      <ol class="crumb-list" id="crumb-list"></ol>
+      <button type="button" class="nav-chevron" data-dir="next" title="Advance" aria-label="Next">›</button>
+    </nav>
+
+    <aside class="leaf-card" id="leaf-card" hidden>
+      <button type="button" class="card-close" id="leaf-card-close" aria-label="Close">&times;</button>
+      <h3 class="card-title" id="leaf-card-title"></h3>
+      <div class="card-body" id="leaf-card-body"></div>
+      <button type="button" class="card-task-btn" id="leaf-card-task">New task →</button>
+    </aside>
+
+    <div class="task-overlay" id="task-overlay" hidden>
+      <div class="task-card" role="dialog" aria-modal="true" aria-labelledby="task-title">
+        <div class="task-chrome">
+          <h4 class="task-title" id="task-title">New task</h4>
+          <button type="button" class="task-close" id="task-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="task-body">
+          <label class="task-label" for="task-assignee">Assignee</label>
+          <input type="text" id="task-assignee" class="task-input" readonly>
+          <label class="task-label" for="task-desc">Task</label>
+          <textarea id="task-desc" class="task-textarea" rows="4" placeholder="Describe the field task in plain language…"></textarea>
+          <div class="task-actions">
+            <button type="button" class="task-send" id="task-send">Send</button>
+          </div>
+          <div class="task-log" id="task-log" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="apos-space-map-data.js"></script>
+  <script src="apos-tree-map.js"></script>
+</body>
+</html>
