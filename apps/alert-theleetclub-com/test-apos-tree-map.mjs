@@ -128,6 +128,59 @@ async function capture(browserType, browserName) {
     }
   }
 
+  // Level stills + pan-zoom stress (chromium canonical names)
+  if (browserName === 'chromium') {
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await waitMapReady(page);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-full.png'), fullPage: false });
+    console.log('   📸 level-full.png');
+
+    await flyTo(page, 'client-leet');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-hub.png'), fullPage: false });
+    console.log('   📸 level-hub.png');
+
+    await flyTo(page, 'area-ee-farwaniya');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-area.png'), fullPage: false });
+    console.log('   📸 level-area.png');
+
+    await flyTo(page, 'loc-ee-farwaniya');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-site.png'), fullPage: false });
+    console.log('   📸 level-site.png');
+
+    await flyTo(page, 'm-ee-4');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-machine.png'), fullPage: false });
+    console.log('   📸 level-machine.png');
+
+    await page.evaluate(() => {
+      const need = window.APOS_TREE_MAP.LOD.branch.draw * 1.15;
+      window.APOS_TREE_MAP.setZoomK(Math.max(window.APOS_TREE_MAP.getTransform().k, need));
+    });
+    await delay(100);
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-id="m-ee-4::revenue"]') || document.querySelector('[data-id^="m-ee-4::"]');
+      if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await delay(280);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-branch-card.png'), fullPage: false });
+    console.log('   📸 level-branch-card.png');
+
+    await page.evaluate(() => window.APOS_TREE_MAP.closeLeafCard?.());
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await page.evaluate(() => window.APOS_TREE_MAP.setZoomK(2.6));
+    await delay(50);
+    await flyTo(page, 'client-park');
+    await page.evaluate(() => window.APOS_TREE_MAP.setZoomK(1.4));
+    await delay(40);
+    await page.evaluate(() => window.APOS_TREE_MAP.setZoomK(0.35));
+    await delay(80);
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'pan-zoom-stress.png'), fullPage: false });
+    console.log('   📸 pan-zoom-stress.png');
+  }
+
   await browser.close();
 }
 
@@ -334,6 +387,92 @@ async function runTests(browserType, browserName) {
     if (bad.length) throw new Error(`label overlaps: ${JSON.stringify(bad)}`);
   });
 
+  await test('Farwaniya drill keeps continuous parent & child links', async () => {
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    // Click Farwaniya area (same as user drill)
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-id="area-ee-farwaniya"]');
+      if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      else window.APOS_TREE_MAP.flyTo('area-ee-farwaniya');
+    });
+    await waitIdle(page);
+    const info = await page.evaluate(() => {
+      const api = window.APOS_TREE_MAP;
+      const focus = api.getFocus();
+      const area = 'area-ee-farwaniya';
+      const areaPos = api.nodeScreenPos(area);
+      const links = api.getIncidentDrawnLinks(area);
+      const parentLink = links.find((L) => L.source === 'client-ee' || L.target === 'client-ee');
+      const childLinks = links.filter((L) => L.source === area || L.target === area)
+        .filter((L) => L.source !== 'client-ee' && L.target !== 'client-ee');
+      const within2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= 2.05;
+      const parentOk = parentLink && areaPos && (
+        (parentLink.source === area && within2(parentLink.sourceScreen, areaPos)) ||
+        (parentLink.target === area && within2(parentLink.targetScreen, areaPos))
+      );
+      // Parent endpoint should be exact hub centre too
+      const hubPos = api.nodeScreenPos('client-ee');
+      const parentHubOk = parentLink && hubPos && (
+        (parentLink.source === 'client-ee' && within2(parentLink.sourceScreen, hubPos)) ||
+        (parentLink.target === 'client-ee' && within2(parentLink.targetScreen, hubPos))
+      );
+      const childOk = childLinks.length > 0 && childLinks.every((L) => {
+        const s = api.nodeScreenPos(L.source);
+        const t = api.nodeScreenPos(L.target);
+        return s && t && within2(L.sourceScreen, s) && within2(L.targetScreen, t);
+      });
+      return {
+        focus,
+        parentOk: !!(parentOk && parentHubOk),
+        childOk,
+        childCount: childLinks.length,
+        parentLink: parentLink ? { s: parentLink.source, t: parentLink.target } : null,
+      };
+    });
+    if (info.focus.id !== 'area-ee-farwaniya') throw new Error(`focus ${JSON.stringify(info.focus)}`);
+    if (!info.parentOk) throw new Error(`parent link not continuous to centres: ${JSON.stringify(info)}`);
+    if (!info.childOk) throw new Error(`child links not continuous: ${JSON.stringify(info)}`);
+  });
+
+  await test('pan/zoom stress restores exact overview state', async () => {
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await delay(100);
+    const before = await page.evaluate(() => window.APOS_TREE_MAP.snapshotOverviewState());
+    if (!before.overview) throw new Error(`expected overview before: ${JSON.stringify(before)}`);
+    // Zoom in, fly/pan around, zoom out, return to overview
+    await page.evaluate(() => window.APOS_TREE_MAP.setZoomK(2.4));
+    await delay(60);
+    await page.evaluate(() => window.APOS_TREE_MAP.flyTo('client-ee'));
+    await waitIdle(page);
+    await page.evaluate(() => window.APOS_TREE_MAP.setZoomK(3.2));
+    await delay(40);
+    await page.evaluate(() => window.APOS_TREE_MAP.setZoomK(0.4));
+    await delay(80);
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    await delay(120);
+    const after = await page.evaluate(() => window.APOS_TREE_MAP.snapshotOverviewState());
+    if (!after.overview) throw new Error(`expected overview after: ${JSON.stringify(after)}`);
+    if (before.drawn.join('|') !== after.drawn.join('|')) {
+      throw new Error(`drawn set mismatch\nbefore=${before.drawn.join(',')}\nafter=${after.drawn.join(',')}`);
+    }
+    if (Math.abs(before.k - after.k) > 0.01 || Math.abs(before.x - after.x) > 2 || Math.abs(before.y - after.y) > 2) {
+      throw new Error(`transform mismatch before=${JSON.stringify({k:before.k,x:before.x,y:before.y})} after=${JSON.stringify({k:after.k,x:after.x,y:after.y})}`);
+    }
+    // Label positions within 2px (same node ids)
+    const byId = new Map(before.labels.map((l) => [l.id, l]));
+    const drifts = [];
+    for (const l of after.labels) {
+      const b = byId.get(l.id);
+      if (!b) { drifts.push({ id: l.id, missing: true }); continue; }
+      const d = Math.hypot(l.x - b.x, l.y - b.y);
+      if (d > 2.05) drifts.push({ id: l.id, d: Math.round(d * 10) / 10, text: l.text, before: {x:b.x,y:b.y}, after: {x:l.x,y:l.y} });
+    }
+    if (drifts.length) throw new Error(`label drift: ${JSON.stringify(drifts.slice(0, 6))}`);
+  });
+
   await test('no console errors', async () => {
     const relevant = consoleErrors.filter(
       (e) => !e.includes('favicon') && !e.includes('/api/') && !e.includes('Failed to load resource')
@@ -408,6 +547,13 @@ async function recordFlow() {
       console.log(`   trim start ${ss.toFixed(2)}s`);
       execSync(`ffmpeg -y -ss ${ss} -i "${raw}" -t 18 -c:v libvpx -b:v 1.4M -an "${dest}"`, { stdio: 'pipe' });
       console.log(`   🎬 ${dest}`);
+      const mp4 = join(ARTIFACTS_DIR, 'compare-flow.mp4');
+      try {
+        execSync(`ffmpeg -y -i "${dest}" -c:v libx264 -pix_fmt yuv420p -an "${mp4}"`, { stdio: 'pipe' });
+        console.log(`   🎬 ${mp4}`);
+      } catch (e2) {
+        console.warn('compare-flow.mp4 encode skipped', e2.message || e2);
+      }
     } catch (e) {
       console.warn('trim/encode failed, raw copy', e.message || e);
       copyFileSync(raw, dest);

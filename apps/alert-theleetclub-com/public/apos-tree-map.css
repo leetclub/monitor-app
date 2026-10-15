@@ -77,7 +77,17 @@ body {
 .brand-mark {
   display: flex;
   flex-direction: column;
-  gap: 0.05rem;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+.brand-logo {
+  height: 28px;
+  width: auto;
+  display: block;
+  /* Official logo is black ink on transparent — invert to white on indigo */
+  filter: invert(1);
+  opacity: 0.95;
 }
 
 .brand-word {
@@ -89,11 +99,11 @@ body {
 }
 
 .brand-sub {
-  font-size: 0.58rem;
-  letter-spacing: 0.16em;
+  font-size: 0.55rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  text-indent: 0.16em;
+  margin-left: 2px;
 }
 
 .view-toggle {

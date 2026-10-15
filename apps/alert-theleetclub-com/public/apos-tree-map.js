@@ -571,6 +571,16 @@
       });
     });
     focusNodeId = DATA.enterprise.id;
+    // Deterministic overview: clear transient grow / label caches so pan/zoom
+    // stress returns to the identical label layout.
+    nodes.forEach((n) => {
+      n.grow = 1;
+      n._labelSx = undefined;
+      n._labelSy = undefined;
+      n._labelAng = undefined;
+      n.labelOx = 0;
+      n.labelOy = 18;
+    });
   }
 
   function setExpandedTo(nodeId) {
@@ -652,7 +662,10 @@
       .on('zoom', (event) => {
         transform = event.transform;
         gRoot.attr('transform', transform);
-        if (event.sourceEvent) focusPinned = false;
+        // Pan never changes expansion; scale changes (wheel/buttons) may collapse
+        const src = event.sourceEvent;
+        const isPan = !!(src && (src.type === 'mousemove' || src.type === 'pointermove' || src.type === 'touchmove'));
+        reconcileViewState(isPan ? 'pan' : 'zoom');
         applyLod();
         applyLabelCounterScale();
         updateBreadcrumbFromView();
@@ -793,7 +806,7 @@
           n.preview = true;
           n.lodAlpha = 0.3;
         } else if (pathToRoot(focusNodeId).includes(n.id)) {
-          // Ancestor hub: invisible (stubs only) — no edge peek
+          // Ancestor hub: invisible disc; continuous parent link still fades to its centre
           n.draw = true;
           n.ancestorOnly = true;
           n.lodAlpha = 0;
@@ -836,7 +849,7 @@
 
       const onPath = expandedPath.has(n.id);
       if (onPath) {
-        // Ancestors above focus: draw faintly for stub links only
+        // Ancestors above focus: keep geometry for continuous fade links
         const isFocus = n.id === focus.id;
         const isChildOfFocus = n.parentId === focus.id;
         const underFocusHub =
@@ -1207,7 +1220,7 @@
           const cv = el.append('g').attr('class', 'core-visual');
           cv.append('circle').attr('class', 'core-glow').attr('r', 28);
           cv.append('circle').attr('class', 'core-disk').attr('r', 11);
-          cv.append('text').attr('class', 'core-wordmark').text('APOS');
+          cv.append('text').attr('class', 'core-wordmark').text('apos');
           el.append('circle').attr('class', 'hit-target').attr('r', 36);
         } else if (d.type === 'hub') {
           const hv = el.append('g').attr('class', 'hub-visual');
@@ -1430,10 +1443,12 @@
   let flyGen = 0;
 
   function flyToTransform(target, done) {
-    flying = true;
     flyGen += 1;
     const myGen = flyGen;
+    // Interrupt any prior flight first; only then mark flying so waitForIdle
+    // cannot resolve against a stale interrupt clearing the flag.
     svg.interrupt('fly');
+    flying = true;
     const W = stage.clientWidth || 1200;
     const H = stage.clientHeight || 800;
     const startView = [(W / 2 - transform.x) / transform.k, (H / 2 - transform.y) / transform.k, W / transform.k];
@@ -1444,7 +1459,7 @@
       applyLod();
       applyLabelCounterScale();
       renderBreadcrumb(focusNodeId);
-      flying = false;
+      if (myGen === flyGen) flying = false;
       if (done) done();
       return;
     }
@@ -1463,7 +1478,8 @@
         applyLabelCounterScale();
       })
       .on('interrupt', () => {
-        flying = false;
+        // Only the active generation may clear flying — a newer flyTo already owns it
+        if (myGen === flyGen) flying = false;
       })
       .on('end', () => {
         if (myGen !== flyGen) return;
@@ -1553,23 +1569,64 @@
     if (prev) prev.disabled = overviewMode && leafCard.hidden;
   }
 
+  /** Zoom thresholds — collapse depth cleanly; pan never mutates focus/expansion */
+  const ZOOM_OVERVIEW_K = 0.62;
+  const ZOOM_MIN_K = {
+    hub: 1.05,
+    area: 1.85,
+    location: 2.35,
+    machine: 2.7,
+    branch: 2.7,
+  };
+
+  function reconcileViewState(reason) {
+    const k = transform.k;
+    // Hard overview floor
+    if (k < ZOOM_OVERVIEW_K) {
+      if (!overviewMode || focusNodeId !== DATA.enterprise.id) {
+        setOverviewExpansion();
+        focusPinned = false;
+      }
+      return;
+    }
+    if (reason === 'pan') {
+      // Pan: keep pinned focus + expansion; only LOD/labels refresh
+      return;
+    }
+    // Zoom: walk focus up while below level threshold
+    if (overviewMode) return;
+    let guard = 0;
+    while (guard++ < 8) {
+      const focus = nodeById.get(focusNodeId);
+      if (!focus || focus.type === 'enterprise') {
+        setOverviewExpansion();
+        focusPinned = false;
+        return;
+      }
+      const need = ZOOM_MIN_K[focus.type] || 1.2;
+      if (k >= need * 0.72) break;
+      if (focus.type === 'hub' || !focus.parentId) {
+        setOverviewExpansion();
+        focusPinned = false;
+        return;
+      }
+      const parent = nodeById.get(focus.parentId);
+      if (!parent || parent.type === 'enterprise') {
+        setOverviewExpansion();
+        focusPinned = false;
+        return;
+      }
+      setExpandedTo(parent.id);
+      focusPinned = true;
+    }
+  }
+
   function updateBreadcrumbFromView() {
-    if (flying || focusPinned) {
+    if (flying) {
       renderBreadcrumb(focusNodeId);
       return;
     }
-    // When zoomed out enough, treat as overview
-    if (transform.k < 0.55) {
-      if (!overviewMode) {
-        setOverviewExpansion();
-        applyLod();
-      }
-      renderBreadcrumb(DATA.enterprise.id);
-      return;
-    }
-    const id = nearestCenterNodeId();
-    focusNodeId = id;
-    renderBreadcrumb(id);
+    renderBreadcrumb(overviewMode ? DATA.enterprise.id : focusNodeId);
   }
 
   function growFocusedChildren(node) {
@@ -1877,11 +1934,15 @@
     log.textContent = `Task dispatched to ${(taskCtx.person?.name || 'assignee')}'s mobile inbox`;
   }
 
-  // ——— particle core (~400 dots, slow drift) ———
+  // ——— particle core (~2.5× larger galaxy + spiral drift) ———
   let pctx;
   let coreParticles = [];
   let dust = [];
   let lastTs = 0;
+  const aposWordmark = new Image();
+  aposWordmark.src = 'assets/apos-wordmark.png';
+  let aposWordmarkReady = false;
+  aposWordmark.onload = () => { aposWordmarkReady = true; };
 
   function resizeParticles() {
     const w = stage.clientWidth;
@@ -1894,21 +1955,30 @@
     pctx = particleCanvas.getContext('2d');
     pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    // Galaxy radius ≈ 18–22% of min viewport (was ~42px ≈ 5%)
+    const coreR = Math.max(72, Math.min(w, h) * 0.2);
     coreParticles = [];
-    for (let i = 0; i < 460; i++) {
+    const nCore = Math.floor(980 + coreR * 4);
+    for (let i = 0; i < nCore; i++) {
       const u = Math.random();
       const v = Math.random();
       const theta = 2 * Math.PI * u;
       const phi = Math.acos(2 * v - 1);
-      const rad = Math.pow(Math.random(), 0.5) * 42;
+      // Soft spiral arms: radius bias + angular twist
+      const arm = (i % 3) * ((2 * Math.PI) / 3);
+      const spiral = arm + theta * 0.35;
+      const rad = Math.pow(Math.random(), 0.55) * coreR;
       coreParticles.push({
-        ox: rad * Math.sin(phi) * Math.cos(theta),
-        oy: rad * Math.sin(phi) * Math.sin(theta),
-        oz: rad * Math.cos(phi),
-        r: 0.5 + Math.random() * 1.3,
-        pink: Math.random() < 0.22,
+        ox: rad * Math.sin(phi) * Math.cos(spiral),
+        oy: rad * Math.sin(phi) * Math.sin(spiral),
+        oz: rad * Math.cos(phi) * 0.55,
+        r: 0.45 + Math.random() * 1.55,
+        pink: Math.random() < 0.2,
         phase: Math.random() * Math.PI * 2,
-        speed: 0.15 + Math.random() * 0.35,
+        speed: 0.12 + Math.random() * 0.32,
+        spin: 0.08 + Math.random() * 0.18,
+        arm0: spiral,
+        rad0: rad,
       });
     }
     dust = [];
@@ -2041,7 +2111,7 @@
     const accent = focusHubId ? accentRgb((UTILS && UTILS.HUB_ACCENT[focusHubId]) || nodeById.get(focusHubId)?.ring || 'teal') : null;
     const localIds = new Set((focus ? localFrameNodes(focus) : []).map((n) => n.id));
 
-    // ——— Curved links (full for local; short faded stubs toward off-frame ancestors) ———
+    // ——— Curved links: always node-centre → node-centre; off-frame ends fade along length ———
     linkDrawStats = { count: 0, minOp: 1, maxOp: 0 };
     links.forEach((L) => {
       const s = nodeById.get(L.source);
@@ -2050,90 +2120,87 @@
       if (L.kind === 'spine') {
         if (!overviewMode) return;
         if (!s.draw || !t.draw) return;
-      } else {
-        if (!s.draw && !t.draw) return;
       }
-      // Never draw enterprise/core links when drilled (removes LEET→bottom spine)
+      // Never draw enterprise/core links when drilled
       if (!overviewMode && (s.type === 'enterprise' || t.type === 'enterprise')) return;
       if (!overviewMode && focus?.type === 'hub' && L.kind === 'spine') return;
 
       const sLocal = (localIds.has(s.id) || (overviewMode && s.draw && !s.preview)) && !s.ancestorOnly;
       const tLocal = (localIds.has(t.id) || (overviewMode && t.draw && !t.preview)) && !t.ancestorOnly;
-      const bothLocal = sLocal && tLocal;
-
-      // Skip pure ancestor–ancestor / off-frame links (they run to corners)
-      if (!overviewMode && !bothLocal) {
+      const onPath = focusPath.has(L.source) && focusPath.has(L.target);
+      // Parent on focus path may be ancestorOnly (off-frame) — still draw continuous fade
+      const sEndpoint = sLocal || onPath || (overviewMode && s.draw);
+      const tEndpoint = tLocal || onPath || (overviewMode && t.draw);
+      if (!overviewMode) {
         if (!sLocal && !tLocal) return;
-        // keep only if one end is local (will draw as stub)
+        if (!(sEndpoint && tEndpoint)) return;
+      } else if (!s.draw || !t.draw) {
+        return;
       }
 
       const a0 = screenOf(s);
       const b0 = screenOf(t);
-      const onPath = focusPath.has(L.source) && focusPath.has(L.target);
       const preview = !!(s.preview || t.preview);
       const future = s.status === 'future' || t.status === 'future';
-
-      let ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
-      let stub = false;
-      if (!overviewMode && !bothLocal) {
-        // Short faded stub from the local node toward the off-frame end
-        const localIsS = localIds.has(s.id) && !s.ancestorOnly;
-        const from = localIsS ? a0 : b0;
-        const to = localIsS ? b0 : a0;
-        const dx = to.x - from.x, dy = to.y - from.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const stubLen = Math.min(42, len * 0.22);
-        ax = from.x;
-        ay = from.y;
-        bx = from.x + (dx / len) * stubLen;
-        by = from.y + (dy / len) * stubLen;
-        stub = true;
-      }
+      const fadeRemote = !overviewMode && !(sLocal && tLocal);
 
       let op = onPath ? 0.9 : preview ? 0.28 : (L.kind === 'spine' ? 0.42 : 0.55);
-      if (stub) op = Math.min(op, 0.28);
+      if (fadeRemote) op = Math.max(op, 0.55);
       if (future && !onPath) op = Math.min(op, 0.32);
       if (op < 0.05) return;
-      if (!preview && !stub) {
+      if (!preview) {
         linkDrawStats.count++;
-        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op);
+        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, fadeRemote ? op * 0.35 : op);
         linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
       }
 
+      const ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
       const cc = curveControls(s, t, L.kind);
-      let c1x = cc.c1x * transform.k + transform.x;
-      let c1y = cc.c1y * transform.k + transform.y;
-      let c2x = cc.c2x * transform.k + transform.x;
-      let c2y = cc.c2y * transform.k + transform.y;
-      if (stub) {
-        c1x = ax + (bx - ax) * 0.35;
-        c1y = ay + (by - ay) * 0.35;
-        c2x = ax + (bx - ax) * 0.7;
-        c2y = ay + (by - ay) * 0.7;
-      }
-      pctx.beginPath();
-      pctx.moveTo(ax, ay);
-      pctx.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by);
+      const c1x = cc.c1x * transform.k + transform.x;
+      const c1y = cc.c1y * transform.k + transform.y;
+      const c2x = cc.c2x * transform.k + transform.x;
+      const c2y = cc.c2y * transform.k + transform.y;
+
       const fromHub = s.type === 'hub' || t.type === 'hub';
       const hubNode = s.type === 'hub' ? s : (t.type === 'hub' ? t : null);
       const firstHopRgb = hubNode ? accentRgb(hubNode.ring || 'teal') : null;
-      if (onPath && accent && !stub) {
-        pctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${op})`;
-        pctx.lineWidth = 2;
-        pctx.shadowColor = `rgba(${accent[0]},${accent[1]},${accent[2]},0.45)`;
-        pctx.shadowBlur = 0;
-      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview && !stub) {
-        pctx.strokeStyle = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},${Math.min(0.72, op + 0.1)})`;
-        pctx.lineWidth = 1.45;
-        pctx.shadowColor = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},0.28)`;
-        pctx.shadowBlur = 0;
-      } else {
-        pctx.strokeStyle = `rgba(255,255,255,${op})`;
-        pctx.lineWidth = L.kind === 'spine' ? 1.1 : stub ? 1.05 : 1.3;
-        pctx.shadowColor = 'rgba(255,255,255,0.2)';
-        pctx.shadowBlur = preview || stub ? 0 : 2;
+      let rgb = [255, 255, 255];
+      let lineW = L.kind === 'spine' ? 1.1 : 1.3;
+      if (onPath && accent) {
+        rgb = accent;
+        lineW = 2;
+      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview) {
+        rgb = firstHopRgb;
+        lineW = 1.45;
+        op = Math.min(0.72, op + 0.1);
       }
+
+      pctx.beginPath();
+      pctx.moveTo(ax, ay);
+      pctx.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by);
+      pctx.lineWidth = lineW;
       pctx.lineCap = 'round';
+      pctx.shadowBlur = 0;
+
+      if (fadeRemote) {
+        // Continuous centre-to-centre curve with length-wise alpha falloff toward off-frame end
+        const localIsS = sLocal;
+        const g = pctx.createLinearGradient(
+          localIsS ? ax : bx, localIsS ? ay : by,
+          localIsS ? bx : ax, localIsS ? by : ay
+        );
+        g.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`);
+        g.addColorStop(0.45, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op * 0.45})`);
+        g.addColorStop(0.78, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op * 0.12})`);
+        g.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+        pctx.strokeStyle = g;
+      } else {
+        pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
+        if (!preview) {
+          pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.28)`;
+          pctx.shadowBlur = 2;
+        }
+      }
       pctx.stroke();
       pctx.shadowBlur = 0;
     });
@@ -2230,20 +2297,33 @@
       r *= grow;
       const alpha = (n.lodAlpha || 1) * (n.preview ? 0.85 : 1);
       if (n.type === 'enterprise') {
-        const grd = pctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 40);
-        grd.addColorStop(0, 'rgba(255,255,255,0.55)');
-        grd.addColorStop(0.35, 'rgba(255,255,255,0.18)');
+        // Soft disc echo of the textured stamp motif behind the galaxy wordmark
+        const discR = Math.max(28, Math.min(stage.clientWidth, stage.clientHeight) * 0.045) * Math.max(0.85, Math.min(1.35, transform.k));
+        const grd = pctx.createRadialGradient(p.x, p.y, discR * 0.15, p.x, p.y, discR * 2.2);
+        grd.addColorStop(0, 'rgba(255,255,255,0.42)');
+        grd.addColorStop(0.4, 'rgba(210,200,255,0.14)');
         grd.addColorStop(1, 'rgba(255,255,255,0)');
         pctx.fillStyle = grd;
         pctx.beginPath();
-        pctx.arc(p.x, p.y, 40, 0, Math.PI * 2);
+        pctx.arc(p.x, p.y, discR * 2.2, 0, Math.PI * 2);
         pctx.fill();
-        pctx.fillStyle = 'rgba(255,255,255,0.95)';
-        pctx.font = '600 13px "Cormorant Garamond", Georgia, serif';
-        pctx.textAlign = 'center';
-        pctx.textBaseline = 'middle';
-        pctx.globalAlpha = overviewMode ? 0.9 : 0;
-        pctx.fillText('APOS', p.x, p.y);
+        pctx.globalAlpha = overviewMode ? 0.95 : 0;
+        if (aposWordmarkReady && aposWordmark.naturalWidth) {
+          const targetH = Math.max(48, Math.min(64, Math.min(stage.clientWidth, stage.clientHeight) * 0.055));
+          const aspect = aposWordmark.naturalWidth / aposWordmark.naturalHeight;
+          const tw = targetH * aspect;
+          const th = targetH;
+          pctx.save();
+          pctx.filter = 'invert(1)';
+          pctx.drawImage(aposWordmark, p.x - tw / 2, p.y - th / 2, tw, th);
+          pctx.restore();
+        } else {
+          pctx.fillStyle = 'rgba(255,255,255,0.96)';
+          pctx.font = '700 56px Manrope, "Segoe UI", system-ui, sans-serif';
+          pctx.textAlign = 'center';
+          pctx.textBaseline = 'middle';
+          pctx.fillText('apos', p.x, p.y);
+        }
         pctx.globalAlpha = 1;
         return;
       }
@@ -2390,29 +2470,39 @@
     const cx = transform.x;
     const cy = transform.y;
     const k = transform.k;
-    // Soft bloom behind core cloud
+    const coreR = Math.max(72, Math.min(w, h) * 0.2);
+    // Soft bloom behind enlarged galaxy (~2.5× prior)
     pctx.beginPath();
-    const coreBloom = pctx.createRadialGradient(cx, cy, 4 * k, cx, cy, 52 * k);
-    coreBloom.addColorStop(0, 'rgba(255,255,255,0.28)');
-    coreBloom.addColorStop(0.4, 'rgba(200,190,255,0.12)');
+    const bloomR = coreR * 1.15 * Math.max(0.9, Math.min(1.4, k));
+    const coreBloom = pctx.createRadialGradient(cx, cy, 6, cx, cy, bloomR);
+    coreBloom.addColorStop(0, 'rgba(255,255,255,0.32)');
+    coreBloom.addColorStop(0.35, 'rgba(200,190,255,0.14)');
     coreBloom.addColorStop(1, 'rgba(255,255,255,0)');
     pctx.fillStyle = coreBloom;
-    pctx.arc(cx, cy, 52 * k, 0, Math.PI * 2);
+    pctx.arc(cx, cy, bloomR, 0, Math.PI * 2);
     pctx.fill();
     for (const p of coreParticles) {
-      const ang = t * p.speed + p.phase;
-      const x = p.ox * Math.cos(ang * 0.3) - p.oz * Math.sin(ang * 0.3);
-      const y = p.oy + Math.sin(ang) * 1.5;
-      const sx = x * k + cx;
+      // Soft spiral drift: rotate in-plane + gentle radial breathe
+      const spin = t * (p.spin || 0.12) + p.phase;
+      const breathe = 1 + Math.sin(t * p.speed + p.phase) * 0.04;
+      const cos = Math.cos(spin * 0.55);
+      const sin = Math.sin(spin * 0.55);
+      const x0 = p.ox * breathe;
+      const y0 = p.oy * breathe;
+      const x = x0 * cos - y0 * sin;
+      const y = x0 * sin + y0 * cos + Math.sin(t * p.speed + p.phase) * 1.2;
+      const z = p.oz * Math.cos(spin * 0.25);
+      const sx = (x - z * 0.15) * k + cx;
       const sy = y * k + cy;
-      const alpha = 0.4 + 0.55 * (1 - Math.min(1, Math.hypot(p.ox, p.oy, p.oz) / 40));
+      const dist = Math.hypot(p.ox, p.oy, p.oz);
+      const alpha = 0.35 + 0.55 * (1 - Math.min(1, dist / (coreR * 0.95)));
       pctx.beginPath();
       pctx.fillStyle = p.pink
         ? `rgba(240, 170, 200, ${alpha})`
         : `rgba(255, 255, 255, ${alpha})`;
-      pctx.shadowColor = p.pink ? 'rgba(240,170,200,0.5)' : 'rgba(255,255,255,0.45)';
-      pctx.shadowBlur = 3;
-      pctx.arc(sx, sy, Math.max(0.7, p.r * Math.min(1.5, 0.6 + k * 0.18)), 0, Math.PI * 2);
+      pctx.shadowColor = p.pink ? 'rgba(240,170,200,0.45)' : 'rgba(255,255,255,0.4)';
+      pctx.shadowBlur = 2.5;
+      pctx.arc(sx, sy, Math.max(0.65, p.r * Math.min(1.6, 0.7 + k * 0.2)), 0, Math.PI * 2);
       pctx.fill();
       pctx.shadowBlur = 0;
     }
@@ -2566,21 +2656,29 @@
 
   function waitForIdle() {
     return new Promise((resolve) => {
+      let idleFrames = 0;
       const tick = () => {
-        if (!flying) resolve();
-        else requestAnimationFrame(tick);
+        if (!flying) {
+          idleFrames += 1;
+          if (idleFrames >= 2) resolve();
+          else requestAnimationFrame(tick);
+        } else {
+          idleFrames = 0;
+          requestAnimationFrame(tick);
+        }
       };
       tick();
     });
   }
 
   function setZoomK(k) {
-    focusPinned = false;
     const W = stage.clientWidth;
     const H = stage.clientHeight;
     const [wx, wy] = transform.invert([W / 2, H / 2]);
     const t = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-wx, -wy);
     transform = t;
+    // Programmatic scale: collapse levels from k (pan must not)
+    reconcileViewState('zoom');
     svg.call(zoomBehavior.transform, t);
     applyLod();
     applyLabelCounterScale();
@@ -2641,6 +2739,87 @@
     machineCount: () => machines.length,
     LOD,
     getLinkDrawStats: () => ({ ...linkDrawStats }),
+    /** Screen endpoints for a parent→child link (node centres). Null if either missing. */
+    getLinkScreenEndpoints: (sourceId, targetId) => {
+      const s = nodeById.get(sourceId);
+      const t = nodeById.get(targetId);
+      if (!s || !t) return null;
+      return { source: worldToScreen(s.x, s.y), target: worldToScreen(t.x, t.y), sourceId, targetId };
+    },
+    /** Drawn tree links incident to a node (for continuity checks). */
+    getIncidentDrawnLinks: (nodeId) => {
+      const out = [];
+      const focus = nodeById.get(focusNodeId);
+      const focusPath = new Set(pathToRoot(focusNodeId));
+      const localIds = new Set((focus ? localFrameNodes(focus) : []).map((n) => n.id));
+      links.forEach((L) => {
+        if (L.source !== nodeId && L.target !== nodeId) return;
+        const s = nodeById.get(L.source);
+        const t = nodeById.get(L.target);
+        if (!s || !t) return;
+        const sLocal = localIds.has(s.id) && !s.ancestorOnly;
+        const tLocal = localIds.has(t.id) && !t.ancestorOnly;
+        const onPath = focusPath.has(L.source) && focusPath.has(L.target);
+        if (!sLocal && !tLocal && !onPath) return;
+        if (!(sLocal || tLocal || onPath)) return;
+        out.push({
+          source: L.source,
+          target: L.target,
+          kind: L.kind,
+          sourceScreen: worldToScreen(s.x, s.y),
+          targetScreen: worldToScreen(t.x, t.y),
+          sourceLocal: sLocal,
+          targetLocal: tLocal,
+        });
+      });
+      return out;
+    },
+    snapshotOverviewState: () => {
+      applyLod();
+      const drawn = nodes
+        .filter((n) => n.draw && !n.preview && !n.ancestorOnly && n.lodAlpha > 0.05)
+        .map((n) => n.id)
+        .sort();
+      const labels = [];
+      nodes.forEach((n) => {
+        if (!n.labelOn || !n.draw || !n.label || n.ancestorOnly) return;
+        const node = worldToScreen(n.x, n.y);
+        const lx = n._labelSx != null ? n._labelSx : node.x;
+        const ly = n._labelSy != null ? n._labelSy : node.y + 18;
+        labels.push({
+          id: n.id,
+          text: n.label,
+          x: Math.round(lx),
+          y: Math.round(ly),
+          nx: Math.round(node.x),
+          ny: Math.round(node.y),
+          ox: Math.round(lx - node.x),
+          oy: Math.round(ly - node.y),
+        });
+      });
+      // Hub titles (overview)
+      document.querySelectorAll('.hub-title-dom').forEach((el) => {
+        if (el.style.display === 'none' || el.hidden) return;
+        const r = el.getBoundingClientRect();
+        if (r.width < 1) return;
+        labels.push({
+          id: el.dataset.id || `hub-title:${(el.textContent || '').trim()}`,
+          text: (el.textContent || '').trim(),
+          x: Math.round(r.left + r.width / 2),
+          y: Math.round(r.top + r.height / 2),
+        });
+      });
+      labels.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      return {
+        overview: overviewMode,
+        focus: focusNodeId,
+        k: +transform.k.toFixed(4),
+        x: +transform.x.toFixed(2),
+        y: +transform.y.toFixed(2),
+        drawn,
+        labels,
+      };
+    },
     countLinkCrossings: () => countLinkCrossings(),
     countDrawnOfType: (type) => nodes.filter((n) => n.type === type && n.draw && !n.preview && !n.ancestorOnly && n.lodAlpha > 0.05).length,
     isOverview: () => overviewMode,
