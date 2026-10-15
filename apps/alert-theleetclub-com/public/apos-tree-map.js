@@ -30,14 +30,13 @@
   const DEEP_NODE_R = { area: 12.5, location: 11.5, machine: 11, branch: 9, artic: 5.5 };
   const DEEP_HUB_R = 20;
   const TREE = {
-    area: 300,       // areas sit farther out so overview feels full (~65% of title radius)
+    area: 220,       // ~69% of title radius — room for titles outside, no edge hairlines
     location: 170,
     machine: 130,
-    branch: 78,
+    branch: 92,
   };
   const FAN_TARGET_R = TREE.area + TREE.location + TREE.machine * 0.85;
-  // Titles outside area ring; areas ≈ 65% of title radius from core
-  const TITLE_PAD = 160;
+  const TITLE_PAD = 220; // clear of area nodes + pills + labels
   const R_TITLE = R_HUB + TREE.area + TITLE_PAD;
   const R_LABEL = R_HUB + TREE.area + TREE.location + TREE.machine + 44;
   const R_OUTER = R_LABEL + 20;
@@ -156,10 +155,16 @@
       const seatBranches = (n) => {
         const kids = childrenOf.get(n.id) || [];
         const brs = kids.filter((c) => c.type === 'branch');
-        const base = n.angle != null ? n.angle : hub.outAngle;
-        const sweep = Math.PI * 1.15; // even labelled arc in front of machine
+        const parent = n.parentId ? nodeById.get(n.parentId) : null;
+        // Open away from parent (~200° fan)
+        const away = parent
+          ? Math.atan2(n.y - parent.y, n.x - parent.x)
+          : n.angle != null
+            ? n.angle
+            : hub.outAngle;
+        const sweep = (200 * Math.PI) / 180;
         brs.forEach((b, bi) => {
-          const ang = base - sweep / 2 + ((bi + 0.5) / Math.max(brs.length, 1)) * sweep;
+          const ang = away - sweep / 2 + ((bi + 0.5) / Math.max(brs.length, 1)) * sweep;
           b.x = n.x + Math.cos(ang) * TREE.branch;
           b.y = n.y + Math.sin(ang) * TREE.branch;
           b.angle = ang;
@@ -711,13 +716,30 @@
       const ax = Math.cos(h.outAngle);
       const ay = Math.sin(h.outAngle);
       if (!focused) {
-        // push title further along ray in screen px so text box clears the tip nodes
-        const push = 8;
+        // Push past area tips/labels/pills along the ray
+        let push = 18;
+        const areas = (childrenOf.get(h.id) || []).filter((c) => c.type === 'area' && c.draw && c.label);
+        for (let guard = 0; guard < 8; guard++) {
+          const tx = s.x + ax * push;
+          const ty = s.y + ay * push;
+          let hit = false;
+          areas.forEach((a) => {
+            const ap = worldToScreen(a.x, a.y);
+            const lab = a._labelSx != null ? { x: a._labelSx, y: a._labelSy } : ap;
+            if (Math.hypot(tx - ap.x, ty - ap.y) < 36) hit = true;
+            if (Math.hypot(tx - lab.x, ty - lab.y) < 42) hit = true;
+            if (Math.hypot(tx - (ap.x + 14), ty - (ap.y - 12)) < 28) hit = true; // pill
+            // subtitle sits ~22px further out
+            if (Math.hypot(tx - lab.x, ty + 22 - lab.y) < 36) hit = true;
+          });
+          if (!hit) break;
+          push += 14;
+        }
         title.style.left = `${s.x + ax * push}px`;
         title.style.top = `${s.y + ay * push}px`;
         title.style.transform = 'translate(-50%, -50%)';
         sub.style.left = `${s.x + ax * push}px`;
-        sub.style.top = `${s.y + ay * push + 22}px`;
+        sub.style.top = `${s.y + ay * push + 24}px`;
         sub.style.transform = 'translate(-50%, 0)';
       } else {
         title.style.left = `${s.x}px`;
@@ -878,8 +900,8 @@
 
     resolveLabelCollisions();
     paintLod();
-    syncHubTitles();
     syncDomLabels();
+    syncHubTitles(); // after labels so titles dodge area label boxes
     syncFocusTitle();
     renderBreadcrumb(focusNodeId);
   }
@@ -893,40 +915,110 @@
     return hubId === a || hubId === b;
   }
 
-  /** Place labels on the outward side of each node; nudge to avoid collisions (screen space). */
+  function nodeScreenRadius(n) {
+    const deep = !overviewMode;
+    if (n.type === 'hub') return deep ? DEEP_HUB_R : HUB_SCREEN_R;
+    if (n.type === 'branch') return deep ? 10 : 5;
+    if (n.type === 'enterprise') return 8;
+    return deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
+  }
+
+  /** Labels outward along link; clear full text box from disc + pill (not just center) */
   function resolveLabelCollisions() {
     const labeled = nodes.filter((n) => n.labelOn && n.draw && n.label && !n.ancestorOnly);
+
+    function textHalf(n) {
+      const len = (n.label || '').length;
+      return {
+        hw: Math.min(100, Math.max(22, 5 + len * 3.55)),
+        hh: n.type === 'branch' ? 9 : 8,
+      };
+    }
+    function placeAt(p, ang, sr, hw, hh, hasPill) {
+      // Dist so near edge of centered text box clears disc by radius+6
+      let dist = sr + 6 + hw * Math.abs(Math.cos(ang)) + hh * Math.abs(Math.sin(ang)) + 2;
+      let sx = p.x + Math.cos(ang) * dist;
+      let sy = p.y + Math.sin(ang) * dist;
+      const pill = hasPill ? { x: p.x + sr * 0.55 + 10, y: p.y - sr * 0.55 - 6, rw: 12, rh: 8 } : null;
+      for (let g = 0; g < 10; g++) {
+        const box = { l: sx - hw, r: sx + hw, t: sy - hh, b: sy + hh };
+        const closestX = Math.max(box.l, Math.min(p.x, box.r));
+        const closestY = Math.max(box.t, Math.min(p.y, box.b));
+        const clearNode = Math.hypot(closestX - p.x, closestY - p.y) >= sr + 6;
+        let clearPill = true;
+        if (pill) {
+          clearPill = !(box.l < pill.x + pill.rw && box.r > pill.x - pill.rw && box.t < pill.y + pill.rh && box.b > pill.y - pill.rh);
+        }
+        if (clearNode && clearPill) return { sx, sy, dist, ang };
+        dist += 7;
+        sx = p.x + Math.cos(ang) * dist;
+        sy = p.y + Math.sin(ang) * dist;
+      }
+      // Try bias away from NE pill
+      if (pill) {
+        const ang2 = ang + 0.45;
+        dist = sr + 6 + hw * Math.abs(Math.cos(ang2)) + hh * Math.abs(Math.sin(ang2)) + 4;
+        return {
+          sx: p.x + Math.cos(ang2) * dist,
+          sy: p.y + Math.sin(ang2) * dist,
+          dist,
+          ang: ang2,
+        };
+      }
+      return { sx, sy, dist, ang };
+    }
+
     labeled.forEach((n) => {
-      const ang = n.angle != null ? n.angle : Math.atan2(n.y, n.x);
-      // Outward along the curve, slightly past the disc (screen px via DOM sync)
-      n._labelAng = ang;
-      n.labelOx = Math.cos(ang) * 14;
-      n.labelOy = Math.sin(ang) * 14 + 10;
+      const parent = n.parentId ? nodeById.get(n.parentId) : null;
+      let ang =
+        parent && parent.type !== 'enterprise'
+          ? Math.atan2(n.y - parent.y, n.x - parent.x)
+          : n.angle != null
+            ? n.angle
+            : Math.atan2(n.y, n.x);
+      const p = screenOf(n);
+      const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
+      const { hw, hh } = textHalf(n);
+      const hasPill = !!(n.alertCount > 0 && (n.type === 'hub' || n.type === 'area' || n.type === 'location'));
+      const placed = placeAt(p, ang, sr, hw, hh, hasPill);
+      n._labelAng = placed.ang;
+      n._labelSx = placed.sx;
+      n._labelSy = placed.sy;
+      n._labelHw = hw;
+      n._labelHh = hh;
+      n.labelOx = placed.sx - p.x;
+      n.labelOy = placed.sy - p.y;
     });
+
     labeled.sort((a, b) => (a._labelAng || 0) - (b._labelAng || 0));
     const placed = [];
     labeled.forEach((n) => {
-      let sx = n.x * transform.k + transform.x + n.labelOx;
-      let sy = n.y * transform.k + transform.y + n.labelOy;
-      for (let guard = 0; guard < 8; guard++) {
+      let sx = n._labelSx;
+      let sy = n._labelSy;
+      const p = screenOf(n);
+      const ang = n._labelAng;
+      const hw = n._labelHw || 40;
+      const hh = n._labelHh || 8;
+      for (let guard = 0; guard < 12; guard++) {
         let hit = false;
-        for (const p of placed) {
-          if (Math.abs(sx - p.sx) < 78 && Math.abs(sy - p.sy) < 15) {
-            n.labelOy += 13;
-            sy += 13;
+        for (const q of placed) {
+          if (Math.abs(sx - q.sx) < hw + q.hw + 4 && Math.abs(sy - q.sy) < hh + q.hh + 4) {
+            const d = Math.hypot(sx - p.x, sy - p.y) + 10;
+            const tang = ang + Math.PI / 2 * (guard % 2 === 0 ? 1 : -1);
+            sx = p.x + Math.cos(ang) * d + Math.cos(tang) * 8;
+            sy = p.y + Math.sin(ang) * d + Math.sin(tang) * 8;
             hit = true;
             break;
           }
         }
         if (!hit) break;
       }
-      placed.push({ sx, sy });
       n._labelSx = sx;
       n._labelSy = sy;
+      placed.push({ sx, sy, hw, hh });
     });
   }
 
-  /** DOM labels — fixed 12–13px readable type with halo (not SVG counter-scale) */
   function syncDomLabels() {
     const layer = document.getElementById('label-layer');
     if (!layer) return;
@@ -947,21 +1039,22 @@
         el.className = 'node-label-dom';
         root.appendChild(el);
       }
-      el.textContent = n.label;
+      el.textContent = n.label; // full label (incl. Technical Support)
       el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}`;
-      const sx = n._labelSx != null ? n._labelSx : n.x * transform.k + transform.x + (n.labelOx || 0);
-      const sy = n._labelSy != null ? n._labelSy : n.y * transform.k + transform.y + (n.labelOy || 16);
+      const sx = n._labelSx != null ? n._labelSx : screenOf(n).x;
+      const sy = n._labelSy != null ? n._labelSy : screenOf(n).y + 20;
       el.style.left = `${sx}px`;
       el.style.top = `${sy}px`;
       el.style.display = '';
       el.style.opacity = '1';
+      el.style.whiteSpace = 'nowrap';
+      el.title = n.label;
     });
     root.querySelectorAll('[data-nid]').forEach((el) => {
       if (!want.has(el.dataset.nid)) el.style.display = 'none';
     });
   }
 
-  /** Focused node title under orb in accent colour (hubs use syncHubTitles) */
   function syncFocusTitle() {
     const layer = document.getElementById('label-layer');
     if (!layer) return;
@@ -982,12 +1075,13 @@
     main.textContent = focus.label || '';
     sub.textContent = focus.type === 'machine' ? 'machine' : focus.type === 'location' ? 'site' : focus.type;
     const hub = nodeById.get(focus.hubId);
-    const ring = hub?.ring || 'teal';
-    main.className = `focus-title-main ${ring}`;
+    main.className = `focus-title-main ${hub?.ring || 'teal'}`;
     const s = worldToScreen(focus.x, focus.y);
+    const sr = nodeScreenRadius(focus);
+    // Place under the disc (screen-down), clear of disc + pill
     el.style.display = '';
     el.style.left = `${s.x}px`;
-    el.style.top = `${s.y + 28}px`;
+    el.style.top = `${s.y + sr + 16}px`;
   }
 
   function hubLabelWorld(d) {
@@ -1245,25 +1339,37 @@
   }
 
   function subtreeExtent(node) {
-    const pts = localFrameNodes(node).map((n) => ({ x: n.x, y: n.y, r: n.r || 8 }));
+    const locals = localFrameNodes(node);
+    const pts = locals.map((n) => ({ x: n.x, y: n.y, r: 14 }));
+    // Include outward label room (~42 world units past each tip)
+    locals.forEach((n) => {
+      const ang = n.angle != null ? n.angle : Math.atan2(n.y - node.y, n.x - node.x);
+      pts.push({
+        x: n.x + Math.cos(ang) * 48,
+        y: n.y + Math.sin(ang) * 48,
+        r: 20,
+      });
+    });
     if (node.type === 'hub') {
       const tipR = TREE.area + TREE.location;
       pts.push({
         x: node.x + Math.cos(node.outAngle) * tipR,
         y: node.y + Math.sin(node.outAngle) * tipR,
-        r: 20,
+        r: 24,
       });
-      // title under hub inward
       const inward = node.outAngle + Math.PI;
       pts.push({
-        x: node.x + Math.cos(inward) * 50,
-        y: node.y + Math.sin(inward) * 50,
-        r: 36,
+        x: node.x + Math.cos(inward) * 56,
+        y: node.y + Math.sin(inward) * 56,
+        r: 40,
       });
+    } else {
+      // Focus title under node
+      pts.push({ x: node.x, y: node.y + 56, r: 28 });
     }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     pts.forEach((n) => {
-      const pad = (n.r || 4) + 36;
+      const pad = (n.r || 4) + 28;
       minX = Math.min(minX, n.x - pad);
       maxX = Math.max(maxX, n.x + pad);
       minY = Math.min(minY, n.y - pad);
@@ -1300,16 +1406,13 @@
       return d3.zoomIdentity.translate(hubSX, hubSY).scale(k).translate(-centerNode.x, -centerNode.y);
     }
     if (centerNode && (centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      const span = Math.max(bbox.w, bbox.h, 100);
-      k = (0.72 * Math.min(W, H)) / span;
-      k = Math.max(1.0, Math.min(k, 28));
+      // Centre the focused subtree bbox (incl. labels) at ~65–70% fill
+      const spanW = Math.max(bbox.w, 80);
+      const spanH = Math.max(bbox.h, 80);
+      k = Math.min((0.68 * W) / spanW, (0.68 * H) / spanH);
+      k = Math.max(0.85, Math.min(k, 28));
       cx = bbox.x + bbox.w / 2;
       cy = bbox.y + bbox.h / 2;
-      // Nudge so focus sits slightly toward inward edge, children fill centre
-      const out = centerNode.angle != null ? centerNode.angle : Math.atan2(centerNode.y, centerNode.x);
-      const nudge = Math.min(bbox.w, bbox.h) * 0.12;
-      cx -= Math.cos(out) * nudge * 0.35;
-      cy -= Math.sin(out) * nudge * 0.35;
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
     }
     return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
@@ -1592,6 +1695,86 @@
     leafCard.hidden = false;
     const hubId = branchNode.hubId || m?.hubId;
     leafCard.dataset.accent = (UTILS && UTILS.HUB_ACCENT[hubId]) || 'teal';
+    positionLeafCard(branchNode);
+  }
+
+  /** Place card on the freer side of the clicked node; thin leader line; never over siblings */
+  function positionLeafCard(branchNode) {
+    const W = stage.clientWidth || 1200;
+    const H = stage.clientHeight || 800;
+    const s = worldToScreen(branchNode.x, branchNode.y);
+    const cardW = Math.min(340, W - 32);
+    const cardH = Math.min(260, leafCard.offsetHeight || 220);
+    const siblings = (childrenOf.get(branchNode.parentId) || []).filter((c) => c.type === 'branch' && c.draw);
+    const sibScreen = siblings.map((c) => worldToScreen(c.x, c.y));
+    // Score left vs right placement by free space and sibling overlap
+    function score(left, top) {
+      let sc = 0;
+      // prefer keeping card on-screen
+      if (left < 12 || left + cardW > W - 12) sc -= 80;
+      if (top < 56 || top + cardH > H - 64) sc -= 80;
+      // free horizontal space
+      sc += left + cardW / 2 > W / 2 ? (W - (left + cardW)) : left;
+      // penalize covering other branch nodes
+      sibScreen.forEach((p) => {
+        if (p.x >= left - 8 && p.x <= left + cardW + 8 && p.y >= top - 8 && p.y <= top + cardH + 8) sc -= 120;
+      });
+      return sc;
+    }
+    const gap = 28;
+    const candidates = [
+      { left: s.x + gap, top: s.y - cardH / 2 },
+      { left: s.x - cardW - gap, top: s.y - cardH / 2 },
+      { left: s.x - cardW / 2, top: s.y + gap + 16 },
+      { left: s.x - cardW / 2, top: s.y - cardH - gap },
+    ];
+    let best = candidates[0];
+    let bestScore = -Infinity;
+    candidates.forEach((c) => {
+      c.left = Math.max(12, Math.min(W - cardW - 12, c.left));
+      c.top = Math.max(56, Math.min(H - cardH - 56, c.top));
+      const sc = score(c.left, c.top);
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = c;
+      }
+    });
+    leafCard.style.left = `${best.left}px`;
+    leafCard.style.top = `${best.top}px`;
+    leafCard.style.transform = 'none';
+    leafCard.style.width = `${cardW}px`;
+    // Leader line from node to nearest card edge
+    let leader = document.getElementById('leaf-card-leader');
+    if (!leader) {
+      leader = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      leader.id = 'leaf-card-leader';
+      leader.setAttribute('class', 'leaf-card-leader');
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('class', 'leaf-card-leader-line');
+      leader.appendChild(line);
+      stage.appendChild(leader);
+    }
+    leader.setAttribute('width', String(W));
+    leader.setAttribute('height', String(H));
+    leader.style.display = '';
+    const line = leader.querySelector('line');
+    // Target: mid of nearest card side
+    const cx = best.left + cardW / 2;
+    const cy = best.top + cardH / 2;
+    let tx = best.left;
+    let ty = cy;
+    if (Math.abs(s.x - (best.left + cardW)) < Math.abs(s.x - best.left)) tx = best.left + cardW;
+    if (Math.abs(s.y - best.top) < Math.abs(s.y - (best.top + cardH)) && Math.abs(s.y - best.top) < Math.abs(s.x - tx)) {
+      tx = cx;
+      ty = best.top;
+    } else if (Math.abs(s.y - (best.top + cardH)) < Math.abs(s.x - tx)) {
+      tx = cx;
+      ty = best.top + cardH;
+    }
+    line.setAttribute('x1', String(s.x));
+    line.setAttribute('y1', String(s.y));
+    line.setAttribute('x2', String(tx));
+    line.setAttribute('y2', String(ty));
   }
 
   function branchRows(key, m) {
@@ -1638,6 +1821,8 @@
 
   function closeLeafCard() {
     leafCard.hidden = true;
+    const leader = document.getElementById('leaf-card-leader');
+    if (leader) leader.style.display = 'none';
   }
 
   let taskCtx = {};
@@ -1799,9 +1984,10 @@
 
   function drawBranchGlyph(ctx, x, y, s, key, alpha) {
     ctx.save();
-    ctx.strokeStyle = `rgba(255,255,255,${0.95 * alpha})`;
-    ctx.fillStyle = `rgba(255,255,255,${0.95 * alpha})`;
-    ctx.lineWidth = Math.max(1.4, s * 0.14);
+    // Dark line icons on white discs (white-on-white was invisible)
+    ctx.strokeStyle = `rgba(36, 32, 68,${0.92 * alpha})`;
+    ctx.fillStyle = `rgba(36, 32, 68,${0.92 * alpha})`;
+    ctx.lineWidth = Math.max(1.6, s * 0.18);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
@@ -1922,12 +2108,12 @@
         pctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${op})`;
         pctx.lineWidth = 2;
         pctx.shadowColor = `rgba(${accent[0]},${accent[1]},${accent[2]},0.45)`;
-        pctx.shadowBlur = 5;
+        pctx.shadowBlur = 0;
       } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview && !stub) {
         pctx.strokeStyle = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},${Math.min(0.72, op + 0.1)})`;
         pctx.lineWidth = 1.45;
         pctx.shadowColor = `rgba(${firstHopRgb[0]},${firstHopRgb[1]},${firstHopRgb[2]},0.28)`;
-        pctx.shadowBlur = 3;
+        pctx.shadowBlur = 0;
       } else {
         pctx.strokeStyle = `rgba(255,255,255,${op})`;
         pctx.lineWidth = L.kind === 'spine' ? 1.1 : stub ? 1.05 : 1.3;
@@ -1940,36 +2126,36 @@
     });
     if (!linkDrawStats.count) linkDrawStats.minOp = 0;
 
-    // ——— Overview depth clusters (tiny dim dots sized by machine count) ———
+    // ——— Overview depth clusters: soft compact dots only (no hairlines) ———
     if (overviewMode) {
       nodes.forEach((n) => {
         if (n.type !== 'area' || !n.draw) return;
         const p = screenOf(n);
         const ang = n.angle != null ? n.angle : Math.atan2(n.y, n.x);
-        const mc = n.machineCount || n.stubHint || 2;
-        const nDots = Math.min(14, Math.max(4, Math.round(2 + Math.sqrt(mc) * 1.8)));
-        const spread = 0.7 + Math.min(0.5, mc * 0.03);
-        for (let i = 0; i < nDots; i++) {
-          const t = (i + 0.5) / nDots - 0.5;
-          const a = ang + t * spread;
-          const dist = 16 + (hash(n.id + ':' + i) % 7) * 2.2 + (i % 3) * 3;
-          const jitter = ((hash(n.id + 'j' + i) % 5) - 2) * 1.2;
-          const x = p.x + Math.cos(a) * dist + Math.cos(a + Math.PI / 2) * jitter;
-          const y = p.y + Math.sin(a) * dist + Math.sin(a + Math.PI / 2) * jitter;
-          const rr = 1.1 + (i % 3) * 0.35;
-          pctx.beginPath();
-          pctx.arc(x, y, rr, 0, Math.PI * 2);
-          pctx.fillStyle = `rgba(255,255,255,${0.14 + (i % 4) * 0.04})`;
-          pctx.fill();
-        }
-        // Soft halo behind cluster
-        const halo = pctx.createRadialGradient(p.x + Math.cos(ang) * 22, p.y + Math.sin(ang) * 22, 2, p.x + Math.cos(ang) * 22, p.y + Math.sin(ang) * 22, 36);
-        halo.addColorStop(0, 'rgba(255,255,255,0.08)');
+        const mc = n.machineCount || 2;
+        const nDots = Math.min(10, Math.max(3, Math.round(2 + Math.sqrt(mc) * 1.4)));
+        // Soft round halo (no lines)
+        const hx = p.x + Math.cos(ang) * 14;
+        const hy = p.y + Math.sin(ang) * 14;
+        const halo = pctx.createRadialGradient(hx, hy, 1, hx, hy, 22);
+        halo.addColorStop(0, 'rgba(255,255,255,0.10)');
         halo.addColorStop(1, 'rgba(255,255,255,0)');
         pctx.fillStyle = halo;
         pctx.beginPath();
-        pctx.arc(p.x + Math.cos(ang) * 22, p.y + Math.sin(ang) * 22, 36, 0, Math.PI * 2);
+        pctx.arc(hx, hy, 22, 0, Math.PI * 2);
         pctx.fill();
+        for (let i = 0; i < nDots; i++) {
+          const t = (i + 0.5) / nDots - 0.5;
+          const a = ang + t * 0.85;
+          const dist = 10 + (hash(n.id + ':' + i) % 5) * 1.6; // compact ≤ ~18px
+          const jitter = ((hash(n.id + 'j' + i) % 5) - 2) * 0.8;
+          const x = p.x + Math.cos(a) * dist + Math.cos(a + Math.PI / 2) * jitter;
+          const y = p.y + Math.sin(a) * dist + Math.sin(a + Math.PI / 2) * jitter;
+          pctx.beginPath();
+          pctx.arc(x, y, 1.15 + (i % 3) * 0.25, 0, Math.PI * 2);
+          pctx.fillStyle = `rgba(255,255,255,${0.16 + (i % 4) * 0.04})`;
+          pctx.fill();
+        }
       });
     }
 
@@ -2065,22 +2251,15 @@
         pctx.arc(p.x, p.y, rr + 5, 0, Math.PI * 2);
         pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(focusedHub ? 0.95 : 0.82) * alpha})`;
         pctx.lineWidth = focusedHub ? 3 : 2.4;
-        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.75)`;
-        pctx.shadowBlur = 14;
         pctx.stroke();
-        pctx.shadowBlur = 0;
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.78 * alpha})`;
-        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.7)`;
-        pctx.shadowBlur = 12;
         pctx.fill();
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr * 0.5, 0, Math.PI * 2);
         pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.95 * alpha})`;
-        pctx.shadowBlur = 6;
         pctx.fill();
-        pctx.shadowBlur = 0;
         drawHubGlyph(pctx, p.x, p.y, rr * 0.62, n.id, alpha);
       } else if (n.type === 'branch') {
         const rr = r * (hoverId === n.id ? 1.2 : 1);
@@ -2094,10 +2273,7 @@
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         pctx.fillStyle = `rgba(255,255,255,${0.96 * alpha})`;
-        pctx.shadowColor = 'rgba(255,255,255,0.65)';
-        pctx.shadowBlur = 8;
         pctx.fill();
-        pctx.shadowBlur = 0;
         if (accent) {
           pctx.beginPath();
           pctx.arc(p.x, p.y, rr + 2.2, 0, Math.PI * 2);
@@ -2124,10 +2300,7 @@
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         pctx.fillStyle = `rgba(255,255,255,${0.97 * alpha})`;
-        pctx.shadowColor = 'rgba(255,255,255,0.45)';
-        pctx.shadowBlur = hoverId === n.id ? 10 : 5;
         pctx.fill();
-        pctx.shadowBlur = 0;
         if (isAlert || isMaint) {
           pctx.beginPath();
           pctx.arc(p.x, p.y, rr + 2.5, 0, Math.PI * 2);
@@ -2171,10 +2344,7 @@
         pctx.arcTo(x0, y0, x0 + bw, y0, rad);
         pctx.closePath();
         pctx.fillStyle = ALERT;
-        pctx.shadowColor = 'rgba(255,107,122,0.45)';
-        pctx.shadowBlur = 4;
         pctx.fill();
-        pctx.shadowBlur = 0;
         pctx.fillStyle = '#fff';
         pctx.font = '700 8px Manrope, sans-serif';
         pctx.textAlign = 'center';

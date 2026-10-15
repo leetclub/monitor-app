@@ -215,7 +215,7 @@ async function runTests(browserType, browserName) {
           lb.left + lb.width / 2 - (nb.left + nb.width / 2),
           lb.top + lb.height / 2 - (nb.top + nb.height / 2)
         );
-        if (dist > 110) out.push({ id: g.getAttribute('data-id'), dist: Math.round(dist) });
+        if (dist > 140) out.push({ id: g.getAttribute('data-id'), dist: Math.round(dist) });
       }
       return out;
     });
