@@ -10,83 +10,93 @@
 <body>
   <div class="app-container">
     <header class="top-bar">
-      <div class="header-left">
-        <div class="apos-logo-header">APOS</div>
-        <h1 class="page-title">Organizational Map</h1>
-      </div>
-      <div class="header-right">
-        <div class="view-toggle">
-          <button class="toggle-btn active" data-view="chart">Chart</button>
-          <button class="toggle-btn" data-view="dashboards">Dashboards</button>
-        </div>
+      <div class="header-brand">APOS</div>
+      <div class="view-toggle">
+        <button class="toggle-btn active" data-view="map">Map</button>
+        <button class="toggle-btn" data-view="dashboards">Dashboards</button>
+        <button class="toggle-btn" data-view="chart">Chart</button>
       </div>
     </header>
 
     <main class="canvas-container">
       <svg id="org-map-svg" class="org-map-canvas"></svg>
+      
       <div class="zoom-controls">
         <button class="zoom-btn" data-action="zoom-in" title="Zoom in">+</button>
         <button class="zoom-btn" data-action="zoom-out" title="Zoom out">−</button>
-        <button class="zoom-btn" data-action="reset" title="Reset view">⟲</button>
+        <button class="zoom-btn" data-action="reset" title="Reset view">○</button>
       </div>
     </main>
 
     <nav class="department-nav">
       <button class="nav-chevron" data-dir="prev" title="Previous department">‹</button>
-      <div class="department-label">
-        <span id="current-department">All Departments</span>
+      <div class="department-label-bottom">
+        <div class="dept-name" id="dept-name">INGESTION</div>
+        <div class="dept-subtitle" id="dept-subtitle">targeting · outreach · sequencing</div>
       </div>
       <button class="nav-chevron" data-dir="next" title="Next department">›</button>
     </nav>
 
-    <aside class="detail-drawer" id="detail-drawer">
-      <button class="drawer-close" aria-label="Close">&times;</button>
-      <div class="drawer-content">
-        <div class="job-header">
-          <h2 class="job-title" id="job-title">Loading...</h2>
-          <span class="job-department-tag" id="job-department">—</span>
+    <aside class="detail-panel" id="detail-panel">
+      <button class="panel-close" aria-label="Close">&times;</button>
+      <div class="panel-content">
+        <span class="job-category-tag" id="job-category">FULLY AUTONOMOUS</span>
+        <h2 class="job-title-panel" id="job-title-panel">Loading...</h2>
+        <p class="job-subtitle-panel" id="job-subtitle-panel">—</p>
+
+        <div class="skill-file-box">
+          <span class="skill-file-label">1 runnable skill file</span>
+          <div class="skill-file-action" id="take-skill">
+            <span>Take it</span>
+            <span>→</span>
+          </div>
         </div>
 
-        <section class="drawer-section">
-          <h3>What it replaces</h3>
-          <p class="replaces-text" id="replaces-text">—</p>
+        <section class="panel-section">
+          <h3 class="panel-section-title">BREAKS INTO</h3>
+          <div class="pill-tags" id="breaks-into">
+            <span class="pill-tag">sequence-writer</span>
+            <span class="pill-tag">subject-line-generator</span>
+          </div>
         </section>
 
-        <section class="drawer-section">
-          <h3>Autonomy Ladder</h3>
-          <div class="autonomy-ladder">
+        <section class="panel-section">
+          <h3 class="panel-section-title">BUILDS ON</h3>
+          <div class="pill-tags" id="builds-on">
+            <span class="pill-tag">ICP Definition</span>
+            <span class="pill-tag">Personalization Research</span>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h3 class="panel-section-title">WHAT IT REPLACES</h3>
+          <div class="replaces-box">
+            <p class="replaces-text" id="replaces-text-panel">—</p>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h3 class="panel-section-title">THE LADDER</h3>
+          <div class="ladder-list">
             <div class="ladder-item" data-level="human-led">
-              <div class="ladder-indicator"></div>
-              <span>Human-Led</span>
+              <div class="ladder-label">Human-Led</div>
+              <div class="ladder-desc" id="ladder-human-led">One template, first-name token, pray.</div>
             </div>
             <div class="ladder-item" data-level="human-assisted">
-              <div class="ladder-indicator"></div>
-              <span>Human-Assisted</span>
+              <div class="ladder-label">Human-Assisted</div>
+              <div class="ladder-desc" id="ladder-human-assisted">The agent writes the full sequence per segment from your offer doc and dossiers; a human approves before launch.</div>
             </div>
             <div class="ladder-item" data-level="fully-autonomous">
-              <div class="ladder-indicator"></div>
-              <span>Fully Autonomous</span>
+              <div class="ladder-label">Fully Autonomous</div>
+              <div class="ladder-desc" id="ladder-fully-autonomous">Sequences generate per segment. A/B variants included, with reply data feeding the next round's angles.</div>
             </div>
           </div>
         </section>
 
-        <section class="drawer-section">
-          <h3>Technical Instructions</h3>
-          <div class="tech-instructions" id="tech-instructions">
-            <p class="endpoint-info" id="endpoint-info">—</p>
-            <pre class="code-block" id="code-block"></pre>
-          </div>
-        </section>
+        <button class="cta-button" id="run-skill-cta">Run Skill</button>
 
-        <section class="drawer-section">
-          <div class="action-buttons">
-            <button class="action-btn primary" id="run-skill-btn">Run Skill</button>
-            <button class="action-btn secondary" id="view-payload-btn">View Payload</button>
-          </div>
-        </section>
-
-        <section class="drawer-section workflow-section">
-          <h3>New Task</h3>
+        <section class="workflow-section">
+          <h3 class="panel-section-title">NEW TASK</h3>
           <form class="workflow-form" id="workflow-form">
             <textarea 
               class="task-input" 
