@@ -144,6 +144,20 @@ async function runBasicTests(browserType, browserName) {
     }
   });
 
+  await test('Dense leaves fill sectors (60+ leaf dots visible)', async () => {
+    const leaves = await page.locator('circle.leaf-dot').count();
+    if (leaves < 400) {
+      throw new Error(`Expected dense galaxy (≥400 leaves across depts), found ${leaves}`);
+    }
+  });
+
+  await test('Faint department labels present in background', async () => {
+    const labels = await page.locator('.faint-label').count();
+    if (labels < 8) {
+      throw new Error(`Expected 8 faint dept labels, found ${labels}`);
+    }
+  });
+
   await test('Department chevrons cycle camera', async () => {
     const nextBtn = page.locator('[data-dir="next"]');
     await nextBtn.click();

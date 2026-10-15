@@ -458,16 +458,314 @@ class SeededRandom {
   }
 }
 
+/** Real APOS domain entities used as leaf detail (not fake filler). */
+const DOMAIN = {
+  machines: (() => {
+    const sites = [
+      ['KU', 'COBA Shadadiya'],
+      ['KU', 'Engineering'],
+      ['KU', 'Science'],
+      ['MEW', 'Zahra'],
+      ['MOH', 'Jaber Gate 1'],
+      ['MOH', 'Jaber Gate 2'],
+      ['MOH', 'Jaber Gate 6'],
+      ['MOH', 'Jaber Gate 8'],
+      ['Park', 'Mall L1'],
+      ['Park', 'Mall L2'],
+      ['EE', 'Salmiya'],
+      ['EE', 'Hawally'],
+      ['Leet', 'HQ Lobby'],
+      ['Leet', 'Ops Floor'],
+      ['AUK', 'Library'],
+      ['AUK', 'Cafeteria'],
+      ['KFH', 'Branch A'],
+      ['KFH', 'Branch B'],
+      ['NBK', 'Tower'],
+      ['NBK', 'Plaza'],
+      ['Gulf', 'Mall'],
+      ['Marina', 'Walk'],
+      ['360', 'Mall'],
+      ['Avenues', 'Phase 3'],
+    ];
+    const out = [];
+    sites.forEach(([owner, place], si) => {
+      const n = si < 12 ? 5 : 3;
+      for (let i = 1; i <= n; i++) {
+        out.push({
+          id: `m-${owner.toLowerCase()}-${si}-${i}`,
+          label: `${owner}-${i} ${place}`,
+          metrics: { owner, site: place, status: i % 7 === 0 ? 'amber' : 'green' },
+        });
+      }
+    });
+    return out;
+  })(),
+  operators: [
+    'Ahmed Al-Rashid', 'Sara Al-Mutairi', 'Fahad Al-Sabah', 'Noura Al-Enezi',
+    'Yousef Al-Kandari', 'Maryam Al-Dosari', 'Khaled Al-Ajmi', 'Hessa Al-Qallaf',
+    'Bader Al-Shammari', 'Laila Al-Hasawi', 'Omar Al-Otaibi', 'Dana Al-Failakawi',
+    'Tariq Al-Mutawa', 'Reem Al-Sabeeh', 'Jassim Al-Najjar', 'Fatima Al-Hassan',
+    'Saud Al-Barrak', 'Aisha Al-Roumi', 'Nasser Al-Ghanim', 'Mona Al-Saleh',
+    'Waleed Al-Husainan', 'Hind Al-Mulla', 'Faisal Al-Qabandi', 'Noor Al-Zamel',
+  ],
+  redFlagChecks: [
+    'NO_RECENT_SALE ≥4h', 'WTD_SALES_DROP', 'SAME_DAY_LW_DROP', 'DISPENSE_FAIL_7D',
+    'DISPENSE_FAIL_SPIKE', 'OFF_EVENTS_TODAY', 'OFF_EVENT_FREQ', 'PROJECTED_LOSS',
+    'PEAK_BAND_LOSS', 'CLEANING_OVERDUE_15H', 'QA_REPEAT_ISSUE', 'STOCK_LOW',
+    'TEMP_ANOMALY', 'JAM_EVENT', 'INACTIVE_TODAY', 'TARGET_MISS', 'SX_ACCEL_DROP',
+    'MTD_YOY_DROP', 'WEB_UNIDENTIFIED', 'TEST_VEND_SPIKE', 'REFUND_CLUSTER',
+    'OPERATOR_ABSENT', 'TECH_OPEN_TICKET', 'HOURS_MISMATCH',
+  ],
+  endpoints: [
+    'GET /api/alert/machines', 'GET /api/alert/red-flags/snapshot',
+    'GET /api/alert/sales/today', 'GET /api/alert/footfall/daily',
+    'GET /api/alert/remote-credits', 'POST /api/alert/workflow/go-check',
+    'POST /api/alert/workflow/dm-operator', 'GET /api/alert/workflow/operator-schedule',
+    'GET /api/alert/attendance', 'GET /api/alert/tech-visits',
+    'GET /api/alert/cleaning', 'GET /api/alert/downtime',
+    'GET /api/alert/targets', 'GET /health', 'GET /api/session',
+    'POST /api/alert/workflow/send-credit', 'GET /api/alert/qa-visits',
+    'GET /api/alert/performance', 'GET /api/alert/product-mix',
+    'GET /api/alert/export/xlsx',
+  ],
+  products: [
+    'Spanish Latte', 'Cappuccino', 'Americano', 'Flat White', 'Espresso',
+    'Mocha', 'Hot Chocolate', 'Green Tea', 'Iced Latte', 'Cold Brew',
+    'Caramel Macchiato', 'Vanilla Latte', 'Turkish Coffee', 'Cortado',
+    'Matcha Latte', 'Chai Latte', 'Water 500ml', 'Sparkling Water',
+    'Orange Juice', 'Apple Juice', 'Energy Drink', 'Protein Shake',
+    'Croissant', 'Cookie', 'Muffin',
+  ],
+  pages: [
+    'RedFlags', 'Overall', 'Performance', 'Footfall', 'Admin', 'Targets',
+    'Promo', 'Settings', 'Login', 'Session Guard', 'Access Rules',
+    'Export PDF', 'Export XLSX', 'Operator Modal', 'Credits Popup',
+    'Downtime Popup', 'QA Visit Popup', 'Tech Visit', 'Call Op', 'Call AM',
+  ],
+  tables: [
+    'vendon_events', 'remote_credits', 'footfall_raw', 'red_alert_snapshot',
+    'machine_targets', 'product_targets', 'operator_schedule', 'attendance_log',
+    'cleaning_events', 'tech_visits', 'qa_findings', 'session_store',
+    'dashboard_access', 'downtime_intervals', 'sku_catalog', 'location_hours',
+  ],
+  reports: [
+    'Weekly Product PDF', 'Red Flags XLSX', 'Overall Summary', 'Footfall Heatmap',
+    'MTD vs Last MTD', 'YTD vs LY', 'Operator Attendance', 'Cleaning Overdue',
+    'Tech Open Tickets', 'QA Issue Frequency', 'Lost Revenue Est', 'Peak Band Loss',
+  ],
+  watchdogs: [
+    'API Heartbeat', 'DB Latency', 'Cache Age', 'Snapshot Freshness',
+    'Vendon Sync Lag', 'Footfall Poll Lag', 'Redis Hit Rate', 'Session TTL',
+    'Probe /health', 'Probe /api/session', 'Image Pull Check', 'Pod Ready',
+    'Ingress 5xx', 'Celery Queue Depth', 'Disk Usage', 'Memory Pressure',
+  ],
+};
+
+const TARGET_LEAVES_PER_DEPT = 110;
+
+const DEPT_LEAF_KINDS = {
+  ingestion: ['machines', 'endpoints', 'products'],
+  'rules-engine': ['redFlagChecks', 'machines', 'operators'],
+  dispatch: ['operators', 'machines', 'endpoints'],
+  storage: ['tables', 'endpoints', 'machines'],
+  analytics: ['products', 'machines', 'reports'],
+  reporting: ['reports', 'pages', 'products'],
+  watchdogs: ['watchdogs', 'endpoints', 'tables'],
+  'ui-shell': ['pages', 'endpoints', 'operators'],
+};
+
 function flattenTree(tree, parentPath = []) {
   const nodes = [];
   tree.forEach((node) => {
     const nodePath = [...parentPath, node.id];
-    nodes.push({ ...node, path: nodePath });
+    const copy = { ...node, path: nodePath, children: node.children ? [...node.children] : undefined };
+    nodes.push(copy);
     if (node.children) {
       nodes.push(...flattenTree(node.children, nodePath));
     }
   });
   return nodes;
+}
+
+function countLeaves(node) {
+  if (!node.children || node.children.length === 0) return 1;
+  return node.children.reduce((s, c) => s + countLeaves(c), 0);
+}
+
+function collectDeepParents(nodes) {
+  return nodes.filter((n) => {
+    const depth = n.path.length;
+    const kids = n.children || [];
+    return depth >= 2 || (depth === 1 && kids.length > 0 && kids.every((c) => !c.children || c.children.length === 0));
+  });
+}
+
+function cloneTree(nodes) {
+  return nodes.map((n) => ({
+    ...n,
+    metrics: n.metrics ? { ...n.metrics } : undefined,
+    children: n.children ? cloneTree(n.children) : undefined,
+  }));
+}
+
+function findNodeById(nodes, id) {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    if (n.children) {
+      const found = findNodeById(n.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function listAttachmentPoints(tree) {
+  const flat = flattenTree(tree);
+  const points = flat.filter((n) => !n.children || n.children.length === 0 || n.path.length >= 2);
+  if (points.length === 0) return flat.filter((n) => n.path.length === 1);
+  return points;
+}
+
+/**
+ * Expand department tree with real domain leaves until ~TARGET_LEAVES_PER_DEPT leaves.
+ * Inserts branchlet twigs for multi-level organic density. Prefers live machine names.
+ */
+function expandDepartmentTree(dept, liveMachines = []) {
+  const tree = cloneTree(dept.tree || []);
+  const kinds = DEPT_LEAF_KINDS[dept.id] || ['machines', 'endpoints'];
+  const pools = [];
+
+  kinds.forEach((kind) => {
+    if (kind === 'machines' && liveMachines.length) {
+      pools.push(
+        liveMachines.map((m) => ({
+          id: `live-m-${m.id}`,
+          label: m.name || m.machineName || String(m.id),
+          metrics: {
+            id: m.id,
+            owner: m.vendon_location_owner || m.owner || '—',
+            status: m.inactiveToday ? 'amber' : 'green',
+          },
+        })),
+      );
+    } else if (DOMAIN[kind]) {
+      pools.push(DOMAIN[kind].map((item) => (typeof item === 'string'
+        ? { id: `${kind}-${item}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'), label: item, metrics: { kind } }
+        : { ...item, metrics: { ...(item.metrics || {}), kind } })));
+    }
+  });
+
+  const flatPool = pools.flat();
+  const attachPoints = listAttachmentPoints(tree);
+  let leafCount = countLeaves({ children: tree });
+  let idx = 0;
+  const rng = new SeededRandom(dept.id.split('').reduce((a, c) => a + c.charCodeAt(0), 42));
+
+  // Create branchlets under each attach point, then pack domain leaves under them
+  const twigs = [];
+  attachPoints.forEach((ap) => {
+    const parent = findNodeById(tree, ap.id);
+    if (!parent) return;
+    if (!parent.children) parent.children = [];
+    const twigCount = 2 + Math.floor(rng.next() * 2);
+    for (let t = 0; t < twigCount; t++) {
+      const twig = {
+        id: `${parent.id}__twig-${t}`,
+        label: `${parent.label || parent.id} · ${t + 1}`,
+        metrics: { branch: true },
+        children: [],
+        _scaffold: true,
+      };
+      parent.children.push(twig);
+      twigs.push(twig);
+    }
+  });
+
+  leafCount = 0;
+  while (leafCount < TARGET_LEAVES_PER_DEPT && flatPool.length > 0 && twigs.length > 0) {
+    const item = flatPool[idx % flatPool.length];
+    idx++;
+    const twig = twigs[Math.floor(rng.next() * twigs.length)];
+    const leafId = `${twig.id}__${item.id}-${idx}`;
+    twig.children.push({
+      id: leafId,
+      label: item.label,
+      metrics: { ...(item.metrics || {}), parent: twig.label },
+      isDomainLeaf: true,
+    });
+    leafCount = twigs.reduce((s, t) => s + t.children.length, 0);
+    if (idx > TARGET_LEAVES_PER_DEPT * 4) break;
+  }
+
+  return tree;
+}
+
+/**
+ * Leaf-weighted radial layout: angles by subtree leaf weight; radii fill the
+ * full hub→label span (internals near hub, leaves distributed along the sector).
+ */
+function layoutRadialTree(tree, hubX, hubY, baseAngle, angleSpread, rMin, rMax, seed) {
+  const rng = new SeededRandom(seed);
+  const root = { id: '__hub__', children: tree, _angle: baseAngle };
+
+  function assignAngles(node, a0, a1) {
+    const kids = node.children || [];
+    if (kids.length === 0) {
+      node._angle = (a0 + a1) / 2;
+      return;
+    }
+    const weights = kids.map((c) => Math.max(1, countLeaves(c)));
+    const total = weights.reduce((s, w) => s + w, 0);
+    let cursor = a0;
+    kids.forEach((kid, i) => {
+      const span = ((a1 - a0) * weights[i]) / total;
+      const jitter = (rng.next() - 0.5) * span * 0.1;
+      assignAngles(kid, cursor, cursor + span);
+      kid._angle = cursor + span / 2 + jitter;
+      cursor += span;
+    });
+    node._angle = kids.reduce((s, k) => s + k._angle, 0) / kids.length;
+  }
+
+  const half = angleSpread / 2;
+  assignAngles(root, baseAngle - half, baseAngle + half);
+
+  function maxDepth(node, d = 0) {
+    if (!node.children || !node.children.length) return d;
+    return Math.max(...node.children.map((c) => maxDepth(c, d + 1)));
+  }
+  const depth = Math.max(4, maxDepth(root));
+  const span = rMax - rMin;
+
+  const positioned = [];
+  function place(node, d, parent) {
+    if (node.id === '__hub__') {
+      (node.children || []).forEach((c) => place(c, 1, null));
+      return;
+    }
+    const isLeaf = !node.children || node.children.length === 0;
+    let radius;
+    if (isLeaf) {
+      // Fill nearly the full hub→label span (biased slightly outward)
+      const u = rng.next();
+      const frac = 0.12 + Math.pow(u, 0.55) * 0.88;
+      radius = rMin + frac * span + (rng.next() - 0.5) * span * 0.035;
+    } else {
+      // Branch hubs stay inward so trunks read continuously
+      const t = d / depth;
+      radius = rMin + Math.pow(t, 0.85) * span * 0.5 + (rng.next() - 0.5) * span * 0.025;
+    }
+    const aJitter = (rng.next() - 0.5) * 0.035;
+    const angle = node._angle + aJitter;
+    node._x = hubX + radius * Math.cos(angle);
+    node._y = hubY + radius * Math.sin(angle);
+    node._depth = d;
+    node._parent = parent;
+    positioned.push(node);
+    (node.children || []).forEach((c) => place(c, d + 1, node));
+  }
+  place(root, 0, null);
+  return positioned;
 }
 
 class RadialOrgMapSingleWorld {
@@ -481,7 +779,10 @@ class RadialOrgMapSingleWorld {
     this.currentDeptIndex = 0;
     this.selectedNode = null;
     this.redFlagsData = null;
+    this.liveMachines = [];
+    this.nodeIndex = new Map();
     this.activePath = new Set();
+    this._builtOnce = false;
 
     this.defs = this.svg.append('defs');
     this.setupFilters();
@@ -490,19 +791,17 @@ class RadialOrgMapSingleWorld {
 
     this.zoom = d3
       .zoom()
-      .scaleExtent([0.3, 4])
+      .scaleExtent([0.25, 5])
       .on('zoom', (event) => {
         this.container.attr('transform', event.transform);
       });
 
     this.svg.call(this.zoom);
 
-    // Build full tree world
     this.buildWorld();
-
     this.setupControls();
     this.setupCard();
-    this.fetchRedFlags();
+    this.fetchLiveData();
 
     window.addEventListener('resize', () => this.handleResize());
     document.addEventListener('keydown', (e) => {
@@ -531,6 +830,7 @@ class RadialOrgMapSingleWorld {
 
   buildWorld() {
     this.container.selectAll('*').remove();
+    this.nodeIndex = new Map();
 
     document.getElementById('dept-name').textContent = 'APOS';
     document.getElementById('dept-subtitle').textContent = 'organizational map';
@@ -538,19 +838,19 @@ class RadialOrgMapSingleWorld {
     this.drawParticleCore();
 
     const count = APOS_DATA.departments.length;
-    const innerRadius = 180;
-    const outerRadius = Math.min(this.width, this.height) * 0.42;
+    const hubRing = Math.min(this.width, this.height) * 0.14;
+    // Faint labels sit near the viewport edge; trees fill almost to them
+    const faintLabelRadius = Math.min(this.width, this.height) * 0.49;
 
     APOS_DATA.departments.forEach((dept, i) => {
       const angle = (i * 2 * Math.PI) / count - Math.PI / 2;
-      const deptX = this.centerX + innerRadius * Math.cos(angle);
-      const deptY = this.centerY + innerRadius * Math.sin(angle);
+      const deptX = this.centerX + hubRing * Math.cos(angle);
+      const deptY = this.centerY + hubRing * Math.sin(angle);
 
       dept._x = deptX;
       dept._y = deptY;
       dept._angle = angle;
 
-      const faintLabelRadius = outerRadius + 80;
       const faintLabelX = this.centerX + faintLabelRadius * Math.cos(angle);
       const faintLabelY = this.centerY + faintLabelRadius * Math.sin(angle);
 
@@ -559,22 +859,29 @@ class RadialOrgMapSingleWorld {
         .attr('x', faintLabelX)
         .attr('y', faintLabelY)
         .attr('text-anchor', 'middle')
-        .attr('fill', 'rgba(45, 45, 58, 0.06)')
-        .attr('font-size', '56px')
+        .attr('dominant-baseline', 'middle')
+        .attr('fill', 'rgba(45, 45, 58, 0.07)')
+        .attr('font-size', '52px')
         .attr('font-weight', '300')
-        .attr('letter-spacing', '0.25em')
+        .attr('letter-spacing', '0.22em')
         .attr('text-transform', 'uppercase')
         .text(dept.label)
         .attr('class', 'faint-label');
 
+      const expanded = expandDepartmentTree(dept, this.liveMachines);
+      dept._expandedTree = expanded;
+      dept._leafCount = countLeaves({ children: expanded });
+
+      const treeGroup = this.container.append('g').attr('class', `tree-${dept.id}`);
+      this.renderDenseSectorTree(treeGroup, dept, deptX, deptY, angle, faintLabelRadius - hubRing - 12);
+
       const deptGroup = this.container.append('g').attr('class', 'department-node-group');
 
-      // Layered orb
       deptGroup
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 50)
+        .attr('r', 48)
         .attr('fill', `url(#grad-${dept.id})`)
         .attr('class', 'dept-orb-outer')
         .style('pointer-events', 'none');
@@ -583,9 +890,9 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 36)
+        .attr('r', 34)
         .attr('fill', dept.color)
-        .attr('fill-opacity', 0.15)
+        .attr('fill-opacity', 0.18)
         .attr('class', 'dept-orb-mid')
         .style('pointer-events', 'none');
 
@@ -593,26 +900,24 @@ class RadialOrgMapSingleWorld {
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 26)
+        .attr('r', 24)
         .attr('fill', dept.color)
-        .attr('fill-opacity', 0.4)
+        .attr('fill-opacity', 0.45)
         .attr('class', 'dept-orb-core')
         .style('pointer-events', 'none');
 
-      // Orbit ring
       deptGroup
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 52)
+        .attr('r', 50)
         .attr('fill', 'none')
         .attr('stroke', dept.color)
         .attr('stroke-width', 1.5)
-        .attr('stroke-opacity', 0.3)
+        .attr('stroke-opacity', 0.35)
         .attr('class', 'dept-orbit')
         .style('pointer-events', 'none');
 
-      // Icon
       if (dept.icon && ICON_PATHS[dept.icon]) {
         deptGroup
           .append('path')
@@ -627,139 +932,112 @@ class RadialOrgMapSingleWorld {
           .style('pointer-events', 'none');
       }
 
-      // Invisible clickable overlay
       deptGroup
         .append('circle')
         .attr('cx', deptX)
         .attr('cy', deptY)
-        .attr('r', 55)
+        .attr('r', 52)
         .attr('fill', 'transparent')
         .attr('class', 'dept-click-target')
         .style('cursor', 'pointer')
         .on('click', (event) => {
           event.stopPropagation();
-          this.zoomToNode({ ...dept, isDept: true }, i);
+          this.zoomToNode({ ...dept, isDept: true, metrics: { ...(dept.metrics || {}), leaves: dept._leafCount } }, i);
         })
         .on('mouseover', () => {
-          deptGroup.select('.dept-orb-core').transition().duration(200).attr('fill-opacity', 0.6);
+          deptGroup.select('.dept-orb-core').transition().duration(200).attr('fill-opacity', 0.65);
         })
         .on('mouseout', () => {
-          deptGroup.select('.dept-orb-core').transition().duration(200).attr('fill-opacity', 0.4);
+          deptGroup.select('.dept-orb-core').transition().duration(200).attr('fill-opacity', 0.45);
         });
-
-      this.renderLargeDenseTree(this.container, dept, deptX, deptY, angle);
     });
 
-    this.svg.transition().duration(800).call(this.zoom.transform, d3.zoomIdentity);
+    if (!this._builtOnce) {
+      this._builtOnce = true;
+      this.svg.transition().duration(600).call(this.zoom.transform, d3.zoomIdentity);
+    }
   }
 
-  renderLargeDenseTree(group, dept, centerX, centerY, baseAngle) {
-    const allNodes = flattenTree(dept.tree);
-    const rng = new SeededRandom(dept.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0));
+  /**
+   * Dense organic sector tree: leaf-weighted angles, radius from hub to faint labels,
+   * batched SVG paths + circles for performance (~90 leaves/dept).
+   */
+  renderDenseSectorTree(group, dept, hubX, hubY, baseAngle, reach) {
+    const angleSpread = ((Math.PI * 2) / APOS_DATA.departments.length) * 0.97;
+    const rMin = 48;
+    const rMax = Math.max(rMin + 80, reach);
+    const seed = dept.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const tree = dept._expandedTree || expandDepartmentTree(dept, this.liveMachines);
+    const positioned = layoutRadialTree(tree, hubX, hubY, baseAngle, angleSpread, rMin, rMax, seed);
 
-    const angleSpread = (Math.PI * 2) / APOS_DATA.departments.length * 0.85;
-    const startAngle = baseAngle - angleSpread / 2;
+    positioned.forEach((n) => {
+      n._deptColor = dept.color;
+      n._deptId = dept.id;
+      this.nodeIndex.set(n.id, n);
+    });
 
-    // Much larger radius to reach faint labels
-    const innerRadius = 70;
-    const maxRadius = Math.min(this.width, this.height) * 0.38;
+    // Batched connectors (single path)
+    const edgeParts = [];
+    positioned.forEach((n) => {
+      const px = n._parent ? n._parent._x : hubX;
+      const py = n._parent ? n._parent._y : hubY;
+      edgeParts.push(`M${px},${py}L${n._x},${n._y}`);
+    });
+    group
+      .append('path')
+      .attr('d', edgeParts.join(''))
+      .attr('fill', 'none')
+      .attr('stroke', 'rgba(45, 45, 58, 0.18)')
+      .attr('stroke-width', 0.75)
+      .attr('class', 'connector-group')
+      .style('pointer-events', 'none');
 
-    // Increase node count per level for density
-    const nodesPerLevel = [8, 24, 60, 120];
+    const midNodes = positioned.filter(
+      (n) => !n.isDomainLeaf && (n.children?.length > 0 || n._depth <= 2),
+    );
+    const leafNodes = positioned.filter((n) => n.isDomainLeaf || (!n.children?.length && !n._scaffold));
 
-    allNodes.forEach((node) => {
-      const level = node.path.length;
-      const radiusJitter = (rng.next() - 0.5) * 20;
-      const radiusBase = innerRadius + (level / 4.5) * maxRadius;
-      const radius = radiusBase + radiusJitter;
-
-      const siblingsAtLevel = allNodes.filter((n) => n.path.length === level);
-      const indexAtLevel = siblingsAtLevel.indexOf(node);
-      const angleStep = angleSpread / (siblingsAtLevel.length + 1);
-      const angleJitter = (rng.next() - 0.5) * angleStep * 0.5;
-      const angle = startAngle + angleStep * (indexAtLevel + 1) + angleJitter;
-
-      const x = centerX + radius * Math.cos(angle);
-      const y = centerY + radius * Math.sin(angle);
-
-      node._x = x;
-      node._y = y;
-      node._deptColor = dept.color;
-      node._deptId = dept.id;
-
-      if (level > 1) {
-        const parent = allNodes.find((n) => n.id === node.path[node.path.length - 2]);
-        if (parent && parent._x !== undefined) {
-          group
-            .append('line')
-            .attr('x1', parent._x)
-            .attr('y1', parent._y)
-            .attr('x2', x)
-            .attr('y2', y)
-            .attr('stroke', 'rgba(45, 45, 58, 0.15)')
-            .attr('stroke-width', 0.8)
-            .attr('class', 'connector-group')
-            .attr('data-parent-id', parent.id)
-            .attr('data-child-id', node.id);
-        }
-      } else {
-        group
-          .append('line')
-          .attr('x1', centerX)
-          .attr('y1', centerY)
-          .attr('x2', x)
-          .attr('y2', y)
-          .attr('stroke', 'rgba(45, 45, 58, 0.2)')
-          .attr('stroke-width', 1.2)
-          .attr('class', 'connector-group')
-          .attr('data-parent-id', dept.id)
-          .attr('data-child-id', node.id);
-      }
-
-      const nodeRadius = level === 1 ? 9 : level === 2 ? 6 : 3.5;
-      const nodeGroup = group.append('g').attr('class', 'node-group').attr('data-node-id', node.id);
-
-      const nodeFill = level === 1 ? dept.color : level === 2 ? '#f5f5f7' : '#f5f5f7';
-      const nodeFillOpacity = level === 1 ? 0.7 : level === 2 ? 0.5 : 0.8;
-      const nodeStroke = level === 1 ? dept.color : level === 2 ? 'rgba(45, 45, 58, 0.3)' : 'rgba(45, 45, 58, 0.2)';
-      const nodeStrokeWidth = level === 1 ? 2 : level === 2 ? 1 : 0.5;
+    // Mid-level frosted discs with icons (incl. branchlets)
+    const midG = group.append('g').attr('class', 'mid-nodes');
+    midNodes.forEach((node) => {
+      const level = node._depth;
+      const nodeRadius = level === 1 ? 8 : level === 2 ? 5 : 3.2;
+      const nodeGroup = midG.append('g').attr('class', 'node-group').attr('data-node-id', node.id);
 
       const nodeCircle = nodeGroup
         .append('circle')
-        .attr('cx', x)
-        .attr('cy', y)
+        .attr('cx', node._x)
+        .attr('cy', node._y)
         .attr('r', nodeRadius)
-        .attr('fill', nodeFill)
-        .attr('fill-opacity', nodeFillOpacity)
-        .attr('stroke', nodeStroke)
-        .attr('stroke-width', nodeStrokeWidth)
-        .attr('filter', level === 3 ? 'url(#glow-soft)' : 'none')
+        .attr('fill', level === 1 ? dept.color : '#f8f6fc')
+        .attr('fill-opacity', level === 1 ? 0.75 : 0.85)
+        .attr('stroke', level === 1 ? dept.color : 'rgba(45, 45, 58, 0.28)')
+        .attr('stroke-width', level === 1 ? 1.8 : 1)
         .style('cursor', 'pointer');
 
-      // Status dot
       if (node.metrics?.status) {
-        const statusColor = node.metrics.status === 'green' ? '#10b981' : node.metrics.status === 'amber' ? '#f59e0b' : '#ef4444';
+        const statusColor =
+          node.metrics.status === 'green' ? '#10b981' : node.metrics.status === 'amber' ? '#f59e0b' : '#ef4444';
         nodeGroup
           .append('circle')
-          .attr('cx', x + nodeRadius * 0.7)
-          .attr('cy', y - nodeRadius * 0.7)
-          .attr('r', 3)
+          .attr('cx', node._x + nodeRadius * 0.7)
+          .attr('cy', node._y - nodeRadius * 0.7)
+          .attr('r', 2.5)
           .attr('fill', statusColor)
           .attr('stroke', '#fff')
-          .attr('stroke-width', 1)
+          .attr('stroke-width', 0.8)
           .attr('class', 'status-dot');
       }
 
-      // Icon for mid-level
-      if (level <= 2 && node.icon && ICON_PATHS[node.icon]) {
-        const iconSize = level === 1 ? 14 : 10;
+      if (node.icon && ICON_PATHS[node.icon]) {
+        const iconSize = level === 1 ? 12 : 9;
         nodeGroup
           .append('path')
           .attr('d', ICON_PATHS[node.icon])
-          .attr('transform', `translate(${x - iconSize / 2}, ${y - iconSize / 2}) scale(${iconSize / 24})`)
+          .attr('transform', `translate(${node._x - iconSize / 2}, ${node._y - iconSize / 2}) scale(${iconSize / 24})`)
           .attr('fill', 'none')
-          .attr('stroke', level === 1 ? '#fff' : 'rgba(45, 45, 58, 0.7)')
-          .attr('stroke-width', 1.8)
+          .attr('stroke', level === 1 ? '#fff' : 'rgba(45, 45, 58, 0.65)')
+          .attr('stroke-width', 1.6)
           .attr('stroke-linecap', 'round')
           .attr('stroke-linejoin', 'round')
           .attr('class', 'node-icon')
@@ -771,28 +1049,86 @@ class RadialOrgMapSingleWorld {
           event.stopPropagation();
           this.zoomToNode(node);
         })
-        .on('mouseover', (event) => {
-          nodeCircle.transition().duration(150).attr('r', nodeRadius * 1.4);
-          if (node.label) {
-            const label = nodeGroup
-              .append('text')
-              .attr('x', x)
-              .attr('y', y - nodeRadius - 8)
-              .attr('text-anchor', 'middle')
-              .attr('fill', 'rgba(45, 45, 58, 0.9)')
-              .attr('font-size', '11px')
-              .attr('font-weight', '600')
-              .attr('letter-spacing', '0.05em')
-              .attr('text-transform', 'uppercase')
-              .attr('class', 'hover-label')
-              .text(node.label);
-          }
+        .on('mouseover', () => {
+          nodeCircle.transition().duration(120).attr('r', nodeRadius * 1.35);
+          nodeGroup
+            .append('text')
+            .attr('x', node._x)
+            .attr('y', node._y - nodeRadius - 7)
+            .attr('text-anchor', 'middle')
+            .attr('fill', 'rgba(45, 45, 58, 0.9)')
+            .attr('font-size', '10px')
+            .attr('font-weight', '600')
+            .attr('letter-spacing', '0.06em')
+            .attr('text-transform', 'uppercase')
+            .attr('class', 'hover-label')
+            .text(node.label);
         })
-        .on('mouseout', (event) => {
-          nodeCircle.transition().duration(150).attr('r', nodeRadius);
+        .on('mouseout', () => {
+          nodeCircle.transition().duration(120).attr('r', nodeRadius);
           nodeGroup.select('.hover-label').remove();
         });
     });
+
+    // Batched leaf circles (domain detail)
+    const leafG = group.append('g').attr('class', 'leaf-nodes');
+    const midIds = new Set(midNodes.map((n) => n.id));
+    const uniqueLeaves = leafNodes.filter((n) => n.isDomainLeaf || !midIds.has(n.id));
+
+    leafG
+      .selectAll('circle.leaf-dot')
+      .data(uniqueLeaves, (d) => d.id)
+      .join('circle')
+      .attr('class', 'leaf-dot node-group')
+      .attr('data-node-id', (d) => d.id)
+      .attr('cx', (d) => d._x)
+      .attr('cy', (d) => d._y)
+      .attr('r', 2.8)
+      .attr('fill', (d) => {
+        const st = d.metrics?.status;
+        if (st === 'amber') return '#f59e0b';
+        if (st === 'red') return '#ef4444';
+        return dept.color;
+      })
+      .attr('fill-opacity', 0.72)
+      .attr('stroke', 'rgba(255,255,255,0.85)')
+      .attr('stroke-width', 0.5)
+      .style('cursor', 'pointer')
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        this.zoomToNode(d);
+      })
+      .on('mouseover', function (event, d) {
+        d3.select(this).transition().duration(100).attr('r', 4.5).attr('fill-opacity', 0.95);
+        leafG
+          .append('text')
+          .attr('x', d._x)
+          .attr('y', d._y - 8)
+          .attr('text-anchor', 'middle')
+          .attr('fill', 'rgba(45, 45, 58, 0.88)')
+          .attr('font-size', '9px')
+          .attr('font-weight', '600')
+          .attr('letter-spacing', '0.05em')
+          .attr('class', 'hover-label')
+          .text(d.label);
+      })
+      .on('mouseout', function () {
+        d3.select(this).transition().duration(100).attr('r', 2.8).attr('fill-opacity', 0.72);
+        leafG.selectAll('.hover-label').remove();
+      });
+
+    // Tiny status dots on amber/red leaves
+    const statusLeaves = uniqueLeaves.filter((d) => d.metrics?.status === 'amber' || d.metrics?.status === 'red');
+    leafG
+      .selectAll('circle.status-leaf')
+      .data(statusLeaves, (d) => d.id + '-st')
+      .join('circle')
+      .attr('class', 'status-dot')
+      .attr('cx', (d) => d._x + 2.5)
+      .attr('cy', (d) => d._y - 2.5)
+      .attr('r', 1.6)
+      .attr('fill', (d) => (d.metrics.status === 'amber' ? '#f59e0b' : '#ef4444'))
+      .style('pointer-events', 'none');
   }
 
   drawParticleCore() {
@@ -879,7 +1215,11 @@ class RadialOrgMapSingleWorld {
       : '<div class="metric-row"><span class="metric-value">No metrics</span></div>';
     document.getElementById('card-metrics').innerHTML = metricsHtml;
 
-    const children = node.tree?.length || (node.children?.length) || 0;
+    const children =
+      node._leafCount ||
+      (node.children ? countLeaves(node) : 0) ||
+      node.tree?.length ||
+      0;
     document.getElementById('card-children').textContent = children;
 
     card.classList.add('open');
@@ -964,29 +1304,58 @@ class RadialOrgMapSingleWorld {
     });
   }
 
-  async fetchRedFlags() {
+  async fetchLiveData() {
     try {
-      const response = await fetch('/api/alert/red-flags/snapshot', { credentials: 'include' });
-      if (response.ok) {
-        this.redFlagsData = await response.json();
-        this.updateAlertPulse();
+      const [snapRes, machRes] = await Promise.all([
+        fetch('/api/alert/red-flags/snapshot', { credentials: 'include' }).catch(() => null),
+        fetch('/api/alert/machines', { credentials: 'include' }).catch(() => null),
+      ]);
+      if (snapRes && snapRes.ok) {
+        this.redFlagsData = await snapRes.json();
       } else {
         this.redFlagsData = { rows: [] };
       }
+      if (machRes && machRes.ok) {
+        const payload = await machRes.json();
+        const list = payload.machines || payload.rows || [];
+        if (Array.isArray(list) && list.length > 0) {
+          const prev = this.liveMachines.length;
+          this.liveMachines = list;
+          // Rebuild once when live machines first arrive (prefer real names over catalog)
+          if (prev === 0) this.buildWorld();
+        }
+      }
+      this.updateAlertPulse();
     } catch (err) {
       this.redFlagsData = { rows: [] };
     }
 
-    setInterval(() => this.fetchRedFlags(), 60000);
+    if (!this._livePoll) {
+      this._livePoll = setInterval(() => this.pollLiveOnly(), 60000);
+    }
+  }
+
+  async pollLiveOnly() {
+    try {
+      const snapRes = await fetch('/api/alert/red-flags/snapshot', { credentials: 'include' });
+      if (snapRes.ok) {
+        this.redFlagsData = await snapRes.json();
+        this.updateAlertPulse();
+      }
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   updateAlertPulse() {
     const hasAlerts = this.redFlagsData && this.redFlagsData.rows && this.redFlagsData.rows.length > 0;
     const redFlagsNode = d3.select('.node-group[data-node-id="red-flags-detector"] circle');
-    if (hasAlerts) {
-      redFlagsNode.attr('fill', '#ef4444').style('animation', 'pulse-alert 1.5s ease-in-out infinite');
-    } else {
-      redFlagsNode.attr('fill', null).style('animation', 'none');
+    if (!redFlagsNode.empty()) {
+      if (hasAlerts) {
+        redFlagsNode.attr('fill', '#ef4444').style('animation', 'pulse-alert 1.5s ease-in-out infinite');
+      } else {
+        redFlagsNode.style('animation', 'none');
+      }
     }
   }
 
@@ -995,7 +1364,6 @@ class RadialOrgMapSingleWorld {
     this.height = window.innerHeight;
     this.centerX = this.width / 2;
     this.centerY = this.height / 2;
-
     this.buildWorld();
   }
 }
