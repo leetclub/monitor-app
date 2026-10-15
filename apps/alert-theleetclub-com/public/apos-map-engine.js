@@ -187,6 +187,36 @@
     });
   }
 
+  /** Space overview: seat first-level brands on an even fan (≥40° apart). */
+  function reseatCountryBrandFan(hub) {
+    if (LAYOUT !== 'countryTree') return;
+    const brands = (childrenOf.get(hub.id) || []).filter((c) => c.type === 'client' && !c.pad);
+    if (brands.length < 2) return;
+    const minGap = (58 * Math.PI) / 180; // ≥40°; wide enough that titles don't crowd
+    const fan = Math.max((brands.length - 1) * minGap, (120 * Math.PI) / 180);
+    hub.wedge = Math.max(hub.wedge || 0, fan + 0.2);
+    const brandDist = TREE.area * 1.0;
+    const shiftTree = (id, dx, dy) => {
+      (childrenOf.get(id) || []).forEach((c) => {
+        c.x += dx;
+        c.y += dy;
+        shiftTree(c.id, dx, dy);
+      });
+    };
+    brands.forEach((b, i) => {
+      const t = brands.length === 1 ? 0.5 : i / (brands.length - 1);
+      const ang = hub.outAngle - fan / 2 + t * fan;
+      const nx = hub.x + Math.cos(ang) * brandDist;
+      const ny = hub.y + Math.sin(ang) * brandDist;
+      const dx = nx - b.x;
+      const dy = ny - b.y;
+      b.x = nx;
+      b.y = ny;
+      b.angle = ang;
+      if (dx || dy) shiftTree(b.id, dx, dy);
+    });
+  }
+
   function layoutAllHubTrees() {
     const weights = hubs.map((h) => {
       const n = countLeavesUnder(h.id);
@@ -197,9 +227,13 @@
     const usable = Math.PI * 2 - hubs.length * gap;
     hubs.forEach((hub, i) => {
       const share = weights[i] / total;
-      const wedge = Math.max(0.5, Math.min(1.65, share * usable));
+      // Space countries with brands need a wide first-hop fan (≥40° between brands)
+      const brandN = (childrenOf.get(hub.id) || []).filter((c) => c.type === 'client').length;
+      const minBrandFan = brandN >= 2 ? (brandN - 1) * ((40 * Math.PI) / 180) + 0.2 : 0.5;
+      const wedge = Math.max(0.5, minBrandFan, Math.min(1.85, share * usable));
       hub.wedge = wedge;
       layoutHubSector(hub, wedge);
+      reseatCountryBrandFan(hub);
       const seatBranches = (n) => {
         const kids = childrenOf.get(n.id) || [];
         const brs = kids.filter((c) => c.type === 'branch');
@@ -988,13 +1022,19 @@
       title.className = `hub-title ${h.ring || ''} ${focused ? 'is-focus' : ''} ${overviewMode ? '' : (focused ? '' : 'muted')}`;
       sub.textContent = h.subtitle || '';
       sub.className = 'hub-sub';
-      // Overview: OUTSIDE tree tips on the ray from core (ref: OPERATIONS above, SALES below)
-      // Focus: under orb along inward radial
+      // Overview: planned countries → titles outside; active with brands → title
+      // sits inward of the hub (toward core) so it never fights brand labels.
+      // Focus: under orb along inward radial.
       let wx, wy;
       const inward = h.outAngle + Math.PI;
+      const brands = (childrenOf.get(h.id) || []).filter((c) => c.type === 'client' && c.draw && c.label);
+      const titleInward = overviewMode && brands.length > 0 && h.status !== 'future';
       if (focused) {
         wx = h.x + Math.cos(inward) * 34;
         wy = h.y + Math.sin(inward) * 34;
+      } else if (titleInward) {
+        wx = h.x + Math.cos(inward) * 110;
+        wy = h.y + Math.sin(inward) * 110;
       } else {
         const titleR = R_TITLE;
         wx = Math.cos(h.outAngle) * titleR;
@@ -1004,39 +1044,47 @@
       el.style.position = 'absolute';
       el.style.left = '0';
       el.style.top = '0';
-      // Anchor: top hubs → title above point; bottom → below; sides → centered on ray
       const ax = Math.cos(h.outAngle);
       const ay = Math.sin(h.outAngle);
       if (!focused) {
-        // Push past area tips/labels/pills along the ray
-        let push = 18;
-        const areas = (childrenOf.get(h.id) || []).filter((c) => (c.type === 'area' || c.type === 'client') && c.draw && c.label);
-        for (let guard = 0; guard < 8; guard++) {
-          const tx = s.x + ax * push;
-          const ty = s.y + ay * push;
-          let hit = false;
-          areas.forEach((a) => {
-            const ap = worldToScreen(a.x, a.y);
-            const lab = a._labelSx != null ? { x: a._labelSx, y: a._labelSy } : ap;
-            if (Math.hypot(tx - ap.x, ty - ap.y) < 36) hit = true;
-            if (Math.hypot(tx - lab.x, ty - lab.y) < 42) hit = true;
-            if (Math.hypot(tx - (ap.x + 14), ty - (ap.y - 12)) < 28) hit = true; // pill
-            // subtitle sits ~22px further out
-            if (Math.hypot(tx - lab.x, ty + 22 - lab.y) < 36) hit = true;
-          });
-          if (!hit) break;
-          push += 14;
+        let tx;
+        let ty;
+        if (titleInward) {
+          tx = s.x;
+          ty = s.y;
+        } else {
+          // Push past area tips/labels/pills along the ray
+          let push = 18;
+          const areas = (childrenOf.get(h.id) || []).filter((c) => (c.type === 'area' || c.type === 'client') && c.draw && c.label);
+          for (let guard = 0; guard < 8; guard++) {
+            const px = s.x + ax * push;
+            const py = s.y + ay * push;
+            let hit = false;
+            areas.forEach((a) => {
+              const ap = worldToScreen(a.x, a.y);
+              const lab = a._labelSx != null ? { x: a._labelSx, y: a._labelSy } : ap;
+              const clear = a.type === 'client' ? 56 : 42;
+              if (Math.hypot(px - ap.x, py - ap.y) < 36) hit = true;
+              if (Math.hypot(px - lab.x, py - lab.y) < clear) hit = true;
+              if (Math.hypot(px - (ap.x + 14), py - (ap.y - 12)) < 28) hit = true;
+              if (Math.hypot(px - lab.x, py + 22 - lab.y) < clear) hit = true;
+            });
+            if (!hit) break;
+            push += 14;
+          }
+          tx = s.x + ax * push;
+          ty = s.y + ay * push;
         }
-        let tx = s.x + ax * push;
-        let ty = s.y + ay * push;
         // Keep titles inside the stage (never under the app header / off the left edge)
         tx = Math.max(56, Math.min(stage.clientWidth - 56, tx));
-        ty = Math.max(28, Math.min(stage.clientHeight - 36, ty));
+        ty = Math.max(40, Math.min(stage.clientHeight - 40, ty));
         title.style.left = `${tx}px`;
         title.style.top = `${ty}px`;
         title.style.transform = 'translate(-50%, -50%)';
+        // Inward KW title: subtitle toward the hub (outward); planned: further out
+        const subDy = titleInward ? (ay >= 0 ? 22 : -28) : 22;
         sub.style.left = `${tx}px`;
-        sub.style.top = `${ty + 22}px`;
+        sub.style.top = `${ty + subDy}px`;
         sub.style.transform = 'translate(-50%, 0)';
       } else {
         title.style.left = `${s.x}px`;
@@ -1244,9 +1292,12 @@
 
     function textHalf(n) {
       const len = (n.label || '').length;
+      // Overview brand labels match country-title scale (~22px)
+      const overviewBrand = overviewMode && n.type === 'client';
+      const charW = overviewBrand ? 7.2 : 3.55;
       return {
-        hw: Math.min(100, Math.max(22, 5 + len * 3.55)),
-        hh: n.type === 'branch' ? 9 : 8,
+        hw: Math.min(overviewBrand ? 140 : 100, Math.max(overviewBrand ? 28 : 22, 5 + len * charW)),
+        hh: overviewBrand ? 14 : n.type === 'branch' ? 9 : 8,
       };
     }
     function placeAt(p, ang, sr, hw, hh, hasPill) {
@@ -1356,7 +1407,8 @@
         root.appendChild(el);
       }
       el.textContent = n.label; // full label (incl. Technical Support)
-      el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}`;
+      const overviewBrand = overviewMode && n.type === 'client';
+      el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}${overviewBrand ? ' overview-brand' : ''}`;
       const sx = n._labelSx != null ? n._labelSx : screenOf(n).x;
       const sy = n._labelSy != null ? n._labelSy : screenOf(n).y + 20;
       el.style.left = `${sx}px`;
@@ -1666,26 +1718,24 @@
   function subtreeExtent(node) {
     const locals = localFrameNodes(node);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    // ~label clearance in world units (labels sit outward ~40–90 screen-px)
-    const labelPad = 55 / Math.max(transform?.k || 1, 0.35);
+    // Fixed world pad for scale (screen label clearance applied in fitTransform centre)
+    const labelPad = 48;
     locals.forEach((n) => {
       minX = Math.min(minX, n.x - labelPad);
       maxX = Math.max(maxX, n.x + labelPad);
       minY = Math.min(minY, n.y - labelPad);
       maxY = Math.max(maxY, n.y + labelPad);
     });
-    // Focus title + child labels — pad evenly so the visual block centres in the viewport
     if (node && node.type !== 'hub' && node.type !== 'country' && node.type !== 'enterprise') {
-      const titlePad = 64 / Math.max(transform?.k || 1, 0.35);
-      // Symmetric vertical pad (title under focus + labels above children)
-      maxY = Math.max(maxY, node.y + titlePad);
-      minY = Math.min(minY, node.y - titlePad);
+      // Extra room for focus title under disc + child labels above
+      maxY = Math.max(maxY, node.y + 72);
+      minY = Math.min(minY, node.y - 56);
       locals.forEach((n) => {
         if (n.id === node.id) return;
-        maxX = Math.max(maxX, n.x + labelPad * 1.1);
-        minX = Math.min(minX, n.x - labelPad * 1.1);
-        maxY = Math.max(maxY, n.y + labelPad);
-        minY = Math.min(minY, n.y - labelPad);
+        maxX = Math.max(maxX, n.x + 56);
+        minX = Math.min(minX, n.x - 56);
+        maxY = Math.max(maxY, n.y + 48);
+        minY = Math.min(minY, n.y - 64);
       });
     }
     if (node.type === 'hub') {
@@ -1720,6 +1770,39 @@
     return { x: -pad, y: -pad, w: pad * 2, h: pad * 2 };
   }
 
+  /** Overview content bbox: hubs + first-hop brands + title anchors (world). */
+  function overviewContentExtent() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const grow = (x, y, r = 0) => {
+      minX = Math.min(minX, x - r);
+      maxX = Math.max(maxX, x + r);
+      minY = Math.min(minY, y - r);
+      maxY = Math.max(maxY, y + r);
+    };
+    grow(0, 0, CORE_WORLD_R);
+    hubs.forEach((h) => {
+      grow(h.x, h.y, 40);
+      const brands = (childrenOf.get(h.id) || []).filter((c) => (c.type === 'client' || c.type === 'area') && !c.pad);
+      brands.forEach((b) => grow(b.x, b.y, 80));
+      // Title sits outside on the hub ray (planned) or inward of brands (active with children)
+      const hasBrands = brands.some((b) => b.type === 'client');
+      if (hasBrands && h.status !== 'future') {
+        const inward = h.outAngle + Math.PI;
+        grow(h.x + Math.cos(inward) * 120, h.y + Math.sin(inward) * 120, 60);
+        // Brand labels outward of brands
+        brands.forEach((b) => {
+          const ang = b.angle != null ? b.angle : Math.atan2(b.y - h.y, b.x - h.x);
+          grow(b.x + Math.cos(ang) * 90, b.y + Math.sin(ang) * 90, 50);
+        });
+      } else {
+        grow(Math.cos(h.outAngle) * R_TITLE, Math.sin(h.outAngle) * R_TITLE, 70);
+      }
+    });
+    if (!Number.isFinite(minX)) return fullExtent();
+    const pad = 40;
+    return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+  }
+
   function fitTransform(bbox, centerNode) {
     const W = stage.clientWidth || 1200;
     const H = stage.clientHeight || 800;
@@ -1729,11 +1812,16 @@
     // Full ring: outer titles reach ~90% of stage height (and width)
     if (centerNode?.type === 'enterprise') {
       if (LAYOUT === 'countryTree') {
-        // Countries on a ring at ~30% of stage; titles must stay on-screen
-        const minDim = Math.min(W, H);
-        k = (0.30 * minDim) / R_HUB;
-        const maxK = (0.48 * minDim) / R_TITLE;
-        k = Math.max(0.12, Math.min(k, maxK));
+        // Fit hubs + KW brands + titles with ~10% screen margin (core shifts naturally)
+        const ext = overviewContentExtent();
+        const margin = 0.10;
+        const fitW = W * (1 - 2 * margin);
+        const fitH = H * (1 - 2 * margin);
+        k = Math.min(fitW / Math.max(ext.w, 1), fitH / Math.max(ext.h, 1));
+        k = Math.max(0.12, Math.min(k, 1.2));
+        const cx = ext.x + ext.w / 2;
+        const cy = ext.y + ext.h / 2;
+        return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
       } else {
         k = Math.min((0.92 * H) / (2 * R_TITLE), (0.92 * W) / (2 * R_TITLE));
       }
@@ -1752,7 +1840,7 @@
       return d3.zoomIdentity.translate(hubSX, hubSY).scale(k).translate(-centerNode.x, -centerNode.y);
     }
     if (centerNode && (centerNode.type === 'client' || centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      // Scale from padded bbox (labels/titles); centre on the disc cluster itself
+      // Scale from padded bbox; centre discs + focus-title as one visual block
       const span = Math.max(bbox.w, bbox.h, 36);
       const minDim = Math.min(W, H);
       const target = 0.68 * minDim;
@@ -1760,10 +1848,17 @@
       k = Math.max(centerNode.type === 'client' ? 1.5 : 2.2, Math.min(k, 80));
       const locals = localFrameNodes(centerNode);
       if (locals.length) {
-        let sx = 0, sy = 0;
-        locals.forEach((n) => { sx += n.x; sy += n.y; });
-        cx = sx / locals.length;
-        cy = sy / locals.length;
+        let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
+        locals.forEach((n) => {
+          minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+          minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+        });
+        cx = (minX + maxX) / 2;
+        // Focus title stack (~title + subtitle) reaches ~140–150 screen-px below the focus disc
+        const titleBottom = 148 / k;
+        const blockMaxY = Math.max(maxY, centerNode.y + titleBottom);
+        const blockMinY = minY;
+        cy = (blockMinY + blockMaxY) / 2;
       } else {
         cx = bbox.x + bbox.w / 2;
         cy = bbox.y + bbox.h / 2;
