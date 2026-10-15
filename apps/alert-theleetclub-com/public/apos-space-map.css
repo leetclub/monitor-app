@@ -278,15 +278,22 @@ body {
 /* ——— SVG stars / links ——— */
 .node {
   cursor: pointer;
+  /* LOD opacity set inline; avoid CSS transitions fighting RAF zoom */
+  transition: none;
 }
 
 .node.future {
-  opacity: 0.38;
   cursor: default;
 }
 
-.node.context {
-  opacity: 0.55;
+.node.is-hover .star-halo,
+.node.is-hover .core-mid-glow {
+  filter: brightness(1.35);
+}
+
+.node.on-path .star-core,
+.node.on-path .core-body {
+  filter: brightness(1.15);
 }
 
 .star-halo {
@@ -399,6 +406,12 @@ body {
 .link.context {
   stroke-opacity: 0.28;
   stroke-width: 1;
+}
+
+.link.on-path {
+  stroke: #d0e8f8;
+  stroke-opacity: 0.72;
+  stroke-width: 1.7;
 }
 
 .nebula {
