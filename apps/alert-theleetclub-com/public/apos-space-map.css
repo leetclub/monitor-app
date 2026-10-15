@@ -67,7 +67,16 @@ body {
 .brand-mark {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+.brand-logo {
+  height: 28px;
+  width: auto;
+  display: block;
+  filter: invert(1);
+  opacity: 0.95;
 }
 
 .brand-word {
@@ -79,12 +88,12 @@ body {
 }
 
 .brand-sub {
-  font-size: 0.65rem;
+  font-size: 0.55rem;
   font-weight: 400;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-dim);
-  text-indent: 0.18em;
+  margin-left: 2px;
 }
 
 .view-toggle {
@@ -759,4 +768,103 @@ body {
     font-size: 12px;
     letter-spacing: 0.24em;
   }
+}
+
+
+/* ——— Shared engine surfaces (space theme) ——— */
+.space-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+.space-world,
+.space-svg,
+.label-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.space-world {
+  z-index: 1;
+  pointer-events: none;
+}
+.space-svg {
+  z-index: 2;
+  background: transparent;
+}
+.label-layer {
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+.node-label-dom {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.92);
+  text-shadow: 0 0 8px rgba(3, 5, 10, 0.9), 0 1px 2px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.node-label-dom.type-branch {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(180, 255, 210, 0.95);
+}
+.hub-title-dom {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.hub-title-dom .hub-title-main {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: rgba(238, 244, 250, 0.9);
+}
+.hub-title-dom .hub-title-sub {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(122, 135, 153, 0.85);
+  margin-top: 2px;
+}
+.focus-title {
+  position: absolute;
+  transform: translate(-50%, 0);
+  text-align: center;
+  pointer-events: none;
+}
+.focus-title-main {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: rgba(244, 250, 255, 0.95);
+  text-transform: uppercase;
+}
+.focus-title-sub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(142, 200, 224, 0.7);
+  margin-top: 4px;
+}
+.leaf-card-leader {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 15;
+}
+.leaf-card-leader-line {
+  stroke: rgba(57, 255, 136, 0.45);
+  stroke-width: 1.2;
+  fill: none;
+}
+.branch-card {
+  z-index: 25;
 }

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>APOS Operations Map | Leet Alert</title>
+  <style id="critical-bg">html,body{margin:0;height:100%;background:#03050a;color:#e2e8f0;overflow:hidden}</style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -14,7 +15,7 @@
   <div class="space-app" id="space-app">
     <header class="space-top">
       <div class="brand-mark" aria-label="APOS">
-        <span class="brand-word">APOS</span>
+        <img class="brand-logo" src="assets/apos-logo.png" alt="apos" width="120" height="28" />
         <span class="brand-sub">operations map</span>
       </div>
       <div class="view-toggle" role="tablist" aria-label="View mode">
@@ -24,9 +25,9 @@
     </header>
 
     <main class="space-stage" id="space-stage">
-      <canvas id="starfield" class="starfield" aria-hidden="true"></canvas>
+      <canvas id="space-world" class="space-world" aria-hidden="true"></canvas>
       <svg id="space-svg" class="space-svg" role="img" aria-label="APOS hierarchy map"></svg>
-      <canvas id="signal-canvas" class="signal-canvas" aria-hidden="true"></canvas>
+      <div class="label-layer" id="label-layer" aria-hidden="true"></div>
       <div class="map-tooltip" id="map-tooltip" hidden></div>
 
       <div class="zoom-controls" aria-label="Zoom">
@@ -50,7 +51,7 @@
       <button type="button" class="card-close" id="branch-card-close" aria-label="Close">&times;</button>
       <h3 class="card-title" id="branch-card-title"></h3>
       <div class="card-body" id="branch-card-body"></div>
-      <button type="button" class="card-task-btn" id="branch-card-task" hidden>Open terminal</button>
+      <button type="button" class="card-task-btn" id="branch-card-task">Open terminal</button>
     </aside>
 
     <div class="terminal-overlay" id="terminal-overlay" hidden>
@@ -76,6 +77,7 @@
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="apos-space-map-data.js"></script>
   <script src="apos-map-polish.js"></script>
+  <script src="apos-map-engine.js"></script>
   <script src="apos-space-map.js"></script>
 </body>
 </html>

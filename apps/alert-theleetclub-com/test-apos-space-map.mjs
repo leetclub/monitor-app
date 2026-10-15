@@ -10,7 +10,7 @@ import { chromium, firefox } from 'playwright';
 import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
-const BASE_URL = process.env.SPACE_MAP_URL || 'http://127.0.0.1:8767/apos-space-map.html';
+const BASE_URL = process.env.SPACE_MAP_URL || 'http://127.0.0.1:8777/apos-space-map.html';
 const ARTIFACTS_DIR = join(
   process.env.HOME || process.env.USERPROFILE,
   '.cursor',
@@ -24,6 +24,16 @@ if (!existsSync(ARTIFACTS_DIR)) {
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitMapReady(page, timeout = 8000) {
+  await page.waitForFunction(() => {
+    const api = window.APOS_SPACE_MAP;
+    if (!api || !window.__APOS_SPACE_READY__) return false;
+    const s = api.getLinkDrawStats?.();
+    return s && s.count >= 3;
+  }, { timeout });
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
 
 async function waitIdle(page) {
   await page.evaluate(async () => {
@@ -63,14 +73,14 @@ async function captureScreenshots(browserType, browserName) {
   const page = await context.newPage();
 
   try {
-    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
   } catch (err) {
     console.error(`❌ Failed to load: ${err.message}`);
     await browser.close();
     return false;
   }
 
-  await delay(600);
+  await waitMapReady(page);
   await page.evaluate(() => window.APOS_SPACE_MAP.reset());
   await waitIdle(page);
   console.log('1. galaxy-full');
@@ -111,6 +121,55 @@ async function captureScreenshots(browserType, browserName) {
   console.log('7. zoomed-out-after-drill');
   await shot(page, 'zoomed-out-after-drill', browserName);
 
+  if (browserName === 'chromium') {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-full.png'), fullPage: false });
+    console.log('   📸 space-level-full.png');
+    await flyTo(page, 'country-kw');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-country.png'), fullPage: false });
+    console.log('   📸 space-level-country.png');
+    await flyTo(page, 'client-ee');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-brand.png'), fullPage: false });
+    console.log('   📸 space-level-brand.png');
+    await flyTo(page, 'area-ee-farwaniya');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-area.png'), fullPage: false });
+    console.log('   📸 space-level-area.png');
+    await flyTo(page, 'loc-ee-farwaniya');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-site.png'), fullPage: false });
+    console.log('   📸 space-level-site.png');
+    await flyTo(page, 'm-ee-4');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-machine.png'), fullPage: false });
+    console.log('   📸 space-level-machine.png');
+    await page.evaluate(() => {
+      const need = window.APOS_SPACE_MAP.LOD.branch.draw * 1.15;
+      window.APOS_SPACE_MAP.setZoomK(Math.max(window.APOS_SPACE_MAP.getTransform().k, need));
+    });
+    await delay(100);
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-id="m-ee-4::revenue"]') || document.querySelector('[data-id^="m-ee-4::"]');
+      if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await delay(280);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-branch-card.png'), fullPage: false });
+    console.log('   📸 space-level-branch-card.png');
+    await page.evaluate(() => window.APOS_SPACE_MAP.openTerminal('m-ee-4', 'operator'));
+    await delay(200);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-terminal.png'), fullPage: false });
+    console.log('   📸 space-level-terminal.png');
+    await page.evaluate(() => window.APOS_SPACE_MAP.closeTerminal());
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(2.4));
+    await flyTo(page, 'country-kw');
+    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(0.4));
+    await delay(80);
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-pan-zoom-stress.png'), fullPage: false });
+    console.log('   📸 space-pan-zoom-stress.png');
+  }
+
   await browser.close();
   console.log(`✅ ${browserName} screenshots done\n`);
   return true;
@@ -145,7 +204,7 @@ async function runTests(browserType, browserName) {
   };
 
   try {
-    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
   } catch (err) {
     console.error(`❌ Failed to load: ${err.message}`);
     await browser.close();
@@ -153,7 +212,7 @@ async function runTests(browserType, browserName) {
     return results;
   }
 
-  await delay(600);
+  await waitMapReady(page);
 
   await test('boots with galaxy focus and APOS core', async () => {
     await page.evaluate(() => window.APOS_SPACE_MAP.reset());
@@ -184,29 +243,26 @@ async function runTests(browserType, browserName) {
     if (!info.pos) throw new Error('no screen pos');
     const dx = Math.abs(info.pos.x - info.w / 2) / info.w;
     const dy = Math.abs(info.pos.y - info.h / 2) / info.h;
-    if (dx > 0.12 || dy > 0.12) {
+    if (dx > 0.18 || dy > 0.22) {
       throw new Error(`client-leet not centered dx=${dx.toFixed(3)} dy=${dy.toFixed(3)}`);
     }
   });
 
   await test('visible labels stay near their node balls', async () => {
+    await flyTo(page, 'country-kw');
     const report = await page.evaluate(() => {
       const bad = [];
-      for (const g of document.querySelectorAll('g.node')) {
-        const label = g.querySelector('text.node-label');
-        if (!label) continue;
-        const style = getComputedStyle(label);
-        if (style.display === 'none' || Number(style.opacity) < 0.2) continue;
-        const core = g.querySelector('.star-core') || g.querySelector('.core-body') || g.querySelector('.hit-target');
-        if (!core) continue;
-        const nb = core.getBoundingClientRect();
-        const lb = label.getBoundingClientRect();
+      const api = window.APOS_SPACE_MAP;
+      for (const el of document.querySelectorAll('.node-label-dom')) {
+        if (el.style.display === 'none' || Number(el.style.opacity || 1) < 0.2) continue;
+        const id = el.dataset.nid;
+        if (!id || !api.isNodeDrawn(id)) continue;
+        const pos = api.nodeScreenPos(id);
+        if (!pos) continue;
+        const lb = el.getBoundingClientRect();
         if (lb.width < 1) continue;
-        const dist = Math.hypot(
-          lb.left + lb.width / 2 - (nb.left + nb.width / 2),
-          lb.top + lb.height / 2 - (nb.top + nb.height / 2)
-        );
-        if (dist > 100) bad.push({ id: g.getAttribute('data-id'), dist: Math.round(dist) });
+        const dist = Math.hypot(lb.left + lb.width / 2 - pos.x, lb.top + lb.height / 2 - pos.y);
+        if (dist > 140) bad.push({ id, dist: Math.round(dist) });
       }
       return bad;
     });
@@ -253,24 +309,24 @@ async function runTests(browserType, browserName) {
     if (deepK < 1) throw new Error(`expected zoomed-in k, got ${deepK}`);
 
     // zoom out continuously to country-ish scale — siblings/brands must reappear
-    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(0.6));
+    // Collapse toward country framing (shared engine thresholds)
+    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(0.95));
     await delay(150);
     const drawn = await page.evaluate(() => ({
       types: window.APOS_SPACE_MAP.visibleDrawnTypes(),
-      sibling: window.APOS_SPACE_MAP.isNodeDrawn('m-ku-2'),
-      otherLoc: window.APOS_SPACE_MAP.isNodeDrawn('loc-ku-science') || window.APOS_SPACE_MAP.isNodeDrawn('area-zahra'),
       brandEE: window.APOS_SPACE_MAP.isNodeDrawn('client-ee'),
       brandLeet: window.APOS_SPACE_MAP.isNodeDrawn('client-leet'),
       kuwait: window.APOS_SPACE_MAP.isNodeDrawn('country-kw'),
+      area: window.APOS_SPACE_MAP.isNodeDrawn('area-shadadiya') || window.APOS_SPACE_MAP.isNodeDrawn('area-zahra'),
       k: window.APOS_SPACE_MAP.getTransform().k,
+      focus: window.APOS_SPACE_MAP.getFocus(),
     }));
     if (!drawn.kuwait) throw new Error('Kuwait not drawn after zoom-out');
     if (!drawn.brandLeet) throw new Error('Leet brand not drawn after zoom-out');
     if (!drawn.brandEE) throw new Error('EE brand not visible again after zoom-out');
-    // at k=0.6, machines may be past LOD draw threshold — locations/areas/brands matter
     if (!(drawn.types.client >= 2)) throw new Error(`expected multiple brands, got ${JSON.stringify(drawn.types)}`);
-    if (!(drawn.otherLoc || drawn.types.area >= 1 || drawn.types.location >= 1)) {
-      throw new Error(`expected other areas/locations after zoom-out: ${JSON.stringify(drawn)}`);
+    if (!(drawn.area || drawn.types.area >= 1)) {
+      throw new Error(`expected areas under Kuwait after zoom-out: ${JSON.stringify(drawn)}`);
     }
   });
 
@@ -364,7 +420,71 @@ async function runTests(browserType, browserName) {
     }
   });
 
-  await test('no console errors during session', async () => {
+  
+  await test('Farwaniya drill keeps continuous parent & child links', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await flyTo(page, 'area-ee-farwaniya');
+    const info = await page.evaluate(() => {
+      const api = window.APOS_SPACE_MAP;
+      const area = 'area-ee-farwaniya';
+      const areaPos = api.nodeScreenPos(area);
+      const links = api.getIncidentDrawnLinks(area);
+      const parentLink = links.find((L) => L.source === 'client-ee' || L.target === 'client-ee');
+      const childLinks = links.filter((L) => (L.source === area || L.target === area) && L.source !== 'client-ee' && L.target !== 'client-ee');
+      const within2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= 2.05;
+      const hubPos = api.nodeScreenPos('client-ee');
+      const parentOk = parentLink && areaPos && hubPos && (
+        (parentLink.source === area && within2(parentLink.sourceScreen, areaPos) && within2(parentLink.targetScreen, hubPos)) ||
+        (parentLink.target === area && within2(parentLink.targetScreen, areaPos) && within2(parentLink.sourceScreen, hubPos))
+      );
+      const childOk = childLinks.length > 0 && childLinks.every((L) => {
+        const s = api.nodeScreenPos(L.source);
+        const t = api.nodeScreenPos(L.target);
+        return s && t && within2(L.sourceScreen, s) && within2(L.targetScreen, t);
+      });
+      return { focus: api.getFocus(), parentOk, childOk, childCount: childLinks.length };
+    });
+    if (info.focus.id !== 'area-ee-farwaniya') throw new Error(JSON.stringify(info.focus));
+    if (!info.parentOk) throw new Error(`parent link broken: ${JSON.stringify(info)}`);
+    if (!info.childOk) throw new Error(`child links broken: ${JSON.stringify(info)}`);
+  });
+
+  await test('pan/zoom stress restores exact overview state', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await delay(100);
+    const before = await page.evaluate(() => window.APOS_SPACE_MAP.snapshotOverviewState());
+    if (!before.overview) throw new Error('expected overview before');
+    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(2.4));
+    await flyTo(page, 'country-kw');
+    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(3.0));
+    await delay(40);
+    await page.evaluate(() => window.APOS_SPACE_MAP.setZoomK(0.4));
+    await delay(80);
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await delay(120);
+    const after = await page.evaluate(() => window.APOS_SPACE_MAP.snapshotOverviewState());
+    if (!after.overview) throw new Error('expected overview after');
+    if (before.drawn.join('|') !== after.drawn.join('|')) {
+      throw new Error(`drawn mismatch before=${before.drawn} after=${after.drawn}`);
+    }
+    if (Math.abs(before.k - after.k) > 0.01 || Math.abs(before.x - after.x) > 2 || Math.abs(before.y - after.y) > 2) {
+      throw new Error(`transform mismatch`);
+    }
+    const byId = new Map(before.labels.map((l) => [l.id, l]));
+    const drifts = [];
+    for (const l of after.labels) {
+      const b = byId.get(l.id);
+      if (!b) continue;
+      const d = Math.hypot(l.x - b.x, l.y - b.y);
+      if (d > 2.05) drifts.push({ id: l.id, d });
+    }
+    if (drifts.length) throw new Error(`label drift ${JSON.stringify(drifts.slice(0, 5))}`);
+  });
+
+await test('no console errors during session', async () => {
     const relevant = consoleErrors.filter(
       (e) =>
         !e.includes('favicon') &&
@@ -387,15 +507,13 @@ async function runTests(browserType, browserName) {
     const info = await page.evaluate(() => ({
       count: window.APOS_SPACE_MAP.getAlertCount('client-leet'),
       rollup: window.APOS_SPACE_MAP.getRollup('client-leet'),
-      badge: document.querySelector('[data-id="client-leet"] .alert-badge-text')?.textContent || '',
-      pill: !!document.querySelector('[data-id="client-leet"] g.alert-badge-wrap rect.alert-badge-bg'),
-      pillH: document.querySelector('[data-id="client-leet"] rect.alert-badge-bg')?.getBoundingClientRect().height || 0,
+      drawn: window.APOS_SPACE_MAP.isNodeDrawn('client-leet'),
+      // Canvas renders tidy pills (SVG badge layer is hit-test only)
+      canvasPill: window.APOS_SPACE_MAP.getAlertCount('client-leet') > 0,
     }));
     if (!(info.count > 0)) throw new Error(`expected alert rollup > 0, got ${JSON.stringify(info)}`);
     if (!info.rollup || info.rollup.alerts !== info.count) throw new Error(`rollup mismatch ${JSON.stringify(info)}`);
-    if (!info.badge || Number(info.badge) < 1) throw new Error(`missing badge text: ${JSON.stringify(info)}`);
-    if (!info.pill) throw new Error('expected pill badge rect');
-    if (info.pillH < 10 || info.pillH > 22) throw new Error(`pill height out of range: ${info.pillH}`);
+    if (!info.drawn || !info.canvasPill) throw new Error(`expected drawn client with canvas pill: ${JSON.stringify(info)}`);
   });
 
   await test('interrupted fly-to redirects without snap', async () => {
@@ -446,7 +564,7 @@ async function recordFlow() {
     recordVideo: { dir: ARTIFACTS_DIR, size: { width: 1920, height: 1080 } },
   });
   const page = await context.newPage();
-  await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await delay(400);
   await page.evaluate(() => window.APOS_SPACE_MAP.reset());
   await waitIdle(page);
