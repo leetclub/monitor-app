@@ -35,7 +35,8 @@ async function waitIdle(page) {
   await page.evaluate(async () => {
     if (window.APOS_TREE_MAP?.waitForIdle) await window.APOS_TREE_MAP.waitForIdle();
   });
-  await delay(60);
+  // Allow staggered grow (≈280ms + 40ms×n) to settle before shots/assertions
+  await delay(400);
 }
 
 async function shot(page, name, browserName) {
@@ -235,11 +236,50 @@ async function runTests(browserType, browserName) {
     const info = await page.evaluate(() => ({
       count: window.APOS_TREE_MAP.getAlertCount('client-leet'),
       rollup: window.APOS_TREE_MAP.getRollup('client-leet'),
-      badge: document.querySelector('[data-id="client-leet"] text.alert-badge')?.textContent || '',
+      badge: document.querySelector('[data-id="client-leet"] .alert-badge-text')?.textContent || '',
+      pill: !!document.querySelector('[data-id="client-leet"] g.alert-badge-wrap rect.alert-badge-bg'),
     }));
     if (!(info.count > 0)) throw new Error(`expected alert rollup > 0, got ${JSON.stringify(info)}`);
     if (!info.rollup || info.rollup.alerts !== info.count) throw new Error(`rollup mismatch ${JSON.stringify(info)}`);
     if (!info.badge || Number(info.badge) < 1) throw new Error(`missing badge text: ${JSON.stringify(info)}`);
+    if (!info.pill) throw new Error('expected pill badge rect');
+  });
+
+  await test('tree link paths visible with non-zero opacity (full + hub)', async () => {
+    await page.evaluate(() => window.APOS_TREE_MAP.reset());
+    await waitIdle(page);
+    const full = await page.evaluate(() => {
+      const paths = [...document.querySelectorAll('path.link')].filter((p) => {
+        const st = getComputedStyle(p);
+        return st.display !== 'none' && Number(st.opacity) > 0.05;
+      });
+      const opacities = paths.map((p) => Number(getComputedStyle(p).opacity));
+      return {
+        count: paths.length,
+        min: opacities.length ? Math.min(...opacities) : 0,
+        max: opacities.length ? Math.max(...opacities) : 0,
+      };
+    });
+    if (full.count < 20) throw new Error(`full view: expected many visible links, got ${JSON.stringify(full)}`);
+    if (full.min < 0.3 || full.max < 0.4) {
+      throw new Error(`full view: link opacity too low ${JSON.stringify(full)}`);
+    }
+
+    await flyTo(page, 'client-leet');
+    const hub = await page.evaluate(() => {
+      const paths = [...document.querySelectorAll('path.link')].filter((p) => {
+        const st = getComputedStyle(p);
+        return st.display !== 'none' && Number(st.opacity) > 0.05 && !p.classList.contains('spine');
+      });
+      const opacities = paths.map((p) => Number(getComputedStyle(p).opacity));
+      return {
+        count: paths.length,
+        min: opacities.length ? Math.min(...opacities) : 0,
+        sample: opacities.slice(0, 5),
+      };
+    });
+    if (hub.count < 10) throw new Error(`hub view: expected tree links, got ${JSON.stringify(hub)}`);
+    if (hub.min < 0.25) throw new Error(`hub view: link opacity too low ${JSON.stringify(hub)}`);
   });
 
   await test('interrupted fly-to redirects without snap', async () => {

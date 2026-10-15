@@ -357,12 +357,14 @@ body {
 }
 
 .hub-disk {
-  fill: var(--hub-fill);
+  fill: #ffffff;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
 }
 
 .hub-ring {
   fill: none;
-  stroke-width: 2;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.25));
 }
 
 .hub-ring.teal {
@@ -391,11 +393,21 @@ body {
   filter: drop-shadow(0 0 8px rgba(94, 234, 212, 0.45));
 }
 
-.alert-badge {
+.alert-badge-wrap {
+  pointer-events: none;
+}
+
+.alert-badge-bg {
   fill: var(--alert);
+}
+
+.alert-badge-text {
+  fill: #ffffff;
   font-family: var(--font);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
   pointer-events: none;
 }
 
@@ -439,16 +451,29 @@ body {
 .leaf-card[data-accent='amber'] .card-title { color: var(--amber); }
 .leaf-card[data-accent='sky'] .card-title { color: var(--sky); }
 
+.core-glow {
+  fill: rgba(255, 255, 255, 0.22);
+  filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.55));
+  pointer-events: none;
+}
+
+.core-disk {
+  fill: rgba(255, 255, 255, 0.95);
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.7));
+  pointer-events: none;
+}
+
 .core-wordmark {
-  fill: rgba(255, 255, 255, 0.92);
+  fill: rgba(255, 255, 255, 0.98);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: 0.34em;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
   user-select: none;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.45));
 }
 
 .star-core {
@@ -484,23 +509,26 @@ body {
 
 .link {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.48);
-  stroke-width: 0.9;
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1.35;
   stroke-linecap: round;
+  /* Keep branch lines visible at every zoom (world stroke would vanish at overview) */
+  vector-effect: non-scaling-stroke;
 }
 
 .link.spine {
-  stroke: rgba(255, 255, 255, 0.22);
-  stroke-width: 0.85;
-}
-
-.link.on-path {
-  stroke: rgba(255, 255, 255, 0.72);
+  stroke: rgba(255, 255, 255, 0.7);
   stroke-width: 1.05;
 }
 
+.link.on-path {
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1.35;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35));
+}
+
 .link.dim {
-  stroke: rgba(255, 255, 255, 0.18);
+  stroke: rgba(255, 255, 255, 0.55);
 }
 
 .node-label {

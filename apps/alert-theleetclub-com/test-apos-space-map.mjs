@@ -29,7 +29,8 @@ async function waitIdle(page) {
   await page.evaluate(async () => {
     if (window.APOS_SPACE_MAP?.waitForIdle) await window.APOS_SPACE_MAP.waitForIdle();
   });
-  await delay(60);
+  // Allow staggered grow to settle before shots/assertions
+  await delay(400);
 }
 
 async function shot(page, name, browserName) {
@@ -386,11 +387,15 @@ async function runTests(browserType, browserName) {
     const info = await page.evaluate(() => ({
       count: window.APOS_SPACE_MAP.getAlertCount('client-leet'),
       rollup: window.APOS_SPACE_MAP.getRollup('client-leet'),
-      badge: document.querySelector('[data-id="client-leet"] text.alert-badge')?.textContent || '',
+      badge: document.querySelector('[data-id="client-leet"] .alert-badge-text')?.textContent || '',
+      pill: !!document.querySelector('[data-id="client-leet"] g.alert-badge-wrap rect.alert-badge-bg'),
+      pillH: document.querySelector('[data-id="client-leet"] rect.alert-badge-bg')?.getBoundingClientRect().height || 0,
     }));
     if (!(info.count > 0)) throw new Error(`expected alert rollup > 0, got ${JSON.stringify(info)}`);
     if (!info.rollup || info.rollup.alerts !== info.count) throw new Error(`rollup mismatch ${JSON.stringify(info)}`);
     if (!info.badge || Number(info.badge) < 1) throw new Error(`missing badge text: ${JSON.stringify(info)}`);
+    if (!info.pill) throw new Error('expected pill badge rect');
+    if (info.pillH < 10 || info.pillH > 22) throw new Error(`pill height out of range: ${info.pillH}`);
   });
 
   await test('interrupted fly-to redirects without snap', async () => {

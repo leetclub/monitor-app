@@ -575,6 +575,8 @@
       return `scale(${inv}) translate(${ox},${oy})`;
     });
     gNodes.selectAll('text.core-wordmark').attr('transform', `scale(${inv})`);
+    // Pill badges stay ~14px on screen at the node's top-right
+    gNodes.selectAll('g.alert-badge-wrap').attr('transform', `scale(${inv}) translate(12,-11)`);
   }
 
   const tooltipEl = document.getElementById('map-tooltip');
@@ -625,6 +627,8 @@
       .data(links, (d) => `${d.source}->${d.target}`)
       .join('path')
       .attr('class', (d) => `link ${d.kind || ''}`)
+      .attr('vector-effect', 'non-scaling-stroke')
+      .attr('stroke-width', (d) => (d.kind === 'spine' ? 1.25 : 1.2))
       .attr('data-source', (d) => d.source)
       .attr('data-target', (d) => d.target)
       .attr('d', (d) => {
@@ -738,12 +742,18 @@
         }
       }
 
-      let badge = g.select('text.alert-badge');
+      let badge = g.select('g.alert-badge-wrap');
       if (d.alertCount > 0 && show && d.type !== 'machine' && d.type !== 'branch') {
         if (badge.empty()) {
-          badge = g.append('text').attr('class', 'alert-badge').attr('dy', '-0.85em').attr('dx', '0.9em');
+          badge = g.append('g').attr('class', 'alert-badge-wrap');
+          badge.append('rect').attr('class', 'alert-badge-bg').attr('rx', 7).attr('ry', 7);
+          badge.append('text').attr('class', 'alert-badge-text');
         }
-        badge.text(String(d.alertCount)).style('display', null);
+        const txt = String(d.alertCount);
+        const tw = Math.max(14, 8 + txt.length * 6);
+        badge.select('rect.alert-badge-bg').attr('width', tw).attr('height', 14).attr('x', -tw / 2).attr('y', -7);
+        badge.select('text.alert-badge-text').text(txt);
+        badge.style('display', null);
       } else if (!badge.empty()) {
         badge.style('display', 'none');
       }
@@ -763,7 +773,9 @@
       const el = d3.select(this);
       el.style('display', show ? null : 'none');
       el.classed('on-path', onPath);
-      el.style('opacity', show ? (onPath ? 0.85 : Math.min(s.lodAlpha, t.lodAlpha) * 0.35) : 0);
+      el.style('opacity', show ? (onPath ? 0.95 : Math.max(0.4, Math.min(s.lodAlpha, t.lodAlpha) * 0.7)) : 0);
+      // Screen-constant widths via vector-effect; on-path stays ~2px
+      el.attr('stroke-width', onPath ? 2 : d.kind === 'spine' ? 1.25 : 1.2);
       if (onPath && accent) el.style('stroke', accent.stroke);
       else el.style('stroke', null);
     });

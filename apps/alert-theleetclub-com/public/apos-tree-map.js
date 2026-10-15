@@ -22,7 +22,7 @@
 
   // World geometry — large hub ring so trees fill ~85% height (not a tiny centre clump)
   const R_HUB = 340;
-  const HUB_SCREEN_R = 6; // ~12px diameter via counter-scale
+  const HUB_SCREEN_R = 8; // ~16px diameter via counter-scale — readable at full view
   const NODE_SCREEN_R = 3; // ~6px white dots
   const TREE = {
     area: 200,
@@ -30,6 +30,8 @@
     machine: 120,
     branch: 48,
   };
+  // Target radial extent so every hub with a real tree fills a similar open fan
+  const FAN_TARGET_R = TREE.area + TREE.location + TREE.machine * 0.85;
   // Labels sit just outside machine tips
   const R_LABEL = R_HUB + TREE.area + TREE.location + TREE.machine + 44;
   const R_OUTER = R_LABEL + 20;
@@ -79,18 +81,114 @@
   function placeFan(parent, kids, dist, spread, baseAngle) {
     const n = kids.length;
     if (!n) return;
-    // Wide open fans — airy like the reference (not tight clumps)
-    const sweep = Math.min(spread, 0.55 + n * 0.38);
+    // Sparse hubs keep a wide open sweep so the fan reads full-size (not a thin spike)
+    const sweep = Math.min(spread, Math.max(0.95, 0.55 + n * 0.38));
     kids.forEach((c, i) => {
       const a = baseAngle + ((i + 0.5) / n - 0.5) * sweep;
       const jitter = ((hash(c.id) % 11) - 5) * 0.018;
-      const dJ = dist * (0.88 + (hash(c.id + 'd') % 7) * 0.035);
+      const dJ = dist * (0.9 + (hash(c.id + 'd') % 7) * 0.03);
       c.x = parent.x + Math.cos(a + jitter) * dJ;
       c.y = parent.y + Math.sin(a + jitter) * dJ;
       c.angle = a + jitter;
       c.labelOx = 0;
       c.labelOy = 16;
     });
+  }
+
+  /** Scale a hub's subtree so tips reach FAN_TARGET_R — balances Leet / EE / Park fans */
+  function normalizeHubFan(hub) {
+    const desc = [];
+    const walk = (id) => {
+      (childrenOf.get(id) || []).forEach((c) => {
+        if (c.type === 'branch' || c.type === 'artic') return;
+        desc.push(c);
+        walk(c.id);
+      });
+    };
+    walk(hub.id);
+    if (!desc.length) return;
+    let maxD = 0;
+    desc.forEach((n) => {
+      const d = Math.hypot(n.x - hub.x, n.y - hub.y);
+      if (d > maxD) maxD = d;
+    });
+    if (maxD < 40) return;
+    const s = FAN_TARGET_R / maxD;
+    if (Math.abs(s - 1) < 0.04) return;
+    desc.forEach((n) => {
+      n.x = hub.x + (n.x - hub.x) * s;
+      n.y = hub.y + (n.y - hub.y) * s;
+    });
+  }
+
+  /** Extra airy twigs so sparse hubs (EE/Park) fill a similar cone without fake machines */
+  function padSparseFan(hub, firstKids) {
+    if (hub.status === 'future' && !firstKids.length) return;
+    const need = Math.max(0, 5 - firstKids.length);
+    if (need <= 0) return;
+    // Active hubs get bright structural pads; future hubs stay dim — never real machines
+    const padStatus = hub.status === 'active' ? 'active' : 'future';
+    for (let i = 0; i < need; i++) {
+      const a = hub.outAngle + ((i + 0.5) / need - 0.5) * 1.25;
+      const dist = TREE.area * (0.62 + (hash(hub.id + 'pad' + i) % 5) * 0.08);
+      const id = `fan-pad-${hub.id}-${i}`;
+      addNode({
+        id,
+        type: 'area',
+        label: '',
+        parentId: hub.id,
+        hubId: hub.id,
+        depth: 2,
+        status: padStatus,
+        r: NODE_SCREEN_R * 0.85,
+        x: hub.x + Math.cos(a) * dist,
+        y: hub.y + Math.sin(a) * dist,
+        angle: a,
+        pad: true,
+      });
+      links.push({ source: hub.id, target: id, kind: 'tree' });
+      for (let j = 0; j < 3; j++) {
+        const a2 = a + ((j + 0.5) / 3 - 0.5) * 0.62;
+        const id2 = `${id}-t${j}`;
+        const d2 = TREE.location * (0.55 + (hash(id2) % 4) * 0.08);
+        addNode({
+          id: id2,
+          type: 'location',
+          label: '',
+          parentId: id,
+          hubId: hub.id,
+          depth: 3,
+          status: padStatus,
+          r: NODE_SCREEN_R * 0.75,
+          x: hub.x + Math.cos(a) * dist + Math.cos(a2) * d2,
+          y: hub.y + Math.sin(a) * dist + Math.sin(a2) * d2,
+          angle: a2,
+          pad: true,
+        });
+        links.push({ source: id, target: id2, kind: 'tree' });
+        // Decorative tip dots (location type) so the cone fills at overview — not counted as machines
+        for (let t = 0; t < 2; t++) {
+          const id3 = `${id2}-tip${t}`;
+          const a3 = a2 + ((t + 0.5) / 2 - 0.5) * 0.35;
+          const d3 = TREE.machine * (0.55 + (hash(id3) % 3) * 0.1);
+          addNode({
+            id: id3,
+            type: 'location',
+            label: '',
+            parentId: id2,
+            hubId: hub.id,
+            depth: 4,
+            status: padStatus,
+            r: NODE_SCREEN_R * 0.7,
+            x: hub.x + Math.cos(a) * dist + Math.cos(a2) * d2 + Math.cos(a3) * d3,
+            y: hub.y + Math.sin(a) * dist + Math.sin(a2) * d2 + Math.sin(a3) * d3,
+            angle: a3,
+            pad: true,
+          });
+          links.push({ source: id2, target: id3, kind: 'tree' });
+        }
+      }
+    }
   }
 
   /** Sparse mid-edge dots only (no side twigs) — keeps trees airy */
@@ -401,14 +499,21 @@
       });
 
       // Place tree growing OUTWARD from hub — wide open fans (~25–30% viewport)
-      const firstKids = childrenOf.get(hub.id) || [];
-      placeFan(hub, firstKids, TREE.area, Math.PI * 1.35, hub.outAngle);
+      let firstKids = childrenOf.get(hub.id) || [];
+      // Pad sparse real trees (EE/Park) before placement so the cone matches Leet's openness
+      if (def.areas && def.areas.length) {
+        padSparseFan(hub, firstKids);
+        firstKids = childrenOf.get(hub.id) || [];
+      }
+      const sparseBoost = Math.max(1, 3 / Math.max(firstKids.filter((c) => !c.pad).length, 1));
+      const distMul = 1 + Math.min(0.28, (sparseBoost - 1) * 0.14);
+      placeFan(hub, firstKids, TREE.area * distMul, Math.PI * 1.35, hub.outAngle);
       firstKids.forEach((kid) => {
         const next = childrenOf.get(kid.id) || [];
-        placeFan(kid, next, TREE.location, Math.PI * 1.2, kid.angle ?? hub.outAngle);
+        placeFan(kid, next, TREE.location * distMul, Math.PI * 1.2, kid.angle ?? hub.outAngle);
         next.forEach((loc) => {
           const ms = childrenOf.get(loc.id) || [];
-          placeFan(loc, ms, TREE.machine, Math.PI * 1.05, loc.angle ?? hub.outAngle);
+          placeFan(loc, ms, TREE.machine * distMul, Math.PI * 1.05, loc.angle ?? hub.outAngle);
           ms.forEach((m) => {
             const brs = childrenOf.get(m.id) || [];
             brs.forEach((b, bi) => {
@@ -419,6 +524,23 @@
           });
         });
       });
+      if (def.areas && def.areas.length) {
+        normalizeHubFan(hub);
+        // Re-seat leaf branches after fan normalize (walker skips branch nodes)
+        (function reseat(id) {
+          const host = nodeById.get(id);
+          const kids = childrenOf.get(id) || [];
+          const brs = kids.filter((c) => c.type === 'branch');
+          brs.forEach((b, bi) => {
+            const ang = -Math.PI / 2 + ((bi + 0.5) / Math.max(brs.length, 1)) * Math.PI * 2;
+            b.x = host.x + Math.cos(ang) * TREE.branch;
+            b.y = host.y + Math.sin(ang) * TREE.branch;
+          });
+          kids.forEach((c) => {
+            if (c.type !== 'branch') reseat(c.id);
+          });
+        })(hub.id);
+      }
     });
 
     // Sparse mid-edge dots only (no side twigs)
@@ -566,7 +688,7 @@
       }
       if (n.type === 'hub') {
         n.draw = true;
-        n.lodAlpha = n.status === 'future' ? 0.35 : 1;
+        n.lodAlpha = n.status === 'future' ? (overviewMode ? 0.62 : 0.4) : 1;
         n.labelOn = false; // hub names are bg-labels
         return;
       }
@@ -730,8 +852,8 @@
       const oy = d.labelOy || 16;
       return `scale(${inv}) translate(${ox},${oy})`;
     });
-    gNodes.selectAll('text.core-wordmark').attr('transform', `scale(${inv})`);
-    // Keep hub orbs ~12px and tree nodes ~6px on screen
+    gNodes.selectAll('g.core-visual').attr('transform', `scale(${inv})`);
+    // Keep hub orbs constant screen size
     gNodes.selectAll('g.node-hub').each(function () {
       d3.select(this).select('g.hub-visual').attr('transform', `scale(${inv})`);
     });
@@ -741,6 +863,10 @@
       const s = (NODE_SCREEN_R / base) * inv;
       g.select('circle.star-core').attr('transform', `scale(${s})`);
       g.select('circle.pulse-ring').attr('transform', `scale(${s})`);
+    });
+    // Pill badges stay ~14px on screen, anchored top-right of the node
+    gNodes.selectAll('g.alert-badge-wrap').attr('transform', function () {
+      return `scale(${inv}) translate(11,-10)`;
     });
     gArts.selectAll('circle.art-dot').attr('transform', function (d) {
       const s = inv;
@@ -776,6 +902,8 @@
       .data(links, (d) => `${d.source}->${d.target}`)
       .join('path')
       .attr('class', (d) => `link ${d.kind || ''}`)
+      .attr('vector-effect', 'non-scaling-stroke')
+      .attr('stroke-width', (d) => (d.kind === 'spine' ? 1.05 : 1.35))
       .attr('d', (d) => {
         const s = nodeById.get(d.source);
         const t = nodeById.get(d.target);
@@ -826,13 +954,16 @@
       g.each(function (d) {
         const el = d3.select(this);
         if (d.type === 'enterprise') {
-          el.append('text').attr('class', 'core-wordmark').text('APOS');
+          const cv = el.append('g').attr('class', 'core-visual');
+          cv.append('circle').attr('class', 'core-glow').attr('r', 28);
+          cv.append('circle').attr('class', 'core-disk').attr('r', 11);
+          cv.append('text').attr('class', 'core-wordmark').text('APOS');
           el.append('circle').attr('class', 'hit-target').attr('r', 36);
         } else if (d.type === 'hub') {
           const hv = el.append('g').attr('class', 'hub-visual');
-          hv.append('circle').attr('class', `hub-ring ${d.ring}`).attr('r', HUB_SCREEN_R + 4);
+          hv.append('circle').attr('class', `hub-ring ${d.ring}`).attr('r', HUB_SCREEN_R + 5);
           hv.append('circle').attr('class', 'hub-disk').attr('r', HUB_SCREEN_R);
-          el.append('circle').attr('class', 'hit-target').attr('r', 22);
+          el.append('circle').attr('class', 'hit-target').attr('r', 24);
         } else {
           el.append('circle').attr('class', 'pulse-ring').attr('r', d.r + 6);
           el.append('circle')
@@ -882,17 +1013,19 @@
       if (!label.empty()) {
         label.style('opacity', d.labelOn ? 1 : 0).style('display', d.labelOn ? null : 'none');
       }
-      // Alert count badge
-      let badge = g.select('text.alert-badge');
-      if (d.alertCount > 0 && d.draw && (d.type === 'hub' || d.type === 'area' || d.type === 'location')) {
+      // Alert count pill badge (top-right of node)
+      let badge = g.select('g.alert-badge-wrap');
+      if (d.alertCount > 0 && d.draw && (d.type === 'hub' || d.type === 'area' || d.type === 'location') && !d.pad) {
         if (badge.empty()) {
-          badge = g
-            .append('text')
-            .attr('class', 'alert-badge')
-            .attr('dy', '-0.7em')
-            .attr('dx', '0.85em');
+          badge = g.append('g').attr('class', 'alert-badge-wrap');
+          badge.append('rect').attr('class', 'alert-badge-bg').attr('rx', 7).attr('ry', 7);
+          badge.append('text').attr('class', 'alert-badge-text');
         }
-        badge.text(String(d.alertCount)).style('display', null);
+        const txt = String(d.alertCount);
+        const tw = Math.max(14, 8 + txt.length * 6);
+        badge.select('rect.alert-badge-bg').attr('width', tw).attr('height', 14).attr('x', -tw / 2).attr('y', -7);
+        badge.select('text.alert-badge-text').text(txt);
+        badge.style('display', null);
       } else if (!badge.empty()) {
         badge.style('display', 'none');
       }
@@ -911,10 +1044,18 @@
       if (d.kind === 'spine' && !overviewMode) show = false;
       const onPath = focusPath.has(d.source) && focusPath.has(d.target);
       const el = d3.select(this);
+      // Constant screen opacity ~50% for tree lines (CSS stroke is near-white; do not multiply by 0.35)
+      let op = 0;
+      if (show) {
+        if (onPath) op = 0.92;
+        else if (d.kind === 'spine') op = 0.5;
+        else if (s?.preview || t?.preview) op = 0.34;
+        else op = 0.55;
+      }
       el.style('display', show ? null : 'none')
         .classed('on-path', onPath)
         .classed('dim', !!(s?.preview || t?.preview) || (!overviewMode && !onPath && show))
-        .style('opacity', show ? (onPath ? 0.9 : Math.min(s.lodAlpha, t.lodAlpha) * (d.kind === 'spine' ? 0.7 : 0.35)) : 0);
+        .style('opacity', op);
       if (onPath && accent) el.style('stroke', accent.stroke);
       else el.style('stroke', null);
     });
