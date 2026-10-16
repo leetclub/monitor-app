@@ -151,6 +151,7 @@ async function capture(browserType, browserName) {
     console.log('   📸 level-site.png');
 
     await flyTo(page, 'm-ee-4');
+    await delay(250);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-machine.png'), fullPage: false });
     console.log('   📸 level-machine.png');
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'tree-focus-machine.png'), fullPage: false });
@@ -539,8 +540,49 @@ async function runTests(browserType, browserName) {
     await page.evaluate(() => window.APOS_TREE_MAP.reset());
     await waitIdle(page);
     await flyTo(page, 'm-ee-4');
+    await delay(200); // inspector opens ~480ms into fly; ensure settled with drawer
     const atMachine = await page.evaluate(() => window.APOS_TREE_MAP.pathLinksVisible('m-ee-4'));
     if (!atMachine) throw new Error('machine path missing');
+    const frame = await page.evaluate(() => {
+      const drawer = document.getElementById('inspector-drawer');
+      const drawerOpen = !!drawer?.classList.contains('is-open');
+      const drawerLeft = drawerOpen
+        ? drawer.getBoundingClientRect().left
+        : (document.getElementById('tree-stage')?.clientWidth || 1920);
+      const need = ['Revenue', 'Operators', 'Technical', 'Stock', 'Contract'];
+      const labels = [...document.querySelectorAll('.node-label-dom')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          text: el.textContent || '',
+          left: r.left,
+          right: r.right,
+          top: r.top,
+          bottom: r.bottom,
+          visible: el.style.display !== 'none' && Number.parseFloat(el.style.opacity || '1') > 0.2,
+        };
+      });
+      const branches = need.map((name) => {
+        const hit = labels.find((l) => l.visible && l.text.toLowerCase().includes(name.toLowerCase()));
+        return hit
+          ? { name, ok: hit.right < drawerLeft - 4, ...hit }
+          : { name, ok: false, missing: true };
+      });
+      const machine = window.APOS_TREE_MAP.nodeScreenPos('m-ee-4');
+      return {
+        drawerOpen,
+        drawerLeft,
+        branches,
+        machine,
+        allClear: branches.every((b) => b.ok),
+      };
+    });
+    if (!frame.drawerOpen) throw new Error(`inspector should be open at machine: ${JSON.stringify(frame)}`);
+    if (!frame.allClear) {
+      throw new Error(`branch labels under/overlapping drawer: ${JSON.stringify(frame)}`);
+    }
+    if (frame.machine && frame.machine.x > frame.drawerLeft - 80) {
+      throw new Error(`machine disc too far right under drawer: ${JSON.stringify(frame)}`);
+    }
     const zoomOk = await page.evaluate(async () => {
       const api = window.APOS_TREE_MAP;
       const k0 = api.getTransform().k;

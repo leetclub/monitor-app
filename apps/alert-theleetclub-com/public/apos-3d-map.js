@@ -336,14 +336,16 @@ function mount() {
     composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.32, 0.55, 0.82));
   }
 
-  function viewportInsets() {
+  function viewportInsets(opts = {}) {
     const w = stage.clientWidth || 1200;
     const h = stage.clientHeight || 800;
     const drawer = document.getElementById('inspector-drawer');
-    const drawerOpen = drawer?.classList.contains('is-open');
-    const right = drawerOpen ? (drawer.getBoundingClientRect().width || 300) : 0;
+    const drawerOpen = !!(drawer?.classList.contains('is-open')
+      || document.body.classList.contains('inspector-open')
+      || opts.reserveDrawer);
+    const right = drawerOpen ? ((drawer?.getBoundingClientRect().width || 300) + 16) : 0;
     const left = hudMode ? 220 : 0;
-    const bottom = hudMode ? 110 : 0;
+    const bottom = hudMode ? 110 : 56;
     return { w, h, left, right, bottom, top: 56 };
   }
 
@@ -386,23 +388,45 @@ function mount() {
     const box = new THREE.Box3();
     const root = graph.byId.get(id);
     if (!root) return box;
-    // Fit focus + children + ancestor path (keep relation to APOS in frame)
+    // Always fit focus + children
     box.expandByPoint(root.pos);
     childrenOf(id).forEach((c) => box.expandByPoint(c.pos));
-    let a = root;
-    while (a) {
-      box.expandByPoint(a.pos);
-      a = a.parentId ? graph.byId.get(a.parentId) : null;
-    }
+    const deep = root.type === 'area' || root.type === 'location'
+      || root.type === 'machine' || root.type === 'branch';
     if (root.type === 'enterprise') {
       graph.nodes.forEach((n) => {
         if (n.depth <= 2) box.expandByPoint(n.pos);
       });
       box.expandByScalar(6);
-    } else {
-      // Soft pad so path links aren't flush to the edge
-      box.expandByScalar(2.2);
+      return box;
     }
+    if (!deep) {
+      // Hub/country/client: include ancestor chain toward APOS
+      let a = root.parentId ? graph.byId.get(root.parentId) : null;
+      while (a) {
+        box.expandByPoint(a.pos);
+        a = a.parentId ? graph.byId.get(a.parentId) : null;
+      }
+      box.expandByScalar(2.2);
+      return box;
+    }
+    // Deep: at most 1–2 nearby ancestors; rest trails to edge APOS chip
+    const localSize = new THREE.Vector3();
+    box.getSize(localSize);
+    const localSpan = Math.max(localSize.x, localSize.y, localSize.z, 1.5);
+    let a = root.parentId ? graph.byId.get(root.parentId) : null;
+    let added = 0;
+    while (a && added < 2 && a.type !== 'enterprise') {
+      const probe = box.clone();
+      probe.expandByPoint(a.pos);
+      const sz = new THREE.Vector3();
+      probe.getSize(sz);
+      if (Math.max(sz.x, sz.y, sz.z) > localSpan * 2.4) break;
+      box.copy(probe);
+      added += 1;
+      a = a.parentId ? graph.byId.get(a.parentId) : null;
+    }
+    box.expandByScalar(1.6);
     return box;
   }
 
@@ -436,7 +460,8 @@ function mount() {
       });
     }
 
-    const insets = viewportInsets();
+    // Reserve drawer width on drill — inspector opens as the flight settles
+    const insets = viewportInsets({ reserveDrawer: n.type !== 'enterprise' });
     const box = subtreeBounds(n.id);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
@@ -446,20 +471,35 @@ function mount() {
       center.set(0, 0.8, 0);
       // Fit full constellation (core + KW/AE/SA + KW brands) in ~70% of view
       size.set(58, 32, 58);
+    } else if (n.type === 'machine' || n.type === 'branch') {
+      // Keep focus + branch fan dominant in the usable frame
+      const kids = childrenOf(n.id);
+      if (kids.length) {
+        const local = new THREE.Box3();
+        local.expandByPoint(n.pos);
+        kids.forEach((c) => local.expandByPoint(c.pos));
+        local.expandByScalar(1.2);
+        local.getCenter(center);
+        local.getSize(size);
+      }
     }
 
-    const fitFrac = n.type === 'enterprise' ? 0.68 : 0.65;
-    const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 58 : 6);
+    const fitFrac = n.type === 'enterprise' ? 0.68 : 0.62;
+    const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 58 : 4);
     const fov = THREE.MathUtils.degToRad(camera.fov);
     let dist = (maxDim / fitFrac) / (2 * Math.tan(fov / 2));
-    dist = THREE.MathUtils.clamp(dist, n.type === 'enterprise' ? 72 : 9, 140);
+    dist = THREE.MathUtils.clamp(dist, n.type === 'enterprise' ? 72 : 8, 140);
 
-    const ndcShiftX = (insets.left - insets.right) / Math.max(insets.w, 1);
+    // Shift look-target into the usable centre (viewport minus drawer/HUD)
+    const usableW = Math.max(1, insets.w - insets.left - insets.right);
+    const usableH = Math.max(1, insets.h - insets.top - insets.bottom);
+    const ndcShiftX = ((insets.left + usableW / 2) - insets.w / 2) / (insets.w / 2);
+    const ndcShiftY = -(((insets.top + usableH / 2) - insets.h / 2) / (insets.h / 2));
     const endTarget = center.clone();
     // Slightly higher camera so hubs read as spheres (not flat discs) and SA stays in frame
     const endCam = center.clone().add(new THREE.Vector3(
-      dist * 0.38 + ndcShiftX * dist * 0.55,
-      dist * (n.type === 'enterprise' ? 0.48 : 0.42),
+      dist * 0.38 + ndcShiftX * dist * 0.45,
+      dist * (n.type === 'enterprise' ? 0.48 : 0.42) + ndcShiftY * dist * 0.15,
       dist * 0.72
     ));
 

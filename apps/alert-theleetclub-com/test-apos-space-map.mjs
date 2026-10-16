@@ -143,8 +143,11 @@ async function captureScreenshots(browserType, browserName) {
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-site.png'), fullPage: false });
     console.log('   📸 space-level-site.png');
     await flyTo(page, 'm-ee-4');
+    await delay(250);
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-level-machine.png'), fullPage: false });
     console.log('   📸 space-level-machine.png');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'space-focus-machine.png'), fullPage: false });
+    console.log('   📸 space-focus-machine.png');
     await page.evaluate(() => {
       const need = window.APOS_SPACE_MAP.LOD.branch.draw * 1.15;
       window.APOS_SPACE_MAP.setZoomK(Math.max(window.APOS_SPACE_MAP.getTransform().k, need));

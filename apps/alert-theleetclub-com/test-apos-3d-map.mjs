@@ -222,9 +222,11 @@ async function runBrowser(browserType, name) {
 
     await page.evaluate(() => window.APOS_3D_MAP.flyTo('m-ee-4'));
     await waitIdle(page);
-    await delay(400);
+    await delay(450);
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-level-machine.png') });
     console.log('   📸 3d-level-machine.png');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-focus-machine.png') });
+    console.log('   📸 3d-focus-machine.png');
     await page.screenshot({ path: join(ARTIFACTS_DIR, '3d-focus.png') });
     console.log('   📸 3d-focus.png');
 

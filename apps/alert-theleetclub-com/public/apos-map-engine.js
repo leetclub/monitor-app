@@ -1091,7 +1091,8 @@
         }
         const src = event.sourceEvent;
         const isPan = !!(src && (src.type === 'mousemove' || src.type === 'pointermove' || src.type === 'touchmove'));
-        reconcileViewState(isPan ? 'pan' : 'zoom');
+        // Never collapse focus while a programmatic fly is writing the transform
+        if (!flying) reconcileViewState(isPan ? 'pan' : 'zoom');
         applyLod();
         applyLabelCounterScale();
         updateBreadcrumbFromView();
@@ -1582,7 +1583,9 @@
         else if (zk < 1.4) lop = 0;
         else if (zk < 2.0) lop = (zk - 1.4) / 0.6;
         else lop = 1;
-        if (zk > 2.6 && n.id !== focusNodeId && !pathToRoot(focusNodeId).includes(n.id)) {
+        // Dim far context when deep-zoomed — never the focus or its direct children
+        const focusChild = n.parentId === focusNodeId;
+        if (zk > 2.6 && n.id !== focusNodeId && !focusChild && !pathToRoot(focusNodeId).includes(n.id)) {
           lop *= 0.08;
         }
       }
@@ -1892,9 +1895,10 @@
   }
 
   /**
-   * Focus framing set: local children + ancestor chain toward APOS.
-   * Deep drills keep a spine tip toward the core (enough for a visible curve)
-   * without forcing a full-galaxy zoom-out.
+   * Focus framing set: always focus + children.
+   * Hub/country/client also include the ancestor chain (spine to APOS).
+   * Deep levels: at most 1–2 nearby ancestors — never fit the whole chain;
+   * the rest runs off-frame via a continuous curve to the edge APOS chip.
    */
   function focusFrameNodes(node) {
     const pts = localFrameNodes(node).slice();
@@ -1902,31 +1906,73 @@
     const path = pathToRoot(node.id);
     const deep = node.type === 'area' || node.type === 'location'
       || node.type === 'machine' || node.type === 'branch';
-    path.forEach((id) => {
-      if (seen.has(id)) return;
+
+    if (!deep) {
+      path.forEach((id) => {
+        if (seen.has(id)) return;
+        const n = nodeById.get(id);
+        if (!n) return;
+        pts.push(n);
+        seen.add(id);
+      });
+      return pts;
+    }
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    pts.forEach((n) => {
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    });
+    const localSpan = Math.max(maxX - minX, maxY - minY, 40);
+    let added = 0;
+    for (const id of path) {
+      if (id === node.id || seen.has(id)) continue;
+      if (added >= 2) break;
       const n = nodeById.get(id);
-      if (!n) return;
-      if (n.type === 'enterprise' && deep) {
-        // Spine tip toward core from the nearest included ancestor (or focus)
-        const anchor = pts.find((p) => p.type === 'hub' || p.type === 'country' || p.type === 'client')
-          || pts.find((p) => p.id === node.parentId)
-          || node;
-        const dist = Math.hypot(anchor.x, anchor.y) || 1;
-        const tipLen = Math.min(R_HUB * 0.55, Math.max(90, dist * 0.42));
-        const ux = -anchor.x / dist;
-        const uy = -anchor.y / dist;
-        pts.push({
-          id: '__spine_tip__',
-          x: anchor.x + ux * tipLen,
-          y: anchor.y + uy * tipLen,
-          type: 'spine-tip',
-        });
-        return;
-      }
+      if (!n || n.type === 'enterprise') break;
+      const nx = Math.min(minX, n.x);
+      const xx = Math.max(maxX, n.x);
+      const ny = Math.min(minY, n.y);
+      const yy = Math.max(maxY, n.y);
+      const span = Math.max(xx - nx, yy - ny);
+      // Only keep an ancestor if it still sits near the local focus cluster
+      if (span > localSpan * 2.15) break;
       pts.push(n);
       seen.add(id);
-    });
+      minX = nx; maxX = xx; minY = ny; maxY = yy;
+      added += 1;
+    }
     return pts;
+  }
+
+  /** Usable camera frame = stage minus chrome + inspector drawer / HUD. */
+  function viewportFitRect(opts = {}) {
+    const W = stage?.clientWidth || 1200;
+    const H = stage?.clientHeight || 800;
+    const drawer = document.getElementById('inspector-drawer');
+    const drawerOpen = !!(drawer?.classList.contains('is-open')
+      || stage?.classList.contains('inspector-open')
+      || document.body.classList.contains('inspector-open'));
+    const reserveDrawer = !!(opts.reserveDrawer || drawerOpen);
+    let right = 12;
+    if (reserveDrawer) {
+      const dw = drawer ? (drawer.getBoundingClientRect().width || 320) : 320;
+      right = Math.round(dw + 20);
+    }
+    const left = 16;
+    const top = 64;
+    const bottom = 78;
+    const x = left;
+    const y = top;
+    const w = Math.max(220, W - left - right);
+    const h = Math.max(180, H - top - bottom);
+    return {
+      x, y, w, h,
+      cx: x + w / 2,
+      cy: y + h / 2,
+      W, H, left, right, top, bottom,
+      reserveDrawer,
+    };
   }
 
   function subtreeExtent(node) {
@@ -2026,10 +2072,12 @@
   }
 
   function fitTransform(bbox, centerNode) {
-    const W = stage.clientWidth || 1200;
-    const H = stage.clientHeight || 800;
-    const kx = (W * FIT) / Math.max(bbox.w, 1);
-    const ky = (H * FIT) / Math.max(bbox.h, 1);
+    const reserveDrawer = !!(centerNode && centerNode.type !== 'enterprise');
+    const fit = viewportFitRect({ reserveDrawer });
+    const W = fit.W;
+    const H = fit.H;
+    const kx = (fit.w * FIT) / Math.max(bbox.w, 1);
+    const ky = (fit.h * FIT) / Math.max(bbox.h, 1);
     let k = Math.max(0.15, Math.min(36, Math.min(kx, ky)));
     // Full ring: outer titles reach ~90% of stage height (and width)
     if (centerNode?.type === 'enterprise') {
@@ -2052,67 +2100,54 @@
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
     let cy = centerNode ? centerNode.y : bbox.y + bbox.h / 2;
     if (centerNode?.type === 'hub' || centerNode?.type === 'country') {
-      // Frame focus + children + ancestor spine so the curve to APOS stays visible.
-      // Never park the hub on the edge with an APOS pill glued underneath.
-      const margin = 0.10;
-      const fitW = W * (1 - 2 * margin);
-      const fitH = H * (1 - 2 * margin);
+      // Frame focus + children + ancestor spine in the usable (drawer-aware) area.
+      const margin = 0.08;
+      const fitW = fit.w * (1 - 2 * margin);
+      const fitH = fit.h * (1 - 2 * margin);
       k = Math.min(fitW / Math.max(bbox.w, 1), fitH / Math.max(bbox.h, 1));
       const fanR = LAYOUT === 'countryTree'
         ? TREE.area + TREE.location + TREE.machine * 0.35
         : TREE.area + TREE.location * 0.85;
-      // Cap so the local fan still reads; floor so core/spine cannot fall off-frame
-      const kFan = (0.70 * Math.min(W, H)) / (fanR + 40);
+      const kFan = (0.70 * Math.min(fit.w, fit.h)) / (fanR + 40);
       k = Math.min(k, kFan);
       k = Math.max(0.28, Math.min(k, 6));
       cx = bbox.x + bbox.w / 2;
       cy = bbox.y + bbox.h / 2;
       const along = centerNode.outAngle || -Math.PI / 2;
-      // Bias slightly toward children so the inward spine holds the near-edge
       const bias = Math.min(bbox.w, bbox.h) * 0.08;
       cx += Math.cos(along) * bias;
       cy += Math.sin(along) * bias;
-      return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
+      return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
     }
     if (centerNode && (centerNode.type === 'client' || centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      // Scale primarily from local children; centre includes ancestor spine so the
-      // path toward APOS runs as a continuous curve (chip only at a true edge).
+      // Prioritise focus + children, centred in the usable viewport (minus drawer).
+      // Ancestors may trail off via continuous curve → edge APOS chip.
       const locals = localFrameNodes(centerNode);
-      const frame = focusFrameNodes(centerNode);
       let lMinX = Infinity, lMaxX = -Infinity, lMinY = Infinity, lMaxY = -Infinity;
       (locals.length ? locals : [centerNode]).forEach((n) => {
         lMinX = Math.min(lMinX, n.x); lMaxX = Math.max(lMaxX, n.x);
         lMinY = Math.min(lMinY, n.y); lMaxY = Math.max(lMaxY, n.y);
       });
-      const localSpan = Math.max(lMaxX - lMinX, lMaxY - lMinY, 36);
-      const frameSpan = Math.max(bbox.w, bbox.h, localSpan);
-      const minDim = Math.min(W, H);
-      // Prefer local fill, but never so tight that the ancestor spine collapses
-      const kLocal = (0.68 * minDim) / localSpan;
-      const kFrame = (0.88 * minDim) / frameSpan;
-      k = Math.min(kLocal, Math.max(kFrame, kLocal * 0.55));
-      k = Math.max(centerNode.type === 'client' ? 1.2 : 1.6, Math.min(k, 80));
-      let fMinX = Infinity, fMaxX = -Infinity, fMinY = Infinity, fMaxY = -Infinity;
-      frame.forEach((n) => {
-        fMinX = Math.min(fMinX, n.x); fMaxX = Math.max(fMaxX, n.x);
-        fMinY = Math.min(fMinY, n.y); fMaxY = Math.max(fMaxY, n.y);
-      });
-      cx = (fMinX + fMaxX) / 2;
-      // Focus title stack (~title + subtitle) reaches ~140–150 screen-px below the focus disc
+      // Room for branch/child labels around discs
+      const labelPad = centerNode.type === 'machine' ? 64 : 48;
+      const localW = Math.max(36, (lMaxX - lMinX) + labelPad * 2);
+      const localH = Math.max(36, (lMaxY - lMinY) + labelPad * 2 + 48);
+      const kLocal = Math.min(fit.w * 0.82 / localW, fit.h * 0.82 / localH);
+      // Stay above ZOOM_MIN_K thresholds so reconcileViewState does not walk focus up
+      const minK = centerNode.type === 'machine' ? 2.85
+        : centerNode.type === 'location' ? 2.45
+        : centerNode.type === 'area' ? 1.95
+        : 1.6;
+      k = Math.max(minK, Math.min(kLocal, 80));
+      cx = (lMinX + lMaxX) / 2;
+      // Focus title stack (~title + subtitle) below the focus disc
       const titleBottom = 148 / k;
-      const blockMaxY = Math.max(fMaxY, centerNode.y + titleBottom, lMaxY);
-      const blockMinY = Math.min(fMinY, lMinY);
+      const blockMaxY = Math.max(lMaxY, centerNode.y + titleBottom);
+      const blockMinY = Math.min(lMinY, centerNode.y) - labelPad / k;
       cy = (blockMinY + blockMaxY) / 2;
-      // Nudge so a measurable spine segment sits between focus and the core-edge
-      const dist = Math.hypot(centerNode.x, centerNode.y) || 1;
-      const ux = -centerNode.x / dist;
-      const uy = -centerNode.y / dist;
-      const spineBudget = (0.20 * minDim) / k;
-      cx -= ux * spineBudget * 0.35;
-      cy -= uy * spineBudget * 0.35;
-      return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
+      return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
     }
-    return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
+    return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
   }
 
   let flyGen = 0;
@@ -2124,10 +2159,15 @@
     // cannot resolve against a stale interrupt clearing the flag.
     svg.interrupt('fly');
     flying = true;
-    const W = stage.clientWidth || 1200;
-    const H = stage.clientHeight || 800;
-    const startView = [(W / 2 - transform.x) / transform.k, (H / 2 - transform.y) / transform.k, W / transform.k];
-    const endView = [(W / 2 - target.x) / target.k, (H / 2 - target.y) / target.k, W / target.k];
+    // Interpolate about the same usable-frame centre the target was fitted into
+    const focus = nodeById.get(focusNodeId);
+    const fit = viewportFitRect({
+      reserveDrawer: !!(focus && focus.type !== 'enterprise' && !overviewMode),
+    });
+    const sx = fit.cx;
+    const sy = fit.cy;
+    const startView = [(sx - transform.x) / transform.k, (sy - transform.y) / transform.k, fit.w / transform.k];
+    const endView = [(sx - target.x) / target.k, (sy - target.y) / target.k, fit.w / target.k];
     if (FLY_MS === 0) {
       transform = target;
       svg.call(zoomBehavior.transform, transform);
@@ -2151,8 +2191,8 @@
       .tween('cam', () => (t) => {
         if (myGen !== flyGen) return;
         const v = iZoom(t);
-        const k = W / v[2];
-        transform = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-v[0], -v[1]);
+        const k = fit.w / v[2];
+        transform = d3.zoomIdentity.translate(sx, sy).scale(k).translate(-v[0], -v[1]);
         gRoot.attr('transform', transform);
         applyLod();
         applyLabelCounterScale();
@@ -4219,22 +4259,9 @@
       const was = stage.classList.contains('inspector-open');
       const want = !!open && !overviewMode;
       stage.classList.toggle('inspector-open', want);
+      document.body.classList.toggle('inspector-open', want);
+      // Framing already reserves drawer width on drill (viewportFitRect) — no half-nudge
       if (was === want) return;
-      const drawer = document.getElementById('inspector-drawer');
-      const halfW = drawer ? Math.round((drawer.getBoundingClientRect().width || 320) / 2) : 160;
-      if (targetTransform) {
-        const dx = want ? -halfW : (was ? halfW : 0);
-        if (dx) {
-          targetTransform = d3.zoomIdentity
-            .translate(targetTransform.x + dx, targetTransform.y)
-            .scale(targetTransform.k);
-          if (!GEMINI || reduceMotion) {
-            transform = targetTransform;
-            gRoot.attr('transform', transform);
-            svg.call(zoomBehavior.transform, transform);
-          }
-        }
-      }
       if (!want) {
         const d = document.getElementById('inspector-drawer');
         if (d) d.classList.remove('is-open');
