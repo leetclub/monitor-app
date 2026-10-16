@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: programmeradmin25/apos-camytics-com:latest
+          image: programmeradmin25/apos-camytics-com:38c6f37
           imagePullPolicy: Always
           ports:
             - name: http
