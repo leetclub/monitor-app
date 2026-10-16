@@ -6,6 +6,7 @@ metadata:
   labels:
     app: apos-camytics-com
   annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
@@ -23,4 +24,4 @@ spec:
   tls:
     - hosts:
         - apos.camytics.com
-      secretName: camytics-tls
+      secretName: apos-camytics-tls
