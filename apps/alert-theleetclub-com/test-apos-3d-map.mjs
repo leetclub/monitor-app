@@ -122,6 +122,42 @@ async function runBrowser(browserType, name) {
     if (open) throw new Error('drawer open at overview');
   });
 
+  await test('focus Leet keeps Leet→KW→APOS path visible', async () => {
+    await page.evaluate(() => window.APOS_3D_MAP.reset());
+    await waitIdle(page);
+    await page.evaluate(() => window.APOS_3D_MAP.flyTo('client-leet'));
+    await waitIdle(page);
+    const info = await page.evaluate(() => ({
+      focus: window.APOS_3D_MAP.getFocus(),
+      pathOk: window.APOS_3D_MAP.pathLinksVisible('client-leet'),
+    }));
+    if (info.focus.id !== 'client-leet') throw new Error(JSON.stringify(info.focus));
+    if (!info.pathOk) throw new Error('Leet→KW→APOS path not visible in 3D');
+  });
+
+  await test('focus machine keeps full chain; zoom-out restores within 100ms', async () => {
+    await page.evaluate(() => window.APOS_3D_MAP.flyTo('m-ee-4'));
+    await waitIdle(page);
+    const atMachine = await page.evaluate(() => window.APOS_3D_MAP.pathLinksVisible('m-ee-4'));
+    if (!atMachine) throw new Error('machine→…→APOS path missing in 3D');
+    const zoomOk = await page.evaluate(async () => {
+      const api = window.APOS_3D_MAP;
+      // Pull camera out without waiting for idle
+      const cam = api.getTransform();
+      const t0 = performance.now();
+      // Nudge via zoom-out button equivalent
+      document.querySelector('.zoom-btn[data-action="zoom-out"]')?.click();
+      document.querySelector('.zoom-btn[data-action="zoom-out"]')?.click();
+      let ok = false;
+      while (performance.now() - t0 < 100) {
+        if (api.pathLinksVisible('m-ee-4')) { ok = true; break; }
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { ok, ms: Math.round(performance.now() - t0), cam };
+    });
+    if (!zoomOk.ok) throw new Error(`3D links not restored within 100ms: ${JSON.stringify(zoomOk)}`);
+  });
+
   await test('visible labels at hub / site / machine', async () => {
     const check = async (id, minLabels) => {
       await page.evaluate((nid) => window.APOS_3D_MAP.flyTo(nid), id);

@@ -919,10 +919,14 @@
   let targetTransform = null;
   let focusPinned = false;
   let hoverId = null;
+  /** Breadcrumb hover — highlight that ancestor + its path link toward APOS */
+  let crumbHoverId = null;
   let layoutMode = 'radial';
   let layoutTween = null;
   let rootPathIds = new Set();
   let focusNodeId = DATA.enterprise.id;
+  /** Edge chip toward off-screen APOS (screen coords); null when core is on-screen */
+  let aposEdgeHint = null;
   /** At overview: all hubs expanded. On drill: only clicked path. */
   let expandedPath = new Set();
   let overviewMode = true;
@@ -1234,57 +1238,49 @@
         sub.style.top = `${s.y + 34}px`;
         sub.style.transform = 'translate(-50%, 0)';
       }
-      const deepDrill = !overviewMode && focus && focus.type !== 'hub' && focus.type !== 'enterprise';
-      const op = deepDrill
-        ? 0
-        : h.status === 'future'
-          ? (overviewMode ? 0.72 : (focused ? 0.75 : 0.14))
-          : (overviewMode || focused ? 1 : 0.14);
+      // Keep hub titles on path / dimmed context while drilled (never blank the relation to APOS)
+      const onPath = !overviewMode && focus && pathToRoot(focusNodeId).includes(h.id);
+      let op;
+      if (overviewMode) {
+        op = h.status === 'future' ? 0.72 : 1;
+      } else if (focused || onPath) {
+        op = h.status === 'future' ? 0.75 : 1;
+      } else {
+        op = 0.25 + 0.5 * contextRestoreT();
+      }
       el.style.opacity = String(op);
-      el.style.display = deepDrill || h.draw === false ? 'none' : '';
+      el.style.display = h.draw === false ? 'none' : '';
     });
+  }
+
+  /** Context opacity rises as the user zooms out — every frame, no settle delay. */
+  function contextRestoreT() {
+    if (overviewMode) return 1;
+    const zk = transform.k || 1;
+    // Below ~1.2k start restoring; by overview floor (~0.62) fully restored
+    const hi = 1.25;
+    const lo = 0.62;
+    if (zk >= hi) return 0;
+    if (zk <= lo) return 1;
+    return (hi - zk) / (hi - lo);
   }
 
   function applyLod() {
     const focus = nodeById.get(focusNodeId);
-    const focusHubId = (focus?.type === 'hub' || focus?.type === 'country') ? focus.id : (focus?.hubId || focus?.countryId || null);
+    const focusPath = new Set(pathToRoot(focusNodeId));
+    const focusHubId = (focus?.type === 'hub' || focus?.type === 'country')
+      ? focus.id
+      : (focus?.hubId || focus?.countryId || null);
+    const restore = contextRestoreT();
+    const dimNode = 0.25 + 0.75 * restore;
 
     nodes.forEach((n) => {
       n.preview = false;
       n.labelOx = n.labelOx || 0;
       n.labelOy = n.labelOy || 18;
       n.ancestorOnly = false;
+      n.collapsedCount = 0;
 
-      if (n.type === 'enterprise') {
-        // Never show core under a drilled hub (avoids spine-to-edge look)
-        n.draw = overviewMode;
-        n.lodAlpha = overviewMode ? 1 : 0;
-        n.labelOn = false;
-        return;
-      }
-      if (n.type === 'hub' || n.type === 'country') {
-        const focusIsRing = focus?.type === 'hub' || focus?.type === 'country';
-        if (overviewMode) {
-          n.draw = true;
-          n.lodAlpha = n.status === 'future' ? 0.7 : 1;
-        } else if (focusIsRing && focus.id === n.id) {
-          n.draw = true;
-          n.lodAlpha = 1;
-        } else if (focusIsRing && focusPathHasHubNeighbor(focus.id, n.id)) {
-          n.draw = true;
-          n.preview = true;
-          n.lodAlpha = 0.3;
-        } else if (pathToRoot(focusNodeId).includes(n.id)) {
-          n.draw = true;
-          n.ancestorOnly = true;
-          n.lodAlpha = 0;
-        } else {
-          n.draw = false;
-          n.lodAlpha = 0;
-        }
-        n.labelOn = false;
-        return;
-      }
       if (n.pad || n.type === 'artic') {
         n.draw = false;
         n.lodAlpha = 0;
@@ -1292,9 +1288,20 @@
         return;
       }
 
-      // ——— Full view: areas only + readable labels ———
+      // ——— Overview ———
       if (overviewMode) {
-        // Hex honeycomb: country + brand cells only (no area/site clutter / stray curves)
+        if (n.type === 'enterprise') {
+          n.draw = true;
+          n.lodAlpha = 1;
+          n.labelOn = false;
+          return;
+        }
+        if (n.type === 'hub' || n.type === 'country') {
+          n.draw = true;
+          n.lodAlpha = n.status === 'future' ? 0.7 : 1;
+          n.labelOn = false;
+          return;
+        }
         if (layoutMode === 'hex') {
           const hexSeat = n.type === 'client' && expandedPath.has(n.id);
           n.draw = hexSeat;
@@ -1306,7 +1313,6 @@
         if (overviewLeaf) {
           n.draw = true;
           n.lodAlpha = n.status === 'future' || n.comingSoon ? 0.5 : 1;
-          // Brands (incl. Park coming-soon) keep labels at overview
           n.labelOn = !!n.label;
         } else {
           n.draw = false;
@@ -1316,91 +1322,85 @@
         return;
       }
 
-      // ——— Drilled ———
-      if (n.type === 'branch') {
-        const show = expandedPath.has(n.id) && focus?.type === 'machine' && n.parentId === focus.id;
-        n.draw = show;
-        n.lodAlpha = show ? 1 : 0;
-        n.labelOn = show;
+      // ——— Drilled: never hide context — dim it; ancestor path always bright ———
+      const onPath = focusPath.has(n.id);
+      const isFocus = n.id === focus.id;
+      const isChild = n.parentId === focus.id;
+
+      // APOS core always present (edge-indicated when off-screen)
+      if (n.type === 'enterprise') {
+        n.draw = true;
+        n.lodAlpha = 0.9;
+        n.labelOn = false;
         return;
       }
 
-      const onPath = expandedPath.has(n.id);
+      // Focus path ancestors + focus: bright continuous chain
       if (onPath) {
-        // Ancestors above focus: keep geometry for continuous fade links
-        const isFocus = n.id === focus.id;
-        const isChildOfFocus = n.parentId === focus.id;
-        const underFocusHub =
-          focus.type === 'hub' &&
-          n.hubId === focus.id &&
-          (n.type === 'area' || n.type === 'location');
-        const underFocusCountry =
-          focus.type === 'country' &&
-          n.countryId === focus.id &&
-          (n.type === 'client' || n.type === 'area');
-        const underFocusClient =
-          focus.type === 'client' &&
-          n.clientId === focus.id &&
-          (n.type === 'area' || n.type === 'location');
-        const underFocusArea =
-          focus.type === 'area' &&
-          (n.parentId === focus.id || (n.type === 'location' && n.areaId === focus.id));
-        const underFocusLoc =
-          focus.type === 'location' &&
-          (n.parentId === focus.id || (n.type === 'machine' && n.locationId === focus.id));
-        const local =
-          isFocus ||
-          isChildOfFocus ||
-          underFocusHub ||
-          underFocusCountry ||
-          underFocusClient ||
-          underFocusArea ||
-          underFocusLoc;
+        n.draw = true;
+        n.lodAlpha = n.status === 'future' ? 0.45 : 1;
+        if (isFocus) n.labelOn = false;
+        else n.labelOn = !!(n.label) && (n.type === 'hub' || n.type === 'country' || n.type === 'client'
+          || n.type === 'area' || n.type === 'location' || n.type === 'machine');
+        return;
+      }
 
-        if (!local) {
-          if (pathToRoot(focusNodeId).includes(n.id)) {
-            n.draw = true;
-            n.ancestorOnly = true;
-            n.lodAlpha = 0;
-            n.labelOn = false;
-            return;
-          }
-          n.draw = false;
-          n.lodAlpha = 0;
-          n.labelOn = false;
+      // Direct children of focus
+      if (isChild) {
+        if (n.type === 'branch') {
+          n.draw = focus.type === 'machine';
+          n.lodAlpha = n.draw ? 1 : 0;
+          n.labelOn = n.draw;
           return;
         }
-
         n.draw = true;
-        n.lodAlpha = n.status === 'future' ? 0.35 : 1;
-        // Every visible local node with a name gets a label (focus uses accent title)
-        if (!n.label || n.status === 'future') n.labelOn = false;
-        else if (isFocus) n.labelOn = false; // focus title handled separately
-        else n.labelOn = true;
+        n.lodAlpha = n.status === 'future' ? 0.4 : 1;
+        n.labelOn = !!n.label;
         return;
       }
 
-      // Neighbor peeks only at hub focus (never pollute area/site/machine frames)
-      if (focus?.type === 'hub' && focusHubId) {
-        const idx = hubs.findIndex((h) => h.id === focusHubId);
-        if (idx >= 0) {
-          const neighborIds = new Set([
-            hubs[(idx - 1 + hubs.length) % hubs.length]?.id,
-            hubs[(idx + 1) % hubs.length]?.id,
-          ]);
-          if (neighborIds.has(n.hubId) && n.type === 'area') {
-            n.draw = true;
-            n.preview = true;
-            n.lodAlpha = 0.22;
-            n.labelOn = false;
-            return;
-          }
+      // Grandchildren under focus (one level of local subtree)
+      if (n.parentId && focusPath.has(n.parentId) === false) {
+        const parent = nodeById.get(n.parentId);
+        if (parent && parent.parentId === focus.id && n.type !== 'branch') {
+          n.draw = true;
+          n.lodAlpha = 0.85;
+          n.labelOn = !!n.label && (n.type === 'location' || n.type === 'machine' || n.type === 'area');
+          return;
         }
       }
 
+      // Other hubs / brands / siblings — always visible, dimmed (restore on zoom-out)
+      if (n.type === 'hub' || n.type === 'country' || n.type === 'client') {
+        n.draw = true;
+        n.preview = true;
+        n.lodAlpha = dimNode * (n.status === 'future' || n.comingSoon ? 0.7 : 1);
+        n.labelOn = !!n.label;
+        return;
+      }
+
+      // Siblings of focus (same parent) — dim
+      if (n.parentId && focus.parentId && n.parentId === focus.parentId) {
+        n.draw = true;
+        n.preview = true;
+        n.lodAlpha = dimNode;
+        n.labelOn = !!n.label && (n.type === 'area' || n.type === 'location' || n.type === 'machine');
+        return;
+      }
+
+      // Deep sub-trees of non-focused branches: collapse (parent shows +N)
       n.draw = false;
       n.lodAlpha = 0;
       n.labelOn = false;
+    });
+
+    // +N rollup on dimmed parents whose deep children are collapsed
+    nodes.forEach((n) => {
+      if (!n.draw || !(n.type === 'client' || n.type === 'area' || n.type === 'location' || n.type === 'hub' || n.type === 'country')) return;
+      if (focusPath.has(n.id) || n.id === focus?.id) return;
+      const kids = (childrenOf.get(n.id) || []).filter((c) => !c.pad && c.type !== 'artic' && c.type !== 'branch');
+      const hidden = kids.filter((c) => !c.draw).length;
+      if (hidden > 0) n.collapsedCount = hidden;
     });
 
     articulations.forEach((a) => {
@@ -1411,9 +1411,10 @@
     resolveLabelCollisions();
     paintLod();
     syncDomLabels();
-    syncHubTitles(); // after labels so titles dodge area label boxes
+    syncHubTitles();
     syncFocusTitle();
     renderBreadcrumb(focusNodeId);
+    syncAposEdgeChip();
   }
 
   function focusPathHasHubNeighbor(focusHubId, hubId) {
@@ -1771,28 +1772,22 @@
         ? focusNodeId
         : nodeById.get(focusNodeId)?.hubId;
     const accent = UTILS ? UTILS.accentFor(focusHubId) : null;
+    const crumbHot = crumbHoverId ? new Set(pathToRoot(crumbHoverId)) : null;
 
     const hoverHot = hoverId ? hoverRelatedIds(hoverId) : null;
     gNodes.selectAll('g.node').each(function (d) {
       const g = d3.select(this);
-      g.style('display', d.draw && !d.ancestorOnly ? null : 'none');
-      let op = d.draw && !d.ancestorOnly ? d.lodAlpha : 0;
-      // Unrelated branches dim to ~25% when drilled
-      if (!overviewMode && d.draw && !focusPath.has(d.id) && !d.preview) {
-        const related =
-          d.hubId === focusHubId ||
-          d.id === focusHubId ||
-          (d.parentId && focusPath.has(d.parentId));
-        if (!related) op = Math.min(op, 0.25);
-      }
+      g.style('display', d.draw ? null : 'none');
+      let op = d.draw ? d.lodAlpha : 0;
+      if (crumbHot && crumbHot.has(d.id)) op = Math.max(op, 0.95);
       // Gemini: hub/node hover fades ~95% of unrelated
       if (hoverHot && d.draw) {
         if (!hoverHot.has(d.id) && hoverId !== d.id) op = Math.min(op, 0.1);
       }
       g.style('opacity', op);
       g.classed('is-focus', focusNodeId === d.id || (!overviewMode && expandedPath.has(d.id) && d.type === 'hub'));
-      g.classed('is-hover', hoverId === d.id);
-      g.classed('is-path', !!(hoverHot && hoverHot.has(d.id)));
+      g.classed('is-hover', hoverId === d.id || crumbHoverId === d.id);
+      g.classed('is-path', !!(hoverHot && hoverHot.has(d.id)) || !!(crumbHot && crumbHot.has(d.id)));
       g.classed('has-alert', !!(d.alertCount > 0 || d.alert));
       // Canvas draws nodes/labels/badges — keep SVG for hit-testing only
       const label = g.select('text.node-label');
@@ -1812,10 +1807,9 @@
       gLinks.selectAll('path.link').each(function (d) {
         const s = nodeById.get(d.source);
         const t = nodeById.get(d.target);
-        let show = !!(s?.draw && t?.draw) && !s?.ancestorOnly && !t?.ancestorOnly;
-        if (d.kind === 'spine' && !overviewMode) show = false;
-        if (!overviewMode && (s?.type === 'enterprise' || t?.type === 'enterprise')) show = false;
         const onPath = focusPath.has(d.source) && focusPath.has(d.target);
+        // Path (incl. spine→APOS) always kept; context links when both ends drawn
+        let show = onPath || !!(s?.draw && t?.draw);
         const el = d3.select(this);
         let op = 0;
         if (show) {
@@ -2176,8 +2170,25 @@
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
+      btn.dataset.nid = nid;
       btn.textContent = n.type === 'enterprise' ? 'APOS' : n.label;
       btn.addEventListener('click', () => flyToNode(n));
+      btn.addEventListener('mouseenter', () => {
+        crumbHoverId = nid;
+        paintLod();
+      });
+      btn.addEventListener('mouseleave', () => {
+        crumbHoverId = null;
+        paintLod();
+      });
+      btn.addEventListener('focus', () => {
+        crumbHoverId = nid;
+        paintLod();
+      });
+      btn.addEventListener('blur', () => {
+        crumbHoverId = null;
+        paintLod();
+      });
       li.appendChild(btn);
       crumbList.appendChild(li);
     });
@@ -2754,6 +2765,77 @@
     return { x: n.x * transform.k + transform.x, y: n.y * transform.k + transform.y };
   }
 
+  /** Clip a screen-space segment to the stage; returns endpoints + which end hit the edge. */
+  function clipLineToStage(x0, y0, x1, y1, pad = 28) {
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
+    const L = pad, R = w - pad, T = pad + 48, B = h - pad - 40;
+    const inside = (x, y) => x >= L && x <= R && y >= T && y <= B;
+    if (inside(x0, y0) && inside(x1, y1)) {
+      return { ax: x0, ay: y0, bx: x1, by: y1, clipped: false, edgeHit: null };
+    }
+    // Parametric clip against padded rect (Liang-Barsky-ish)
+    let t0 = 0, t1 = 1;
+    const dx = x1 - x0, dy = y1 - y0;
+    const clips = [
+      [-dx, x0 - L], [dx, R - x0], [-dy, y0 - T], [dy, B - y0],
+    ];
+    for (let i = 0; i < 4; i++) {
+      const p = clips[i][0], q = clips[i][1];
+      if (p === 0) {
+        if (q < 0) return null;
+        continue;
+      }
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return null;
+    }
+    const ax = x0 + t0 * dx, ay = y0 + t0 * dy;
+    const bx = x0 + t1 * dx, by = y0 + t1 * dy;
+    let edgeHit = null;
+    const near = (x, y) => {
+      if (Math.abs(x - L) < 1.5) return 'left';
+      if (Math.abs(x - R) < 1.5) return 'right';
+      if (Math.abs(y - T) < 1.5) return 'top';
+      if (Math.abs(y - B) < 1.5) return 'bottom';
+      return null;
+    };
+    if (!inside(x0, y0)) edgeHit = { x: ax, y: ay, side: near(ax, ay) || 'edge', towardCore: true };
+    else if (!inside(x1, y1)) edgeHit = { x: bx, y: by, side: near(bx, by) || 'edge', towardCore: true };
+    return { ax, ay, bx, by, clipped: true, edgeHit };
+  }
+
+  function ensureAposEdgeChip() {
+    let el = document.getElementById('apos-edge-chip');
+    if (el) return el;
+    el = document.createElement('button');
+    el.id = 'apos-edge-chip';
+    el.type = 'button';
+    el.className = 'apos-edge-chip';
+    el.textContent = 'APOS';
+    el.title = 'Fly to APOS';
+    el.hidden = true;
+    el.addEventListener('click', () => {
+      const core = nodeById.get(DATA.enterprise.id);
+      if (core) flyToNode(core);
+      else flyToGalaxy();
+    });
+    (stage || document.body).appendChild(el);
+    return el;
+  }
+
+  function syncAposEdgeChip() {
+    const el = ensureAposEdgeChip();
+    if (overviewMode || !aposEdgeHint) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.style.left = `${aposEdgeHint.x}px`;
+    el.style.top = `${aposEdgeHint.y}px`;
+  }
+
 
   /** Simple white line icons inside hub discs (brand glyphs) */
   function drawHubGlyph(ctx, x, y, s, hubId, alpha) {
@@ -2859,9 +2941,13 @@
     const accent = focusHubId ? accentRgb((UTILS && UTILS.HUB_ACCENT[focusHubId]) || nodeById.get(focusHubId)?.ring || 'teal') : null;
     const localIds = new Set((focus ? localFrameNodes(focus) : []).map((n) => n.id));
 
-    // ——— Curved links: always node-centre → node-centre; off-frame ends fade along length ———
+    // ——— Curved links: continuous ancestor path + dimmed context (no broken stubs) ———
     linkDrawStats = { count: 0, minOp: 1, maxOp: 0 };
+    aposEdgeHint = null;
     const hoverHotDraw = hoverId ? hoverRelatedIds(hoverId) : null;
+    const crumbHot = crumbHoverId ? new Set(pathToRoot(crumbHoverId)) : null;
+    const restore = contextRestoreT();
+    const pathPackets = [];
     links.forEach((L) => {
       const s = nodeById.get(L.source);
       const t = nodeById.get(L.target);
@@ -2873,88 +2959,77 @@
         if (!(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target))) return;
         if (L.kind === 'spine') return;
       }
-      if (L.kind === 'spine') {
-        if (!overviewMode) return;
-        if (!s.draw || !t.draw) return;
-      }
-      // Never draw enterprise/core links when drilled
-      if (!overviewMode && (s.type === 'enterprise' || t.type === 'enterprise')) return;
-      if (!overviewMode && focus?.type === 'hub' && L.kind === 'spine') return;
 
-      const sLocal = (localIds.has(s.id) || (overviewMode && s.draw && !s.preview)) && !s.ancestorOnly;
-      const tLocal = (localIds.has(t.id) || (overviewMode && t.draw && !t.preview)) && !t.ancestorOnly;
       const onPath = focusPath.has(L.source) && focusPath.has(L.target);
-      // Parent on focus path may be ancestorOnly (off-frame) — still draw continuous fade
-      const sEndpoint = sLocal || onPath || (overviewMode && s.draw);
-      const tEndpoint = tLocal || onPath || (overviewMode && t.draw);
-      if (!overviewMode) {
-        if (!sLocal && !tLocal) return;
-        if (!(sEndpoint && tEndpoint)) return;
-      } else if (!s.draw || !t.draw) {
-        return;
+      const crumbPath = !!(crumbHot && crumbHot.has(L.source) && crumbHot.has(L.target));
+      // Always draw the focus→…→APOS chain; context links when both ends are drawn
+      if (!onPath && !crumbPath) {
+        if (!s.draw || !t.draw) return;
+        // Skip deep-deep context noise (branch links of non-focus)
+        if (L.kind === 'leaf' || s.type === 'branch' || t.type === 'branch') return;
       }
 
       const a0 = screenOf(s);
       const b0 = screenOf(t);
-      const preview = !!(s.preview || t.preview);
+      const preview = !!(s.preview || t.preview) && !onPath;
       const future = s.status === 'future' || t.status === 'future';
-      const fadeRemote = !overviewMode && !(sLocal && tLocal);
 
-      let op = onPath ? 0.9 : preview ? 0.28 : (L.kind === 'spine' ? 0.42 : 0.55);
-      if (fadeRemote) op = Math.min(op, 0.42);
-      if (future && !onPath) op = Math.min(op, 0.32);
-      if (hoverHotDraw && !(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target))) {
+      let op;
+      if (overviewMode) {
+        // Overview stays bright (prior constellation look)
+        op = onPath ? 0.9 : preview ? 0.28 : (L.kind === 'spine' ? 0.42 : 0.55);
+        if (future && !onPath) op = Math.min(op, 0.35);
+      } else if (onPath || crumbPath) {
+        op = crumbPath && !onPath ? 0.95 : 0.92;
+      } else if (preview) {
+        op = 0.12 + 0.35 * restore;
+      } else {
+        op = (L.kind === 'spine' ? 0.18 : 0.12) + 0.4 * restore;
+      }
+      if (future && !onPath && !overviewMode) op = Math.min(op, 0.28);
+      if (hoverHotDraw && !(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target)) && !onPath) {
         op = Math.min(op, 0.05);
       }
-      if (op < 0.05) return;
-      if (!preview && !fadeRemote) {
-        linkDrawStats.count++;
-        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op);
-        linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
-      } else if (!preview && fadeRemote) {
-        linkDrawStats.count++;
-        linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op * 0.5);
-        linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
-      }
+      if (op < 0.04) return;
 
-      let ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
-      let c1x, c1y, c2x, c2y;
+      linkDrawStats.count++;
+      linkDrawStats.minOp = Math.min(linkDrawStats.minOp, op);
+      linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
+
       const cc = curveControls(s, t, L.kind);
-      if (fadeRemote) {
-        // Short faded stub from the on-frame node toward the off-frame ancestor
-        const localIsS = sLocal;
-        const from = localIsS ? a0 : b0;
-        const to = localIsS ? b0 : a0;
-        const dx = to.x - from.x, dy = to.y - from.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const stubLen = Math.min(52, Math.max(28, len * 0.16));
-        ax = from.x;
-        ay = from.y;
-        bx = from.x + (dx / len) * stubLen;
-        by = from.y + (dy / len) * stubLen;
-        c1x = ax + (bx - ax) * 0.35;
-        c1y = ay + (by - ay) * 0.35;
-        c2x = ax + (bx - ax) * 0.7;
-        c2y = ay + (by - ay) * 0.7;
-      } else {
-        c1x = cc.c1x * transform.k + transform.x;
-        c1y = cc.c1y * transform.k + transform.y;
-        c2x = cc.c2x * transform.k + transform.x;
-        c2y = cc.c2y * transform.k + transform.y;
+      let ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
+      let c1x = cc.c1x * transform.k + transform.x;
+      let c1y = cc.c1y * transform.k + transform.y;
+      let c2x = cc.c2x * transform.k + transform.x;
+      let c2y = cc.c2y * transform.k + transform.y;
+
+      // Continuous path: clip when an endpoint is off-screen; edge chip points to APOS
+      if (onPath && !overviewMode) {
+        const clipped = clipLineToStage(ax, ay, bx, by, 32);
+        if (!clipped) return;
+        if (clipped.clipped) {
+          ax = clipped.ax; ay = clipped.ay; bx = clipped.bx; by = clipped.by;
+          c1x = ax + (bx - ax) * 0.33;
+          c1y = ay + (by - ay) * 0.33;
+          c2x = ax + (bx - ax) * 0.66;
+          c2y = ay + (by - ay) * 0.66;
+          if (clipped.edgeHit) {
+            aposEdgeHint = { x: clipped.edgeHit.x, y: clipped.edgeHit.y };
+          }
+        }
       }
 
       const fromHub = s.type === 'hub' || t.type === 'hub' || s.type === 'country' || t.type === 'country';
       const hubNode = (s.type === 'hub' || s.type === 'country') ? s : ((t.type === 'hub' || t.type === 'country') ? t : null);
       const firstHopRgb = hubNode ? accentRgb(hubNode.ring || 'teal') : null;
       let rgb = [255, 255, 255];
-      let lineW = L.kind === 'spine' ? 1.1 : fadeRemote ? 1.1 : 1.3;
-      if (onPath && accent && !fadeRemote) {
-        rgb = accent;
-        lineW = 2;
-      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview && !fadeRemote) {
+      let lineW = L.kind === 'spine' ? 1.15 : 1.25;
+      if (onPath || crumbPath) {
+        rgb = accent || [0, 210, 230];
+        lineW = 2.15;
+      } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview) {
         rgb = firstHopRgb;
-        lineW = 1.45;
-        op = Math.min(0.72, op + 0.1);
+        lineW = 1.2;
       }
 
       pctx.beginPath();
@@ -2962,25 +3037,49 @@
       pctx.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by);
       pctx.lineWidth = lineW;
       pctx.lineCap = 'round';
-      pctx.shadowBlur = 0;
-
-      if (fadeRemote) {
-        const g = pctx.createLinearGradient(ax, ay, bx, by);
-        g.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`);
-        g.addColorStop(0.55, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op * 0.35})`);
-        g.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
-        pctx.strokeStyle = g;
+      pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
+      if (onPath || crumbPath) {
+        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.45)`;
+        pctx.shadowBlur = 6;
       } else {
-        pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
-        if (!preview) {
-          pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.28)`;
-          pctx.shadowBlur = 2;
-        }
+        pctx.shadowBlur = 0;
       }
       pctx.stroke();
       pctx.shadowBlur = 0;
+
+      // Flowing packet toward APOS along the ancestor path
+      if ((onPath || crumbPath) && !reduceMotion) {
+        pathPackets.push({ s, t, cc, towardCore: true, rgb });
+      }
     });
     if (!linkDrawStats.count) linkDrawStats.minOp = 0;
+
+    // Path packets: travel toward the core every frame
+    if (pathPackets.length && !reduceMotion) {
+      const tSec = (ts || 0) / 1000;
+      pathPackets.forEach(({ s, t, cc, rgb }, si) => {
+        // Orient packet toward enterprise (lower depth)
+        const coreIsS = s.type === 'enterprise' || (s.depth != null && t.depth != null && s.depth < t.depth);
+        const pts = sampleCubic(
+          coreIsS ? t.x : s.x, coreIsS ? t.y : s.y,
+          coreIsS ? cc.c2x : cc.c1x, coreIsS ? cc.c2y : cc.c1y,
+          coreIsS ? cc.c1x : cc.c2x, coreIsS ? cc.c1y : cc.c2y,
+          coreIsS ? s.x : t.x, coreIsS ? s.y : t.y,
+          28
+        );
+        const u = (tSec * 0.42 + si * 0.18) % 1;
+        const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
+        const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
+        pctx.beginPath();
+        pctx.arc(sp.x, sp.y, 2.6, 0, Math.PI * 2);
+        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`;
+        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.7)`;
+        pctx.shadowBlur = 8;
+        pctx.fill();
+        pctx.shadowBlur = 0;
+      });
+    }
+    syncAposEdgeChip();
 
     // ——— Gemini signal arcs: calm cyan, max ~5, smooth core-bow Béziers ———
     if (layoutMode !== 'hex' || hoverId) {
@@ -3002,7 +3101,9 @@
           if (!s.draw || !t.draw || s.ancestorOnly || t.ancestorOnly) return;
         } else if (L.drill) {
           if (overviewMode) return;
-          if (!(localIds.has(s.id) && localIds.has(t.id))) return;
+          // Live relations for focus: local frame OR along the ancestor path to APOS
+          const onPathEnds = focusPath.has(s.id) && focusPath.has(t.id);
+          if (!(localIds.has(s.id) && localIds.has(t.id)) && !onPathEnds) return;
         } else {
           return;
         }
@@ -3345,6 +3446,25 @@
         pctx.font = '700 8px Manrope, sans-serif';
         pctx.textAlign = 'center';
         pctx.textBaseline = 'middle';
+        pctx.fillText(txt, bx, by + 0.5);
+      }
+      // Collapsed deep-subtree count on dimmed parents
+      if (n.collapsedCount > 0 && n.draw && n.preview) {
+        const txt = `+${n.collapsedCount}`;
+        const bx = p.x + r * 0.7 + 8;
+        const by = p.y + r * 0.55 + 4;
+        pctx.font = '600 9px Manrope, sans-serif';
+        pctx.textAlign = 'center';
+        pctx.textBaseline = 'middle';
+        const tw = Math.max(18, 8 + txt.length * 5.5);
+        pctx.fillStyle = `rgba(125,147,178,${0.55 * alpha})`;
+        pctx.beginPath();
+        pctx.roundRect?.(bx - tw / 2, by - 6, tw, 12, 5);
+        if (!pctx.roundRect) {
+          pctx.rect(bx - tw / 2, by - 6, tw, 12);
+        }
+        pctx.fill();
+        pctx.fillStyle = `rgba(200,220,240,${0.85 * alpha})`;
         pctx.fillText(txt, bx, by + 0.5);
       }
     });
@@ -3875,49 +3995,49 @@
       if (!s || !t) return null;
       return { source: worldToScreen(s.x, s.y), target: worldToScreen(t.x, t.y), sourceId, targetId };
     },
-    /** Drawn tree links incident to a node (for continuity checks). */
+    /** Drawn tree links incident to a node (continuous path — no stubs). */
     getIncidentDrawnLinks: (nodeId) => {
       const out = [];
-      const focus = nodeById.get(focusNodeId);
       const focusPath = new Set(pathToRoot(focusNodeId));
-      const localIds = new Set((focus ? localFrameNodes(focus) : []).map((n) => n.id));
       links.forEach((L) => {
         if (L.source !== nodeId && L.target !== nodeId) return;
+        if (L.kind === 'signal') return;
         const s = nodeById.get(L.source);
         const t = nodeById.get(L.target);
         if (!s || !t) return;
-        const sLocal = localIds.has(s.id) && !s.ancestorOnly;
-        const tLocal = localIds.has(t.id) && !t.ancestorOnly;
         const onPath = focusPath.has(L.source) && focusPath.has(L.target);
-        if (!sLocal && !tLocal && !onPath) return;
-        if (!(sLocal || tLocal || onPath)) return;
-        let sourceScreen = worldToScreen(s.x, s.y);
-        let targetScreen = worldToScreen(t.x, t.y);
-        const stub = !overviewMode && !(sLocal && tLocal) && (sLocal || tLocal);
-        if (stub) {
-          const localIsS = sLocal;
-          const from = localIsS ? sourceScreen : targetScreen;
-          const to = localIsS ? targetScreen : sourceScreen;
-          const dx = to.x - from.x, dy = to.y - from.y;
-          const len = Math.hypot(dx, dy) || 1;
-          const stubLen = Math.min(52, Math.max(28, len * 0.16));
-          const end = { x: from.x + (dx / len) * stubLen, y: from.y + (dy / len) * stubLen };
-          if (localIsS) { sourceScreen = from; targetScreen = end; }
-          else { targetScreen = from; sourceScreen = end; }
-        }
+        if (!onPath && !(s.draw && t.draw)) return;
         out.push({
           source: L.source,
           target: L.target,
           kind: L.kind,
-          sourceScreen,
-          targetScreen,
-          sourceLocal: sLocal,
-          targetLocal: tLocal,
-          stub: !!stub,
+          sourceScreen: worldToScreen(s.x, s.y),
+          targetScreen: worldToScreen(t.x, t.y),
+          sourceLocal: !!s.draw,
+          targetLocal: !!t.draw,
+          onPath,
+          stub: false,
         });
       });
       return out;
     },
+    /** True when every hop focus→…→APOS is a drawn continuous link. */
+    pathLinksVisible: (fromId) => {
+      const path = pathToRoot(fromId || focusNodeId);
+      if (path.length < 2) return true;
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i], b = path[i + 1];
+        const hit = links.some((L) =>
+          (L.source === a && L.target === b) || (L.source === b && L.target === a)
+        );
+        if (!hit) return false;
+        const na = nodeById.get(a), nb = nodeById.get(b);
+        if (!na?.draw || !nb?.draw) return false;
+      }
+      return true;
+    },
+    getContextRestoreT: () => contextRestoreT(),
+    getAposEdgeHint: () => (aposEdgeHint ? { ...aposEdgeHint } : null),
     snapshotOverviewState: () => {
       applyLod();
       const drawn = nodes

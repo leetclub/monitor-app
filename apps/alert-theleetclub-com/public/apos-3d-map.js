@@ -386,15 +386,22 @@ function mount() {
     const box = new THREE.Box3();
     const root = graph.byId.get(id);
     if (!root) return box;
-    // Fit focused node + direct children only (not the whole path to core)
+    // Fit focus + children + ancestor path (keep relation to APOS in frame)
     box.expandByPoint(root.pos);
     childrenOf(id).forEach((c) => box.expandByPoint(c.pos));
+    let a = root;
+    while (a) {
+      box.expandByPoint(a.pos);
+      a = a.parentId ? graph.byId.get(a.parentId) : null;
+    }
     if (root.type === 'enterprise') {
       graph.nodes.forEach((n) => {
         if (n.depth <= 2) box.expandByPoint(n.pos);
       });
-      // Pad so SA/AE halos are not clipped at the frame edge
       box.expandByScalar(6);
+    } else {
+      // Soft pad so path links aren't flush to the edge
+      box.expandByScalar(2.2);
     }
     return box;
   }
@@ -511,6 +518,7 @@ function mount() {
     resize();
   }
 
+  let crumbHoverId = null;
   function renderBreadcrumb() {
     const ol = document.getElementById('crumb-list');
     if (!ol) return;
@@ -522,118 +530,164 @@ function mount() {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
+      btn.dataset.nid = p.id;
       btn.textContent = p.type === 'enterprise' ? 'APOS' : p.label;
       if (i === path.length - 1) btn.classList.add('is-current');
       btn.addEventListener('click', () => flyTo(p.id));
+      btn.addEventListener('mouseenter', () => { crumbHoverId = p.id; applyLod(); });
+      btn.addEventListener('mouseleave', () => { crumbHoverId = null; applyLod(); });
       li.appendChild(btn);
       ol.appendChild(li);
     });
   }
 
+  function ensureAposEdgeChip3d() {
+    let el = document.getElementById('apos-edge-chip');
+    if (el) return el;
+    el = document.createElement('button');
+    el.id = 'apos-edge-chip';
+    el.type = 'button';
+    el.className = 'apos-edge-chip';
+    el.textContent = 'APOS';
+    el.title = 'Fly to APOS';
+    el.hidden = true;
+    el.addEventListener('click', () => flyTo(graph.core.id));
+    stage.appendChild(el);
+    return el;
+  }
+
   function applyLod() {
     const path = focusPath();
     const focus = graph.byId.get(focusId);
+    const overview = focusId === graph.core.id;
+    // Distance-based restore: as camera pulls back, context brightens immediately
+    const dist = camera.position.distanceTo(controls.target) || 40;
+    const restore = overview ? 1 : THREE.MathUtils.clamp((dist - 14) / 40, 0, 1);
+    const dimNode = 0.25 + 0.75 * restore;
+    const dimLink = 0.12 + 0.35 * restore;
+
     meshes.forEach(({ mesh, halo, node }) => {
       if (node.type === 'enterprise') return;
       const isFocus = node.id === focusId;
       const isChild = node.parentId === focusId;
-      let show;
-      if (focusId === graph.core.id) {
-        // Overview: countries + brands only
+      const onPath = path.has(node.id);
+      let show = false;
+      let op = 0.98;
+      if (overview) {
         show = node.depth <= 2;
+        op = node.status === 'future' || node.comingSoon ? 0.38 : 0.98;
       } else if (node.type === 'branch') {
         show = focus?.type === 'machine' && isChild;
+        op = 0.98;
+      } else if (onPath || isChild) {
+        // Ancestor chain + focus children always present
+        show = true;
+        op = node.status === 'future' || node.comingSoon ? 0.4 : 0.98;
+      } else if (node.depth <= 2) {
+        // Other hubs/brands — dim, never remove
+        show = true;
+        op = dimNode * (node.status === 'future' || node.comingSoon ? 0.7 : 1);
+      } else if (node.parentId && path.has(node.parentId) && node.parentId !== focusId) {
+        // Sibling under an ancestor — dim
+        show = true;
+        op = dimNode;
       } else {
-        // Drill: focus + direct children only (ancestors stay off — parent uses stub)
-        show = isFocus || isChild;
+        show = false;
       }
       mesh.visible = show;
+      if (show) mesh.material.opacity = op;
       if (halo) {
         halo.visible = show && node.depth <= 3;
-        if (halo.visible) halo.position.copy(node.pos);
+        if (halo.visible) {
+          halo.position.copy(node.pos);
+          halo.material.opacity = Math.min(0.16, op * 0.18);
+        }
       }
-      mesh.material.opacity = node.status === 'future' || node.comingSoon ? 0.38 : 0.98;
     });
+
+    // Core always visible when drilled (edge chip if projected off-screen)
+    coreGroup.visible = true;
+    wordmark.visible = overview;
+    if (overview) {
+      const vFOV = THREE.MathUtils.degToRad(camera.fov);
+      const distCore = camera.position.distanceTo(controls.target) || camera.position.length();
+      const aspect = camera.aspect || 1.7;
+      const worldH = 2 * Math.tan(vFOV / 2) * distCore;
+      const worldW = worldH * aspect;
+      const targetW = worldW * 0.072;
+      wordmark.scale.set(targetW, targetW / 3.9, 1);
+      wordmark.material.opacity = 1;
+    }
+
     linkLines.forEach((line) => {
       const s = graph.byId.get(line.userData.source);
       const t = graph.byId.get(line.userData.target);
       if (!s || !t) { line.visible = false; return; }
-      const sm = meshes.get(s.id);
-      const tm = meshes.get(t.id);
       const hot = path.has(s.id) && path.has(t.id);
       const childLink = (s.id === focusId && t.parentId === focusId)
         || (t.id === focusId && s.parentId === focusId);
-      const bothLocal = !!(sm?.mesh.visible && tm?.mesh.visible);
-      const parentId = focus?.parentId;
-      const touchesCore = s.type === 'enterprise' || t.type === 'enterprise';
-      const isParentStub = focusId !== graph.core.id && (
-        (parentId && ((s.id === focusId && t.id === parentId) || (t.id === focusId && s.id === parentId)))
-        || (touchesCore && (s.id === focusId || t.id === focusId))
-      );
+      const sm = meshes.get(s.id);
+      const tm = meshes.get(t.id);
+      const sShow = s.type === 'enterprise' ? coreGroup.visible : !!sm?.mesh.visible;
+      const tShow = t.type === 'enterprise' ? coreGroup.visible : !!tm?.mesh.visible;
 
-      // Short faded parent stub (like 2D maps) — never a full curve off-frame
-      if (isParentStub) {
-        const localNode = s.id === focusId ? s
-          : (t.id === focusId ? t : (s.type === 'enterprise' ? t : s));
-        const remote = localNode === s ? t : s;
-        const from = localNode.pos.clone();
-        const toward = remote.pos.clone().sub(from);
-        const len = toward.length() || 1;
-        const stubLen = Math.min(0.85, Math.max(0.45, len * 0.055));
-        toward.multiplyScalar(stubLen / len);
-        const to = from.clone().add(toward);
-        const mid = from.clone().lerp(to, 0.55);
-        line.geometry.dispose();
-        line.geometry = new THREE.BufferGeometry().setFromPoints([from, mid, to]);
-        line.visible = true;
-        line.material.opacity = 0.22;
-        line.userData.stubbed = true;
-        return;
-      }
-
-      // Hide ancestor-path / spine links when drilled (children-only curves)
-      if (focusId !== graph.core.id && hot && !childLink) {
-        line.visible = false;
-        return;
-      }
-      if (focusId !== graph.core.id && touchesCore) {
-        line.visible = false;
-        return;
-      }
-
-      if (line.userData.stubbed && bothLocal && !isParentStub) {
+      // Restore full curve if previously stubbed
+      if (line.userData.stubbed) {
         const pts = curvePoints(s.pos, t.pos, 18);
         line.geometry.dispose();
         line.geometry = new THREE.BufferGeometry().setFromPoints(pts);
         line.userData.stubbed = false;
       }
 
-      line.visible = bothLocal;
-      if (!line.visible) return;
-      if (focusId !== graph.core.id && !hot && !childLink) line.material.opacity = 0.08;
-      else line.material.opacity = hot ? 0.55 : line.userData.kind === 'spine' ? 0.28 : 0.32;
-    });
-    // Orbit rings only on overview (avoid long dashed diagonals on drill views)
-    const focusDepth = focus?.depth ?? 0;
-    ringGroup.visible = focusId === graph.core.id;
+      if (overview) {
+        line.visible = s.depth <= 2 && t.depth <= 2;
+        line.material.opacity = hot ? 0.45 : line.userData.kind === 'spine' ? 0.28 : 0.3;
+        return;
+      }
 
-    if (focusId === graph.core.id) {
-      wordmark.visible = true;
-      coreGroup.visible = true;
-      const vFOV = THREE.MathUtils.degToRad(camera.fov);
-      const distCore = camera.position.distanceTo(controls.target) || camera.position.length();
-      const aspect = camera.aspect || 1.7;
-      const worldH = 2 * Math.tan(vFOV / 2) * distCore;
-      const worldW = worldH * aspect;
-      // Wordmark ≈ 12–15% viewport (sprite+bloom reads larger than raw scale)
-      const targetW = worldW * 0.072;
-      const targetH = targetW / 3.9;
-      wordmark.scale.set(targetW, targetH, 1);
-      wordmark.material.opacity = 1;
+      // Continuous ancestor path (incl. spine to APOS) — never stubbed/hidden
+      if (hot) {
+        line.visible = true;
+        line.material.opacity = 0.78;
+        line.material.color.setHex(0x00d4e6);
+        return;
+      }
+      if (childLink) {
+        line.visible = true;
+        line.material.opacity = 0.45;
+        return;
+      }
+      // Dim context links between visible nodes
+      if (sShow && tShow && (s.depth <= 2 || t.depth <= 2)) {
+        line.visible = true;
+        line.material.opacity = dimLink;
+        return;
+      }
+      line.visible = false;
+    });
+
+    ringGroup.visible = overview;
+
+    // Edge indicator when APOS core projects outside the viewport
+    const chip = ensureAposEdgeChip3d();
+    if (overview) {
+      chip.hidden = true;
     } else {
-      wordmark.visible = false;
-      // Hide core as soon as we leave overview so no long spine to origin
-      coreGroup.visible = false;
+      const v = graph.core.pos.clone().project(camera);
+      const w = stage.clientWidth || 1920;
+      const h = stage.clientHeight || 1080;
+      const onScreen = v.z > -1 && v.z < 1 && Math.abs(v.x) < 0.92 && Math.abs(v.y) < 0.92;
+      if (onScreen) {
+        chip.hidden = true;
+      } else {
+        let sx = (v.x * 0.5 + 0.5) * w;
+        let sy = (-v.y * 0.5 + 0.5) * h;
+        sx = Math.min(w - 48, Math.max(48, sx));
+        sy = Math.min(h - 48, Math.max(64, sy));
+        chip.hidden = false;
+        chip.style.left = `${sx}px`;
+        chip.style.top = `${sy}px`;
+      }
     }
   }
 
@@ -642,54 +696,89 @@ function mount() {
     const h = stage.clientHeight || 1080;
     const insets = viewportInsets();
     const want = new Set();
-    const focus = graph.byId.get(focusId);
+    const path = focusPath();
     if (focusId === graph.core.id) {
       graph.nodes.forEach((n) => {
         if (n.depth === 1 || n.depth === 2) want.add(n.id);
       });
     } else {
+      const focus = graph.byId.get(focusId);
       want.add(focusId);
       childrenOf(focusId).forEach((c) => want.add(c.id));
+      // Ancestor labels: keep chain readable without crowding machine children
+      path.forEach((id) => {
+        if (id === graph.core.id) return;
+        const n = graph.byId.get(id);
+        if (!n) return;
+        if ((focus?.type === 'machine' || focus?.type === 'location') && n.depth > 2) return;
+        want.add(id);
+      });
+      graph.nodes.forEach((n) => {
+        if (n.depth === 1) want.add(n.id);
+      });
     }
     const placed = [];
     const visible = [];
-    labelEls.forEach((el, id) => {
+    // Place focus first, then children, then ancestors — reduces overlaps
+    const order = [...want].sort((a, b) => {
+      const score = (id) => (id === focusId ? 0 : (graph.byId.get(id)?.parentId === focusId ? 1 : 2));
+      return score(a) - score(b);
+    });
+    order.forEach((id) => {
+      const el = labelEls.get(id);
       const entry = meshes.get(id);
-      if (!entry || !want.has(id)) { el.style.display = 'none'; return; }
-      // Force mesh visible for labeled nodes
+      if (!el || !entry) return;
       entry.mesh.visible = true;
       if (entry.halo) entry.halo.visible = entry.node.depth <= 3;
       const n = entry.node;
       const v = n.pos.clone().project(camera);
-      // NDC: discard behind / far out of frustum
       if (v.z < -1 || v.z > 1 || Math.abs(v.x) > 1.15 || Math.abs(v.y) > 1.15) {
         el.style.display = 'none';
         return;
       }
+      const estW = Math.max(40, (n.label || '').length * (id === focusId ? 8.5 : 6.2));
+      const estH = id === focusId ? 18 : 14;
       let x = (v.x * 0.5 + 0.5) * w;
-      let y = (-v.y * 0.5 + 0.5) * h + (id === focusId ? 18 : 12);
-      // Keep inside visible area (excluding drawer/HUD)
+      let y = (-v.y * 0.5 + 0.5) * h + (id === focusId ? 32 : (n.parentId === focusId ? -22 : 14));
+      // Fan child labels away from focus by screen angle
+      if (n.parentId === focusId && focusId) {
+        const fp = graph.byId.get(focusId)?.pos;
+        if (fp) {
+          const dx = n.pos.x - fp.x, dz = n.pos.z - fp.z;
+          const ang = Math.atan2(dz, dx);
+          x += Math.cos(ang) * 28;
+          y += Math.sin(ang) * 10 - 8;
+        }
+      }
       const minX = insets.left + 28;
       const maxX = w - insets.right - 28;
       const minY = insets.top + 12;
       const maxY = h - insets.bottom - 16;
       let tries = 0;
-      while (tries < 10 && placed.some((p) => Math.abs(p.x - x) < 78 && Math.abs(p.y - y) < 16)) {
-        y += 15;
+      const hits = (px, py) => placed.some((p) =>
+        Math.abs(p.x - px) < (p.w + estW) * 0.58 && Math.abs(p.y - py) < (p.h + estH) * 0.75
+      );
+      while (tries < 16 && hits(x, y)) {
+        y += (n.parentId === focusId ? -14 : 16);
+        if (tries % 3 === 2) x += (tries % 6 === 2 ? 22 : -22);
         tries += 1;
       }
       x = Math.min(maxX, Math.max(minX, x));
       y = Math.min(maxY, Math.max(minY, y));
       el.style.display = 'block';
       el.style.visibility = 'visible';
-      el.style.opacity = '1';
+      el.style.opacity = path.has(id) || id === focusId || n.parentId === focusId ? '1' : '0.45';
       el.style.left = `${x}px`;
       el.style.top = `${y}px`;
       el.classList.toggle('is-focus', id === focusId);
       el.classList.toggle('is-hub', n.depth <= 1);
       el.classList.toggle('is-child', n.parentId === focusId);
-      placed.push({ x, y, id });
+      placed.push({ x, y, id, w: estW, h: estH });
       visible.push({ id, label: n.label, x, y });
+    });
+    // Hide unused
+    labelEls.forEach((el, id) => {
+      if (!want.has(id)) el.style.display = 'none';
     });
     return visible;
   }
@@ -866,6 +955,26 @@ function mount() {
         list.push({ id, text: el.textContent, x: r.left, y: r.top, w: r.width, h: r.height });
       });
       return list;
+    },
+    pathLinksVisible: (fromId) => {
+      const start = fromId || focusId;
+      const path = [];
+      let n = graph.byId.get(start);
+      while (n) { path.push(n.id); n = n.parentId ? graph.byId.get(n.parentId) : null; }
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i], b = path[i + 1];
+        const line = linkLines.find((L) =>
+          (L.userData.source === a && L.userData.target === b)
+          || (L.userData.source === b && L.userData.target === a)
+        );
+        if (!line || !line.visible || line.userData.stubbed) return false;
+      }
+      return true;
+    },
+    getAposEdgeHint: () => {
+      const el = document.getElementById('apos-edge-chip');
+      if (!el || el.hidden) return null;
+      return { x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0 };
     },
     goBack: () => flyTo(graph.byId.get(focusId)?.parentId || graph.core.id),
     waitForIdle: () => new Promise((resolve) => {

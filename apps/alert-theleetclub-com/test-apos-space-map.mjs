@@ -489,19 +489,15 @@ await test('back navigation via Esc and chevron', async () => {
       const api = window.APOS_SPACE_MAP;
       const area = 'area-ee-farwaniya';
       const areaPos = api.nodeScreenPos(area);
+      const parentPos = api.nodeScreenPos('client-ee');
       const links = api.getIncidentDrawnLinks(area);
       const parentLink = links.find((L) => L.source === 'client-ee' || L.target === 'client-ee');
       const childLinks = links.filter((L) => (L.source === area || L.target === area) && L.source !== 'client-ee' && L.target !== 'client-ee');
       const within2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= 2.05;
-      const parentAttached = parentLink && areaPos && (
-        within2(parentLink.sourceScreen, areaPos) || within2(parentLink.targetScreen, areaPos)
-      );
-      const stubLen = parentLink
-        ? Math.hypot(
-            parentLink.sourceScreen.x - parentLink.targetScreen.x,
-            parentLink.sourceScreen.y - parentLink.targetScreen.y
-          )
-        : 0;
+      // Full continuous curve to parent centre (no short stub)
+      const parentOk = parentLink && areaPos && parentPos && !parentLink.stub
+        && within2(parentLink.sourceScreen, parentLink.source === area ? areaPos : parentPos)
+        && within2(parentLink.targetScreen, parentLink.target === area ? areaPos : parentPos);
       const childOk = childLinks.length > 0 && childLinks.every((L) => {
         const s = api.nodeScreenPos(L.source);
         const t = api.nodeScreenPos(L.target);
@@ -509,15 +505,65 @@ await test('back navigation via Esc and chevron', async () => {
       });
       return {
         focus: api.getFocus(),
-        parentOk: !!parentAttached && stubLen > 0 && stubLen <= 60,
-        stubLen: Math.round(stubLen),
+        parentOk: !!parentOk,
+        pathToApos: api.pathLinksVisible?.(area),
         childOk,
         childCount: childLinks.length,
       };
     });
     if (info.focus.id !== 'area-ee-farwaniya') throw new Error(JSON.stringify(info.focus));
     if (!info.parentOk) throw new Error(`parent link broken: ${JSON.stringify(info)}`);
+    if (!info.pathToApos) throw new Error(`path to APOS missing: ${JSON.stringify(info)}`);
     if (!info.childOk) throw new Error(`child links broken: ${JSON.stringify(info)}`);
+  });
+
+  await test('focus Leet keeps Leet→KW→APOS path visible', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await flyTo(page, 'client-leet');
+    const info = await page.evaluate(() => {
+      const api = window.APOS_SPACE_MAP;
+      return {
+        focus: api.getFocus(),
+        pathOk: api.pathLinksVisible('client-leet'),
+        leet: api.isNodeDrawn('client-leet'),
+        kw: api.isNodeDrawn('country-kw'),
+        apos: api.isNodeDrawn('ent-apos'),
+        eeDim: api.isNodeDrawn('client-ee'),
+      };
+    });
+    if (info.focus.id !== 'client-leet') throw new Error(JSON.stringify(info.focus));
+    if (!info.pathOk) throw new Error(`Leet→KW→APOS path missing: ${JSON.stringify(info)}`);
+    if (!info.leet || !info.kw || !info.apos) throw new Error(`chain nodes not drawn: ${JSON.stringify(info)}`);
+    if (!info.eeDim) throw new Error('sibling brand EE should stay dimmed, not removed');
+  });
+
+  await test('focus machine keeps full chain; zoom-out restores links within 100ms', async () => {
+    await page.evaluate(() => window.APOS_SPACE_MAP.reset());
+    await waitIdle(page);
+    await flyTo(page, 'm-ee-4');
+    const atMachine = await page.evaluate(() => window.APOS_SPACE_MAP.pathLinksVisible('m-ee-4'));
+    if (!atMachine) throw new Error('machine→…→APOS path not visible');
+    // Zoom out without waiting for settle — path to APOS from current focus stays lit
+    const zoomOk = await page.evaluate(async () => {
+      const api = window.APOS_SPACE_MAP;
+      const k0 = api.getTransform().k;
+      api.setZoomK(Math.max(0.55, k0 * 0.55));
+      const t0 = performance.now();
+      let ok = false;
+      let last = {};
+      while (performance.now() - t0 < 100) {
+        const focusId = api.getFocus()?.id;
+        const pathOk = api.pathLinksVisible(focusId);
+        const count = api.getLinkDrawStats().count;
+        last = { focusId, pathOk, count };
+        // Relations present: current focus path + at least a few drawn links
+        if (pathOk && count >= 2) { ok = true; break; }
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { ok, ms: Math.round(performance.now() - t0), ...last };
+    });
+    if (!zoomOk.ok) throw new Error(`links not restored within 100ms: ${JSON.stringify(zoomOk)}`);
   });
 
   await test('pan/zoom stress restores exact overview state', async () => {
