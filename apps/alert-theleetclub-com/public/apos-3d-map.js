@@ -53,10 +53,12 @@ function buildGraph() {
     links.push({ source: core.id, target: country.id, kind: 'spine' });
 
     (c.clients || []).forEach((cl, ci, arr) => {
-      const fan = ((ci + 0.5) / Math.max(arr.length, 1) - 0.5) * 0.95;
+      // At least ~58° between the outer brands so screen labels do not stack on the hub.
+      const span = Math.max((58 * Math.PI) / 180, 1.01);
+      const fan = arr.length <= 1 ? 0 : (ci / (arr.length - 1) - 0.5) * span;
       const brand = add({
         id: cl.id, type: 'client', label: cl.label || cl.brand, depth: 2,
-        angle: a + fan, orbit: 26, color: country.color, r: 0.28,
+        angle: a + fan, orbit: 36, color: country.color, r: 0.28,
         parentId: country.id, countryId: country.id, comingSoon: !!cl.comingSoon,
       });
       links.push({ source: country.id, target: brand.id, kind: 'tree' });
@@ -65,7 +67,7 @@ function buildGraph() {
         const af = ((ai + 0.5) / Math.max(aarr.length, 1) - 0.5) * 0.55;
         const an = add({
           id: area.id, type: 'area', label: area.label, depth: 3,
-          angle: brand.angle + af, orbit: 34, color: country.color, r: 0.22,
+          angle: brand.angle + af, orbit: 46, color: country.color, r: 0.22,
           parentId: brand.id, countryId: country.id, clientId: brand.id,
         });
         links.push({ source: brand.id, target: an.id, kind: 'tree' });
@@ -74,7 +76,7 @@ function buildGraph() {
           const lf = ((li + 0.5) / Math.max(larr.length, 1) - 0.5) * 0.4;
           const ln = add({
             id: loc.id, type: 'location', label: loc.label, depth: 4,
-            angle: an.angle + lf, orbit: 40, color: COLORS.white, r: 0.18,
+            angle: an.angle + lf, orbit: 53, color: COLORS.white, r: 0.18,
             parentId: an.id, countryId: country.id, clientId: brand.id,
             alert: !!(loc.machines || []).some((m) => m.alert),
           });
@@ -84,7 +86,7 @@ function buildGraph() {
             const mf = ((mi + 0.5) / Math.max(marr.length, 1) - 0.5) * 0.32;
             const mn = add({
               id: m.id, type: 'machine', label: m.label, depth: 5,
-              angle: ln.angle + mf, orbit: 45,
+              angle: ln.angle + mf, orbit: 59,
               color: m.alert ? COLORS.magenta : COLORS.white, r: 0.15,
               parentId: ln.id, countryId: country.id, clientId: brand.id,
               alert: !!m.alert, status: m.status || 'active', revenue: m.revenue, stock: m.stock,
@@ -96,7 +98,7 @@ function buildGraph() {
               const ba = mn.angle + ((bi + 0.5) / BRANCHES.length - 0.5) * 0.85;
               add({
                 id: `${m.id}::${b.id}`, type: 'branch', branchId: b.id, label: b.label, depth: 6,
-                angle: ba, orbit: 49, color: COLORS.mint, r: 0.11,
+                angle: ba, orbit: 64, color: COLORS.mint, r: 0.11,
                 parentId: mn.id, countryId: country.id, clientId: brand.id, machineId: m.id,
               });
               links.push({ source: mn.id, target: `${m.id}::${b.id}`, kind: 'tree' });
@@ -219,7 +221,7 @@ function mount() {
 
   const ringGroup = new THREE.Group();
   ringGroup.rotation.x = ORBIT_TILT;
-  [16, 26, 40].forEach((r) => {
+  [16, 36, 53].forEach((r) => {
     const pts = [];
     for (let i = 0; i <= 128; i++) {
       const a = (i / 128) * Math.PI * 2;
@@ -236,38 +238,103 @@ function mount() {
   scene.add(ringGroup);
 
   const coreGroup = new THREE.Group();
+  const galaxySpin = new THREE.Group();
   {
+    const arms = 3;
     const N = 4200;
     const pos = new Float32Array(N * 3);
     const col = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
-      const t = i / N;
-      const arm = (i % 3) * ((Math.PI * 2) / 3);
-      const spiral = arm + t * Math.PI * 5.5;
-      const rad = Math.pow(Math.random(), 0.55) * 5.8;
-      const y = (Math.random() - 0.5) * 1.6 * (1 - t);
-      pos[i * 3] = Math.cos(spiral) * rad;
-      pos[i * 3 + 1] = y;
-      pos[i * 3 + 2] = Math.sin(spiral) * rad;
-      const cyan = Math.random() > 0.28;
-      if (cyan) { col[i * 3] = 0.0; col[i * 3 + 1] = 0.95; col[i * 3 + 2] = 1.0; }
-      else { col[i * 3] = 0.15; col[i * 3 + 1] = 1.0; col[i * 3 + 2] = 0.65; }
+      const arm = i % arms;
+      const along = Math.pow(Math.random(), 0.78);
+      const theta = arm * ((Math.PI * 2) / arms) + along * Math.PI * 3.6;
+      const rad = 0.2 + along * 6.6;
+      const thick = (0.16 + along * 0.72) * (Math.random() + Math.random() + Math.random() - 1.5);
+      pos[i * 3] = Math.cos(theta) * rad - Math.sin(theta) * thick;
+      pos[i * 3 + 1] = Math.sin(theta) * rad + Math.cos(theta) * thick;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 0.22 * (1 - along * 0.65);
+      const hot = Math.exp(-rad / 1.55);
+      const fade = 0.28 + 0.72 * Math.exp(-rad / 3.8);
+      col[i * 3] = (0.92 * hot + 0.02 * (1 - hot)) * fade;
+      col[i * 3 + 1] = (0.96 * hot + 0.78 * (1 - hot)) * fade;
+      col[i * 3 + 2] = (1.0 * hot + 0.92 * (1 - hot)) * fade;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    coreGroup.add(new THREE.Points(geo, new THREE.PointsMaterial({
-      size: 0.085, vertexColors: true, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
-    })));
-    coreGroup.add(new THREE.Mesh(
-      new THREE.SphereGeometry(3.2, 24, 24),
-      new THREE.MeshBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.06, depthWrite: false })
-    ));
+    const armPts = new THREE.Points(geo, new THREE.PointsMaterial({
+      size: 0.095, vertexColors: true, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, sizeAttenuation: true,
+    }));
+    armPts.renderOrder = 1;
+    galaxySpin.add(armPts);
+    const nCore = 780;
+    const cpos = new Float32Array(nCore * 3);
+    const ccol = new Float32Array(nCore * 3);
+    for (let i = 0; i < nCore; i++) {
+      const rad = Math.pow(Math.random(), 0.45) * 1.15;
+      const ang = Math.random() * Math.PI * 2;
+      cpos[i * 3] = Math.cos(ang) * rad;
+      cpos[i * 3 + 1] = Math.sin(ang) * rad;
+      cpos[i * 3 + 2] = (Math.random() - 0.5) * 0.18;
+      const hot = 1 - rad / 1.15;
+      ccol[i * 3] = 0.85 + 0.15 * hot;
+      ccol[i * 3 + 1] = 0.92 + 0.08 * hot;
+      ccol[i * 3 + 2] = 1;
+    }
+    const cgeo = new THREE.BufferGeometry();
+    cgeo.setAttribute('position', new THREE.BufferAttribute(cpos, 3));
+    cgeo.setAttribute('color', new THREE.BufferAttribute(ccol, 3));
+    const nucleus = new THREE.Points(cgeo, new THREE.PointsMaterial({
+      size: 0.16, vertexColors: true, transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, sizeAttenuation: true,
+    }));
+    nucleus.renderOrder = 2;
+    galaxySpin.add(nucleus);
   }
-  const wordmark = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, opacity: 0 }));
+  coreGroup.add(galaxySpin);
+  const backingCanvas = document.createElement('canvas');
+  backingCanvas.width = 256;
+  backingCanvas.height = 128;
+  {
+    const g = backingCanvas.getContext('2d');
+    const grd = g.createRadialGradient(128, 64, 10, 128, 64, 124);
+    grd.addColorStop(0, 'rgba(2, 6, 12, 0.96)');
+    grd.addColorStop(0.38, 'rgba(2, 6, 12, 0.86)');
+    grd.addColorStop(0.68, 'rgba(2, 6, 12, 0.4)');
+    grd.addColorStop(1, 'rgba(2, 6, 12, 0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 256, 128);
+  }
+  const wordmarkBacking = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(backingCanvas),
+    transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+  }));
+  wordmarkBacking.scale.set(8.4, 4.2, 1);
+  wordmarkBacking.renderOrder = 8;
+  const labelScene = new THREE.Scene();
+  labelScene.add(wordmarkBacking);
+  const wordmarkCanvas = document.createElement('canvas');
+  wordmarkCanvas.width = 640;
+  wordmarkCanvas.height = 180;
+  {
+    const g = wordmarkCanvas.getContext('2d');
+    g.clearRect(0, 0, 640, 180);
+    g.fillStyle = '#ffffff';
+    g.font = '700 132px "IBM Plex Sans", Manrope, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('apos', 320, 96);
+  }
+  const wordmarkTex = new THREE.CanvasTexture(wordmarkCanvas);
+  wordmarkTex.colorSpace = THREE.SRGBColorSpace;
+  const wordmark = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: wordmarkTex,
+    transparent: true, depthTest: false, depthWrite: false, toneMapped: false, opacity: 1,
+  }));
   wordmark.scale.set(10, 2.6, 1);
-  coreGroup.add(wordmark);
+  wordmark.renderOrder = 12;
+  labelScene.add(wordmark);
   new THREE.TextureLoader().load('assets/apos-wordmark.png', (tex) => {
     const img = tex.image;
     const c = document.createElement('canvas');
@@ -670,15 +737,17 @@ function mount() {
     // Core always visible when drilled (edge chip if projected off-screen)
     coreGroup.visible = true;
     wordmark.visible = overview;
+    wordmarkBacking.visible = overview;
     if (overview) {
       const vFOV = THREE.MathUtils.degToRad(camera.fov);
       const distCore = camera.position.distanceTo(controls.target) || camera.position.length();
       const aspect = camera.aspect || 1.7;
       const worldH = 2 * Math.tan(vFOV / 2) * distCore;
       const worldW = worldH * aspect;
-      const targetW = worldW * 0.072;
+      const targetW = worldW * 0.078;
       wordmark.scale.set(targetW, targetW / 3.9, 1);
-      wordmark.material.opacity = 1;
+      wordmark.material.opacity = wordmark.material.map ? 1 : 0;
+      wordmarkBacking.scale.set(targetW * 1.08, targetW * 0.5, 1);
     }
 
     linkLines.forEach((line) => {
@@ -807,35 +876,6 @@ function mount() {
         el.style.display = 'none';
         return;
       }
-      const estW = Math.max(40, (n.label || '').length * (id === focusId ? 8.5 : 6.2));
-      const estH = id === focusId ? 18 : 14;
-      let x = (v.x * 0.5 + 0.5) * w;
-      let y = (-v.y * 0.5 + 0.5) * h + (id === focusId ? 32 : (n.parentId === focusId ? -22 : 14));
-      // Fan child labels away from focus by screen angle
-      if (n.parentId === focusId && focusId) {
-        const fp = graph.byId.get(focusId)?.pos;
-        if (fp) {
-          const dx = n.pos.x - fp.x, dz = n.pos.z - fp.z;
-          const ang = Math.atan2(dz, dx);
-          x += Math.cos(ang) * 28;
-          y += Math.sin(ang) * 10 - 8;
-        }
-      }
-      const minX = insets.left + 28;
-      const maxX = w - insets.right - 28;
-      const minY = insets.top + 12;
-      const maxY = h - insets.bottom - 16;
-      let tries = 0;
-      const hits = (px, py) => placed.some((p) =>
-        Math.abs(p.x - px) < (p.w + estW) * 0.58 && Math.abs(p.y - py) < (p.h + estH) * 0.75
-      );
-      while (tries < 16 && hits(x, y)) {
-        y += (n.parentId === focusId ? -14 : 16);
-        if (tries % 3 === 2) x += (tries % 6 === 2 ? 22 : -22);
-        tries += 1;
-      }
-      x = Math.min(maxX, Math.max(minX, x));
-      y = Math.min(maxY, Math.max(minY, y));
       const badge = n.alertCount || 0;
       const chipOn = offlineChip.has(n.id) && (n.type === 'machine' || n.depth <= 2);
       const mark = badge + (chipOn ? '|off' : '');
@@ -857,6 +897,44 @@ function mount() {
         }
       }
       el.style.display = 'block';
+      const coreV = graph.core.pos.clone().project(camera);
+      const cx = (coreV.x * 0.5 + 0.5) * w;
+      const cy = (-coreV.y * 0.5 + 0.5) * h;
+      const nx = (v.x * 0.5 + 0.5) * w;
+      const ny = (-v.y * 0.5 + 0.5) * h;
+      let ox = nx - cx;
+      let oy = ny - cy;
+      const olen = Math.hypot(ox, oy) || 1;
+      ox /= olen;
+      oy /= olen;
+      const tx = -oy;
+      const ty = ox;
+      const boxW = Math.max(48, el.offsetWidth + 10);
+      const boxH = Math.max(16, el.offsetHeight + 4);
+      const push0 = n.depth <= 1 ? 22 : 28;
+      let x = nx + ox * push0;
+      let y = ny + oy * push0;
+      const hits = (px, py) => {
+        const L = px - boxW / 2;
+        const R = px + boxW / 2;
+        const T = py;
+        const B = py + boxH;
+        return placed.some((p) => L < p.r + 4 && R > p.l - 4 && T < p.b + 3 && B > p.t - 3);
+      };
+      let tries = 0;
+      while (tries < 20 && hits(x, y)) {
+        const step = push0 + 16 + tries * 11;
+        const side = (tries % 2 === 0 ? 1 : -1) * (tries > 4 ? 8 + tries * 2 : 0);
+        x = nx + ox * step + tx * side;
+        y = ny + oy * step + ty * side;
+        tries += 1;
+      }
+      const minX = insets.left + boxW / 2 + 8;
+      const maxX = w - insets.right - boxW / 2 - 8;
+      const minY = insets.top + 8;
+      const maxY = h - insets.bottom - boxH - 8;
+      x = Math.min(maxX, Math.max(minX, x));
+      y = Math.min(maxY, Math.max(minY, y));
       el.style.visibility = 'visible';
       el.style.opacity = path.has(id) || id === focusId || n.parentId === focusId ? '1' : '0.45';
       el.style.left = `${x}px`;
@@ -864,7 +942,10 @@ function mount() {
       el.classList.toggle('is-focus', id === focusId);
       el.classList.toggle('is-hub', n.depth <= 1);
       el.classList.toggle('is-child', n.parentId === focusId);
-      placed.push({ x, y, id, w: estW, h: estH });
+      placed.push({
+        x, y, id, w: boxW, h: boxH,
+        l: x - boxW / 2, r: x + boxW / 2, t: y, b: y + boxH,
+      });
       visible.push({ id, label: n.label, x, y });
     });
     // Hide unused
@@ -1183,10 +1264,13 @@ function mount() {
     recompute3dAlerts();
     const t = clock.elapsedTime;
     if (!flying) controls.update();
+    galaxySpin.quaternion.copy(camera.quaternion);
     if (!reduceMotion) {
-      coreGroup.rotation.y = t * 0.08;
+      galaxySpin.rotateZ(t * 0.16);
       coreGroup.scale.setScalar(1 + Math.sin(t * 0.7) * 0.03);
       ringGroup.children.forEach((line, i) => { line.rotation.y = t * (i % 2 ? -0.04 : 0.03); });
+    } else {
+      coreGroup.scale.setScalar(1);
     }
     if (starPointsRef) {
       const base = starPointsRef.geometry.userData.base;
@@ -1268,6 +1352,12 @@ function mount() {
     syncLabels();
     if (composer && !window.__APOS_3D_NO_BLOOM__) composer.render();
     else renderer.render(scene, camera);
+    if (wordmark.visible) {
+      renderer.autoClear = false;
+      renderer.clearDepth();
+      renderer.render(labelScene, camera);
+      renderer.autoClear = true;
+    }
     const work = performance.now() - workT0;
     frameWarm += 1;
     if (work > 18) slowStreak += 1;

@@ -256,6 +256,9 @@
   align-items: center;
   pointer-events: auto;
 }
+/* 3D header overlays the stage — keep search under the logo, same left rail as 2D */
+.map3d-stage .map-command { top: 78px; }
+.map3d-stage .map-search { top: 122px; }
 .map-search-btn, .map-filters button {
   font: 500 0.68rem/1 Manrope, 'IBM Plex Sans', system-ui, sans-serif;
   letter-spacing: 0.06em;
