@@ -1891,8 +1891,46 @@
     return pts;
   }
 
+  /**
+   * Focus framing set: local children + ancestor chain toward APOS.
+   * Deep drills keep a spine tip toward the core (enough for a visible curve)
+   * without forcing a full-galaxy zoom-out.
+   */
+  function focusFrameNodes(node) {
+    const pts = localFrameNodes(node).slice();
+    const seen = new Set(pts.map((n) => n.id));
+    const path = pathToRoot(node.id);
+    const deep = node.type === 'area' || node.type === 'location'
+      || node.type === 'machine' || node.type === 'branch';
+    path.forEach((id) => {
+      if (seen.has(id)) return;
+      const n = nodeById.get(id);
+      if (!n) return;
+      if (n.type === 'enterprise' && deep) {
+        // Spine tip toward core from the nearest included ancestor (or focus)
+        const anchor = pts.find((p) => p.type === 'hub' || p.type === 'country' || p.type === 'client')
+          || pts.find((p) => p.id === node.parentId)
+          || node;
+        const dist = Math.hypot(anchor.x, anchor.y) || 1;
+        const tipLen = Math.min(R_HUB * 0.55, Math.max(90, dist * 0.42));
+        const ux = -anchor.x / dist;
+        const uy = -anchor.y / dist;
+        pts.push({
+          id: '__spine_tip__',
+          x: anchor.x + ux * tipLen,
+          y: anchor.y + uy * tipLen,
+          type: 'spine-tip',
+        });
+        return;
+      }
+      pts.push(n);
+      seen.add(id);
+    });
+    return pts;
+  }
+
   function subtreeExtent(node) {
-    const locals = localFrameNodes(node);
+    const locals = focusFrameNodes(node);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     // Fixed world pad for scale (screen label clearance applied in fitTransform centre)
     const labelPad = 48;
@@ -1914,25 +1952,33 @@
         minY = Math.min(minY, n.y - 64);
       });
     }
-    if (node.type === 'hub') {
+    if (node.type === 'hub' || node.type === 'country') {
       const tipR = TREE.area + TREE.location;
-      const tx = node.x + Math.cos(node.outAngle) * tipR;
-      const ty = node.y + Math.sin(node.outAngle) * tipR;
+      const along = node.outAngle || -Math.PI / 2;
+      const tx = node.x + Math.cos(along) * tipR;
+      const ty = node.y + Math.sin(along) * tipR;
       minX = Math.min(minX, tx, node.x);
       maxX = Math.max(maxX, tx, node.x);
       minY = Math.min(minY, ty, node.y);
       maxY = Math.max(maxY, ty, node.y);
-      // Hub title inward
-      const inward = node.outAngle + Math.PI;
+      // Hub title + inward spine toward APOS (never frame hub alone at the edge)
+      const inward = along + Math.PI;
       const hx = node.x + Math.cos(inward) * 50;
       const hy = node.y + Math.sin(inward) * 50;
       minX = Math.min(minX, hx);
       maxX = Math.max(maxX, hx);
       minY = Math.min(minY, hy);
       maxY = Math.max(maxY, hy);
+      const core = nodeById.get(DATA.enterprise.id);
+      if (core) {
+        minX = Math.min(minX, core.x - CORE_WORLD_R * 0.35);
+        maxX = Math.max(maxX, core.x + CORE_WORLD_R * 0.35);
+        minY = Math.min(minY, core.y - CORE_WORLD_R * 0.35);
+        maxY = Math.max(maxY, core.y + CORE_WORLD_R * 0.35);
+      }
     }
     // Tight world pad — label clearance handled as screen margin in fitTransform
-    const pad = node.type === 'hub' ? 36 : 24;
+    const pad = node.type === 'hub' || node.type === 'country' ? 40 : 24;
     return {
       x: minX - pad,
       y: minY - pad,
@@ -2006,39 +2052,64 @@
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
     let cy = centerNode ? centerNode.y : bbox.y + bbox.h / 2;
     if (centerNode?.type === 'hub' || centerNode?.type === 'country') {
+      // Frame focus + children + ancestor spine so the curve to APOS stays visible.
+      // Never park the hub on the edge with an APOS pill glued underneath.
+      const margin = 0.10;
+      const fitW = W * (1 - 2 * margin);
+      const fitH = H * (1 - 2 * margin);
+      k = Math.min(fitW / Math.max(bbox.w, 1), fitH / Math.max(bbox.h, 1));
       const fanR = LAYOUT === 'countryTree'
         ? TREE.area + TREE.location + TREE.machine * 0.35
         : TREE.area + TREE.location * 0.85;
-      k = (0.78 * Math.min(W, H)) / (fanR + 40);
+      // Cap so the local fan still reads; floor so core/spine cannot fall off-frame
+      const kFan = (0.70 * Math.min(W, H)) / (fanR + 40);
+      k = Math.min(k, kFan);
+      k = Math.max(0.28, Math.min(k, 6));
+      cx = bbox.x + bbox.w / 2;
+      cy = bbox.y + bbox.h / 2;
       const along = centerNode.outAngle || -Math.PI / 2;
-      const hubSX = W / 2 - Math.cos(along) * (Math.min(W, H) * 0.28);
-      const hubSY = H / 2 - Math.sin(along) * (Math.min(W, H) * 0.28);
-      return d3.zoomIdentity.translate(hubSX, hubSY).scale(k).translate(-centerNode.x, -centerNode.y);
+      // Bias slightly toward children so the inward spine holds the near-edge
+      const bias = Math.min(bbox.w, bbox.h) * 0.08;
+      cx += Math.cos(along) * bias;
+      cy += Math.sin(along) * bias;
+      return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
     }
     if (centerNode && (centerNode.type === 'client' || centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      // Scale from padded bbox; centre discs + focus-title as one visual block
-      const span = Math.max(bbox.w, bbox.h, 36);
-      const minDim = Math.min(W, H);
-      const target = 0.68 * minDim;
-      k = target / span;
-      k = Math.max(centerNode.type === 'client' ? 1.5 : 2.2, Math.min(k, 80));
+      // Scale primarily from local children; centre includes ancestor spine so the
+      // path toward APOS runs as a continuous curve (chip only at a true edge).
       const locals = localFrameNodes(centerNode);
-      if (locals.length) {
-        let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
-        locals.forEach((n) => {
-          minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
-          minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
-        });
-        cx = (minX + maxX) / 2;
-        // Focus title stack (~title + subtitle) reaches ~140–150 screen-px below the focus disc
-        const titleBottom = 148 / k;
-        const blockMaxY = Math.max(maxY, centerNode.y + titleBottom);
-        const blockMinY = minY;
-        cy = (blockMinY + blockMaxY) / 2;
-      } else {
-        cx = bbox.x + bbox.w / 2;
-        cy = bbox.y + bbox.h / 2;
-      }
+      const frame = focusFrameNodes(centerNode);
+      let lMinX = Infinity, lMaxX = -Infinity, lMinY = Infinity, lMaxY = -Infinity;
+      (locals.length ? locals : [centerNode]).forEach((n) => {
+        lMinX = Math.min(lMinX, n.x); lMaxX = Math.max(lMaxX, n.x);
+        lMinY = Math.min(lMinY, n.y); lMaxY = Math.max(lMaxY, n.y);
+      });
+      const localSpan = Math.max(lMaxX - lMinX, lMaxY - lMinY, 36);
+      const frameSpan = Math.max(bbox.w, bbox.h, localSpan);
+      const minDim = Math.min(W, H);
+      // Prefer local fill, but never so tight that the ancestor spine collapses
+      const kLocal = (0.68 * minDim) / localSpan;
+      const kFrame = (0.88 * minDim) / frameSpan;
+      k = Math.min(kLocal, Math.max(kFrame, kLocal * 0.55));
+      k = Math.max(centerNode.type === 'client' ? 1.2 : 1.6, Math.min(k, 80));
+      let fMinX = Infinity, fMaxX = -Infinity, fMinY = Infinity, fMaxY = -Infinity;
+      frame.forEach((n) => {
+        fMinX = Math.min(fMinX, n.x); fMaxX = Math.max(fMaxX, n.x);
+        fMinY = Math.min(fMinY, n.y); fMaxY = Math.max(fMaxY, n.y);
+      });
+      cx = (fMinX + fMaxX) / 2;
+      // Focus title stack (~title + subtitle) reaches ~140–150 screen-px below the focus disc
+      const titleBottom = 148 / k;
+      const blockMaxY = Math.max(fMaxY, centerNode.y + titleBottom, lMaxY);
+      const blockMinY = Math.min(fMinY, lMinY);
+      cy = (blockMinY + blockMaxY) / 2;
+      // Nudge so a measurable spine segment sits between focus and the core-edge
+      const dist = Math.hypot(centerNode.x, centerNode.y) || 1;
+      const ux = -centerNode.x / dist;
+      const uy = -centerNode.y / dist;
+      const spineBudget = (0.20 * minDim) / k;
+      cx -= ux * spineBudget * 0.35;
+      cy -= uy * spineBudget * 0.35;
       return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
     }
     return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
@@ -2831,9 +2902,56 @@
       el.hidden = true;
       return;
     }
+    // Never glue an APOS pill under the focused node — require a real spine run
+    const focus = nodeById.get(focusNodeId);
+    if (focus) {
+      const fp = screenOf(focus);
+      const dist = Math.hypot(aposEdgeHint.x - fp.x, aposEdgeHint.y - fp.y);
+      if (dist < 96) {
+        el.hidden = true;
+        return;
+      }
+    }
     el.hidden = false;
     el.style.left = `${aposEdgeHint.x}px`;
     el.style.top = `${aposEdgeHint.y}px`;
+  }
+
+  /** Sample a screen-space cubic and find where it leaves the padded stage (for edge chip). */
+  function curveEdgeExit(x0, y0, c1x, c1y, c2x, c2y, x1, y1, pad = 28) {
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
+    const L = pad, R = w - pad, T = pad + 48, B = h - pad - 40;
+    const inside = (x, y) => x >= L && x <= R && y >= T && y <= B;
+    const steps = 36;
+    let prevIn = inside(x0, y0);
+    let px = x0, py = y0;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      const x = u * u * u * x0 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x1;
+      const y = u * u * u * y0 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * y1;
+      const nowIn = inside(x, y);
+      if (prevIn && !nowIn) {
+        // Lerp to the padded boundary
+        let ax = px, ay = py, bx = x, by = y;
+        for (let j = 0; j < 8; j++) {
+          const mx = (ax + bx) / 2, my = (ay + by) / 2;
+          if (inside(mx, my)) { ax = mx; ay = my; }
+          else { bx = mx; by = my; }
+        }
+        const hx = (ax + bx) / 2, hy = (ay + by) / 2;
+        let side = 'edge';
+        if (Math.abs(hx - L) <= Math.abs(hx - R) && Math.abs(hx - L) <= Math.abs(hy - T) && Math.abs(hx - L) <= Math.abs(hy - B)) side = 'left';
+        else if (Math.abs(hx - R) <= Math.abs(hy - T) && Math.abs(hx - R) <= Math.abs(hy - B)) side = 'right';
+        else if (Math.abs(hy - T) <= Math.abs(hy - B)) side = 'top';
+        else side = 'bottom';
+        return { x: hx, y: hy, side };
+      }
+      prevIn = nowIn;
+      px = x; py = y;
+    }
+    return null;
   }
 
 
@@ -2982,9 +3100,10 @@
       } else if (onPath || crumbPath) {
         op = crumbPath && !onPath ? 0.95 : 0.92;
       } else if (preview) {
-        op = 0.12 + 0.35 * restore;
+        // Match space map dimmed context (~0.25)
+        op = 0.25 + 0.2 * restore;
       } else {
-        op = (L.kind === 'spine' ? 0.18 : 0.12) + 0.4 * restore;
+        op = (L.kind === 'spine' ? 0.28 : 0.22) + 0.3 * restore;
       }
       if (future && !onPath && !overviewMode) op = Math.min(op, 0.28);
       if (hoverHotDraw && !(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target)) && !onPath) {
@@ -2997,24 +3116,25 @@
       linkDrawStats.maxOp = Math.max(linkDrawStats.maxOp, op);
 
       const cc = curveControls(s, t, L.kind);
-      let ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
-      let c1x = cc.c1x * transform.k + transform.x;
-      let c1y = cc.c1y * transform.k + transform.y;
-      let c2x = cc.c2x * transform.k + transform.x;
-      let c2y = cc.c2y * transform.k + transform.y;
+      // Always draw the full cubic — canvas clips visually; keeps a continuous curve to the edge
+      const ax = a0.x, ay = a0.y, bx = b0.x, by = b0.y;
+      const c1x = cc.c1x * transform.k + transform.x;
+      const c1y = cc.c1y * transform.k + transform.y;
+      const c2x = cc.c2x * transform.k + transform.x;
+      const c2y = cc.c2y * transform.k + transform.y;
 
-      // Continuous path: clip when an endpoint is off-screen; edge chip points to APOS
+      // Edge chip at the true curve exit toward APOS (prefer the core-most hop)
       if (onPath && !overviewMode) {
-        const clipped = clipLineToStage(ax, ay, bx, by, 32);
-        if (!clipped) return;
-        if (clipped.clipped) {
-          ax = clipped.ax; ay = clipped.ay; bx = clipped.bx; by = clipped.by;
-          c1x = ax + (bx - ax) * 0.33;
-          c1y = ay + (by - ay) * 0.33;
-          c2x = ax + (bx - ax) * 0.66;
-          c2y = ay + (by - ay) * 0.66;
-          if (clipped.edgeHit) {
-            aposEdgeHint = { x: clipped.edgeHit.x, y: clipped.edgeHit.y };
+        const coreIsS = s.type === 'enterprise' || (s.depth != null && t.depth != null && s.depth < t.depth);
+        const touchesCore = s.type === 'enterprise' || t.type === 'enterprise';
+        const exit = coreIsS
+          ? curveEdgeExit(bx, by, c2x, c2y, c1x, c1y, ax, ay, 32)
+          : curveEdgeExit(ax, ay, c1x, c1y, c2x, c2y, bx, by, 32);
+        if (exit) {
+          const depthRank = Math.min(s.depth ?? 99, t.depth ?? 99);
+          const prevRank = aposEdgeHint?.depthRank ?? 99;
+          if (touchesCore || depthRank <= prevRank) {
+            aposEdgeHint = { x: exit.x, y: exit.y, side: exit.side, depthRank: touchesCore ? -1 : depthRank };
           }
         }
       }
@@ -3311,7 +3431,10 @@
         pctx.beginPath();
         pctx.arc(p.x, p.y, discR * 2.2, 0, Math.PI * 2);
         pctx.fill();
-        pctx.globalAlpha = overviewMode ? 0.95 : 0;
+        // Drilled: keep a faint galaxy peek when core sits at the frame edge
+        const onStage = p.x > -40 && p.x < stage.clientWidth + 40
+          && p.y > -40 && p.y < stage.clientHeight + 40;
+        pctx.globalAlpha = overviewMode ? 0.95 : (onStage ? 0.42 : 0);
         if (aposWordmarkReady && aposWordmark.naturalWidth) {
           const targetH = Math.max(48, Math.min(64, Math.min(stage.clientWidth, stage.clientHeight) * 0.055));
           const aspect = aposWordmark.naturalWidth / aposWordmark.naturalHeight;

@@ -139,6 +139,8 @@ async function capture(browserType, browserName) {
     await flyTo(page, 'client-leet');
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-hub.png'), fullPage: false });
     console.log('   📸 level-hub.png');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'tree-focus-leet.png'), fullPage: false });
+    console.log('   📸 tree-focus-leet.png');
 
     await flyTo(page, 'area-ee-farwaniya');
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-area.png'), fullPage: false });
@@ -151,6 +153,8 @@ async function capture(browserType, browserName) {
     await flyTo(page, 'm-ee-4');
     await page.screenshot({ path: join(ARTIFACTS_DIR, 'level-machine.png'), fullPage: false });
     console.log('   📸 level-machine.png');
+    await page.screenshot({ path: join(ARTIFACTS_DIR, 'tree-focus-machine.png'), fullPage: false });
+    console.log('   📸 tree-focus-machine.png');
 
     await page.evaluate(() => {
       const need = window.APOS_TREE_MAP.LOD.branch.draw * 1.15;
@@ -393,11 +397,11 @@ async function runTests(browserType, browserName) {
       pathOk: window.APOS_TREE_MAP.pathLinksVisible('client-leet'),
     }));
     if (hub.count < 5) throw new Error(`hub view: expected area+site links, got ${JSON.stringify(hub)}`);
-    // Path links are bright; dimmed context may sit ~0.12 — require path present + max bright
+    // Path links are bright; dimmed context sits ~0.25 like space
     if (!hub.pathOk || hub.maxOp < 0.7) {
       throw new Error(`hub view: path not bright ${JSON.stringify(hub)}`);
     }
-    if (hub.minOp < 0.1) throw new Error(`hub view: context links vanished ${JSON.stringify(hub)}`);
+    if (hub.minOp < 0.18) throw new Error(`hub view: context links too dim ${JSON.stringify(hub)}`);
   });
 
   await test('interrupted fly-to redirects without snap', async () => {
@@ -482,13 +486,34 @@ async function runTests(browserType, browserName) {
     await flyTo(page, 'client-leet');
     const info = await page.evaluate(() => {
       const api = window.APOS_TREE_MAP;
-      // Tree hubs are brands under APOS (no country ring) — path is Leet→APOS
+      const W = document.getElementById('tree-stage')?.clientWidth || 1200;
+      const H = document.getElementById('tree-stage')?.clientHeight || 800;
+      const leetPos = api.nodeScreenPos('client-leet');
+      const aposPos = api.nodeScreenPos('ent-apos');
+      const chip = api.getAposEdgeHint?.();
+      const chipEl = document.getElementById('apos-edge-chip');
+      const chipVisible = !!(chipEl && !chipEl.hidden);
+      const chipDist = chip && leetPos
+        ? Math.hypot(chip.x - leetPos.x, chip.y - leetPos.y)
+        : null;
+      // Core partly in frame OR chip at end of a real continuous spine (never under Leet)
+      const coreInFrame = !!(aposPos
+        && aposPos.x > -60 && aposPos.x < W + 60
+        && aposPos.y > -60 && aposPos.y < H + 60);
+      const leetNotOnBottomEdge = !!(leetPos && leetPos.y < H - 90);
       return {
         focus: api.getFocus(),
         pathOk: api.pathLinksVisible('client-leet'),
         leet: api.isNodeDrawn('client-leet'),
         apos: api.isNodeDrawn('ent-apos'),
         eeDim: api.isNodeDrawn('client-ee'),
+        coreInFrame,
+        chipVisible,
+        chipDist,
+        leetNotOnBottomEdge,
+        leetPos,
+        aposPos,
+        minOp: api.getLinkDrawStats().minOp,
       };
     });
     if (info.focus.id !== 'client-leet') throw new Error(JSON.stringify(info.focus));
@@ -496,6 +521,18 @@ async function runTests(browserType, browserName) {
       throw new Error(`Leet→APOS broken: ${JSON.stringify(info)}`);
     }
     if (!info.eeDim) throw new Error('sibling EE should stay dimmed, not removed');
+    if (!info.coreInFrame && !(info.chipVisible && info.chipDist != null && info.chipDist >= 96)) {
+      throw new Error(`Leet frame must show core or distant edge chip: ${JSON.stringify(info)}`);
+    }
+    if (info.chipVisible && info.chipDist != null && info.chipDist < 96) {
+      throw new Error(`APOS pill must not sit under Leet: ${JSON.stringify(info)}`);
+    }
+    if (!info.leetNotOnBottomEdge) {
+      throw new Error(`Leet parked on bottom edge: ${JSON.stringify(info)}`);
+    }
+    if (info.minOp < 0.18) {
+      throw new Error(`dimmed context below ~0.25: ${JSON.stringify(info)}`);
+    }
   });
 
   await test('focus machine keeps full chain; zoom-out restores within 100ms', async () => {
