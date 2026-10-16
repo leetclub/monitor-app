@@ -243,3 +243,106 @@
   border-color: rgba(0, 242, 254, 0.9);
   background: rgba(0, 242, 254, 0.12);
 }
+
+.tree-svg, .space-svg, .map3d-canvas { touch-action: none; }
+
+.map-command {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 24;
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  pointer-events: auto;
+}
+.map-search-btn, .map-filters button {
+  font: 500 0.68rem/1 Manrope, 'IBM Plex Sans', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: inherit;
+  background: rgba(8, 14, 28, 0.55);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
+  padding: 0.38rem 0.65rem;
+  cursor: pointer;
+}
+.map-filters { display: flex; gap: 0.28rem; }
+.map-filters button.is-on { border-color: rgba(0, 242, 254, 0.7); color: #d8fbff; }
+.map-search-btn kbd {
+  margin-left: 0.35rem;
+  opacity: 0.55;
+  font-size: 0.62rem;
+}
+.map-search {
+  position: absolute;
+  top: 52px;
+  left: 14px;
+  z-index: 30;
+  width: min(320px, calc(100vw - 40px));
+  background: rgba(8, 14, 28, 0.92);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 10px;
+  padding: 0.45rem;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+}
+.map-search input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: 500 0.9rem/1.4 Manrope, system-ui, sans-serif;
+  outline: none;
+  padding: 0.35rem 0.4rem;
+}
+.map-search ul { list-style: none; margin: 0.2rem 0 0; padding: 0; }
+.map-search li {
+  padding: 0.4rem 0.45rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.map-search li.is-active, .map-search li:hover { background: rgba(255,255,255,0.08); }
+.map-search .hit-type { opacity: 0.5; margin-left: 0.4rem; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.map-event-feed {
+  position: absolute;
+  left: 14px;
+  bottom: 78px;
+  z-index: 24;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: min(280px, calc(100vw - 36px));
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.map-event-feed li {
+  background: rgba(8, 14, 28, 0.78);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+}
+.map-event-feed li.kind-sale { border-color: rgba(0, 210, 200, 0.45); }
+.map-event-feed li.kind-alert, .map-event-feed li.kind-offline { border-color: rgba(255, 107, 122, 0.55); }
+.map-event-feed li.kind-lowstock, .map-event-feed li.kind-task { border-color: rgba(232, 192, 120, 0.5); }
+.map3d-tooltip {
+  position: absolute;
+  z-index: 27;
+  pointer-events: none;
+  background: rgba(8, 14, 28, 0.9);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.72rem;
+  max-width: 220px;
+}
+.map3d-tooltip strong { display: block; margin-bottom: 0.15rem; }
+.hud-stat { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  .map-event-feed li { animation: none; }
+}

@@ -7,6 +7,7 @@
  */
 
 import { chromium, firefox } from 'playwright';
+import { assertLiveMotion, assertReducedMotion, recordMotionMp4 } from './test-apos-motion.mjs';
 import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
@@ -648,6 +649,13 @@ async function runTests(browserType, browserName) {
     if (relevant.length) throw new Error(relevant.slice(0, 2).join(' | '));
   });
 
+  await test('live motion, filter, search, frame time', async () => {
+    await assertLiveMotion(page, 'APOS_TREE_MAP');
+  });
+  await test('reduced motion pauses ambient bob', async () => {
+    await assertReducedMotion(browser, BASE_URL, 'APOS_TREE_MAP');
+  });
+
   await browser.close();
   return results;
 }
@@ -741,6 +749,7 @@ async function main() {
     all.push(await runTests(b.type, b.name));
   }
   await recordFlow();
+  await recordMotionMp4(BASE_URL, 'motion-tree.mp4');
   let passed = 0;
   let failed = 0;
   console.log('\nSUMMARY');

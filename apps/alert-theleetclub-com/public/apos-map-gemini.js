@@ -223,9 +223,119 @@
     setTimeout(() => app.classList.remove('gemini-intro', 'gemini-intro-rays', 'gemini-intro-rings', 'gemini-intro-leaves'), 1600);
   }
 
+  function ensureLiveChrome() {
+    const stage = document.querySelector('.space-stage, .tree-stage, .map3d-stage');
+    if (!stage || document.getElementById('map-command')) return;
+    const bar = document.createElement('div');
+    bar.id = 'map-command';
+    bar.className = 'map-command';
+    bar.innerHTML = `
+      <button type="button" class="map-search-btn" id="map-search-btn">Search <kbd>Ctrl K</kbd></button>
+      <div class="map-filters" role="tablist" aria-label="Filter nodes">
+        <button type="button" data-filter="all" class="is-on">All</button>
+        <button type="button" data-filter="alerts">Alerts</button>
+        <button type="button" data-filter="offline">Offline</button>
+        <button type="button" data-filter="lowstock">Low stock</button>
+      </div>`;
+    stage.appendChild(bar);
+    const search = document.createElement('div');
+    search.id = 'map-search';
+    search.className = 'map-search';
+    search.hidden = true;
+    search.innerHTML = `<input id="map-search-input" placeholder="Find a node…" autocomplete="off" aria-label="Find a node"><ul id="map-search-list"></ul>`;
+    stage.appendChild(search);
+    const feed = document.createElement('ol');
+    feed.id = 'map-event-feed';
+    feed.className = 'map-event-feed';
+    feed.setAttribute('aria-live', 'polite');
+    stage.appendChild(feed);
+
+    const input = search.querySelector('#map-search-input');
+    const list = search.querySelector('#map-search-list');
+    let active = 0;
+    function hits() {
+      const m = api();
+      if (!m || typeof m.searchNodes !== 'function') return [];
+      return m.searchNodes(input.value);
+    }
+    function paint() {
+      const rows = hits();
+      active = Math.min(active, Math.max(0, rows.length - 1));
+      list.innerHTML = '';
+      rows.forEach((h, i) => {
+        const li = document.createElement('li');
+        li.className = i === active ? 'is-active' : '';
+        li.innerHTML = `${h.label}<span class="hit-type">${h.type}</span>`;
+        li.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const m = api();
+          if (m) m.flyTo(h.id);
+          closeSearch();
+        });
+        list.appendChild(li);
+      });
+    }
+    function openSearch() {
+      search.hidden = false;
+      input.value = '';
+      active = 0;
+      paint();
+      input.focus();
+    }
+    function closeSearch() {
+      search.hidden = true;
+      input.blur();
+    }
+    document.getElementById('map-search-btn').addEventListener('click', openSearch);
+    input.addEventListener('input', () => { active = 0; paint(); });
+    input.addEventListener('keydown', (e) => {
+      const rows = hits();
+      if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(rows.length - 1, active + 1); paint(); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); paint(); }
+      if (e.key === 'Enter' && rows[active]) {
+        e.preventDefault();
+        e.stopPropagation();
+        const m = api();
+        if (m) m.flyTo(rows[active].id);
+        closeSearch();
+      }
+    });
+    bar.querySelectorAll('[data-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const m = api();
+        if (m && typeof m.setFilter === 'function') m.setFilter(btn.dataset.filter);
+        bar.querySelectorAll('[data-filter]').forEach((b) => b.classList.toggle('is-on', b === btn));
+      });
+    });
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        if (search.hidden) openSearch();
+        else closeSearch();
+      }
+    });
+    stage.addEventListener('apos-live', (e) => {
+      const ev = e.detail || {};
+      const li = document.createElement('li');
+      li.className = `kind-${ev.kind || 'sale'}`;
+      li.textContent = ev.body || ev.label || 'event';
+      feed.prepend(li);
+      while (feed.children.length > 4) feed.removeChild(feed.lastChild);
+      const drawer = document.getElementById('insp-grid');
+      if (drawer && document.getElementById('inspector-drawer')?.classList.contains('is-open')) {
+        const row = document.createElement('div');
+        row.className = 'insp-row';
+        row.innerHTML = `<span>${ev.label || 'event'}</span><span>${ev.title || ''}</span>`;
+        drawer.prepend(row);
+      }
+    });
+  }
+
   function boot() {
     ensureNav();
     ensureChrome();
+    ensureLiveChrome();
     bindInspectorBridge();
     paintHexOverlay();
     window.addEventListener('resize', () => paintHexOverlay());

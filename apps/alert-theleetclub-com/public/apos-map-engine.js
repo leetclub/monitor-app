@@ -927,6 +927,24 @@
   let focusNodeId = DATA.enterprise.id;
   /** Edge chip toward off-screen APOS (screen coords); null when core is on-screen */
   let aposEdgeHint = null;
+  /** Live motion — screen-space only. Never writes node.x/y (framing stays stable). */
+  let filterMode = 'all';
+  let filterHot = new Set();
+  let pointerNX = 0;
+  let pointerNY = 0;
+  let pageHidden = false;
+  let panVx = 0;
+  let panVy = 0;
+  let panStamp = 0;
+  let lastPX = null;
+  let lastPY = null;
+  let inertia = null;
+  let inertiaPan = false;
+  const ripples = [];
+  const flowEvents = [];
+  const liveLog = [];
+  const frameSamples = [];
+  const cubicCache = new Map();
   /** At overview: all hubs expanded. On drill: only clicked path. */
   let expandedPath = new Set();
   let overviewMode = true;
@@ -1080,7 +1098,15 @@
       .scaleExtent([0.12, 80])
       .filter((event) => {
         if (event.type === 'dblclick') return false;
+        if (event.type === 'wheel') return true;
         return !event.ctrlKey && !event.button;
+      })
+      .on('start', () => {
+        inertia = null;
+        lastPX = null;
+        lastPY = null;
+        panVx = 0;
+        panVy = 0;
       })
       .on('zoom', (event) => {
         // Gemini: user input updates target; display lerps toward it each frame
@@ -1090,17 +1116,44 @@
           gRoot.attr('transform', transform);
         }
         const src = event.sourceEvent;
-        const isPan = !!(src && (src.type === 'mousemove' || src.type === 'pointermove' || src.type === 'touchmove'));
+        const isPan = inertiaPan || !!(src && (src.type === 'mousemove' || src.type === 'pointermove' || src.type === 'touchmove'));
+        if (isPan && src && src.clientX != null) {
+          const now = performance.now();
+          if (lastPX != null) {
+            const dt = Math.max(8, now - panStamp);
+            panVx = (src.clientX - lastPX) / dt;
+            panVy = (src.clientY - lastPY) / dt;
+          }
+          lastPX = src.clientX;
+          lastPY = src.clientY;
+          panStamp = now;
+        } else if (!inertiaPan) {
+          panVx = 0;
+          panVy = 0;
+        }
         // Never collapse focus while a programmatic fly is writing the transform
         if (!flying) reconcileViewState(isPan ? 'pan' : 'zoom');
         applyLod();
         applyLabelCounterScale();
         updateBreadcrumbFromView();
+      })
+      .on('end', (event) => {
+        if (reduceMotion || flying) return;
+        const src = event.sourceEvent;
+        const up = src && (src.type === 'pointerup' || src.type === 'mouseup' || src.type === 'touchend');
+        if (!up) return;
+        if (Math.hypot(panVx, panVy) < 0.18) return;
+        inertia = { vx: panVx * 16, vy: panVy * 16 };
       });
 
     svg.call(zoomBehavior);
     svg.on('dblclick.zoom', null);
     svg.on('dblclick', (e) => {
+      e.preventDefault();
+      const cur = nodeById.get(focusNodeId);
+      if (cur) drillDeeper(cur);
+    });
+    svg.on('contextmenu', (e) => {
       e.preventDefault();
       flyOut();
     });
@@ -1492,7 +1545,8 @@
           : n.angle != null
             ? n.angle
             : Math.atan2(n.y, n.x);
-      const p = screenOf(n);
+      // Layout screen, not the bob — DOM labels must not drift frame to frame
+      const p = worldToScreen(n.x, n.y);
       const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
       const { hw, hh } = textHalf(n);
       const hasPill = !!(n.alertCount > 0 && (n.type === 'hub' || n.type === 'country' || n.type === 'client' || n.type === 'area' || n.type === 'location'));
@@ -1511,7 +1565,7 @@
     labeled.forEach((n) => {
       let sx = n._labelSx;
       let sy = n._labelSy;
-      const p = screenOf(n);
+      const p = worldToScreen(n.x, n.y);
       const ang = n._labelAng;
       const hw = n._labelHw || 40;
       const hh = n._labelHh || 8;
@@ -1559,14 +1613,16 @@
       el.textContent = n.label; // full label (incl. Technical Support)
       const overviewBrand = overviewMode && n.type === 'client';
       el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}${overviewBrand ? ' overview-brand' : ''}`;
-      const sx = n._labelSx != null ? n._labelSx : screenOf(n).x;
-      const sy = n._labelSy != null ? n._labelSy : screenOf(n).y + 20;
+      const base = worldToScreen(n.x, n.y);
+      const sx = n._labelSx != null ? n._labelSx : base.x;
+      const sy = n._labelSy != null ? n._labelSy : base.y + 20;
       // Hex: park labels under the cell, never over the core logo
       let lx = sx;
       let ly = sy;
       if (layoutMode === 'hex') {
         ly = sy + 18;
-        const coreS = screenOf(nodeById.get(DATA.enterprise.id) || { x: 0, y: 0 });
+        const coreN = nodeById.get(DATA.enterprise.id);
+        const coreS = coreN ? worldToScreen(coreN.x, coreN.y) : { x: transform.x, y: transform.y };
         if (Math.hypot(lx - coreS.x, ly - coreS.y) < 56 && n.type !== 'enterprise') {
           ly = coreS.y + 64;
         }
@@ -1718,7 +1774,13 @@
         .attr('transform', (d) => `translate(${d.x},${d.y})`)
         .on('click', (event, d) => {
           event.stopPropagation();
+          ripples.push({ id: d.id, t0: performance.now() });
           onNodeClick(d);
+        })
+        .on('dblclick', (event, d) => {
+          event.stopPropagation();
+          event.preventDefault();
+          drillDeeper(d);
         })
         .on('mouseenter', (event, d) => {
           hoverId = d.id;
@@ -1782,6 +1844,7 @@
       const g = d3.select(this);
       g.style('display', d.draw ? null : 'none');
       let op = d.draw ? d.lodAlpha : 0;
+      if (d.draw) op *= filterFade(d.id);
       if (crumbHot && crumbHot.has(d.id)) op = Math.max(op, 0.95);
       // Gemini: hub/node hover fades ~95% of unrelated
       if (hoverHot && d.draw) {
@@ -2238,6 +2301,23 @@
     closeTask();
     applyLod();
     flyToTransform(fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id)));
+  }
+
+  function drillDeeper(node) {
+    if (!node) return;
+    const kids = (childrenOf.get(node.id) || []).filter(
+      (c) => c.type !== 'branch' && c.type !== 'artic' && c.status !== 'future' && !c.pad
+    );
+    if (kids[0]) {
+      flyToNode(kids[0]);
+      return;
+    }
+    if (node.type === 'machine') {
+      const br = (childrenOf.get(node.id) || [])[0];
+      if (br) onNodeClick(br);
+      return;
+    }
+    if (node.id !== focusNodeId) flyToNode(node);
   }
 
   function flyOut() {
@@ -2860,7 +2940,7 @@
           a: 0.12 + Math.random() * 0.4,
           tw: Math.random() * Math.PI * 2,
           twSpeed: 0.4 + Math.random() * 0.9,
-          parallax: 0,
+          parallax: 0.1 + Math.random() * 0.14,
         });
       }
     }
@@ -2873,7 +2953,78 @@
   }
 
   function screenOf(n) {
-    return { x: n.x * transform.k + transform.x, y: n.y * transform.k + transform.y };
+    const s = { x: n.x * transform.k + transform.x, y: n.y * transform.k + transform.y };
+    // Gentle bob in screen pixels only — world layout, links' topology, and fit stay put
+    if (!reduceMotion && n && n.id && n.type && n.type !== 'enterprise' && n.type !== 'packet') {
+      const ph = (hash(String(n.id)) % 628) / 100;
+      const t = (lastTs || 0) / 1000;
+      s.x += Math.cos(t * 0.63 + ph) * 2.2;
+      s.y += Math.sin(t * 0.85 + ph * 1.17) * 2.6;
+    }
+    return s;
+  }
+
+  function cachedCubic(s, t, cc, steps, dir) {
+    const key = `${s.id}|${t.id}|${dir || 'f'}|${steps}|${s.x | 0}|${s.y | 0}|${t.x | 0}|${t.y | 0}`;
+    let pts = cubicCache.get(key);
+    if (!pts) {
+      pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, steps);
+      if (cubicCache.size > 480) cubicCache.clear();
+      cubicCache.set(key, pts);
+    }
+    return pts;
+  }
+
+  function nodeMatchesFilter(n) {
+    if (!n || n.type !== 'machine') return false;
+    if (filterMode === 'alerts') return !!n.alert;
+    if (filterMode === 'offline') return n.status === 'offline' || (n.offlineHours || 0) >= (THRESH?.offlineHours || 2);
+    if (filterMode === 'lowstock') return (n.stock?.fillPct ?? 100) < (THRESH?.stockLowPct || 15);
+    return true;
+  }
+
+  function refreshFilter() {
+    filterHot = new Set();
+    if (filterMode === 'all') return;
+    nodes.forEach((n) => {
+      if (!nodeMatchesFilter(n)) return;
+      pathToRoot(n.id).forEach((id) => filterHot.add(id));
+    });
+  }
+
+  function filterFade(id) {
+    if (filterMode === 'all') return 1;
+    return filterHot.has(id) ? 1 : 0.2;
+  }
+
+  function shownRevenue(n) {
+    if (!n) return null;
+    if (n.revenue && n.revenue.today != null) {
+      if (!n._revT0 || reduceMotion) return n.revenue.today;
+      const u = Math.min(1, (performance.now() - n._revT0) / 640);
+      const from = n._revFrom != null ? n._revFrom : n.revenue.today;
+      return Math.round((from + (n.revenue.today - from) * u) * 10) / 10;
+    }
+    return n.rollup?.revenueToday ?? null;
+  }
+
+  function shownStock(n) {
+    if (n?.stock?.fillPct != null) return n.stock.fillPct;
+    if (n?.type === 'machine' || !UTILS) return null;
+    const ms = UTILS.walkMachines(n, childrenOf);
+    if (!ms.length) return null;
+    const avg = ms.reduce((s, m) => s + (m.stock?.fillPct ?? 0), 0) / ms.length;
+    return Math.round(avg);
+  }
+
+  function statusLabel(n) {
+    if (!n) return '—';
+    if (n.alert === 'red' || n.status === 'offline') return 'offline';
+    if (n.alert) return 'alert';
+    if ((n.stock?.fillPct ?? 100) < (THRESH?.stockLowPct || 15)) return 'low stock';
+    if (n.status === 'future' || n.planned) return 'planned';
+    if (n.comingSoon) return 'soon';
+    return n.status || 'ok';
   }
 
   /** Clip a screen-space segment to the stage; returns endpoints + which end hit the edge. */
@@ -3088,6 +3239,37 @@
     ctx.restore();
   }
 
+  function drawFlowEvents(ts) {
+    if (reduceMotion || !flowEvents.length || !pctx) return;
+    for (let i = flowEvents.length - 1; i >= 0; i--) {
+      const ev = flowEvents[i];
+      ev.u += ev.speed;
+      if (ev.u >= 1) { flowEvents.splice(i, 1); continue; }
+      const path = ev.path;
+      const hops = path.length - 1;
+      if (hops < 1) continue;
+      const f = ev.u * hops;
+      const hi = Math.min(hops - 1, Math.floor(f));
+      const local = f - hi;
+      const a = nodeById.get(path[hi]);
+      const b = nodeById.get(path[hi + 1]);
+      if (!a || !b) continue;
+      const cc = curveControls(a, b, 'tree');
+      const pts = cachedCubic(a, b, cc, 16, 'ev');
+      const idx = Math.min(pts.length - 1, Math.floor(local * (pts.length - 1)));
+      const sx = pts[idx][0] * transform.k + transform.x;
+      const sy = pts[idx][1] * transform.k + transform.y;
+      const rgb = ev.rgb;
+      pctx.beginPath();
+      pctx.arc(sx, sy, 3.2, 0, Math.PI * 2);
+      pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.96)`;
+      pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.85)`;
+      pctx.shadowBlur = 10;
+      pctx.fill();
+      pctx.shadowBlur = 0;
+    }
+  }
+
   function drawWorldScene(ts) {
     if (!pctx || !particleCanvas) return;
     const w = stage.clientWidth;
@@ -3149,6 +3331,7 @@
       if (hoverHotDraw && !(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target)) && !onPath) {
         op = Math.min(op, 0.05);
       }
+      if (filterMode !== 'all' && !filterHot.has(s.id) && !filterHot.has(t.id)) op *= 0.22;
       if (op < 0.04) return;
 
       linkDrawStats.count++;
@@ -3217,28 +3400,37 @@
     // Path packets: travel toward the core every frame
     if (pathPackets.length && !reduceMotion) {
       const tSec = (ts || 0) / 1000;
-      pathPackets.forEach(({ s, t, cc, rgb }, si) => {
-        // Orient packet toward enterprise (lower depth)
+      pathPackets.forEach(({ s, t, cc }, si) => {
+        // Orient packet toward enterprise (lower depth). Teal = revenue, amber/red = alerts.
         const coreIsS = s.type === 'enterprise' || (s.depth != null && t.depth != null && s.depth < t.depth);
-        const pts = sampleCubic(
-          coreIsS ? t.x : s.x, coreIsS ? t.y : s.y,
-          coreIsS ? cc.c2x : cc.c1x, coreIsS ? cc.c2y : cc.c1y,
-          coreIsS ? cc.c1x : cc.c2x, coreIsS ? cc.c1y : cc.c2y,
-          coreIsS ? s.x : t.x, coreIsS ? s.y : t.y,
-          28
-        );
-        const u = (tSec * 0.42 + si * 0.18) % 1;
-        const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
-        const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
-        pctx.beginPath();
-        pctx.arc(sp.x, sp.y, 2.6, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`;
-        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.7)`;
-        pctx.shadowBlur = 8;
-        pctx.fill();
-        pctx.shadowBlur = 0;
+        const from = coreIsS ? t : s;
+        const to = coreIsS ? s : t;
+        const ccDir = coreIsS
+          ? { c1x: cc.c2x, c1y: cc.c2y, c2x: cc.c1x, c2y: cc.c1y }
+          : cc;
+        const pts = cachedCubic(from, to, ccDir, 24, coreIsS ? 'core' : 'out');
+        const alertish = !!(s.alert || t.alert);
+        const pkt = alertish
+          ? ((s.alert === 'red' || t.alert === 'red' || s.status === 'offline' || t.status === 'offline')
+            ? [255, 107, 122] : [232, 192, 120])
+          : [0, 210, 200];
+        const activity = (s.revenue?.today || t.revenue?.today || 0);
+        const hops = activity > 180 ? 2 : 1;
+        for (let k = 0; k < hops; k++) {
+          const u = (tSec * 0.42 + si * 0.18 + k * 0.5) % 1;
+          const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
+          const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
+          pctx.beginPath();
+          pctx.arc(sp.x, sp.y, 2.6, 0, Math.PI * 2);
+          pctx.fillStyle = `rgba(${pkt[0]},${pkt[1]},${pkt[2]},0.95)`;
+          pctx.shadowColor = `rgba(${pkt[0]},${pkt[1]},${pkt[2]},0.7)`;
+          pctx.shadowBlur = 8;
+          pctx.fill();
+          pctx.shadowBlur = 0;
+        }
       });
     }
+    drawFlowEvents(ts);
     syncAposEdgeChip();
 
     // ——— Gemini signal arcs: calm cyan, max ~5, smooth core-bow Béziers ———
@@ -3301,7 +3493,7 @@
         pctx.shadowBlur = 0;
         if (!reduceMotion) {
           const tSec = (ts || 0) / 1000;
-          const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 24);
+          const pts = cachedCubic(s, t, cc, 16, 'sig');
           const u = (tSec * 0.35 + si * 0.22) % 1;
           const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
           const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
@@ -3361,9 +3553,9 @@
         if (!overviewMode && !(localIds.has(s.id) && localIds.has(t.id))) return;
         const cc = curveControls(s, t, L.kind);
         const phase = (tSec * 0.35 + (hash(L.source + L.target) % 100) * 0.01) % 1;
+        const pts = cachedCubic(s, t, cc, 16, 'flow');
         for (let k = 0; k < 2; k++) {
           const u = (phase + k * 0.45) % 1;
-          const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 20);
           const idx = Math.min(pts.length - 1, Math.floor(u * (pts.length - 1)));
           const sp = screenOf({ x: pts[idx][0], y: pts[idx][1] });
           pctx.beginPath();
@@ -3459,7 +3651,11 @@
       else if (n.type === 'branch') r = deep ? (DEEP_NODE_R.branch || 14) : 5;
       else r = deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
       r *= grow;
-      const alpha = (n.lodAlpha || 1) * (n.preview ? 0.85 : 1);
+      const springTarget = hoverId === n.id ? 1.16 : (hoverHotDraw && hoverHotDraw.has(n.id) ? 1.045 : 1);
+      const springK = reduceMotion ? 1 : 0.18;
+      n._spring = n._spring == null ? 1 : n._spring + (springTarget - n._spring) * springK;
+      r *= n._spring;
+      const alpha = (n.lodAlpha || 1) * (n.preview ? 0.85 : 1) * filterFade(n.id);
       if (n.type === 'enterprise') {
         // Soft disc echo of the textured stamp motif behind the galaxy wordmark
         const discR = Math.max(28, Math.min(stage.clientWidth, stage.clientHeight) * 0.045) * Math.max(0.85, Math.min(1.35, transform.k));
@@ -3496,7 +3692,7 @@
       }
       if (n.type === 'hub' || n.type === 'country') {
         const rgb = accentRgb(n.ring || 'teal');
-        const breathe = reduceMotion ? 1 : 1 + Math.sin(ts / 1400 + (n.angle || 0)) * 0.015;
+        const breathe = reduceMotion ? 1 : 1 + Math.sin(ts / 1100 + (n.angle || 0)) * 0.028;
         const rr = (deep ? DEEP_HUB_R : HUB_SCREEN_R) * breathe;
         const focusedHub = focusNodeId === n.id || (!overviewMode && n.id === focusHubId);
         const bloom = pctx.createRadialGradient(p.x, p.y, rr * 0.2, p.x, p.y, rr + 18);
@@ -3522,7 +3718,7 @@
         pctx.fill();
         drawHubGlyph(pctx, p.x, p.y, rr * 0.62, n.id, alpha);
       } else if (n.type === 'branch') {
-        const rr = r * (hoverId === n.id ? 1.2 : 1);
+        const rr = r;
         const halo = pctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.4);
         halo.addColorStop(0, `rgba(255,255,255,${0.35 * alpha})`);
         halo.addColorStop(1, 'rgba(255,255,255,0)');
@@ -3544,8 +3740,7 @@
         drawBranchGlyph(pctx, p.x, p.y, rr * 0.7, n.branchKey, alpha);
       } else {
         // Consistent: white disc + soft glow; status as thin ring (not offset dot)
-        const hoverScale = hoverId === n.id ? 1.25 : 1;
-        const rr = r * hoverScale;
+        const rr = r;
         const isAlert = !!(n.alert || (n.type === 'machine' && n.alert));
         const isMaint =
           n.status === 'maintenance' ||
@@ -3567,6 +3762,14 @@
           pctx.strokeStyle = isAlert ? `rgba(255,107,122,${0.95 * alpha})` : `rgba(232,192,120,${0.95 * alpha})`;
           pctx.lineWidth = 2.2;
           pctx.stroke();
+          if (isAlert && !reduceMotion) {
+            const beat = 0.5 + 0.5 * Math.sin((ts || 0) / 520 + (hash(n.id) % 20));
+            pctx.beginPath();
+            pctx.arc(p.x, p.y, rr + 5 + beat * 8, 0, Math.PI * 2);
+            pctx.strokeStyle = `rgba(255,90,110,${(0.12 + 0.4 * (1 - beat)) * alpha})`;
+            pctx.lineWidth = 1.35;
+            pctx.stroke();
+          }
         } else if ((n.type === 'area' || n.type === 'client') && overviewMode) {
           const rgb = accentRgb(nodeById.get(n.hubId || n.countryId)?.ring || n.ring || 'teal');
           pctx.beginPath();
@@ -3630,7 +3833,34 @@
         pctx.fillStyle = `rgba(200,220,240,${0.85 * alpha})`;
         pctx.fillText(txt, bx, by + 0.5);
       }
+      if (n._revT0 && n.revenue && !reduceMotion) {
+        const u = Math.min(1, ((ts || performance.now()) - n._revT0) / 900);
+        if (u < 1) {
+          const shown = shownRevenue(n);
+          pctx.globalAlpha = 1 - u;
+          pctx.fillStyle = 'rgba(0, 210, 200, 0.95)';
+          pctx.font = '600 10px Manrope, sans-serif';
+          pctx.textAlign = 'center';
+          pctx.fillText(String(shown), p.x, p.y - r - 10 - u * 8);
+          pctx.globalAlpha = 1;
+        }
+      }
     });
+    if (!reduceMotion) {
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const rp = ripples[i];
+        const age = ((ts || 0) - rp.t0) / 680;
+        if (age > 1) { ripples.splice(i, 1); continue; }
+        const n = nodeById.get(rp.id);
+        if (!n?.draw) continue;
+        const p = screenOf(n);
+        pctx.beginPath();
+        pctx.arc(p.x, p.y, 6 + age * 34, 0, Math.PI * 2);
+        pctx.strokeStyle = `rgba(255,255,255,${(1 - age) * 0.55})`;
+        pctx.lineWidth = 1.4;
+        pctx.stroke();
+      }
+    }
     pctx.restore();
   }
 
@@ -3664,11 +3894,11 @@
     pctx.strokeStyle = THEME === 'space' ? 'rgba(0, 242, 254, 0.35)' : 'rgba(255,255,255,0.28)';
     pctx.setLineDash([3, 5]);
     pctx.beginPath();
-    pctx.arc(cx, cy, outer, t * (Math.PI / 180), t * (Math.PI / 180) + Math.PI * 2);
+    pctx.arc(cx, cy, outer, t * 0.15, t * 0.15 + Math.PI * 2);
     pctx.stroke();
     pctx.strokeStyle = THEME === 'space' ? 'rgba(5, 255, 161, 0.22)' : 'rgba(200,180,255,0.22)';
     pctx.beginPath();
-    pctx.arc(cx, cy, outer * 0.72, -t * 0.6 * (Math.PI / 180), -t * 0.6 * (Math.PI / 180) + Math.PI * 2);
+    pctx.arc(cx, cy, outer * 0.72, -t * 0.09, -t * 0.09 + Math.PI * 2);
     pctx.stroke();
     pctx.setLineDash([]);
     // Crosshair ticks
@@ -3704,11 +3934,13 @@
     }
     const panX = (transform.x - w / 2) * 0.2;
     const panY = (transform.y - h / 2) * 0.2;
+    const mx = (pointerNX || 0) * 16;
+    const my = (pointerNY || 0) * 11;
     for (const d of dust) {
       const twinkle = reduceMotion ? 1 : 0.65 + 0.35 * Math.sin(tDust * d.twSpeed + d.tw);
-      const px = d.parallax || 0;
-      const sx = d.x + panX * px;
-      const sy = d.y + panY * px;
+      const px = d.parallax || 0.14;
+      const sx = d.x + panX * px + mx * px;
+      const sy = d.y + panY * px + my * px;
       pctx.beginPath();
       pctx.fillStyle = THEME === 'space'
         ? `rgba(200, 220, 245,${d.a * twinkle})`
@@ -3717,14 +3949,17 @@
       pctx.fill();
     }
 
-    // Core particles only in overview — hide glowing ball under hub when drilled
-    if (!overviewMode) return;
+    // Core galaxy stays alive whenever it is on stage (overview, or a drilled edge peek)
+    const coreNode = nodeById.get(DATA.enterprise.id);
+    const coreScreen = coreNode ? screenOf(coreNode) : { x: transform.x, y: transform.y };
+    const coreOnStage = coreScreen.x > -80 && coreScreen.x < w + 80 && coreScreen.y > -80 && coreScreen.y < h + 80;
+    if (!overviewMode && !coreOnStage) return;
 
     const t = (ts || 0) / 1000;
-    const cx = transform.x;
-    const cy = transform.y;
-    const k = transform.k;
-    const coreR = Math.min(CORE_WORLD_R, Math.max(72, Math.min(w, h) * 0.18));
+    const cx = overviewMode ? transform.x : coreScreen.x;
+    const cy = overviewMode ? transform.y : coreScreen.y;
+    const k = overviewMode ? transform.k : Math.max(0.55, Math.min(transform.k, 1.4));
+    const coreR = Math.min(CORE_WORLD_R, Math.max(72, Math.min(w, h) * 0.18)) * (overviewMode ? 1 : 0.62);
     // Soft bloom behind galaxy — kept inside hub ring
     pctx.beginPath();
     const bloomR = coreR * 1.15 * Math.max(0.9, Math.min(1.4, k));
@@ -3737,8 +3972,8 @@
     pctx.fill();
     for (const p of coreParticles) {
       // Soft spiral drift: rotate in-plane + gentle radial breathe
-      const spin = t * (p.spin || 0.12) + p.phase;
-      const breathe = 1 + Math.sin(t * p.speed + p.phase) * 0.04;
+      const spin = t * 0.11 + (p.spin || 0.12) + p.phase;
+      const breathe = (1 + Math.sin(t * 0.7) * 0.035) * (1 + Math.sin(t * p.speed + p.phase) * 0.04);
       const cos = Math.cos(spin * 0.55);
       const sin = Math.sin(spin * 0.55);
       const x0 = p.ox * breathe;
@@ -3802,7 +4037,19 @@
       if (e.target === taskOverlay) closeTask();
     });
     document.getElementById(DOM.taskSend).addEventListener('click', sendTask);
+    stage.addEventListener('pointermove', (e) => {
+      const r = stage.getBoundingClientRect();
+      pointerNX = ((e.clientX - r.left) / Math.max(r.width, 1)) * 2 - 1;
+      pointerNY = ((e.clientY - r.top) / Math.max(r.height, 1)) * 2 - 1;
+    });
+    stage.addEventListener('pointerleave', () => { pointerNX = 0; pointerNY = 0; });
+    document.addEventListener('visibilitychange', () => {
+      pageHidden = document.hidden;
+      if (!pageHidden) requestAnimationFrame(loop);
+    });
     window.addEventListener('keydown', (e) => {
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'Escape') {
         if (!taskOverlay.hidden) {
           closeTask();
@@ -3821,20 +4068,22 @@
         }
         return;
       }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
         const cur = nodeById.get(focusNodeId);
         if (!cur) return;
         if (cur.type === 'hub' || overviewMode) {
           const idx = hubs.findIndex((h) => h.id === (cur.type === 'hub' ? cur.id : focusNodeId));
-          const next = hubs[(idx + (e.key === 'ArrowRight' ? 1 : -1) + hubs.length) % hubs.length];
+          const dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+          const next = hubs[(idx + dir + hubs.length) % hubs.length];
           if (next) flyToNode(next);
           return;
         }
         const siblings = (childrenOf.get(cur.parentId) || []).filter((c) => c.type === cur.type);
         const si = siblings.findIndex((s) => s.id === cur.id);
         if (si < 0 || siblings.length < 2) return;
-        const nxt = siblings[(si + (e.key === 'ArrowRight' ? 1 : -1) + siblings.length) % siblings.length];
+        const dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+        const nxt = siblings[(si + dir + siblings.length) % siblings.length];
         if (nxt) flyToNode(nxt);
       }
     });
@@ -3854,12 +4103,13 @@
   const tooltipEl = document.getElementById(DOM.tooltip);
   function showTooltip(event, d) {
     if (!tooltipEl || !d || d.type === 'enterprise') return;
-    let stat = '';
-    if (d.rollup) stat = `${d.rollup.online}/${d.rollup.total} online · ${d.rollup.alerts} alerts`;
-    else if (d.type === 'machine') {
-      const alert = d.alert ? ` · ${d.alert}` : '';
-      stat = `${d.revenue?.today ?? '—'} KWD today${alert}`;
-    } else if (d.subtitle) stat = d.subtitle;
+    const rev = shownRevenue(d);
+    const stock = shownStock(d);
+    const stat = [
+      rev == null ? null : `${rev} KWD today`,
+      stock == null ? null : `stock ${stock}%`,
+      statusLabel(d),
+    ].filter(Boolean).join(' · ');
     tooltipEl.hidden = false;
     tooltipEl.innerHTML = `<strong>${d.label || d.bgLabel || d.id}</strong>${stat ? `<span>${stat}</span>` : ''}`;
     const stageBox = stage.getBoundingClientRect();
@@ -3884,9 +4134,46 @@
     });
   }
 
+  function packetRgb(kind) {
+    if (kind === 'alert' || kind === 'offline') return [255, 107, 122];
+    if (kind === 'lowstock' || kind === 'task') return [232, 192, 120];
+    return [0, 210, 200];
+  }
+
+  function spawnFlow(machineId, kind) {
+    const path = pathToRoot(machineId);
+    if (path.length < 2) return;
+    if (flowEvents.length > 6) flowEvents.shift();
+    flowEvents.push({ path, u: 0, speed: 0.012, rgb: packetRgb(kind), kind });
+  }
+
+  function emitLive(ev) {
+    liveLog.push(ev);
+    if (liveLog.length > 16) liveLog.shift();
+    const m = nodeById.get(ev.machineId);
+    if (m?.revenue && ev.deltaRev) {
+      m._revFrom = shownRevenue(m);
+      m.revenue.today = Math.round((m.revenue.today + ev.deltaRev) * 10) / 10;
+      m._revT0 = performance.now();
+      let id = m.parentId;
+      while (id) {
+        const n = nodeById.get(id);
+        if (!n) break;
+        if (n.rollup && UTILS) n.rollup.revenueToday = UTILS.rollup(n, childrenOf).revenueToday;
+        id = n.parentId;
+      }
+    }
+    if (m?.stock && ev.deltaStock) {
+      m.stock.fillPct = Math.max(0, Math.min(100, Math.round((m.stock.fillPct || 0) + ev.deltaStock)));
+    }
+    spawnFlow(ev.machineId, ev.kind);
+    stage?.dispatchEvent(new CustomEvent('apos-live', { detail: ev }));
+  }
+
   function spawnPathSignal(machineId, kind) {
+    spawnFlow(machineId, kind === 'alert' ? 'alert' : 'sale');
     const pathIds = pathToRoot(machineId);
-    const color = kind === 'alert' ? 'rgba(255,107,122,0.95)' : 'rgba(230,245,255,0.95)';
+    const color = kind === 'alert' ? 'rgba(255,107,122,0.95)' : 'rgba(0,210,200,0.95)';
     for (let i = 0; i < pathIds.length - 1; i++) {
       const a = nodeById.get(pathIds[i]);
       const b = nodeById.get(pathIds[i + 1]);
@@ -3902,14 +4189,36 @@
 
   function startSignalTimers() {
     if (reduceMotion) return;
+    const kinds = [
+      { id: 'sale', label: 'Sale', deltaRev: [1.5, 6.5] },
+      { id: 'lowstock', label: 'Low stock', deltaStock: -1 },
+      { id: 'offline', label: 'Machine offline' },
+      { id: 'task', label: 'Task assigned' },
+    ];
     setInterval(() => {
-      if (!machines.length) return;
+      if (pageHidden || !machines.length) return;
       const live = machines.filter((m) => m.status !== 'planned' && m.status !== 'future');
       if (!live.length) return;
-      const m = live[Math.floor(Math.random() * live.length)];
-      const kind = m.alert && Math.random() < 0.45 ? 'alert' : 'transaction';
-      spawnPathSignal(m.id, kind);
-    }, 2800);
+      const weights = live.map((m) => 12 + Math.min(80, m.revenue?.today || 0) / 8 + (m.alert ? 18 : 0));
+      let pick = Math.random() * weights.reduce((a, b) => a + b, 0);
+      let m = live[0];
+      for (let i = 0; i < live.length; i++) {
+        pick -= weights[i];
+        if (pick <= 0) { m = live[i]; break; }
+      }
+      const kind = m.alert && Math.random() < 0.5 ? kinds[2] : kinds[Math.floor(Math.random() * kinds.length)];
+      const deltaRev = kind.deltaRev ? kind.deltaRev[0] + Math.random() * (kind.deltaRev[1] - kind.deltaRev[0]) : 0;
+      emitLive({
+        kind: kind.id,
+        label: kind.label,
+        machineId: m.id,
+        title: m.label,
+        body: `${kind.label} · ${m.label}`,
+        deltaRev: deltaRev ? Math.round(deltaRev * 10) / 10 : 0,
+        deltaStock: kind.deltaStock || 0,
+        at: Date.now(),
+      });
+    }, 3400);
   }
 
   function waitForIdle() {
@@ -4254,6 +4563,47 @@
     getRollup: (id) => nodeById.get(id)?.rollup || null,
 
 
+    prefersReducedMotion: () => reduceMotion,
+    getMotionState: () => ({
+      reduceMotion: !!reduceMotion,
+      running: !pageHidden,
+      hidden: pageHidden,
+      filter: filterMode,
+      bobAmp: reduceMotion ? 0 : 2.6,
+      packets: flowEvents.length,
+    }),
+    getFrameStats: () => {
+      const s = frameSamples.slice().sort((a, b) => a - b);
+      const mid = s.length ? s[Math.floor(s.length / 2)] : 0;
+      const p95 = s.length ? s[Math.min(s.length - 1, Math.floor(s.length * 0.95))] : 0;
+      return { median: Math.round(mid * 10) / 10, p95: Math.round(p95 * 10) / 10, n: s.length };
+    },
+    setFilter: (mode) => {
+      filterMode = ['alerts', 'offline', 'lowstock'].includes(mode) ? mode : 'all';
+      refreshFilter();
+      paintLod();
+      return filterMode;
+    },
+    getFilter: () => filterMode,
+    getFilterDimmedCount: () => {
+      if (filterMode === 'all') return 0;
+      return nodes.filter((n) => n.draw && n.lodAlpha > 0.05 && n.type !== 'enterprise' && !filterHot.has(n.id)).length;
+    },
+    searchNodes: (q) => {
+      const s = String(q || '').trim().toLowerCase();
+      if (!s) return [];
+      return nodes
+        .filter((n) => n.type !== 'artic' && n.type !== 'branch' && ((n.label || '') + ' ' + (n.bgLabel || '')).toLowerCase().includes(s))
+        .slice(0, 8)
+        .map((n) => ({ id: n.id, label: n.label || n.bgLabel || n.id, type: n.type }));
+    },
+    getLiveLog: () => liveLog.slice(-8),
+    emitTestEvent: (machineId, kind) => {
+      const m = nodeById.get(machineId) || machines[0];
+      if (!m) return null;
+      emitLive({ kind: kind || 'sale', label: 'Sale', machineId: m.id, title: m.label, body: `Sale · ${m.label}`, deltaRev: 2.5, at: Date.now() });
+      return m.id;
+    },
     setInspectorOpen: (open) => {
       if (!stage) return;
       const was = stage.classList.contains('inspector-open');
@@ -4342,8 +4692,22 @@
   window[READY_FLAG] = true;
   window.__APOS_MAP_READY__ = true;
 
-  requestAnimationFrame(function loop(ts) {
+  function loop(ts) {
+    if (pageHidden) return;
+    const workT0 = performance.now();
     lastTs = ts;
+    if (inertia && !flying && !reduceMotion) {
+      inertia.vx *= 0.9;
+      inertia.vy *= 0.9;
+      if (Math.hypot(inertia.vx, inertia.vy) < 0.25) inertia = null;
+      else {
+        const base = targetTransform || transform;
+        const t = d3.zoomIdentity.translate(base.x + inertia.vx, base.y + inertia.vy).scale(base.k);
+        inertiaPan = true;
+        svg.call(zoomBehavior.transform, t);
+        inertiaPan = false;
+      }
+    }
     // Gemini camera damping toward targetTransform
     if (GEMINI && !flying && targetTransform && !reduceMotion) {
       const dx = targetTransform.x - transform.x;
@@ -4367,6 +4731,11 @@
     drawOrbitGuides(ts);
     if (!flying) syncHubTitles();
     if (signalRunner) signalRunner.tick(ts);
+    const work = performance.now() - workT0;
+    if (work > 0 && work < 80) {
+      frameSamples.push(work);
+      if (frameSamples.length > 90) frameSamples.shift();
+    }
     // subtle node breathe
     if (!reduceMotion && gNodes && overviewMode) {
       const breathe = 1 + Math.sin(ts / 1400) * 0.012;
@@ -4376,7 +4745,8 @@
       });
     }
     requestAnimationFrame(loop);
-  });
+  }
+  requestAnimationFrame(loop);
 
   return api;
   } // mount

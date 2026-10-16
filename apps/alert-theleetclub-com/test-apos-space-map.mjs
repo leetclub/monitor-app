@@ -7,6 +7,7 @@
  */
 
 import { chromium, firefox } from 'playwright';
+import { assertLiveMotion, assertReducedMotion, recordMotionMp4 } from './test-apos-motion.mjs';
 import { mkdirSync, existsSync, copyFileSync } from 'fs';
 import { join } from 'path';
 
@@ -671,6 +672,13 @@ await test('no console errors during session', async () => {
     if (bad.length) throw new Error(`label overlaps: ${JSON.stringify(bad)}`);
   });
 
+  await test('live motion, filter, search, frame time', async () => {
+    await assertLiveMotion(page, 'APOS_SPACE_MAP');
+  });
+  await test('reduced motion pauses ambient bob', async () => {
+    await assertReducedMotion(browser, BASE_URL, 'APOS_SPACE_MAP');
+  });
+
   await browser.close();
   return results;
 }
@@ -734,6 +742,7 @@ async function main() {
     all.push(await runTests(b.type, b.name));
   }
   await recordFlow();
+  await recordMotionMp4(BASE_URL, 'motion-space.mp4');
   console.log('\n' + '='.repeat(60));
   console.log('SUMMARY');
   console.log('='.repeat(60));

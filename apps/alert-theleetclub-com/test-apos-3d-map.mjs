@@ -2,6 +2,7 @@
  * APOS 3D constellation — Playwright (Chromium + Firefox)
  */
 import { chromium, firefox } from 'playwright';
+import { assertLiveMotion, assertReducedMotion, recordMotionMp4 } from './test-apos-motion.mjs';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
@@ -248,6 +249,13 @@ async function runBrowser(browserType, name) {
     console.log('   📸 3d-overview.png');
   }
 
+  await test('live motion, filter, search, frame time', async () => {
+    await assertLiveMotion(page, 'APOS_3D_MAP');
+  });
+  await test('reduced motion pauses ambient bob', async () => {
+    await assertReducedMotion(browser, BASE_URL, 'APOS_3D_MAP');
+  });
+
   await browser.close();
   return results;
 }
@@ -255,6 +263,7 @@ async function runBrowser(browserType, name) {
 const all = [];
 all.push(...(await runBrowser(chromium, 'chromium')));
 all.push(...(await runBrowser(firefox, 'firefox')));
+await recordMotionMp4(BASE_URL, 'motion-3d.mp4');
 const failed = all.filter((r) => !r.ok);
 console.log(`\nSUMMARY\nchromium+firefox: ${all.length - failed.length} passed, ${failed.length} failed\n`);
 process.exit(failed.length ? 1 : 0);

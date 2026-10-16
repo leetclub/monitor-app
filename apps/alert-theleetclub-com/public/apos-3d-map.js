@@ -152,9 +152,22 @@ function mount() {
   let expanded = new Set();
   let flying = false;
   let hudMode = false;
-  let idleOrbit = true;
+  let idleOrbit = false;
   let lastInteract = performance.now();
   let composer = null;
+  let starPointsRef = null;
+  let hoverId = null;
+  let filterMode = 'all';
+  let filterHot = new Set();
+  let pageHidden = false;
+  let pointerNX = 0;
+  let pointerNY = 0;
+  let orbitBase = null;
+  let flyGen = 0;
+  const frameSamples = [];
+  let frameWarm = 0;
+  let slowStreak = 0;
+  const flowPackets = [];
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -197,9 +210,11 @@ function mount() {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    geo.userData.base = pos.slice();
+    starPointsRef = new THREE.Points(geo, new THREE.PointsMaterial({
       color: 0xaaccff, size: 0.32, transparent: true, opacity: 0.5, sizeAttenuation: true,
-    })));
+    }));
+    scene.add(starPointsRef);
   }
 
   const ringGroup = new THREE.Group();
@@ -506,9 +521,11 @@ function mount() {
     const startCam = camera.position.clone();
     const startTarget = controls.target.clone();
     flying = true;
+    const myGen = ++flyGen;
     const dur = reduceMotion ? 0 : n.type === 'enterprise' ? 550 : 900;
     const t0 = performance.now();
     function step(now) {
+      if (myGen !== flyGen) return;
       const u = dur === 0 ? 1 : Math.min(1, (now - t0) / dur);
       const e = 1 - Math.pow(1 - u, 3);
       camera.position.lerpVectors(startCam, endCam, e);
@@ -634,6 +651,7 @@ function mount() {
       } else {
         show = false;
       }
+      if (show && filterMode !== 'all' && !filterHot.has(node.id)) op *= 0.22;
       mesh.visible = show;
       if (show) mesh.material.opacity = op;
       if (halo) {
@@ -825,15 +843,103 @@ function mount() {
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  canvas.addEventListener('pointerdown', (e) => {
-    idleOrbit = false; lastInteract = performance.now();
+  const tip = document.createElement('div');
+  tip.className = 'map3d-tooltip';
+  tip.hidden = true;
+  stage.appendChild(tip);
+  function pick(e) {
     const rect = canvas.getBoundingClientRect();
     pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    pointerNX = pointer.x;
+    pointerNY = -pointer.y;
     raycaster.setFromCamera(pointer, camera);
-    const objs = [...meshes.values()].map((m) => m.mesh).filter((m) => m.visible && m.isMesh);
-    const hits = raycaster.intersectObjects(objs, false);
-    if (hits[0]?.object.userData.nodeId) flyTo(hits[0].object.userData.nodeId);
+    const objs = [...meshes.values()].map((m) => m.mesh).filter((m) => m.visible && m.isMesh && m.userData.nodeId);
+    return raycaster.intersectObjects(objs, false);
+  }
+  let down = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    idleOrbit = false; orbitBase = null; lastInteract = performance.now();
+    down = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    lastInteract = performance.now();
+    if (!down) return;
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+    down = null;
+    if (moved > 6) return;
+    const id = pick(e)[0]?.object.userData.nodeId;
+    if (!id) return;
+    const n = graph.byId.get(id);
+    if (n) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.15, 0.22, 20),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.65, side: THREE.DoubleSide, depthWrite: false })
+      );
+      ring.position.copy(n.pos);
+      ring.lookAt(camera.position);
+      scene.add(ring);
+      const t0 = performance.now();
+      const grow = (now) => {
+        const u = Math.min(1, (now - t0) / 480);
+        ring.scale.setScalar(1 + u * 5);
+        ring.material.opacity = 0.65 * (1 - u);
+        if (u < 1) requestAnimationFrame(grow);
+        else { scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); }
+      };
+      if (!reduceMotion) requestAnimationFrame(grow);
+    }
+    flyTo(id);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    const id = pick(e)[0]?.object.userData.nodeId || null;
+    hoverId = id;
+    const n = id ? graph.byId.get(id) : null;
+    if (!n) { tip.hidden = true; return; }
+    const rev = n.revenue?.today;
+    const stock = n.stock?.fillPct;
+    tip.hidden = false;
+    tip.innerHTML = '<strong>' + n.label + '</strong><span>' + [
+      rev == null ? null : rev + ' KWD today',
+      stock == null ? null : 'stock ' + stock + '%',
+      n.alert ? 'alert' : (n.status || 'ok'),
+    ].filter(Boolean).join(' · ') + '</span>';
+    const box = stage.getBoundingClientRect();
+    tip.style.left = (e.clientX - box.left + 12) + 'px';
+    tip.style.top = (e.clientY - box.top + 12) + 'px';
+  });
+  canvas.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    const id = pick(e)[0]?.object.userData.nodeId || focusId;
+    const kid = graph.nodes.find((c) => c.parentId === id && c.type !== 'branch');
+    flyTo(kid?.id || id);
+  });
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    flyTo(graph.byId.get(focusId)?.parentId || graph.core.id);
+  });
+  window.addEventListener('keydown', (e) => {
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'Escape') { flyTo(graph.byId.get(focusId)?.parentId || graph.core.id); return; }
+    if (e.key === 'Enter') {
+      const kid = graph.nodes.find((c) => c.parentId === focusId && c.type !== 'branch');
+      if (kid) flyTo(kid.id);
+      return;
+    }
+    if (e.key.startsWith('Arrow')) {
+      e.preventDefault();
+      const cur = graph.byId.get(focusId);
+      const sibs = graph.nodes.filter((c) => c.parentId === cur?.parentId && c.type === cur?.type);
+      const i = sibs.findIndex((s) => s.id === cur?.id);
+      if (i < 0 || sibs.length < 2) return;
+      const dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+      flyTo(sibs[(i + dir + sibs.length) % sibs.length].id);
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    pageHidden = document.hidden;
+    if (!pageHidden) requestAnimationFrame(tick);
   });
 
   document.querySelectorAll('.zoom-btn').forEach((btn) => {
@@ -856,6 +962,7 @@ function mount() {
         b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
       });
       hudMode = btn.dataset.view === 'hud';
+      if (hudMode) animateHud();
       document.getElementById('map3d-app').classList.toggle('hud-mode', hudMode);
       ['hud-left', 'hud-right', 'hud-bottom'].forEach((id) => {
         const el = document.getElementById(id);
@@ -918,33 +1025,140 @@ function mount() {
       ua.appendChild(li);
     });
   }
+  function animateHud() {
+    const machines = graph.nodes.filter((n) => n.type === 'machine');
+    const revenue = Math.round(machines.reduce((s, m) => s + (m.revenue?.today || 0), 0));
+    const alerts = machines.filter((m) => m.alert).length;
+    const host = document.querySelector('#hud-left h4');
+    if (!host) return;
+    let stat = document.getElementById('hud-live-stat');
+    if (!stat) {
+      stat = document.createElement('p');
+      stat.id = 'hud-live-stat';
+      stat.className = 'hud-stat';
+      host.insertAdjacentElement('afterend', stat);
+    }
+    const t0 = performance.now();
+    const step = (now) => {
+      const u = reduceMotion ? 1 : Math.min(1, (now - t0) / 700);
+      const e = 1 - Math.pow(1 - u, 3);
+      stat.textContent = Math.round(revenue * e) + ' KWD today · ' + alerts + ' alerts';
+      if (u < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
   const hudLog = document.getElementById('hud-term-log');
   if (hudLog) {
     hudLog.innerHTML = '<div>&gt; link secure · constellation online</div><div>&gt; portfolio watching</div><div>&gt; ready for task relay_</div>';
   }
 
   setExpandedTo(graph.core.id);
+  const packetDots = [];
+  for (let i = 0; i < 5; i++) {
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.95 })
+    );
+    dot.visible = false;
+    scene.add(dot);
+    packetDots.push(dot);
+  }
+  function spawn3dFlow(fromId, kind) {
+    const path = [];
+    let n = graph.byId.get(fromId);
+    while (n) { path.push(n); n = n.parentId ? graph.byId.get(n.parentId) : null; }
+    if (path.length < 2) return;
+    if (flowPackets.length > 5) flowPackets.shift();
+    const color = (kind === 'offline' || kind === 'alert') ? 0xff6b7a : (kind === 'lowstock' || kind === 'task') ? 0xe8c078 : 0x00d2c8;
+    flowPackets.push({ path, u: 0, color });
+  }
   const clock = new THREE.Clock();
   function tick() {
+    if (pageHidden) return;
+    const workT0 = performance.now();
     const t = clock.elapsedTime;
     if (!flying) controls.update();
-    coreGroup.rotation.y = t * 0.06;
-    if (!flying && !reduceMotion && focusId === graph.core.id) {
-      if (performance.now() - lastInteract > 2200) idleOrbit = true;
-      if (idleOrbit) {
-        const ang = t * 0.08;
-        const r = Math.hypot(camera.position.x, camera.position.z) || 42;
-        camera.position.x = Math.cos(ang) * r;
-        camera.position.z = Math.sin(ang) * r;
-        camera.position.y = 18;
-        controls.target.set(0, 0, 0);
-        camera.lookAt(0, 0, 0);
+    if (!reduceMotion) {
+      coreGroup.rotation.y = t * 0.08;
+      coreGroup.scale.setScalar(1 + Math.sin(t * 0.7) * 0.03);
+      ringGroup.children.forEach((line, i) => { line.rotation.y = t * (i % 2 ? -0.04 : 0.03); });
+    }
+    if (starPointsRef) {
+      const base = starPointsRef.geometry.userData.base;
+      const arr = starPointsRef.geometry.attributes.position.array;
+      const ox = camera.position.x * 0.025 + pointerNX * 1.2;
+      const oy = camera.position.y * 0.015 + pointerNY * 0.7;
+      if (base) {
+        for (let i = 0; i < base.length; i += 3) {
+          const layer = 0.35 + ((i / 3) % 5) * 0.1;
+          arr[i] = base[i] + ox * layer;
+          arr[i + 1] = base[i + 1] + oy * layer;
+          arr[i + 2] = base[i + 2];
+        }
+        starPointsRef.geometry.attributes.position.needsUpdate = true;
       }
     }
+    meshes.forEach(({ mesh, node }) => {
+      if (!mesh.isMesh || node.type === 'enterprise' || !mesh.material) return;
+      const baseE = node.type === 'country' ? 0.55 : node.type === 'client' ? 0.42 : 0.28;
+      const wantE = hoverId === node.id ? baseE + 0.45 : baseE;
+      if (mesh.material.emissiveIntensity != null) {
+        mesh.material.emissiveIntensity += (wantE - mesh.material.emissiveIntensity) * (reduceMotion ? 1 : 0.16);
+      }
+      const wantS = hoverId === node.id ? 1.12 : 1;
+      mesh.scale.setScalar(reduceMotion ? wantS : mesh.scale.x + (wantS - mesh.scale.x) * 0.18);
+      if (!reduceMotion) {
+        const ph = (node.id.length % 17) * 0.37;
+        mesh.position.y = node.pos.y + Math.sin(t * 0.85 + ph) * 0.06;
+        if (node.alert) mesh.material.emissiveIntensity = Math.max(mesh.material.emissiveIntensity, 0.2 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.1 + ph)));
+      }
+    });
+    packetDots.forEach((d) => { d.visible = false; });
+    for (let i = flowPackets.length - 1; i >= 0; i--) {
+      const ev = flowPackets[i];
+      ev.u += reduceMotion ? 1 : 0.008;
+      if (ev.u >= 1) { flowPackets.splice(i, 1); continue; }
+      const hops = ev.path.length - 1;
+      const f = ev.u * hops;
+      const hi = Math.min(hops - 1, Math.floor(f));
+      const dot = packetDots[i % packetDots.length];
+      dot.visible = true;
+      dot.position.lerpVectors(ev.path[hi].pos, ev.path[hi + 1].pos, f - hi);
+      dot.material.color.setHex(ev.color);
+    }
+    if (!flying && !reduceMotion && focusId === graph.core.id) {
+      if (performance.now() - lastInteract > 5000) idleOrbit = true;
+      if (idleOrbit) {
+        if (!orbitBase) {
+          orbitBase = {
+            ang: Math.atan2(camera.position.z, camera.position.x),
+            r: Math.hypot(camera.position.x, camera.position.z) || 48,
+            y: camera.position.y,
+            t0: t,
+          };
+        }
+        const elapsed = Math.max(0, t - orbitBase.t0);
+        const ease = Math.min(1, elapsed / 1.4);
+        const smooth = ease * ease * (3 - 2 * ease);
+        const ang = orbitBase.ang + elapsed * 0.04 * smooth;
+        camera.position.x = Math.cos(ang) * orbitBase.r;
+        camera.position.z = Math.sin(ang) * orbitBase.r;
+        camera.position.y = orbitBase.y;
+      } else orbitBase = null;
+    } else if (!idleOrbit) orbitBase = null;
     applyLod();
     syncLabels();
-    if (composer) composer.render();
+    if (composer && !window.__APOS_3D_NO_BLOOM__) composer.render();
     else renderer.render(scene, camera);
+    const work = performance.now() - workT0;
+    frameWarm += 1;
+    if (work > 18) slowStreak += 1;
+    else slowStreak = 0;
+    if (slowStreak >= 4) window.__APOS_3D_NO_BLOOM__ = true;
+    if (frameWarm > 24 && work > 0 && work < 400) {
+      frameSamples.push(work);
+      if (frameSamples.length > 90) frameSamples.shift();
+    }
     requestAnimationFrame(tick);
   }
   document.getElementById('inspector-drawer')?.classList.remove('is-open');
@@ -967,6 +1181,41 @@ function mount() {
     controls.update();
     applyLod();
     syncLabels();
+  }
+  if (!reduceMotion) {
+    const dest = camera.position.clone();
+    const destT = controls.target.clone();
+    const startCam = dest.clone().multiplyScalar(1.18).add(new THREE.Vector3(0, 6, 0));
+    camera.position.copy(startCam);
+    flying = true;
+    const introGen = ++flyGen;
+    const t0 = performance.now();
+    const intro = (now) => {
+      if (introGen !== flyGen) return;
+      const u = Math.min(1, (now - t0) / 1600);
+      const e = 1 - Math.pow(1 - u, 3);
+      camera.position.lerpVectors(startCam, dest, e);
+      controls.target.copy(destT);
+      controls.update();
+      if (u < 1) requestAnimationFrame(intro);
+      else {
+        flying = false;
+        lastInteract = performance.now();
+        idleOrbit = false;
+        orbitBase = null;
+      }
+    };
+    requestAnimationFrame(intro);
+    const machines = graph.nodes.filter((n) => n.type === 'machine' && n.status !== 'future');
+    setInterval(() => {
+      if (pageHidden || !machines.length) return;
+      const m = machines[Math.floor(Math.random() * machines.length)];
+      const kinds = ['sale', 'lowstock', 'offline', 'task'];
+      const kind = m.alert && Math.random() < 0.5 ? 'offline' : kinds[Math.floor(Math.random() * kinds.length)];
+      if (m.revenue && kind === 'sale') m.revenue.today = Math.round((m.revenue.today + 2 + Math.random() * 4) * 10) / 10;
+      spawn3dFlow(m.id, kind);
+      stage.dispatchEvent(new CustomEvent('apos-live', { detail: { kind, label: kind, title: m.label, body: kind + ' · ' + m.label, machineId: m.id } }));
+    }, 3600);
   }
   requestAnimationFrame(tick);
 
@@ -1028,6 +1277,49 @@ function mount() {
     openTerminal: () => { term.hidden = false; },
     closeTerminal: () => { term.hidden = true; },
     nodeCount: () => graph.nodes.length,
+    prefersReducedMotion: () => reduceMotion,
+    getMotionState: () => ({
+      reduceMotion: !!reduceMotion, running: !pageHidden, hidden: pageHidden,
+      filter: filterMode, bobAmp: reduceMotion ? 0 : 2.4, packets: flowPackets.length,
+    }),
+    getFrameStats: () => {
+      const s = frameSamples.slice().sort((a, b) => a - b);
+      const mid = s.length ? s[Math.floor(s.length / 2)] : 0;
+      const p95 = s.length ? s[Math.min(s.length - 1, Math.floor(s.length * 0.95))] : 0;
+      return { median: Math.round(mid * 10) / 10, p95: Math.round(p95 * 10) / 10, n: s.length };
+    },
+    setFilter: (mode) => {
+      filterMode = ['alerts', 'offline', 'lowstock'].includes(mode) ? mode : 'all';
+      filterHot = new Set();
+      if (filterMode !== 'all') {
+        graph.nodes.forEach((n) => {
+          const stock = n.stock?.fillPct ?? 100;
+          const hit = filterMode === 'alerts' ? !!n.alert
+            : filterMode === 'offline' ? n.status === 'offline'
+            : n.type === 'machine' && stock < 15;
+          if (!hit) return;
+          let c = n;
+          while (c) { filterHot.add(c.id); c = c.parentId ? graph.byId.get(c.parentId) : null; }
+        });
+      }
+      applyLod();
+      return filterMode;
+    },
+    getFilter: () => filterMode,
+    getFilterDimmedCount: () => {
+      if (filterMode === 'all') return 0;
+      let n = 0;
+      meshes.forEach(({ mesh, node }) => {
+        if (mesh.visible && node.type !== 'enterprise' && !filterHot.has(node.id)) n += 1;
+      });
+      return n;
+    },
+    searchNodes: (q) => {
+      const s = String(q || '').trim().toLowerCase();
+      if (!s) return [];
+      return graph.nodes.filter((n) => n.type !== 'branch' && (n.label || '').toLowerCase().includes(s))
+        .slice(0, 8).map((n) => ({ id: n.id, label: n.label, type: n.type }));
+    },
     getTransform: () => ({ k: 55 / camera.position.distanceTo(controls.target), x: camera.position.x, y: camera.position.y, z: camera.position.z }),
   };
   window.APOS_3D_MAP = api;
