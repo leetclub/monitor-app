@@ -176,11 +176,11 @@
 }
 
 
-/* Staggered intro */
+/* Staggered intro — never dim the world canvas (that read as a blank map). */
 .gemini-intro .space-world,
-.gemini-intro .tree-world { opacity: 0.35; }
+.gemini-intro .tree-world,
 .gemini-intro-rays .space-world,
-.gemini-intro-rays .tree-world { opacity: 0.7; transition: opacity 250ms ease-out; }
+.gemini-intro-rays .tree-world { opacity: 1; }
 .gemini-intro-rings .map-vignette { opacity: 1; animation: geminiRingIn 400ms ease-out; }
 .gemini-intro-leaves .label-layer { animation: geminiLeafSpring 700ms cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes geminiRingIn {
@@ -345,4 +345,25 @@
 .hud-stat { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) {
   .map-event-feed li { animation: none; }
+}
+
+.m3d-label .m3d-badge,
+.m3d-label .m3d-off {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ff6b7a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  vertical-align: 1px;
+}
+.m3d-label .m3d-off {
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
 }

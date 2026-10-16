@@ -68,11 +68,11 @@ export async function assertReducedMotion(browser, url, apiName) {
 
 function frameStats(png) {
   const out = execSync(
-    `python3 -c "from PIL import Image; im=Image.open('${png}').convert('L').resize((80,45)); d=list(im.getdata()); n=len(d); m=sum(d)/n; v=sum((x-m)**2 for x in d)/n; print(m, v**0.5)"`,
+    `python3 -c "from PIL import Image; im=Image.open('${png}').convert('L'); d=list(im.resize((80,45)).getdata()); n=len(d); m=sum(d)/n; v=sum((x-m)**2 for x in d)/n; w,h=im.size; c=im.crop((w//2-60,h//2-36,w//2+60,h//2+36)); print(m, v**0.5, max(c.getdata()))"`,
     { encoding: 'utf8' }
   );
-  const [mean, std] = out.trim().split(/\s+/).map(Number);
-  return { mean, std };
+  const [mean, std, center] = out.trim().split(/\s+/).map(Number);
+  return { mean, std, center };
 }
 
 export async function recordMotionMp4(url, filename) {
@@ -91,7 +91,20 @@ export async function recordMotionMp4(url, filename) {
   });
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => window.__APOS_MAP_READY__, null, { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(900);
+  // 2D canvas: don't start the gesture until the core wordmark is actually painted.
+  await page.waitForFunction(() => {
+    const c = document.querySelector('canvas');
+    if (!c || !c.width) return false;
+    const ctx = c.getContext('2d');
+    if (!ctx) return true;
+    const x = Math.floor(c.width / 2) - 8;
+    const y = Math.floor(c.height / 2) - 8;
+    const px = ctx.getImageData(x, y, 16, 16).data;
+    let m = 0;
+    for (let i = 0; i < px.length; i += 4) m = Math.max(m, px[i] + px[i + 1] + px[i + 2]);
+    return m > 380;
+  }, null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(400);
   await page.mouse.move(640, 380);
   await page.waitForTimeout(1100);
   await page.mouse.move(460, 300);
@@ -115,12 +128,12 @@ export async function recordMotionMp4(url, filename) {
     let ss = 0.2;
     for (let t = 0; t < 8; t += 0.25) {
       execSync(`ffmpeg -y -hide_banner -loglevel error -ss ${t} -i "${raw}" -frames:v 1 "${probe}"`, { stdio: 'pipe' });
-      const { mean, std } = frameStats(probe);
-      // Skip about:blank white and the flat dark page before the canvas paints.
-      if (mean < 180 && std > 8) { ss = t; break; }
+      const { mean, std, center } = frameStats(probe);
+      // Require the bright core, not just the empty grid (std alone matches the background).
+      if (mean < 210 && std > 6 && center > 185) { ss = t; break; }
     }
     execSync(
-      `ffmpeg -y -ss ${ss} -i "${raw}" -t 10 -c:v libx264 -pix_fmt yuv420p -an "${dest}"`,
+      `ffmpeg -y -ss ${ss} -i "${raw}" -t 10 -c:v libx264 -pix_fmt yuv420p -movflags +faststart -an "${dest}"`,
       { stdio: 'pipe' }
     );
     console.log(`   🎬 ${dest} (from ${ss.toFixed(2)}s)`);

@@ -87,7 +87,7 @@ function buildGraph() {
               angle: ln.angle + mf, orbit: 45,
               color: m.alert ? COLORS.magenta : COLORS.white, r: 0.15,
               parentId: ln.id, countryId: country.id, clientId: brand.id,
-              alert: !!m.alert, revenue: m.revenue, stock: m.stock,
+              alert: !!m.alert, status: m.status || 'active', revenue: m.revenue, stock: m.stock,
               technical: m.technical, operators: m.operators, contract: m.contract,
             });
             links.push({ source: ln.id, target: mn.id, kind: 'tree' });
@@ -324,6 +324,9 @@ function mount() {
     el.style.display = 'none';
     labelLayer.appendChild(el);
     labelEls.set(n.id, el);
+    n._baseAlert = !!n.alert;
+    n._baseStatus = n.status;
+    if (n.stock) n._baseFill = n.stock.fillPct;
     meshes.set(n.id, { mesh, halo, node: n });
   });
 
@@ -631,7 +634,8 @@ function mount() {
       let show = false;
       let op = 0.98;
       if (overview) {
-        show = node.depth <= 2;
+        const liveOff = node.type === 'machine' && node.status === 'offline' && node._offlineUntil;
+        show = node.depth <= 2 || !!liveOff;
         op = node.status === 'future' || node.comingSoon ? 0.38 : 0.98;
       } else if (node.type === 'branch') {
         show = focus?.type === 'machine' && isChild;
@@ -657,7 +661,7 @@ function mount() {
       if (halo) {
         halo.visible = show && node.depth <= 3;
         if (halo.visible) {
-          halo.position.copy(node.pos);
+          halo.position.copy(mesh.position);
           halo.material.opacity = Math.min(0.16, op * 0.18);
         }
       }
@@ -755,9 +759,18 @@ function mount() {
     const insets = viewportInsets();
     const want = new Set();
     const path = focusPath();
+    const offlineChip = new Set();
+    graph.nodes.forEach((n) => {
+      if (n.type !== 'machine' || n.status !== 'offline' || !n._offlineUntil) return;
+      let c = n;
+      while (c) {
+        if (c.type !== 'enterprise') offlineChip.add(c.id);
+        c = c.parentId ? graph.byId.get(c.parentId) : null;
+      }
+    });
     if (focusId === graph.core.id) {
       graph.nodes.forEach((n) => {
-        if (n.depth === 1 || n.depth === 2) want.add(n.id);
+        if (n.depth === 1 || n.depth === 2 || (n.type === 'machine' && offlineChip.has(n.id))) want.add(n.id);
       });
     } else {
       const focus = graph.byId.get(focusId);
@@ -823,6 +836,26 @@ function mount() {
       }
       x = Math.min(maxX, Math.max(minX, x));
       y = Math.min(maxY, Math.max(minY, y));
+      const badge = n.alertCount || 0;
+      const chipOn = offlineChip.has(n.id) && (n.type === 'machine' || n.depth <= 2);
+      const mark = badge + (chipOn ? '|off' : '');
+      if (el.dataset.mark !== mark) {
+        el.dataset.mark = mark;
+        el.dataset.badge = String(badge);
+        el.textContent = n.label || '';
+        if (badge > 0 && n.type !== 'machine') {
+          const b = document.createElement('span');
+          b.className = 'm3d-badge';
+          b.textContent = String(badge);
+          el.appendChild(b);
+        }
+        if (chipOn) {
+          const c = document.createElement('span');
+          c.className = 'm3d-off';
+          c.textContent = 'Offline';
+          el.appendChild(c);
+        }
+      }
       el.style.display = 'block';
       el.style.visibility = 'visible';
       el.style.opacity = path.has(id) || id === focusId || n.parentId === focusId ? '1' : '0.45';
@@ -1063,6 +1096,77 @@ function mount() {
     scene.add(dot);
     packetDots.push(dot);
   }
+  function linkEndpoint(node) {
+    if (!node || !Number.isFinite(node.pos?.x)) return null;
+    if (node.type === 'enterprise') return coreGroup.position;
+    const entry = meshes.get(node.id);
+    const p = entry?.mesh?.position || node.pos;
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return null;
+    return p;
+  }
+
+  function syncLinkEndpoints() {
+    linkLines.forEach((line) => {
+      if (!line.visible) return;
+      const a = graph.byId.get(line.userData.source);
+      const b = graph.byId.get(line.userData.target);
+      const pa = linkEndpoint(a);
+      const pb = linkEndpoint(b);
+      if (!pa || !pb) return;
+      const pts = curvePoints(pa, pb, 18);
+      const attr = line.geometry.attributes.position;
+      if (!attr || attr.count !== pts.length) {
+        line.geometry.dispose();
+        line.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+        return;
+      }
+      for (let i = 0; i < pts.length; i++) attr.setXYZ(i, pts[i].x, pts[i].y, pts[i].z);
+      attr.needsUpdate = true;
+    });
+  }
+
+  function recompute3dAlerts() {
+    const now = performance.now();
+    graph.nodes.forEach((n) => {
+      if (n.type !== 'machine') return;
+      if (n._offlineUntil && now >= n._offlineUntil) {
+        n.status = n._baseStatus || 'active';
+        n._offlineUntil = 0;
+      }
+      const low = (n.stock?.fillPct ?? 100) < 15;
+      const task = (n._taskUntil || 0) > now;
+      n.alert = !!(n._baseAlert || n.status === 'offline' || low || task);
+      n.alertCount = n.alert ? 1 : 0;
+      const entry = meshes.get(n.id);
+      if (entry?.mesh?.material?.emissive) {
+        entry.mesh.material.emissive.setHex(n.status === 'offline' ? 0xff3355 : (n.color || 0xffffff));
+      }
+    });
+    const roll = (id) => {
+      let alerts = 0;
+      graph.nodes.forEach((c) => {
+        if (c.parentId !== id || c.type === 'branch') return;
+        alerts += c.type === 'machine' ? (c.alertCount || 0) : roll(c.id);
+      });
+      const n = graph.byId.get(id);
+      if (n && n.type !== 'machine') n.alertCount = alerts;
+      return alerts;
+    };
+    roll(graph.core.id);
+    if (filterMode !== 'all') {
+      filterHot = new Set();
+      graph.nodes.forEach((n) => {
+        const stock = n.stock?.fillPct ?? 100;
+        const hit = filterMode === 'alerts' ? !!n.alert
+          : filterMode === 'offline' ? n.status === 'offline'
+          : n.type === 'machine' && stock < 15;
+        if (!hit) return;
+        let c = n;
+        while (c) { filterHot.add(c.id); c = c.parentId ? graph.byId.get(c.parentId) : null; }
+      });
+    }
+  }
+
   function spawn3dFlow(fromId, kind) {
     const path = [];
     let n = graph.byId.get(fromId);
@@ -1076,6 +1180,7 @@ function mount() {
   function tick() {
     if (pageHidden) return;
     const workT0 = performance.now();
+    recompute3dAlerts();
     const t = clock.elapsedTime;
     if (!flying) controls.update();
     if (!reduceMotion) {
@@ -1109,10 +1214,19 @@ function mount() {
       mesh.scale.setScalar(reduceMotion ? wantS : mesh.scale.x + (wantS - mesh.scale.x) * 0.18);
       if (!reduceMotion) {
         const ph = (node.id.length % 17) * 0.37;
+        mesh.position.x = node.pos.x;
+        mesh.position.z = node.pos.z;
         mesh.position.y = node.pos.y + Math.sin(t * 0.85 + ph) * 0.06;
-        if (node.alert) mesh.material.emissiveIntensity = Math.max(mesh.material.emissiveIntensity, 0.2 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.1 + ph)));
+        const entry = meshes.get(node.id);
+        if (entry?.halo) entry.halo.position.copy(mesh.position);
+        if (node.alert || node.status === 'offline') {
+          mesh.material.emissiveIntensity = Math.max(mesh.material.emissiveIntensity, 0.2 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.1 + ph)));
+        }
+      } else {
+        mesh.position.copy(node.pos);
       }
     });
+    syncLinkEndpoints();
     packetDots.forEach((d) => { d.visible = false; });
     for (let i = flowPackets.length - 1; i >= 0; i--) {
       const ev = flowPackets[i];
@@ -1121,9 +1235,12 @@ function mount() {
       const hops = ev.path.length - 1;
       const f = ev.u * hops;
       const hi = Math.min(hops - 1, Math.floor(f));
+      const pa = linkEndpoint(ev.path[hi]);
+      const pb = linkEndpoint(ev.path[hi + 1]);
+      if (!pa || !pb) continue;
       const dot = packetDots[i % packetDots.length];
       dot.visible = true;
-      dot.position.lerpVectors(ev.path[hi].pos, ev.path[hi + 1].pos, f - hi);
+      dot.position.lerpVectors(pa, pb, f - hi);
       dot.material.color.setHex(ev.color);
     }
     if (!flying && !reduceMotion && focusId === graph.core.id) {
@@ -1147,6 +1264,7 @@ function mount() {
       } else orbitBase = null;
     } else if (!idleOrbit) orbitBase = null;
     applyLod();
+    syncLinkEndpoints();
     syncLabels();
     if (composer && !window.__APOS_3D_NO_BLOOM__) composer.render();
     else renderer.render(scene, camera);
@@ -1213,6 +1331,15 @@ function mount() {
       const kinds = ['sale', 'lowstock', 'offline', 'task'];
       const kind = m.alert && Math.random() < 0.5 ? 'offline' : kinds[Math.floor(Math.random() * kinds.length)];
       if (m.revenue && kind === 'sale') m.revenue.today = Math.round((m.revenue.today + 2 + Math.random() * 4) * 10) / 10;
+      if (kind === 'offline') {
+        m.status = 'offline';
+        m._offlineUntil = performance.now() + 9000;
+      } else if (kind === 'lowstock' && m.stock) {
+        m.stock.fillPct = Math.min(m.stock.fillPct ?? 100, 12);
+      } else if (kind === 'task') {
+        m._taskUntil = performance.now() + 8000;
+      }
+      recompute3dAlerts();
       spawn3dFlow(m.id, kind);
       stage.dispatchEvent(new CustomEvent('apos-live', { detail: { kind, label: kind, title: m.label, body: kind + ' · ' + m.label, machineId: m.id } }));
     }, 3600);
@@ -1321,6 +1448,23 @@ function mount() {
         .slice(0, 8).map((n) => ({ id: n.id, label: n.label, type: n.type }));
     },
     getTransform: () => ({ k: 55 / camera.position.distanceTo(controls.target), x: camera.position.x, y: camera.position.y, z: camera.position.z }),
+    emitTestEvent: (machineId, kind) => {
+      const m = graph.byId.get(machineId) || graph.nodes.find((n) => n.type === 'machine' && n.status !== 'future');
+      if (!m || m.type !== 'machine') return null;
+      const k = kind || 'sale';
+      if (m.revenue && k === 'sale') m.revenue.today = Math.round((m.revenue.today + 2.5) * 10) / 10;
+      if (k === 'offline') {
+        m._baseStatus = m._baseStatus || m.status || 'active';
+        m.status = 'offline';
+        m._offlineUntil = performance.now() + 9000;
+      } else if (k === 'lowstock' && m.stock) {
+        m.stock.fillPct = Math.min(m.stock.fillPct ?? 100, 12);
+      }
+      recompute3dAlerts();
+      spawn3dFlow(m.id, k);
+      stage.dispatchEvent(new CustomEvent('apos-live', { detail: { kind: k, label: k === 'offline' ? 'Machine offline' : k, title: m.label, body: (k === 'offline' ? 'Machine offline' : k) + ' · ' + m.label, machineId: m.id } }));
+      return { id: m.id, status: m.status, alert: !!m.alert, kw: graph.byId.get('country-kw')?.alertCount || 0, leet: graph.byId.get('client-leet')?.alertCount || 0 };
+    },
   };
   window.APOS_3D_MAP = api;
   window.__APOS_3D_READY__ = true;

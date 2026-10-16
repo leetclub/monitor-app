@@ -897,6 +897,12 @@
       const r = UTILS.rollup(n, childrenOf);
       n.alertCount = r.alerts;
       n.rollup = r;
+      n._pill0 = r.alerts > 0;
+    });
+    machines.forEach((m) => {
+      m._baseStatus = m.status;
+      m._baseFill = m.stock ? m.stock.fillPct : null;
+      m._baseOfflineHours = m.offlineHours || 0;
     });
   }
 
@@ -933,6 +939,7 @@
   let pointerNX = 0;
   let pointerNY = 0;
   let pageHidden = false;
+  let revealT0 = 0;
   let panVx = 0;
   let panVy = 0;
   let panStamp = 0;
@@ -1549,7 +1556,7 @@
       const p = worldToScreen(n.x, n.y);
       const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
       const { hw, hh } = textHalf(n);
-      const hasPill = !!(n.alertCount > 0 && (n.type === 'hub' || n.type === 'country' || n.type === 'client' || n.type === 'area' || n.type === 'location'));
+      const hasPill = !!(n._pill0 && (n.type === 'hub' || n.type === 'country' || n.type === 'client' || n.type === 'area' || n.type === 'location'));
       const placed = placeAt(p, ang, sr, hw, hh, hasPill);
       n._labelAng = placed.ang;
       n._labelSx = placed.sx;
@@ -1884,10 +1891,13 @@
           else if (s?.preview || t?.preview) op = 0.34;
           else op = 0.55;
         }
+        // Canvas paints the curves. SVG stays invisible so an untransformed
+        // world-origin path cannot draw a diagonal from the stage corner.
         el.style('display', show ? null : 'none')
           .classed('on-path', onPath)
           .classed('dim', !!(s?.preview || t?.preview) || (!overviewMode && !onPath && show))
-          .style('opacity', op);
+          .style('opacity', 0)
+          .style('pointer-events', show ? 'stroke' : 'none');
         if (onPath && accent) el.style('stroke', accent.stroke);
         else el.style('stroke', null);
       });
@@ -2952,6 +2962,23 @@
     return m[key] || m.teal;
   }
 
+  function finitePos(n) {
+    return !!(n && Number.isFinite(n.x) && Number.isFinite(n.y));
+  }
+
+  /** Core is on the first paint; children bloom in and finish by ~1.2s. */
+  function revealScale(n) {
+    if (reduceMotion || !n || n.type === 'enterprise') return 1;
+    const delay = 120 + (n.depth || 1) * 150 + (hash(String(n.id)) % 5) * 26;
+    const dur = 260;
+    const t = performance.now() - (revealT0 || 0);
+    if (t >= delay + dur || t >= 1400) return 1;
+    if (t < delay) return 0;
+    const u = Math.min(1, (t - delay) / dur);
+    const e = 1 - Math.pow(1 - u, 3);
+    return 0.28 + 0.72 * e;
+  }
+
   function screenOf(n) {
     const s = { x: n.x * transform.k + transform.x, y: n.y * transform.k + transform.y };
     // Gentle bob in screen pixels only — world layout, links' topology, and fit stay put
@@ -3253,7 +3280,7 @@
       const local = f - hi;
       const a = nodeById.get(path[hi]);
       const b = nodeById.get(path[hi + 1]);
-      if (!a || !b) continue;
+      if (!finitePos(a) || !finitePos(b)) continue;
       const cc = curveControls(a, b, 'tree');
       const pts = cachedCubic(a, b, cc, 16, 'ev');
       const idx = Math.min(pts.length - 1, Math.floor(local * (pts.length - 1)));
@@ -3291,8 +3318,9 @@
     links.forEach((L) => {
       const s = nodeById.get(L.source);
       const t = nodeById.get(L.target);
-      if (!s || !t) return;
+      if (!finitePos(s) || !finitePos(t)) return;
       if (L.kind === 'signal') return; // drawn in signal pass
+      if (revealScale(s) <= 0 || revealScale(t) <= 0) return;
       // Hex mode: no tree/spine/leaf links at all unless hovering a related path
       if (layoutMode === 'hex') {
         if (!hoverId || !hoverHotDraw) return;
@@ -3440,7 +3468,8 @@
         if (L.kind !== 'signal') return;
         const s = nodeById.get(L.source);
         const t = nodeById.get(L.target);
-        if (!s || !t) return;
+        if (!finitePos(s) || !finitePos(t)) return;
+        if (revealScale(s) <= 0 || revealScale(t) <= 0) return;
         // Hex: only when hovering a related endpoint
         if (layoutMode === 'hex') {
           if (!hoverId) return;
@@ -3642,6 +3671,7 @@
     // ——— Nodes ———
     nodes.forEach((n) => {
       if (!n.draw || n.lodAlpha < 0.05 || n.ancestorOnly) return;
+      if (revealScale(n) <= 0) return;
       const p = screenOf(n);
       const grow = n.grow == null ? 1 : n.grow;
       const deep = !overviewMode;
@@ -3650,7 +3680,7 @@
       else if (n.type === 'enterprise') r = 0;
       else if (n.type === 'branch') r = deep ? (DEEP_NODE_R.branch || 14) : 5;
       else r = deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
-      r *= grow;
+      r *= grow * revealScale(n);
       const springTarget = hoverId === n.id ? 1.16 : (hoverHotDraw && hoverHotDraw.has(n.id) ? 1.045 : 1);
       const springK = reduceMotion ? 1 : 0.18;
       n._spring = n._spring == null ? 1 : n._spring + (springTarget - n._spring) * springK;
@@ -3845,6 +3875,33 @@
           pctx.globalAlpha = 1;
         }
       }
+    });
+    // Live offline: chip sits on the machine, or the nearest drawn ancestor in overview.
+    const chipped = new Set();
+    machines.forEach((m) => {
+      if (m.status !== 'offline' || !m._offlineUntil) return;
+      let host = m;
+      while (host && (!host.draw || host.lodAlpha < 0.2 || host.type === 'enterprise')) {
+        host = nodeById.get(host.parentId);
+      }
+      if (!host || chipped.has(host.id)) return;
+      chipped.add(host.id);
+      const p = screenOf(host);
+      const chip = 'Offline';
+      pctx.save();
+      pctx.font = '700 9px Manrope, sans-serif';
+      const tw = Math.ceil(pctx.measureText(chip).width) + 10;
+      const bx = p.x + 14;
+      const by = p.y + 10;
+      pctx.beginPath();
+      pctx.roundRect(bx, by, tw, 14, 7);
+      pctx.fillStyle = 'rgba(255,107,122,0.96)';
+      pctx.fill();
+      pctx.fillStyle = '#fff';
+      pctx.textAlign = 'left';
+      pctx.textBaseline = 'middle';
+      pctx.fillText(chip, bx + 5, by + 7);
+      pctx.restore();
     });
     if (!reduceMotion) {
       for (let i = ripples.length - 1; i >= 0; i--) {
@@ -4147,6 +4204,32 @@
     flowEvents.push({ path, u: 0, speed: 0.012, rgb: packetRgb(kind), kind });
   }
 
+  function refreshAlertRollups() {
+    if (!UTILS) return;
+    const now = performance.now();
+    machines.forEach((m) => {
+      if (m._offlineUntil && now >= m._offlineUntil) {
+        m.status = m._baseStatus || 'active';
+        m.offlineHours = m._baseOfflineHours || 0;
+        m._offlineUntil = 0;
+      }
+      m.alert = UTILS.computeAlert(m);
+      m.alertCount = m.alert ? 1 : 0;
+    });
+    nodes.forEach((n) => {
+      if (n.type === 'machine' || n.type === 'branch' || n.type === 'enterprise' || n.type === 'artic') return;
+      const r = UTILS.rollup(n, childrenOf);
+      n.alertCount = r.alerts;
+      if (n.rollup) {
+        n.rollup.alerts = r.alerts;
+        n.rollup.online = r.online;
+        n.rollup.revenueToday = r.revenueToday;
+        n.rollup.tint = r.tint;
+      } else n.rollup = r;
+    });
+    refreshFilter();
+  }
+
   function emitLive(ev) {
     liveLog.push(ev);
     if (liveLog.length > 16) liveLog.shift();
@@ -4165,6 +4248,19 @@
     }
     if (m?.stock && ev.deltaStock) {
       m.stock.fillPct = Math.max(0, Math.min(100, Math.round((m.stock.fillPct || 0) + ev.deltaStock)));
+    }
+    if (m && ev.kind === 'offline') {
+      if (!m._offlineUntil) m._baseStatus = m._baseStatus || m.status;
+      m.status = 'offline';
+      m.offlineHours = Math.max(m.offlineHours || 0, (THRESH?.offlineHours || 2) + 1);
+      m._offlineUntil = performance.now() + 9000;
+    }
+    if (m && ev.kind === 'lowstock' && m.stock) {
+      const floor = (THRESH?.stockLowPct || 15) - 1;
+      if (m.stock.fillPct > floor) m.stock.fillPct = floor;
+    }
+    if (m && (ev.kind === 'offline' || ev.kind === 'lowstock' || ev.deltaStock || ev.deltaRev)) {
+      refreshAlertRollups();
     }
     spawnFlow(ev.machineId, ev.kind);
     stage?.dispatchEvent(new CustomEvent('apos-live', { detail: ev }));
@@ -4601,7 +4697,18 @@
     emitTestEvent: (machineId, kind) => {
       const m = nodeById.get(machineId) || machines[0];
       if (!m) return null;
-      emitLive({ kind: kind || 'sale', label: 'Sale', machineId: m.id, title: m.label, body: `Sale · ${m.label}`, deltaRev: 2.5, at: Date.now() });
+      const k = kind || 'sale';
+      const label = k === 'offline' ? 'Machine offline' : k === 'lowstock' ? 'Low stock' : 'Sale';
+      emitLive({
+        kind: k,
+        label,
+        machineId: m.id,
+        title: m.label,
+        body: `${label} · ${m.label}`,
+        deltaRev: k === 'sale' ? 2.5 : 0,
+        deltaStock: k === 'lowstock' ? -4 : 0,
+        at: Date.now(),
+      });
       return m.id;
     },
     setInspectorOpen: (open) => {
@@ -4661,16 +4768,19 @@
   setOverviewExpansion();
   transform = fitTransform(fullExtent(), nodeById.get(DATA.enterprise.id));
   targetTransform = transform;
+  // Gemini zoom handler defers the SVG group until the camera lerps.
+  // Set it now so world-origin strokes are not pinned to the stage corner.
+  gRoot.attr('transform', transform);
   svg.call(zoomBehavior.transform, transform);
   applyLod();
   applyLabelCounterScale();
   syncHubTitles();
-  // Synchronous first paint — map visible within first frame (~<300ms), no blank intro
+  revealT0 = performance.now();
+  // Synchronous first paint — core is on the canvas before the first frame returns.
   if (typeof paintWorldOnce === 'function') paintWorldOnce();
-  else {
-    drawParticles(performance.now());
-    drawWorldScene(performance.now());
-  }
+  drawParticles(performance.now());
+  drawWorldScene(performance.now());
+  if (typeof drawOrbitGuides === 'function') drawOrbitGuides(performance.now());
   renderBreadcrumb(DATA.enterprise.id);
   startSignalTimers();
   window[API_NAME] = api;
@@ -4726,6 +4836,7 @@
         gRoot.attr('transform', transform);
       }
     }
+    if (machines.some((m) => m._offlineUntil && performance.now() >= m._offlineUntil)) refreshAlertRollups();
     drawParticles(ts);
     drawWorldScene(ts);
     drawOrbitGuides(ts);
