@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apos-camytics-com
+  namespace: camytics
+  labels:
+    app: apos-camytics-com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: apos.camytics.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: apos-camytics-com
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - apos.camytics.com
+      secretName: apos-camytics-tls

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APOS maps</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --card: rgba(12, 20, 36, 0.82);
+      --line: rgba(140, 190, 220, 0.22);
+      --text: #e8f2f8;
+      --muted: #8ea3b8;
+      --cyan: #3ee0ff;
+      --violet: #b9a6ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 480px at 50% -10%, rgba(62, 224, 255, 0.14), transparent 60%),
+        radial-gradient(700px 420px at 100% 100%, rgba(120, 90, 220, 0.16), transparent 55%),
+        var(--bg);
+    }
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 72px 24px 48px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .brand img { height: 36px; width: auto; }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      font-weight: 560;
+      letter-spacing: -0.03em;
+    }
+    p.lead {
+      margin: 0 0 36px;
+      max-width: 42rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    a.card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 220px;
+      padding: 22px 22px 20px;
+      text-decoration: none;
+      color: inherit;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+      transition: transform 160ms ease, border-color 160ms ease;
+    }
+    a.card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(62, 224, 255, 0.55);
+    }
+    .kicker {
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--cyan);
+    }
+    a.card h2 { margin: 0; font-size: 1.55rem; font-weight: 560; }
+    a.card p { margin: 0; color: var(--muted); line-height: 1.45; }
+    .go { margin-top: auto; color: var(--violet); font-size: 0.92rem; }
+    @media (max-width: 800px) {
+      .cards { grid-template-columns: 1fr; }
+      main { padding-top: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">
+      <img src="assets/apos-logo.png" alt="apos" width="140" height="36">
+    </div>
+    <h1>Operations maps</h1>
+    <p class="lead">Three views of the same hierarchy. Open a map, focus a node, and follow the path back toward the core.</p>
+    <div class="cards">
+      <a class="card" href="apos-tree-map.html">
+        <span class="kicker">01</span>
+        <h2>Tree</h2>
+        <p>Brand hubs on a dark field, with a curved spine from the focus back to APOS.</p>
+        <span class="go">Open tree map</span>
+      </a>
+      <a class="card" href="apos-space-map.html">
+        <span class="kicker">02</span>
+        <h2>Dark</h2>
+        <p>Country rings and a hex honeycomb. The same chain, drawn as a space map.</p>
+        <span class="go">Open dark map</span>
+      </a>
+      <a class="card" href="apos-3d-map.html">
+        <span class="kicker">03</span>
+        <h2>3D</h2>
+        <p>Orbit the constellation. Focus stays in frame; the ancestor path runs off to the edge.</p>
+        <span class="go">Open 3D map</span>
+      </a>
+    </div>
+  </main>
+</body>
+</html>
