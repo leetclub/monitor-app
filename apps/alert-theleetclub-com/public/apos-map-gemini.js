@@ -176,34 +176,43 @@
     if (typeof m.getLayoutMode !== 'function') {
       m.getLayoutMode = () => layoutMode;
     }
+    function paintInspector() {
+      try {
+        const focus = m.getFocus?.();
+        const isOverview = !!(focus?.overview || m.isOverview?.());
+        if (!focus || isOverview || focus.type === 'enterprise') {
+          closeInspector();
+          return;
+        }
+        const facts = m.nodeFacts?.(focus.id);
+        openInspector({
+          kicker: focus.type || 'node',
+          title: facts?.label || focus.id,
+          rows: facts ? [
+            ['Alerts', String(facts.alerts)],
+            ['Offline', String(facts.offline)],
+            ['Revenue today', facts.revenueToday == null ? '—' : `${facts.revenueToday} KWD`],
+            ['Stock', facts.stockPct == null ? '—' : `${facts.stockPct}%`],
+            ['Status', facts.status],
+          ] : [
+            ['Level', String(focus.level ?? '—')],
+          ],
+        });
+      } catch (_) { /* ignore */ }
+    }
     const prevFly = m.flyTo?.bind(m);
     if (prevFly) {
       m.flyTo = (id) => {
         const r = prevFly(id);
-        setTimeout(() => {
-          try {
-            const focus = m.getFocus?.();
-            const isOverview = !!(focus?.overview || m.isOverview?.());
-            if (!focus || isOverview || focus.type === 'enterprise') {
-              closeInspector();
-              return;
-            }
-            openInspector({
-              kicker: focus.type || 'node',
-              title: focus.id,
-              rows: [
-                ['Level', String(focus.level ?? '—')],
-                ['Machine', focus.machineId || '—'],
-                ['Location', focus.locationId || '—'],
-                ['Hub', focus.hubId || focus.countryId || '—'],
-                ['Mode', m.getLayoutMode?.() || layoutMode],
-              ],
-            });
-          } catch (_) { /* ignore */ }
-        }, 480);
+        const paint = () => {
+          if (m.isFlying?.()) requestAnimationFrame(paint);
+          else paintInspector();
+        };
+        requestAnimationFrame(paint);
         return r;
       };
     }
+    m.refreshInspector = paintInspector;
     const prevReset = m.reset?.bind(m);
     if (prevReset) {
       m.reset = (...args) => {
@@ -322,13 +331,8 @@
       li.textContent = ev.body || ev.label || 'event';
       feed.prepend(li);
       while (feed.children.length > 4) feed.removeChild(feed.lastChild);
-      const drawer = document.getElementById('insp-grid');
-      if (drawer && document.getElementById('inspector-drawer')?.classList.contains('is-open')) {
-        const row = document.createElement('div');
-        row.className = 'insp-row';
-        row.innerHTML = `<span>${ev.label || 'event'}</span><span>${ev.title || ''}</span>`;
-        drawer.prepend(row);
-      }
+      const map = api();
+      if (map && typeof map.refreshInspector === 'function') map.refreshInspector();
     });
   }
 

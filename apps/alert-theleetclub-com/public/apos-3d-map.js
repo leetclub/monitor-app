@@ -166,13 +166,21 @@ function mount() {
   let pointerNY = 0;
   let orbitBase = null;
   let flyGen = 0;
+  const viewStack = [];
+  const flyQuery = Number(new URLSearchParams(location.search).get('fly') || 0);
   const frameSamples = [];
   let frameWarm = 0;
   let slowStreak = 0;
   const flowPackets = [];
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: !navigator.webdriver,
+    alpha: false,
+    powerPreference: 'high-performance',
+    preserveDrawingBuffer: !!navigator.webdriver,
+  });
+  renderer.setPixelRatio(navigator.webdriver ? 1 : Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x04080e, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -515,8 +523,24 @@ function mount() {
     return box;
   }
 
-  function flyTo(id) {
+  function flyTo(id, opts) {
     const n = graph.byId.get(id) || graph.core;
+    const restoring = !!(opts && opts.restore);
+    if (opts && opts.fresh) viewStack.length = 0;
+    if (!restoring && !(opts && opts.fresh)) {
+      const snap = {
+        focusId,
+        px: camera.position.x, py: camera.position.y, pz: camera.position.z,
+        tx: controls.target.x, ty: controls.target.y, tz: controls.target.z,
+      };
+      const top = viewStack[viewStack.length - 1];
+      const moved = !top || top.focusId !== snap.focusId
+        || Math.hypot(top.px - snap.px, top.py - snap.py, top.pz - snap.pz) > 0.15;
+      if (moved && [snap.px, snap.py, snap.pz, snap.tx, snap.ty, snap.tz].every(Number.isFinite)) {
+        viewStack.push(snap);
+        if (viewStack.length > 32) viewStack.shift();
+      }
+    }
     focusId = n.id;
     setExpandedTo(n.id);
     idleOrbit = n.type === 'enterprise';
@@ -556,17 +580,13 @@ function mount() {
       center.set(0, 0.8, 0);
       // Fit full constellation (core + KW/AE/SA + KW brands) in ~70% of view
       size.set(58, 32, 58);
-    } else if (n.type === 'machine' || n.type === 'branch') {
-      // Keep focus + branch fan dominant in the usable frame
-      const kids = childrenOf(n.id);
-      if (kids.length) {
-        const local = new THREE.Box3();
-        local.expandByPoint(n.pos);
-        kids.forEach((c) => local.expandByPoint(c.pos));
-        local.expandByScalar(1.2);
-        local.getCenter(center);
-        local.getSize(size);
-      }
+    } else {
+      // Look at the focus itself. Distance still covers its children.
+      const kids = graph.nodes.filter((c) => c.parentId === n.id && c.type !== 'branch' || (n.type === 'machine' && c.parentId === n.id));
+      let reach = n.type === 'branch' ? 3.2 : 4;
+      kids.forEach((c) => { reach = Math.max(reach, n.pos.distanceTo(c.pos) + (c.r || 1) * 2); });
+      center.copy(n.pos);
+      size.set(reach * 2, reach * 2, reach * 2);
     }
 
     const fitFrac = n.type === 'enterprise' ? 0.68 : 0.62;
@@ -581,18 +601,37 @@ function mount() {
     const ndcShiftX = ((insets.left + usableW / 2) - insets.w / 2) / (insets.w / 2);
     const ndcShiftY = -(((insets.top + usableH / 2) - insets.h / 2) / (insets.h / 2));
     const endTarget = center.clone();
-    // Slightly higher camera so hubs read as spheres (not flat discs) and SA stays in frame
+    // Slightly higher camera so hubs read as spheres (not flat discs) and SA stays in frame.
+    // Orbit controls keep the target at the viewport centre, so a drawer offset has to
+    // pan the target (and the camera with it), not just slide the camera sideways.
     const endCam = center.clone().add(new THREE.Vector3(
-      dist * 0.38 + ndcShiftX * dist * 0.45,
-      dist * (n.type === 'enterprise' ? 0.48 : 0.42) + ndcShiftY * dist * 0.15,
+      dist * 0.38,
+      dist * (n.type === 'enterprise' ? 0.48 : 0.42),
       dist * 0.72
     ));
+    if (n.type !== 'enterprise') {
+      const offset = endCam.clone().sub(endTarget);
+      const forward = offset.clone().negate().normalize();
+      const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward);
+      if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+      right.normalize();
+      const camUp = new THREE.Vector3().crossVectors(forward, right).normalize();
+      const halfH = Math.tan(fov / 2) * offset.length();
+      const halfW = halfH * (insets.w / Math.max(insets.h, 1));
+      const pan = right.multiplyScalar(ndcShiftX * halfW).add(camUp.multiplyScalar(ndcShiftY * halfH));
+      endTarget.add(pan);
+      endCam.add(pan);
+    }
+    if (restoring && opts.snap) {
+      endCam.set(opts.snap.px, opts.snap.py, opts.snap.pz);
+      endTarget.set(opts.snap.tx, opts.snap.ty, opts.snap.tz);
+    }
 
     const startCam = camera.position.clone();
     const startTarget = controls.target.clone();
     flying = true;
     const myGen = ++flyGen;
-    const dur = reduceMotion ? 0 : n.type === 'enterprise' ? 550 : 900;
+    const dur = reduceMotion ? 0 : (flyQuery > 0 ? flyQuery : (n.type === 'enterprise' ? 550 : 900));
     const t0 = performance.now();
     function step(now) {
       if (myGen !== flyGen) return;
@@ -614,6 +653,56 @@ function mount() {
     applyLod();
   }
 
+  function nodeFacts(id) {
+    const n = graph.byId.get(id);
+    if (!n) return null;
+    const alerts = n.type === 'machine' ? (n.alert ? 1 : 0) : (n.alertCount || 0);
+    const offline = n.type === 'machine' ? (n.status === 'offline' ? 1 : 0) : (n.rollup?.offline || 0);
+    const revenueToday = n.type === 'machine'
+      ? (n.revenue?.today ?? null)
+      : (n.rollup?.revenueToday ?? null);
+    const stockPct = n.stock?.fillPct ?? null;
+    return {
+      id: n.id, label: n.label || '', type: n.type,
+      status: n.status || (n.alert ? 'alert' : 'ok'),
+      alerts, offline, revenueToday, stockPct, badge: n.alertCount || 0,
+    };
+  }
+
+  function audit3d() {
+    const issues = [];
+    const sumOf = (n, key) => {
+      if (n.type === 'machine') {
+        if (key === 'revenueToday') return n.revenue?.today || 0;
+        if (key === 'alerts') return n.alert ? 1 : 0;
+        if (key === 'offline') return n.status === 'offline' ? 1 : 0;
+        return 0;
+      }
+      return graph.nodes
+        .filter((c) => c.parentId === n.id && c.type !== 'branch')
+        .reduce((s, c) => s + sumOf(c, key), 0);
+    };
+    graph.nodes.forEach((n) => {
+      if (!n.label) issues.push(`${n.id}: empty label`);
+      if (n.type === 'machine') {
+        const fill = n.stock?.fillPct;
+        if (fill != null && (!(fill >= 0) || fill > 100)) issues.push(`${n.id}: fill ${fill}`);
+        const rev = n.revenue?.today;
+        if (rev != null && (!Number.isFinite(rev) || rev < 0)) issues.push(`${n.id}: revenue ${rev}`);
+      }
+      if (n.type === 'branch' || n.type === 'machine') return;
+      const alerts = sumOf(n, 'alerts');
+      const offline = sumOf(n, 'offline');
+      const rev = Math.round(sumOf(n, 'revenueToday') * 10) / 10;
+      if ((n.alertCount || 0) !== alerts) issues.push(`${n.id}: badge ${n.alertCount} != ${alerts}`);
+      if (!n.rollup) { issues.push(`${n.id}: missing rollup`); return; }
+      if ((n.rollup.alerts || 0) !== alerts) issues.push(`${n.id}: rollup alerts`);
+      if ((n.rollup.offline || 0) !== offline) issues.push(`${n.id}: rollup offline`);
+      if (Math.abs((n.rollup.revenueToday || 0) - rev) > 0.15) issues.push(`${n.id}: rollup revenue`);
+    });
+    return issues;
+  }
+
   function openInspectorFor(n) {
     const d = document.getElementById('inspector-drawer');
     if (!d) return;
@@ -631,9 +720,12 @@ function mount() {
       ['Id', n.id], ['Depth', String(n.depth)],
       ['Status', n.status || (n.alert ? 'alert' : n.comingSoon ? 'soon' : 'ok')],
     ];
-    if (n.revenue) {
-      rows.push(['Today', `${n.revenue.today} KWD`]);
-      rows.push(['Monthly', `${n.revenue.monthly} KWD`]);
+    const facts = nodeFacts(n.id);
+    if (facts) {
+      rows.push(['Alerts', String(facts.alerts)]);
+      rows.push(['Offline', String(facts.offline)]);
+      if (facts.revenueToday != null) rows.push(['Today', `${facts.revenueToday} KWD`]);
+      if (facts.stockPct != null) rows.push(['Stock', `${facts.stockPct}%`]);
     }
     rows.forEach(([k, v]) => {
       const row = document.createElement('div');
@@ -660,7 +752,20 @@ function mount() {
       btn.dataset.nid = p.id;
       btn.textContent = p.type === 'enterprise' ? 'APOS' : p.label;
       if (i === path.length - 1) btn.classList.add('is-current');
-      btn.addEventListener('click', () => flyTo(p.id));
+      btn.addEventListener('click', () => {
+        let idx = -1;
+        for (let i = viewStack.length - 1; i >= 0; i--) {
+          if (viewStack[i].focusId === p.id) { idx = i; break; }
+        }
+        if (idx >= 0) {
+          const s = viewStack[idx];
+          viewStack.length = idx;
+          flyTo(s.focusId, { restore: true, snap: s });
+        } else if (p.type === 'enterprise') {
+          viewStack.length = 0;
+          flyTo(graph.core.id, { fresh: true });
+        } else flyTo(p.id);
+      });
       btn.addEventListener('mouseenter', () => { crumbHoverId = p.id; applyLod(); });
       btn.addEventListener('mouseleave', () => { crumbHoverId = null; applyLod(); });
       li.appendChild(btn);
@@ -1010,14 +1115,14 @@ function mount() {
     hoverId = id;
     const n = id ? graph.byId.get(id) : null;
     if (!n) { tip.hidden = true; return; }
-    const rev = n.revenue?.today;
-    const stock = n.stock?.fillPct;
+    const facts = nodeFacts(n.id);
     tip.hidden = false;
-    tip.innerHTML = '<strong>' + n.label + '</strong><span>' + [
-      rev == null ? null : rev + ' KWD today',
-      stock == null ? null : 'stock ' + stock + '%',
-      n.alert ? 'alert' : (n.status || 'ok'),
-    ].filter(Boolean).join(' · ') + '</span>';
+    tip.innerHTML = '<strong>' + (facts?.label || n.label) + '</strong><span>' + [
+      facts?.revenueToday == null ? null : facts.revenueToday + ' KWD today',
+      facts?.stockPct == null ? null : 'stock ' + facts.stockPct + '%',
+      facts ? ('alerts ' + facts.alerts) : null,
+      facts ? ('offline ' + facts.offline) : null,
+    ].filter((x) => x != null).join(' · ') + '</span>';
     const box = stage.getBoundingClientRect();
     tip.style.left = (e.clientX - box.left + 12) + 'px';
     tip.style.top = (e.clientY - box.top + 12) + 'px';
@@ -1028,14 +1133,22 @@ function mount() {
     const kid = graph.nodes.find((c) => c.parentId === id && c.type !== 'branch');
     flyTo(kid?.id || id);
   });
+  function goBack() {
+    if (viewStack.length) {
+      const s = viewStack.pop();
+      flyTo(s.focusId, { restore: true, snap: s });
+      return;
+    }
+    flyTo(graph.byId.get(focusId)?.parentId || graph.core.id);
+  }
   canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    flyTo(graph.byId.get(focusId)?.parentId || graph.core.id);
+    goBack();
   });
   window.addEventListener('keydown', (e) => {
     const tag = e.target && e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    if (e.key === 'Escape') { flyTo(graph.byId.get(focusId)?.parentId || graph.core.id); return; }
+    if (e.key === 'Escape') { goBack(); return; }
     if (e.key === 'Enter') {
       const kid = graph.nodes.find((c) => c.parentId === focusId && c.type !== 'branch');
       if (kid) flyTo(kid.id);
@@ -1140,9 +1253,11 @@ function mount() {
     });
   }
   function animateHud() {
-    const machines = graph.nodes.filter((n) => n.type === 'machine');
-    const revenue = Math.round(machines.reduce((s, m) => s + (m.revenue?.today || 0), 0));
-    const alerts = machines.filter((m) => m.alert).length;
+    const coreFacts = graph.byId.get(graph.core.id);
+    const revenue = Math.round(coreFacts?.rollup?.revenueToday || 0);
+    const alerts = coreFacts?.alertCount || 0;
+    const live = document.getElementById('hud-live-stat');
+    if (live) live.textContent = revenue + ' KWD today · ' + alerts + ' alerts';
     const host = document.querySelector('#hud-left h4');
     if (!host) return;
     let stat = document.getElementById('hud-live-stat');
@@ -1152,14 +1267,7 @@ function mount() {
       stat.className = 'hud-stat';
       host.insertAdjacentElement('afterend', stat);
     }
-    const t0 = performance.now();
-    const step = (now) => {
-      const u = reduceMotion ? 1 : Math.min(1, (now - t0) / 700);
-      const e = 1 - Math.pow(1 - u, 3);
-      stat.textContent = Math.round(revenue * e) + ' KWD today · ' + alerts + ' alerts';
-      if (u < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+    stat.textContent = revenue + ' KWD today · ' + alerts + ' alerts';
   }
   const hudLog = document.getElementById('hud-term-log');
   if (hudLog) {
@@ -1214,6 +1322,10 @@ function mount() {
         n.status = n._baseStatus || 'active';
         n._offlineUntil = 0;
       }
+      if (n._lowUntil && now >= n._lowUntil && n.stock && n._baseFill != null) {
+        n.stock.fillPct = n._baseFill;
+        n._lowUntil = 0;
+      }
       const low = (n.stock?.fillPct ?? 100) < 15;
       const task = (n._taskUntil || 0) > now;
       n.alert = !!(n._baseAlert || n.status === 'offline' || low || task);
@@ -1225,15 +1337,35 @@ function mount() {
     });
     const roll = (id) => {
       let alerts = 0;
+      let offline = 0;
+      let revenueToday = 0;
       graph.nodes.forEach((c) => {
         if (c.parentId !== id || c.type === 'branch') return;
-        alerts += c.type === 'machine' ? (c.alertCount || 0) : roll(c.id);
+        if (c.type === 'machine') {
+          alerts += c.alertCount || 0;
+          offline += c.status === 'offline' ? 1 : 0;
+          revenueToday += c.revenue?.today || 0;
+        } else {
+          const sub = roll(c.id);
+          alerts += sub.alerts;
+          offline += sub.offline;
+          revenueToday += sub.revenueToday;
+        }
       });
       const n = graph.byId.get(id);
-      if (n && n.type !== 'machine') n.alertCount = alerts;
-      return alerts;
+      revenueToday = Math.round(revenueToday * 10) / 10;
+      if (n && n.type !== 'machine') {
+        n.alertCount = alerts;
+        n.rollup = { alerts, offline, revenueToday, tint: alerts > 0 };
+      }
+      return { alerts, offline, revenueToday };
     };
     roll(graph.core.id);
+    const hudStat = document.getElementById('hud-live-stat');
+    if (hudStat) {
+      const coreRoll = graph.byId.get(graph.core.id);
+      hudStat.textContent = `${Math.round(coreRoll?.rollup?.revenueToday || 0)} KWD today · ${coreRoll?.alertCount || 0} alerts`;
+    }
     if (filterMode !== 'all') {
       filterHot = new Set();
       graph.nodes.forEach((n) => {
@@ -1259,7 +1391,10 @@ function mount() {
   }
   const clock = new THREE.Clock();
   function tick() {
-    if (pageHidden) return;
+    if (pageHidden) {
+      setTimeout(() => requestAnimationFrame(tick), 200);
+      return;
+    }
     const workT0 = performance.now();
     recompute3dAlerts();
     const t = clock.elapsedTime;
@@ -1390,6 +1525,7 @@ function mount() {
     applyLod();
     syncLabels();
   }
+  let liveTimer = 0;
   if (!reduceMotion) {
     const dest = camera.position.clone();
     const destT = controls.target.clone();
@@ -1415,17 +1551,20 @@ function mount() {
     };
     requestAnimationFrame(intro);
     const machines = graph.nodes.filter((n) => n.type === 'machine' && n.status !== 'future');
-    setInterval(() => {
+    liveTimer = setInterval(() => {
       if (pageHidden || !machines.length) return;
       const m = machines[Math.floor(Math.random() * machines.length)];
       const kinds = ['sale', 'lowstock', 'offline', 'task'];
       const kind = m.alert && Math.random() < 0.5 ? 'offline' : kinds[Math.floor(Math.random() * kinds.length)];
       if (m.revenue && kind === 'sale') m.revenue.today = Math.round((m.revenue.today + 2 + Math.random() * 4) * 10) / 10;
       if (kind === 'offline') {
+        if (!m._baseStatus) m._baseStatus = m.status || 'active';
         m.status = 'offline';
         m._offlineUntil = performance.now() + 9000;
       } else if (kind === 'lowstock' && m.stock) {
+        if (m._baseFill == null) m._baseFill = m.stock.fillPct;
         m.stock.fillPct = Math.min(m.stock.fillPct ?? 100, 12);
+        m._lowUntil = performance.now() + 9000;
       } else if (kind === 'task') {
         m._taskUntil = performance.now() + 8000;
       }
@@ -1435,6 +1574,7 @@ function mount() {
     }, 3600);
   }
   requestAnimationFrame(tick);
+  recompute3dAlerts();
 
   const api = {
     getFocus: () => {
@@ -1450,7 +1590,8 @@ function mount() {
     reset: () => {
       document.getElementById('inspector-drawer')?.classList.remove('is-open');
       document.body.classList.remove('inspector-open');
-      flyTo(graph.core.id);
+      viewStack.length = 0;
+      flyTo(graph.core.id, { fresh: true });
     },
     visibleLabels: () => {
       const list = [];
@@ -1482,9 +1623,34 @@ function mount() {
       if (!el || el.hidden) return null;
       return { x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0 };
     },
-    goBack: () => flyTo(graph.byId.get(focusId)?.parentId || graph.core.id),
+    goBack: () => goBack(),
+    viewDepth: () => viewStack.length,
+    listNodes: () => graph.nodes
+      .filter((n) => n.type !== 'artic')
+      .map((n) => ({ id: n.id, type: n.type, label: n.label || '', parentId: n.parentId || null, depth: n.depth })),
+    nodeFacts: (id) => nodeFacts(id),
+    auditData: () => audit3d(),
+    getUsableFrame: () => {
+      const stageEl = stage;
+      const W = stageEl.clientWidth;
+      const H = stageEl.clientHeight;
+      const drawer = document.getElementById('inspector-drawer');
+      const open = !!drawer?.classList.contains('is-open');
+      const right = open ? (drawer.getBoundingClientRect().width || 320) + 16 : 12;
+      const left = 16, top = 72, bottom = 72;
+      const w = Math.max(200, W - left - right);
+      const h = Math.max(160, H - top - bottom);
+      return { x: left, y: top, w, h, cx: left + w / 2, cy: top + h / 2, W, H };
+    },
     waitForIdle: () => new Promise((resolve) => {
-      const check = () => { if (!flying) resolve(); else requestAnimationFrame(check); };
+      const t0 = performance.now();
+      let settled = false;
+      const finish = () => { if (settled) return; settled = true; flying = false; resolve(); };
+      const check = () => {
+        if (!flying || performance.now() - t0 > 4000) finish();
+        else requestAnimationFrame(check);
+      };
+      setTimeout(finish, 4200);
       requestAnimationFrame(check);
     }),
     isFlying: () => flying,
@@ -1494,6 +1660,49 @@ function mount() {
     openTerminal: () => { term.hidden = false; },
     closeTerminal: () => { term.hidden = true; },
     nodeCount: () => graph.nodes.length,
+    isNodeDrawn: (id) => {
+      const n = graph.byId.get(id);
+      if (!n) return false;
+      if (n.type === 'enterprise') return !!coreGroup.visible;
+      const m = meshes.get(id);
+      return !!(m && m.mesh.visible && (m.mesh.material?.opacity ?? 1) > 0.05);
+    },
+    getNodeAlpha: (id) => {
+      const n = graph.byId.get(id);
+      if (!n) return 0;
+      if (n.type === 'enterprise') return coreGroup.visible ? 1 : 0;
+      const m = meshes.get(id);
+      if (!m?.mesh.visible) return 0;
+      return m.mesh.material?.opacity ?? 0;
+    },
+    countLinkCrossings: () => {
+      const pts = [];
+      linkLines.forEach((line) => {
+        if (!line.visible) return;
+        const a = graph.byId.get(line.userData.source);
+        const b = graph.byId.get(line.userData.target);
+        if (!a?.pos || !b?.pos) return;
+        pts.push({ s: line.userData.source, t: line.userData.target, a: a.pos, b: b.pos });
+      });
+      const share = (p, q) => p.s === q.s || p.s === q.t || p.t === q.s || p.t === q.t;
+      const cross = (p, q) => {
+        const ax = p.a.x, ay = p.a.z, bx = p.b.x, by = p.b.z;
+        const cx = q.a.x, cy = q.a.z, dx = q.b.x, dy = q.b.z;
+        const d1 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+        const d2 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+        const d3 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx);
+        const d4 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+      };
+      let n = 0;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          if (share(pts[i], pts[j])) continue;
+          if (cross(pts[i], pts[j])) n += 1;
+        }
+      }
+      return n;
+    },
     prefersReducedMotion: () => reduceMotion,
     getMotionState: () => ({
       reduceMotion: !!reduceMotion, running: !pageHidden, hidden: pageHidden,
@@ -1537,7 +1746,29 @@ function mount() {
       return graph.nodes.filter((n) => n.type !== 'branch' && (n.label || '').toLowerCase().includes(s))
         .slice(0, 8).map((n) => ({ id: n.id, label: n.label, type: n.type }));
     },
-    getTransform: () => ({ k: 55 / camera.position.distanceTo(controls.target), x: camera.position.x, y: camera.position.y, z: camera.position.z }),
+    getTransform: () => ({
+      k: 55 / camera.position.distanceTo(controls.target),
+      x: camera.position.x, y: camera.position.y, z: camera.position.z,
+      tx: controls.target.x, ty: controls.target.y, tz: controls.target.z,
+    }),
+    nodeScreenPos: (id) => {
+      const n = graph.byId.get(id);
+      if (!n) return null;
+      const src = n.type === 'enterprise' ? coreGroup.position : (meshes.get(id)?.mesh.position || n.pos);
+      if (!src) return null;
+      const v = src.clone().project(camera);
+      const W = stage.clientWidth;
+      const H = stage.clientHeight;
+      return { x: (v.x * 0.5 + 0.5) * W, y: (-v.y * 0.5 + 0.5) * H, behind: v.z > 1 };
+    },
+    setLive: (on) => {
+      if (!on) {
+        if (liveTimer) clearInterval(liveTimer);
+        liveTimer = 0;
+        return false;
+      }
+      return !!liveTimer;
+    },
     emitTestEvent: (machineId, kind) => {
       const m = graph.byId.get(machineId) || graph.nodes.find((n) => n.type === 'machine' && n.status !== 'future');
       if (!m || m.type !== 'machine') return null;
@@ -1548,7 +1779,9 @@ function mount() {
         m.status = 'offline';
         m._offlineUntil = performance.now() + 9000;
       } else if (k === 'lowstock' && m.stock) {
+        if (m._baseFill == null) m._baseFill = m.stock.fillPct;
         m.stock.fillPct = Math.min(m.stock.fillPct ?? 100, 12);
+        m._lowUntil = performance.now() + 9000;
       }
       recompute3dAlerts();
       spawn3dFlow(m.id, k);

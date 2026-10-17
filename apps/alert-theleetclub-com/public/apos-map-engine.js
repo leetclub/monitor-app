@@ -45,8 +45,9 @@
   const POLISH = window.APOS_MAP_POLISH;
   const reduceMotion = POLISH?.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const THRESH = DATA.thresholds;
-  const FLY_MS = reduceMotion ? 0 : 900;
-  const PULL_MS = reduceMotion ? 0 : 550;
+  const flyQuery = Number(new URLSearchParams(location.search).get('fly') || 0);
+  const FLY_MS = reduceMotion ? 0 : (flyQuery > 0 ? flyQuery : 900);
+  const PULL_MS = reduceMotion ? 0 : (flyQuery > 0 ? Math.max(120, Math.round(flyQuery * 0.62)) : 550);
   const CAM_LERP = reduceMotion ? 1 : 0.085;
   const GEMINI = true; // APOS Gemini-inspired camera / rings / reticle
   const FIT = 0.88;
@@ -596,29 +597,7 @@
 
     layoutAllHubTrees();
     addGeminiSignalArcs();
-    // rollups
-    nodes.forEach((n) => {
-      if (n.type === 'machine') {
-        n.alertCount = n.alert ? 1 : 0;
-      }
-    });
-    function rollup(id) {
-      const kids = childrenOf.get(id) || [];
-      let alerts = 0;
-      kids.forEach((c) => {
-        if (c.type === 'branch' || c.pad) return;
-        rollup(c.id);
-        alerts += c.alertCount || 0;
-      });
-      const n = nodeById.get(id);
-      if (n && n.type !== 'machine') n.alertCount = alerts;
-    }
-    hubs.forEach((h) => rollup(h.id));
-    nodes.forEach((n) => {
-      if (n.alertCount > 0 && (n.type === 'country' || n.type === 'client' || n.type === 'area' || n.type === 'location')) {
-        n.rollup = { alerts: n.alertCount };
-      }
-    });
+    seedRollups();
   }
 
   function buildWorld() {
@@ -760,7 +739,7 @@
           addNode({
             id,
             type: 'area',
-            label: '',
+            label: `Reserved ${i + 1}`,
             parentId: hub.id,
             hubId: hub.id,
             depth: 2,
@@ -888,21 +867,26 @@
       return n;
     }
     nodes.forEach((n) => {
-      if (n.type === 'machine' || n.type === 'branch' || n.type === 'enterprise' || n.type === 'artic') return;
+      if (n.type === 'machine' || n.type === 'branch' || n.type === 'artic' || n.pad) return;
       n.machineCount = countMachinesUnder(n.id);
-      if (!UTILS) {
-        n.alertCount = 0;
-        return;
-      }
+    });
+    seedRollups();
+  }
+
+  function seedRollups() {
+    machines.forEach((m) => {
+      if (m._baseStatus == null) m._baseStatus = m.status;
+      if (m._baseOfflineHours == null) m._baseOfflineHours = m.offlineHours || 0;
+      if (m.stock && m._baseFill == null) m._baseFill = m.stock.fillPct;
+      m.alertCount = m.alert ? 1 : 0;
+    });
+    if (!UTILS) return;
+    nodes.forEach((n) => {
+      if (n.type === 'machine' || n.type === 'branch' || n.type === 'artic' || n.pad) return;
       const r = UTILS.rollup(n, childrenOf);
       n.alertCount = r.alerts;
       n.rollup = r;
       n._pill0 = r.alerts > 0;
-    });
-    machines.forEach((m) => {
-      m._baseStatus = m.status;
-      m._baseFill = m.stock ? m.stock.fillPct : null;
-      m._baseOfflineHours = m.offlineHours || 0;
     });
   }
 
@@ -1501,6 +1485,9 @@
     const labeled = nodes.filter((n) => n.labelOn && n.draw && n.label && !n.ancestorOnly);
 
     function textHalf(n) {
+      if (n._measW > 2 && n._measH > 2) {
+        return { hw: n._measW / 2 + 2, hh: n._measH / 2 + 2 };
+      }
       const len = (n.label || '').length;
       // Overview brand labels match country-title scale (~22px)
       const overviewBrand = overviewMode && n.type === 'client';
@@ -1656,6 +1643,10 @@
       if (lop < 0.05) el.style.display = 'none';
       el.style.whiteSpace = 'nowrap';
       el.title = n.label;
+      if (el.offsetWidth > 2) {
+        n._measW = el.offsetWidth;
+        n._measH = el.offsetHeight || 16;
+      }
     });
     root.querySelectorAll('[data-nid]').forEach((el) => {
       if (!want.has(el.dataset.nid)) el.style.display = 'none';
@@ -1685,10 +1676,15 @@
     main.className = `focus-title-main ${hub?.ring || 'teal'}`;
     const s = worldToScreen(focus.x, focus.y);
     const sr = nodeScreenRadius(focus);
-    // Place under the disc (screen-down), clear of disc + pill
+    // Place under the disc, or above it when a child label already occupies that band.
+    let top = s.y + sr + 16;
+    const crowded = nodes.some((n) => n.labelOn && n.draw && n._labelSx != null
+      && Math.abs(n._labelSx - s.x) < 110
+      && n._labelSy > s.y && n._labelSy < top + 42);
+    if (crowded) top = s.y - sr - 48;
     el.style.display = '';
     el.style.left = `${s.x}px`;
-    el.style.top = `${s.y + sr + 16}px`;
+    el.style.top = `${top}px`;
   }
 
   function hubLabelWorld(d) {
@@ -2164,11 +2160,11 @@
         k = Math.max(0.12, Math.min(k, 1.2));
         const cx = ext.x + ext.w / 2;
         const cy = ext.y + ext.h / 2;
-        return d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
+        return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
       } else {
         k = Math.min((0.92 * H) / (2 * R_TITLE), (0.92 * W) / (2 * R_TITLE));
       }
-      return d3.zoomIdentity.translate(W / 2, H / 2).scale(k);
+      return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k);
     }
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
     let cy = centerNode ? centerNode.y : bbox.y + bbox.h / 2;
@@ -2207,11 +2203,17 @@
       const localH = Math.max(36, (lMaxY - lMinY) + labelPad * 2 + 48);
       const kLocal = Math.min(fit.w * 0.82 / localW, fit.h * 0.82 / localH);
       // Stay above ZOOM_MIN_K thresholds so reconcileViewState does not walk focus up
-      const minK = centerNode.type === 'machine' ? 2.85
+      const prefer = centerNode.type === 'machine' ? 2.85
         : centerNode.type === 'location' ? 2.45
         : centerNode.type === 'area' ? 1.95
         : 1.6;
-      k = Math.max(minK, Math.min(kLocal, 80));
+      // Short viewports: do not force a zoom that pushes child labels out of the usable frame.
+      const floor = centerNode.type === 'machine' ? 1.7
+        : centerNode.type === 'location' ? 1.8
+        : centerNode.type === 'area' ? 1.45
+        : 1.25;
+      const lo = kLocal + 0.05 < prefer ? floor : prefer;
+      k = Math.max(lo, Math.min(kLocal, 80));
       cx = (lMinX + lMaxX) / 2;
       // Focus title stack (~title + subtitle) below the focus disc
       const titleBottom = 148 / k;
@@ -2224,6 +2226,45 @@
   }
 
   let flyGen = 0;
+  /** Exact prior camera + focus. Esc / back / breadcrumb pop this, they do not refit. */
+  const viewStack = [];
+
+  function captureView() {
+    return {
+      focusId: focusNodeId,
+      overview: !!overviewMode,
+      k: transform.k,
+      x: transform.x,
+      y: transform.y,
+    };
+  }
+
+  function pushView() {
+    const s = captureView();
+    if (![s.k, s.x, s.y].every(Number.isFinite)) return;
+    const top = viewStack[viewStack.length - 1];
+    if (top && top.focusId === s.focusId && top.overview === s.overview
+      && Math.abs(top.k - s.k) < 0.002
+      && Math.abs(top.x - s.x) < 0.4
+      && Math.abs(top.y - s.y) < 0.4) return;
+    viewStack.push(s);
+    if (viewStack.length > 32) viewStack.shift();
+  }
+
+  function applyFocusState(focusId, overview) {
+    if (overview || !focusId || focusId === DATA.enterprise.id) setOverviewExpansion();
+    else setExpandedTo(focusId);
+    focusPinned = true;
+  }
+
+  function restoreView(s) {
+    closeLeafCard();
+    closeTask();
+    applyFocusState(s.focusId, s.overview);
+    applyLod();
+    const t = d3.zoomIdentity.translate(s.x, s.y).scale(s.k);
+    flyToTransform(t);
+  }
 
   function flyToTransform(target, done) {
     flyGen += 1;
@@ -2232,17 +2273,23 @@
     // cannot resolve against a stale interrupt clearing the flag.
     svg.interrupt('fly');
     flying = true;
-    // Interpolate about the same usable-frame centre the target was fitted into
+    // Interpolate about the same usable-frame centre the target was fitted into.
+    // Log-scale and the world point under that centre move monotonically (no overshoot).
     const focus = nodeById.get(focusNodeId);
     const fit = viewportFitRect({
       reserveDrawer: !!(focus && focus.type !== 'enterprise' && !overviewMode),
     });
     const sx = fit.cx;
     const sy = fit.cy;
-    const startView = [(sx - transform.x) / transform.k, (sy - transform.y) / transform.k, fit.w / transform.k];
-    const endView = [(sx - target.x) / target.k, (sy - target.y) / target.k, fit.w / target.k];
+    const k0 = Math.max(transform.k || 1, 1e-4);
+    const k1 = Math.max(target.k || 1, 1e-4);
+    const w0x = (sx - transform.x) / k0;
+    const w0y = (sy - transform.y) / k0;
+    const w1x = (sx - target.x) / k1;
+    const w1y = (sy - target.y) / k1;
     if (FLY_MS === 0) {
       transform = target;
+      targetTransform = target;
       svg.call(zoomBehavior.transform, transform);
       applyLod();
       applyLabelCounterScale();
@@ -2251,21 +2298,19 @@
       if (done) done();
       return;
     }
-    const iZoom = d3.interpolateZoom(startView, endView);
-    // Gemini: fly-in cubic-bezier(0.25,1,0.5,1); pull-out spring ~550ms
-    const pullingOut = target.k < transform.k * 0.92;
-    const flyEase = pullingOut
-      ? d3.easePolyOut.exponent(3.2)
-      : d3.easeCubicOut;
+    const pullingOut = k1 < k0 * 0.92;
+    const log0 = Math.log(k0);
+    const log1 = Math.log(k1);
     svg
       .transition('fly')
       .duration(pullingOut ? PULL_MS : FLY_MS)
-      .ease(flyEase)
+      .ease(d3.easeCubicOut)
       .tween('cam', () => (t) => {
         if (myGen !== flyGen) return;
-        const v = iZoom(t);
-        const k = fit.w / v[2];
-        transform = d3.zoomIdentity.translate(sx, sy).scale(k).translate(-v[0], -v[1]);
+        const k = Math.exp(log0 + (log1 - log0) * t);
+        const wx = w0x + (w1x - w0x) * t;
+        const wy = w0y + (w1y - w0y) * t;
+        transform = d3.zoomIdentity.translate(sx, sy).scale(k).translate(-wx, -wy);
         gRoot.attr('transform', transform);
         applyLod();
         applyLabelCounterScale();
@@ -2288,23 +2333,22 @@
   }
 
   function flyToNode(node) {
+    if (!node) return;
     if (node.type === 'enterprise') {
       flyToGalaxy();
       return;
     }
-    // Coming soon / planned hubs: show card, still fly
-    if (node.type === 'hub' && (node.comingSoon || node.planned || node.status === 'future')) {
-      showStatusCard(node);
-    }
+    if (node.id !== focusNodeId || overviewMode) pushView();
     setExpandedTo(node.id);
     focusPinned = true;
-    if (!(node.comingSoon || node.planned)) closeLeafCard();
+    closeLeafCard();
     applyLod();
     growFocusedChildren(node);
     flyToTransform(fitTransform(subtreeExtent(node), node));
   }
 
   function flyToGalaxy(_geminiInsp) {
+    viewStack.length = 0;
     setOverviewExpansion();
     focusPinned = true;
     closeLeafCard();
@@ -2339,6 +2383,10 @@
       closeTask();
       return;
     }
+    if (viewStack.length) {
+      restoreView(viewStack.pop());
+      return;
+    }
     const cur = nodeById.get(focusNodeId);
     if (!cur?.parentId || cur.type === 'hub' || cur.type === 'country') {
       flyToGalaxy();
@@ -2362,6 +2410,22 @@
     return best?.id || DATA.enterprise.id;
   }
 
+  function jumpToAncestor(n) {
+    if (!n) return;
+    let idx = -1;
+    for (let i = viewStack.length - 1; i >= 0; i--) {
+      if (viewStack[i].focusId === n.id) { idx = i; break; }
+    }
+    if (idx >= 0) {
+      const s = viewStack[idx];
+      viewStack.length = idx;
+      restoreView(s);
+      return;
+    }
+    if (n.type === 'enterprise') flyToGalaxy();
+    else flyToNode(n);
+  }
+
   function renderBreadcrumb(id) {
     const path = pathToRoot(id).reverse();
     crumbList.replaceChildren();
@@ -2373,7 +2437,7 @@
       btn.type = 'button';
       btn.dataset.nid = nid;
       btn.textContent = n.type === 'enterprise' ? 'APOS' : n.label;
-      btn.addEventListener('click', () => flyToNode(n));
+      btn.addEventListener('click', () => jumpToAncestor(n));
       btn.addEventListener('mouseenter', () => {
         crumbHoverId = nid;
         paintLod();
@@ -2405,8 +2469,8 @@
     client: 1.55,
     area: 1.85,
     location: 2.35,
-    machine: 2.7,
-    branch: 2.7,
+    machine: 2.15,
+    branch: 2.15,
   };
 
   function reconcileViewState(reason) {
@@ -2476,7 +2540,7 @@
       const dur = 320;
       const anim = (now) => {
         const t = Math.max(0, Math.min(1, (now - start) / dur));
-        const e = d3.easeBackOut.overshoot(1.35)(t); // springy bloom overshoot
+        const e = d3.easeCubicOut(t);
         c.grow = 0.28 + 0.72 * e;
         if (t < 1) requestAnimationFrame(anim);
         else c.grow = 1;
@@ -4160,11 +4224,15 @@
   const tooltipEl = document.getElementById(DOM.tooltip);
   function showTooltip(event, d) {
     if (!tooltipEl || !d || d.type === 'enterprise') return;
-    const rev = shownRevenue(d);
+    const rev = d.revenue?.today != null ? d.revenue.today : (d.rollup?.revenueToday ?? null);
     const stock = shownStock(d);
+    const alerts = d.type === 'machine' ? (d.alert ? 1 : 0) : (d.alertCount || 0);
+    const offline = d.type === 'machine' ? (d.status === 'offline' ? 1 : 0) : (d.rollup?.offline || 0);
     const stat = [
       rev == null ? null : `${rev} KWD today`,
       stock == null ? null : `stock ${stock}%`,
+      `alerts ${alerts}`,
+      `offline ${offline}`,
       statusLabel(d),
     ].filter(Boolean).join(' · ');
     tooltipEl.hidden = false;
@@ -4213,19 +4281,18 @@
         m.offlineHours = m._baseOfflineHours || 0;
         m._offlineUntil = 0;
       }
+      if (m._lowUntil && now >= m._lowUntil && m.stock && m._baseFill != null) {
+        m.stock.fillPct = m._baseFill;
+        m._lowUntil = 0;
+      }
       m.alert = UTILS.computeAlert(m);
       m.alertCount = m.alert ? 1 : 0;
     });
     nodes.forEach((n) => {
-      if (n.type === 'machine' || n.type === 'branch' || n.type === 'enterprise' || n.type === 'artic') return;
+      if (n.type === 'machine' || n.type === 'branch' || n.type === 'artic' || n.pad) return;
       const r = UTILS.rollup(n, childrenOf);
       n.alertCount = r.alerts;
-      if (n.rollup) {
-        n.rollup.alerts = r.alerts;
-        n.rollup.online = r.online;
-        n.rollup.revenueToday = r.revenueToday;
-        n.rollup.tint = r.tint;
-      } else n.rollup = r;
+      n.rollup = r;
     });
     refreshFilter();
   }
@@ -4257,7 +4324,9 @@
     }
     if (m && ev.kind === 'lowstock' && m.stock) {
       const floor = (THRESH?.stockLowPct || 15) - 1;
+      if (m._baseFill == null) m._baseFill = m.stock.fillPct;
       if (m.stock.fillPct > floor) m.stock.fillPct = floor;
+      m._lowUntil = performance.now() + 9000;
     }
     if (m && (ev.kind === 'offline' || ev.kind === 'lowstock' || ev.deltaStock || ev.deltaRev)) {
       refreshAlertRollups();
@@ -4283,15 +4352,16 @@
     if (signalRunner && overviewMode) signalRunner.spawnPath(pathIds, color, true);
   }
 
+  let liveTimer = 0;
   function startSignalTimers() {
-    if (reduceMotion) return;
+    if (reduceMotion || liveTimer) return;
     const kinds = [
       { id: 'sale', label: 'Sale', deltaRev: [1.5, 6.5] },
       { id: 'lowstock', label: 'Low stock', deltaStock: -1 },
       { id: 'offline', label: 'Machine offline' },
       { id: 'task', label: 'Task assigned' },
     ];
-    setInterval(() => {
+    liveTimer = setInterval(() => {
       if (pageHidden || !machines.length) return;
       const live = machines.filter((m) => m.status !== 'planned' && m.status !== 'future');
       if (!live.length) return;
@@ -4315,6 +4385,15 @@
         at: Date.now(),
       });
     }, 3400);
+  }
+  function setLive(on) {
+    if (!on) {
+      if (liveTimer) clearInterval(liveTimer);
+      liveTimer = 0;
+      return false;
+    }
+    startSignalTimers();
+    return !!liveTimer;
   }
 
   function waitForIdle() {
@@ -4536,6 +4615,7 @@
       const n = nodeById.get(id);
       return !!(n && n.draw && n.lodAlpha > 0.05);
     },
+    getNodeAlpha: (id) => nodeById.get(id)?.lodAlpha || 0,
     visibleDrawnTypes: () => {
       const types = {};
       nodes.forEach((n) => {
@@ -4657,6 +4737,73 @@
     isOverview: () => overviewMode,
     getAlertCount: (id) => nodeById.get(id)?.alertCount || 0,
     getRollup: (id) => nodeById.get(id)?.rollup || null,
+    listNodes: () => nodes
+      .filter((n) => !n.pad && n.type !== 'artic')
+      .map((n) => ({ id: n.id, type: n.type, label: n.label || '', parentId: n.parentId || null, depth: n.depth })),
+    getUsableFrame: () => {
+      const focus = nodeById.get(focusNodeId);
+      const reserve = !!(focus && focus.type !== 'enterprise' && !overviewMode);
+      return viewportFitRect({ reserveDrawer: reserve || undefined });
+    },
+    nodeFacts: (id) => {
+      const n = nodeById.get(id);
+      if (!n) return null;
+      const rev = n.revenue?.today != null ? n.revenue.today : (n.rollup?.revenueToday ?? null);
+      const stock = shownStock(n);
+      const alerts = n.type === 'machine' ? (n.alert ? 1 : 0) : (n.alertCount || 0);
+      const offline = n.type === 'machine' ? (n.status === 'offline' ? 1 : 0) : (n.rollup?.offline || 0);
+      return {
+        id: n.id,
+        label: n.label || n.bgLabel || '',
+        type: n.type,
+        status: statusLabel(n),
+        revenueToday: rev,
+        stockPct: stock,
+        alerts,
+        offline,
+        badge: n.alertCount || 0,
+      };
+    },
+    auditData: () => {
+      const issues = [];
+      const sumOf = (n, key) => {
+        if (n.type === 'machine') {
+          if (key === 'revenueToday') return n.revenue?.today || 0;
+          if (key === 'alerts') return n.alert ? 1 : 0;
+          if (key === 'offline') return n.status === 'offline' ? 1 : 0;
+        }
+        return (childrenOf.get(n.id) || [])
+          .filter((c) => c.type !== 'branch' && c.type !== 'artic' && !c.pad)
+          .reduce((s, c) => s + sumOf(c, key), 0);
+      };
+      nodes.forEach((n) => {
+        if (!n.label && n.type !== 'enterprise') issues.push(`${n.id}: empty label`);
+        if (n.type === 'machine') {
+          const fill = n.stock?.fillPct;
+          if (fill != null && (!(fill >= 0) || fill > 100)) issues.push(`${n.id}: fill ${fill}`);
+          const rev = n.revenue?.today;
+          if (rev != null && !Number.isFinite(rev)) issues.push(`${n.id}: revenue ${rev}`);
+          if (rev != null && rev < 0) issues.push(`${n.id}: negative revenue`);
+        }
+        if (n.type === 'branch' || n.type === 'artic' || n.pad) return;
+        if (!UTILS) return;
+        const r = UTILS.rollup(n, childrenOf);
+        const badge = n.type === 'machine' ? (n.alert ? 1 : 0) : (n.alertCount || 0);
+        if (Math.abs((r.revenueToday || 0) - sumOf(n, 'revenueToday')) > 0.15) {
+          issues.push(`${n.id}: revenue ${r.revenueToday} != children`);
+        }
+        if (r.alerts !== sumOf(n, 'alerts')) issues.push(`${n.id}: alerts ${r.alerts} != ${sumOf(n, 'alerts')}`);
+        if ((r.offline || 0) !== sumOf(n, 'offline')) issues.push(`${n.id}: offline ${r.offline} != children`);
+        if (n.type !== 'machine' && badge !== r.alerts) issues.push(`${n.id}: badge ${badge} != rollup ${r.alerts}`);
+        if (n.rollup && n.type !== 'machine') {
+          if (Math.abs((n.rollup.revenueToday || 0) - r.revenueToday) > 0.15) issues.push(`${n.id}: stored revenue drift`);
+          if ((n.rollup.alerts || 0) !== r.alerts) issues.push(`${n.id}: stored alerts drift`);
+          if ((n.rollup.offline || 0) !== r.offline) issues.push(`${n.id}: stored offline drift`);
+        }
+      });
+      return issues;
+    },
+    viewDepth: () => viewStack.length,
 
 
     prefersReducedMotion: () => reduceMotion,
@@ -4694,6 +4841,7 @@
         .map((n) => ({ id: n.id, label: n.label || n.bgLabel || n.id, type: n.type }));
     },
     getLiveLog: () => liveLog.slice(-8),
+    setLive,
     emitTestEvent: (machineId, kind) => {
       const m = nodeById.get(machineId) || machines[0];
       if (!m) return null;
@@ -4836,7 +4984,7 @@
         gRoot.attr('transform', transform);
       }
     }
-    if (machines.some((m) => m._offlineUntil && performance.now() >= m._offlineUntil)) refreshAlertRollups();
+    if (machines.some((m) => (m._offlineUntil && performance.now() >= m._offlineUntil) || (m._lowUntil && performance.now() >= m._lowUntil))) refreshAlertRollups();
     drawParticles(ts);
     drawWorldScene(ts);
     drawOrbitGuides(ts);

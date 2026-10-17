@@ -585,6 +585,7 @@ window.APOS_MAP_UTILS = (function () {
     const total = ms.length;
     const online = ms.filter((m) => m.status === 'active').length;
     const alerts = ms.filter((m) => computeAlert(m)).length;
+    const offline = ms.filter((m) => m.status === 'offline').length;
     const revenueToday = ms.reduce((s, m) => s + (m.revenue?.today || 0), 0);
     const productCounts = {};
     ms.forEach((m) => {
@@ -598,6 +599,7 @@ window.APOS_MAP_UTILS = (function () {
       total,
       online,
       alerts,
+      offline,
       revenueToday: Math.round(revenueToday * 10) / 10,
       topProduct,
       tint: alerts > 0,
