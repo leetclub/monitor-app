@@ -21,7 +21,7 @@ const PAGES = [
   { id: '3d', file: 'apos-3d-map.html', api: 'APOS_3D_MAP', ready: '__APOS_3D_READY__' },
 ];
 
-const CHECKS = ['F1', 'F2', 'F3', 'F4', 'F5', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'D1', 'D2', 'D3', 'D4', 'V1', 'V2', 'V3', 'V4', 'B1'];
+const CHECKS = ['F1', 'F2', 'F3', 'F4', 'F5', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'C1', 'D1', 'D2', 'D3', 'D4', 'V1', 'V2', 'V3', 'V4', 'B1'];
 
 function blankScore() {
   const o = {};
@@ -67,7 +67,7 @@ async function walk(page, pageDef, score) {
       };
     };
     const labelBoxes = () => {
-      const sel = '.node-label-dom, .hub-title-dom, .focus-title, .m3d-label';
+      const sel = '.node-label-dom, .hub-title-dom, .focus-title, .m3d-label, .node-badge, .m3d-badge';
       const out = [];
       document.querySelectorAll(sel).forEach((el) => {
         const st = getComputedStyle(el);
@@ -75,19 +75,48 @@ async function walk(page, pageDef, score) {
         if (Number.parseFloat(st.opacity || '1') < 0.2) return;
         const r = el.getBoundingClientRect();
         if (r.width < 2 || r.height < 2) return;
+        const badge = el.classList.contains('node-badge') || el.classList.contains('m3d-badge');
         out.push({
-          id: el.dataset.nid || el.dataset.id || '',
+          id: badge ? '' : (el.dataset.nid || el.dataset.id || ''),
           text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
           l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height,
         });
       });
       return out;
     };
+    const overlapPairs = (boxes) => {
+      const hits = [];
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i];
+          const b = boxes[j];
+          if (a.l < b.r - 1 && a.r > b.l + 1 && a.t < b.b - 1 && a.b > b.t + 1) {
+            hits.push(`${a.text.slice(0, 24)} | ${b.text.slice(0, 24)}`);
+          }
+        }
+      }
+      return hits;
+    };
     const dataIssues = api.auditData();
     const finite = (t) => t && [t.k, t.x, t.y].every((v) => Number.isFinite(v));
 
     let targets = nodes.filter((n) => n.type !== 'artic');
     if (limit > 0) targets = targets.slice(0, limit);
+
+    const zoomCollision = async (tag, id) => {
+      if (id) api.flyTo(id);
+      else api.reset();
+      await api.waitForIdle();
+      await new Promise((r) => setTimeout(r, 60));
+      overlapPairs(labelBoxes()).slice(0, 4).forEach((msg) => fail('C1', `${tag} ${msg}`));
+    };
+    await zoomCollision('overview');
+    const mid = nodes.find((n) => n.type === 'client') || nodes.find((n) => n.type === 'area') || nodes.find((n) => n.type === 'country');
+    if (mid) await zoomCollision('mid', mid.id);
+    const machine = nodes.find((n) => n.id === 'm-ee-4') || nodes.find((n) => n.type === 'machine');
+    if (machine) await zoomCollision('focus', machine.id);
+    api.reset();
+    await api.waitForIdle();
     let smoothChecked = 0;
     for (const n of targets) {
       api.reset();
@@ -105,6 +134,7 @@ async function walk(page, pageDef, score) {
       requestAnimationFrame(sample);
       api.flyTo(n.id);
       await api.waitForIdle();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       live = false;
       await new Promise((r) => setTimeout(r, 40));
       const after = api.getTransform();
@@ -166,14 +196,7 @@ async function walk(page, pageDef, score) {
         const label = byId.get(b.id).label || '';
         if (label && !b.text.includes(label)) fail('R5', `${b.id} label "${b.text}" != "${label}"`);
       });
-      for (let i = 0; i < boxes.length; i++) {
-        for (let j = i + 1; j < boxes.length; j++) {
-          const a = boxes[i];
-          const b = boxes[j];
-          const overlap = a.l < b.r - 1 && a.r > b.l + 1 && a.t < b.b - 1 && a.b > b.t + 1;
-          if (overlap) fail('R6', `${n.id} labels overlap ${a.text.slice(0, 24)} | ${b.text.slice(0, 24)}`);
-        }
-      }
+      overlapPairs(boxes).slice(0, 3).forEach((msg) => fail('R6', `${n.id} labels overlap ${msg}`));
       const focusAndKids = new Set([n.id, ...nodes.filter((c) => c.parentId === n.id).map((c) => c.id)]);
       boxes.forEach((b) => {
         if (!focusAndKids.has(b.id)) return;
@@ -191,13 +214,19 @@ async function walk(page, pageDef, score) {
         if (kids.length && kids.every((c) => !api.isNodeDrawn(c.id))) fail('V1', `${n.id} shows no children`);
       }
       if (n.type === 'machine') {
-        const branches = nodes.filter((c) => c.parentId === n.id && c.type === 'branch');
-        if (branches.length && branches.some((c) => !api.isNodeDrawn(c.id))) fail('V1', `${n.id} missing a branch`);
+        const kids = nodes.filter((c) => c.parentId === n.id);
+        if (kids.length) fail('V1', `${n.id} still has child nodes`);
         const facts = api.nodeFacts(n.id);
         const drawer = document.getElementById('insp-title')?.textContent || '';
+        const gridRaw = document.getElementById('insp-grid')?.innerText || '';
+        const gridFold = gridRaw.toLowerCase();
         if (facts && drawer && !drawer.includes(facts.label)) fail('V1', `${n.id} drawer title ${drawer}`);
+        ['Overview', 'Performance', 'Stock', 'Support', 'Contract'].forEach((sec) => {
+          if (!gridFold.includes(sec.toLowerCase())) fail('V1', `${n.id} missing ${sec}`);
+        });
       }
 
+      if (typeof api.refreshInspector === 'function') api.refreshInspector();
       const facts = api.nodeFacts(n.id);
       if (facts) {
         if (n.type !== 'machine' && facts.badge !== facts.alerts) fail('D2', `${n.id} badge ${facts.badge} != ${facts.alerts}`);
@@ -251,7 +280,7 @@ async function walk(page, pageDef, score) {
   note(score, 'D4', result.dataIssues.length === 0, result.dataIssues.filter((s) => /fill|revenue|label|NaN/.test(s)).join('; ') || 'ok');
   const grouped = {};
   result.fails.forEach((f) => { grouped[f.code] = grouped[f.code] || []; grouped[f.code].push(f.msg); });
-  ['F1', 'F3', 'F4', 'F5', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'D2', 'V1', 'V2'].forEach((code) => {
+  ['F1', 'F3', 'F4', 'F5', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'C1', 'D2', 'V1', 'V2'].forEach((code) => {
     const msgs = grouped[code] || [];
     if (!msgs.length) note(score, code, true, 'ok');
     else msgs.slice(0, 6).forEach((m) => note(score, code, false, m));
@@ -292,7 +321,7 @@ async function stress(page, pageDef, score) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.evaluate(async (apiName) => {
+  const inPage = page.evaluate(async (apiName) => {
     const api = window[apiName];
     const nodes = api.listNodes().filter((n) => n.type !== 'branch');
     const pick = () => nodes[Math.floor(Math.random() * nodes.length)];
@@ -309,16 +338,27 @@ async function stress(page, pageDef, score) {
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
         document.dispatchEvent(new Event('visibilitychange'));
       }
-      if (i % 4 === 0) await new Promise((r) => setTimeout(r, 16));
+      await new Promise((r) => setTimeout(r, i % 4 === 0 ? 16 : 8));
     }
     api.reset();
     await api.waitForIdle();
-  }, pageDef.api);
+    return 'in-page';
+  }, pageDef.api).catch((e) => { errors.push(String(e)); return 'in-page-error'; });
+  const timed = await Promise.race([
+    inPage,
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 150000)),
+  ]);
+  if (timed !== 'in-page') {
+    errors.push(`stress in-page ${timed}`);
+    note(score, 'B1', false, errors.slice(0, 2).join(' | '));
+    await page.goto(`${BASE}/${pageDef.file}?fly=220`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    return;
+  }
   const box = await page.locator('.tree-stage, .space-stage, .map3d-stage').boundingBox();
   for (let i = 0; i < 40; i++) {
     if (!box) break;
     if (i % 4 === 0) await page.mouse.wheel(0, (i % 8 === 0 ? -1 : 1) * 480);
-    else if (i % 4 === 1) await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.45);
+    else if (i % 4 === 1) await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.45, { timeout: 2500 }).catch(() => {});
     else if (i % 4 === 2) await page.keyboard.press('Escape');
     else await page.setViewportSize(i % 8 === 0 ? { width: 1366, height: 768 } : { width: 1920, height: 1080 });
     if (i % 3 === 0) await page.evaluate((apiName) => window[apiName].flyTo(window[apiName].listNodes().find((n) => n.type === 'machine')?.id), pageDef.api);

@@ -1,9 +1,9 @@
 /* APOS Tree Map — muted indigo-purple continuous world (skilltree reference) */
 
 :root {
-  --bg-0: #3b3a6b;
-  --bg-1: #4a4880;
-  --bg-2: #1e1d3a;
+  --bg-0: #071018;
+  --bg-1: #0c1826;
+  --bg-2: #04080e;
   --ink: #f2f0fa;
   --ink-soft: rgba(242, 240, 250, 0.72);
   --ink-faint: rgba(242, 240, 250, 0.22);
@@ -18,8 +18,8 @@
   --amber: #e8c078;
   --sky: #7ec8e8;
   --alert: #ff6b7a;
-  --font: 'Manrope', 'Segoe UI', sans-serif;
-  --font-display: 'Cormorant Garamond', 'Times New Roman', Georgia, serif;
+  --font: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-display: 'IBM Plex Sans', 'Segoe UI', sans-serif;
 }
 
 *,
@@ -61,7 +61,7 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;
   background:
-    radial-gradient(ellipse 55% 50% at 50% 48%, #56548f 0%, transparent 58%),
+    radial-gradient(ellipse 55% 50% at 50% 48%, #123044 0%, transparent 58%),
     radial-gradient(ellipse 90% 80% at 50% 50%, var(--bg-1) 0%, var(--bg-0) 55%, var(--bg-2) 100%);
 }
 
@@ -71,7 +71,7 @@ body {
   justify-content: space-between;
   padding: 0.75rem 1.35rem;
   z-index: 20;
-  background: linear-gradient(180deg, rgba(46, 45, 85, 0.55), transparent);
+  background: linear-gradient(180deg, rgba(4, 10, 18, 0.72), transparent);
 }
 
 .brand-mark {

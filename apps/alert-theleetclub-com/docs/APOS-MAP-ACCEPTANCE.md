@@ -18,6 +18,7 @@ Applies to all three pages: tree (`apos-tree-map.html`), space (`apos-space-map.
 4. **R4 No crossings.** `countLinkCrossings()` is 0. 2D counts drawn tree curves that do not share a vertex. 3D counts visible edges whose ground (x, z) segments cross without sharing a vertex.
 5. **R5 Labels match.** Every visible label’s text contains that node’s label, and the node id on the element is the node it is placed against.
 6. **R6 No label overlap.** Visible label boxes (opacity ≥ 0.2, at least 2×2px) do not intersect by more than 1px.
+7. **C1 Badges.** At overview, a mid-level focus (brand or area), and a machine focus, no visible label or status-badge box overlaps another by more than 1px. Badges sit on their own node, not on a link.
 
 ## Data logic
 
@@ -28,7 +29,7 @@ Applies to all three pages: tree (`apos-tree-map.html`), space (`apos-space-map.
 
 ## Views
 
-1. **V1 Question per level.** Overview draws every hub/country and at least one alert badge when the data has alerts (where are the problems). Brand/area/country focus draws its child sites (which sites need action). Machine focus draws the five branch labels and the drawer names the machine (what is wrong and who is assigned).
+1. **V1 Question per level.** Overview draws every hub/country and at least one alert badge when the data has alerts (where are the problems). Brand/area/country focus draws its child sites (which sites need action). Machine focus ends the drill: the drawer names the machine and shows Overview, Performance, Stock, Support, and Contract (what is wrong and who is assigned). Revenue, operators, tech, stock, and contract are not child nodes.
 2. **V2 In frame.** Focus and direct-child labels lie fully inside the usable rect (2px tolerance), not under the drawer or the header.
 3. **V3 Sizes.** V1 and V2 hold at 1366×768, 1920×1080, and 2560×1440.
 4. **V4 Browsers.** The same checks pass in Chromium and Firefox.

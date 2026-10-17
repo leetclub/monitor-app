@@ -134,6 +134,21 @@ window.APOS_SPACE_DATA = {
                       technical: { openTickets: 2, lastMaintenance: '2026-10-15', history: ['Board replace in progress'] },
                       operators: { lastVisit: '2026-10-12 09:40', log: ['Machine offline for tech'] },
                     },
+                    {
+                      id: 'm-ku-4',
+                      label: 'KU-4',
+                      model: 'Vendon Compact',
+                      status: 'unknown',
+                      stale: true,
+                      lastSeen: '2026-10-11T03:40:00Z',
+                      operatorId: 'person-op-ahmed',
+                      technicianId: 'person-tech-khaled',
+                      revenue: { today: 0, dailyAvg: 90, monthly: 0, cashPct: 0, digitalPct: 100, baseline: 90 },
+                      stock: { fillPct: 48, topProducts: ['Latte'], peakHours: '—' },
+                      contract: { vendor: 'Vendon', lease: '36 mo', renewal: '2027-03-15' },
+                      technical: { openTickets: 0, lastMaintenance: '2026-09-02', history: ['No heartbeat'] },
+                      operators: { lastVisit: '2026-10-11 03:40', log: ['No recent telemetry'] },
+                    },
                   ],
                 },
                 {
@@ -198,6 +213,21 @@ window.APOS_SPACE_DATA = {
                       contract: { vendor: 'Vendon', lease: '24 mo', renewal: '2027-02-01' },
                       technical: { openTickets: 1, lastMaintenance: '2026-09-15', history: ['Network drop'] },
                       operators: { lastVisit: '2026-10-14 18:00', log: ['Reported offline'] },
+                    },
+                    {
+                      id: 'm-mew-3',
+                      label: 'MEW-3',
+                      model: 'Vendon Compact',
+                      status: 'unknown',
+                      stale: true,
+                      lastSeen: '2026-10-09T22:15:00Z',
+                      operatorId: 'person-op-yousef',
+                      technicianId: 'person-tech-bader',
+                      revenue: { today: 0, dailyAvg: 70, monthly: 0, cashPct: 0, digitalPct: 100, baseline: 70 },
+                      stock: { fillPct: 61, topProducts: ['Tea'], peakHours: '—' },
+                      contract: { vendor: 'Vendon', lease: '24 mo', renewal: '2027-02-01' },
+                      technical: { openTickets: 0, lastMaintenance: '2026-08-30', history: ['Telemetry lost'] },
+                      operators: { lastVisit: '2026-10-09 22:15', log: ['No heartbeat'] },
                     },
                   ],
                 },
@@ -422,6 +452,21 @@ window.APOS_SPACE_DATA = {
                       technical: { openTickets: 1, lastMaintenance: '2026-10-15', history: ['Pump service'] },
                       operators: { lastVisit: '2026-10-14 11:30', log: ['Tech on site'] },
                     },
+                    {
+                      id: 'm-ee-6',
+                      label: 'EE-6',
+                      model: 'Vendon Compact',
+                      status: 'unknown',
+                      stale: true,
+                      lastSeen: '2026-10-08T18:05:00Z',
+                      operatorId: 'person-op-ahmed',
+                      technicianId: 'person-tech-khaled',
+                      revenue: { today: 0, dailyAvg: 55, monthly: 0, cashPct: 0, digitalPct: 100, baseline: 55 },
+                      stock: { fillPct: 33, topProducts: ['Water'], peakHours: '—' },
+                      contract: { vendor: 'Vendon', lease: '24 mo', renewal: '2027-04-01' },
+                      technical: { openTickets: 0, lastMaintenance: '2026-09-01', history: ['Silent'] },
+                      operators: { lastVisit: '2026-10-08 18:05', log: ['Last seen'] },
+                    },
                   ],
                 },
               ],
@@ -557,6 +602,7 @@ window.APOS_MAP_UTILS = (function () {
 
   function computeAlert(m) {
     if (!m || m.status === 'planned' || m.status === 'future') return null;
+    if (m.status === 'unknown' || m.stale) return null;
     const t = THRESH();
     const stockLow = (m.stock?.fillPct ?? 100) < t.stockLowPct;
     const offlineLong = m.status === 'offline' && (m.offlineHours || 0) > t.offlineHours;
@@ -583,9 +629,14 @@ window.APOS_MAP_UTILS = (function () {
   function rollup(node, childrenOf) {
     const ms = walkMachines(node, childrenOf);
     const total = ms.length;
+    const t = THRESH();
     const online = ms.filter((m) => m.status === 'active').length;
     const alerts = ms.filter((m) => computeAlert(m)).length;
     const offline = ms.filter((m) => m.status === 'offline').length;
+    const unknown = ms.filter((m) => m.status === 'unknown' || m.stale).length;
+    const maintenance = ms.filter((m) => m.status === 'maintenance').length;
+    const planned = ms.filter((m) => m.status === 'planned' || m.status === 'future' || m.planned).length;
+    const low = ms.filter((m) => m.status !== 'unknown' && !m.stale && (m.stock?.fillPct ?? 100) < t.stockLowPct).length;
     const revenueToday = ms.reduce((s, m) => s + (m.revenue?.today || 0), 0);
     const productCounts = {};
     ms.forEach((m) => {
@@ -600,6 +651,10 @@ window.APOS_MAP_UTILS = (function () {
       online,
       alerts,
       offline,
+      unknown,
+      maintenance,
+      planned,
+      low,
       revenueToday: Math.round(revenueToday * 10) / 10,
       topProduct,
       tint: alerts > 0,
@@ -616,6 +671,59 @@ window.APOS_MAP_UTILS = (function () {
     ];
   }
 
+  function healthOf(n) {
+    if (!n) return 'unknown';
+    if (n.planned || n.status === 'future' || n.status === 'planned') return 'planned';
+    if (n.status === 'unknown' || n.stale) return 'unknown';
+    if (n.status === 'offline') return 'offline';
+    if (n.alert === 'red') return 'critical';
+    if (n.alert === 'amber' || n.status === 'maintenance') return 'warning';
+    if (n.type === 'machine' && (n.stock?.fillPct ?? 100) < THRESH().stockLowPct) return 'warning';
+    if (n.type !== 'machine' && (n.rollup?.offline || 0) > 0) return 'critical';
+    if (n.type !== 'machine' && (n.alertCount || 0) > 0) return 'warning';
+    return 'healthy';
+  }
+
+  function fleetOf(machines) {
+    const ops = (machines || []).filter((m) => m && m.status !== 'planned' && m.status !== 'future' && !m.planned);
+    const offline = ops.filter((m) => m.status === 'offline').length;
+    const unknown = ops.filter((m) => m.status === 'unknown' || m.stale).length;
+    const low = ops.filter((m) => m.status !== 'offline' && m.status !== 'unknown' && !m.stale && (m.stock?.fillPct ?? 100) < THRESH().stockLowPct).length;
+    const critical = ops.filter((m) => m.status === 'offline' || computeAlert(m) === 'red').length;
+    const online = ops.length - offline - unknown - low;
+    const revenueToday = Math.round(ops.reduce((s, m) => s + (m.revenue?.today || 0), 0) * 10) / 10;
+    const availability = ops.length ? Math.round(((ops.length - offline - unknown) / ops.length) * 1000) / 10 : 100;
+    return { total: ops.length, online: Math.max(0, online), offline, unknown, low, critical, revenueToday, availability };
+  }
+
+  function inspectorSections(n, people) {
+    const person = (id) => (people && people[id] && people[id].name) || '—';
+    const money = (v) => (v == null || !Number.isFinite(Number(v)) ? '—' : `${v} KWD`);
+    const health = healthOf(n);
+    if (!n) return [];
+    if (n.type === 'machine') {
+      const seen = (n.status === 'unknown' || n.stale)
+        ? (n.lastSeen || 'no heartbeat')
+        : (n.operators?.lastVisit || 'live');
+      const alerts = n.alert ? 1 : 0;
+      const offline = n.status === 'offline' ? 1 : 0;
+      return [
+        { title: 'Overview', rows: [['Status', health], ['Last heartbeat', String(seen)], ['Alerts', String(alerts)], ['Offline', String(offline)]] },
+        { title: 'Performance', rows: [['Revenue today', money(n.revenue?.today ?? 0)]] },
+        { title: 'Stock', rows: [['Fill', `${n.stock?.fillPct ?? '—'}%`], ['Top product', (n.stock?.topProducts || [])[0] || '—']] },
+        { title: 'Support', rows: [['Operator', person(n.operatorId)], ['Technician', person(n.technicianId)]] },
+        { title: 'Contract', rows: [['Vendor', n.contract?.vendor || '—'], ['Renewal', n.contract?.renewal || '—']] },
+      ];
+    }
+    const r = n.rollup || {};
+    return [
+      { title: 'Overview', rows: [['Status', health], ['Machines', String(r.total || 0)], ['Online', String(r.online || 0)], ['Offline', String(r.offline || 0)], ['Unknown', String(r.unknown || 0)], ['Maintenance', String(r.maintenance || 0)], ['Planned', String(r.planned || 0)], ['Alerts', String(r.alerts || 0)]] },
+      { title: 'Performance', rows: [['Revenue today', money(r.revenueToday || 0)]] },
+      { title: 'Stock', rows: [['Low stock', String(r.low || 0)]] },
+      { title: 'Support', rows: [['Open alerts', String(r.alerts || 0)], ['Offline machines', String(r.offline || 0)]] },
+    ];
+  }
+
   return {
     ACCENTS,
     HUB_ACCENT,
@@ -625,5 +733,8 @@ window.APOS_MAP_UTILS = (function () {
     walkMachines,
     rollup,
     kpiRows,
+    healthOf,
+    fleetOf,
+    inspectorSections,
   };
 })();

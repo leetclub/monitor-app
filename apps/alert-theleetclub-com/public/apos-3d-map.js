@@ -25,6 +25,8 @@ const COLORS = {
 
 const RING = { 'country-kw': COLORS.teal, 'country-sa': COLORS.amber, 'country-ae': COLORS.sky };
 const ORBIT_TILT = THREE.MathUtils.degToRad(24);
+const LEVEL_ORBIT = { 1: 22, 2: 40, 3: 54, 4: 66, 5: 78 };
+const HEALTH_HEX = { healthy: 0x5ed6b0, warning: 0xe8c078, critical: 0xff6b7a, offline: 0xff6b7a, unknown: 0x94a3b8, planned: 0x9aa8bc };
 
 function buildGraph() {
   const nodes = [];
@@ -46,9 +48,11 @@ function buildGraph() {
   countries.forEach((c, i) => {
     const a = -Math.PI / 2 + (i / nC) * Math.PI * 2;
     const country = add({
-      id: c.id, type: 'country', label: c.code || c.label,
+      id: c.id, type: 'country',       label: c.code || c.label,
+      fullLabel: c.label || c.code,
       subtitle: c.status === 'future' ? 'planned' : 'live', status: c.status,
-      depth: 1, angle: a, orbit: 16, color: RING[c.id] || COLORS.indigo, r: 0.55, parentId: core.id,
+      depth: 1, angle: a, orbit: LEVEL_ORBIT[1], color: RING[c.id] || COLORS.indigo, r: 0.55, parentId: core.id,
+      planned: !!c.planned,
     });
     links.push({ source: core.id, target: country.id, kind: 'spine' });
 
@@ -58,7 +62,7 @@ function buildGraph() {
       const fan = arr.length <= 1 ? 0 : (ci / (arr.length - 1) - 0.5) * span;
       const brand = add({
         id: cl.id, type: 'client', label: cl.label || cl.brand, depth: 2,
-        angle: a + fan, orbit: 36, color: country.color, r: 0.28,
+        angle: a + fan, orbit: LEVEL_ORBIT[2], color: country.color, r: 0.28,
         parentId: country.id, countryId: country.id, comingSoon: !!cl.comingSoon,
       });
       links.push({ source: country.id, target: brand.id, kind: 'tree' });
@@ -67,7 +71,7 @@ function buildGraph() {
         const af = ((ai + 0.5) / Math.max(aarr.length, 1) - 0.5) * 0.55;
         const an = add({
           id: area.id, type: 'area', label: area.label, depth: 3,
-          angle: brand.angle + af, orbit: 46, color: country.color, r: 0.22,
+          angle: brand.angle + af, orbit: LEVEL_ORBIT[3], color: country.color, r: 0.22,
           parentId: brand.id, countryId: country.id, clientId: brand.id,
         });
         links.push({ source: brand.id, target: an.id, kind: 'tree' });
@@ -76,7 +80,7 @@ function buildGraph() {
           const lf = ((li + 0.5) / Math.max(larr.length, 1) - 0.5) * 0.4;
           const ln = add({
             id: loc.id, type: 'location', label: loc.label, depth: 4,
-            angle: an.angle + lf, orbit: 53, color: COLORS.white, r: 0.18,
+            angle: an.angle + lf, orbit: LEVEL_ORBIT[4], color: COLORS.white, r: 0.18,
             parentId: an.id, countryId: country.id, clientId: brand.id,
             alert: !!(loc.machines || []).some((m) => m.alert),
           });
@@ -86,27 +90,36 @@ function buildGraph() {
             const mf = ((mi + 0.5) / Math.max(marr.length, 1) - 0.5) * 0.32;
             const mn = add({
               id: m.id, type: 'machine', label: m.label, depth: 5,
-              angle: ln.angle + mf, orbit: 59,
-              color: m.alert ? COLORS.magenta : COLORS.white, r: 0.15,
+              angle: ln.angle + mf, orbit: LEVEL_ORBIT[5],
+              color: COLORS.white, r: 0.15,
               parentId: ln.id, countryId: country.id, clientId: brand.id,
-              alert: !!m.alert, status: m.status || 'active', revenue: m.revenue, stock: m.stock,
+              status: m.status || 'active', revenue: m.revenue, stock: m.stock,
               technical: m.technical, operators: m.operators, contract: m.contract,
+              operatorId: m.operatorId, technicianId: m.technicianId,
+              offlineHours: m.offlineHours || 0, lastSeen: m.lastSeen || null, stale: !!m.stale,
+              model: m.model,
             });
+            mn.alert = window.APOS_MAP_UTILS?.computeAlert(mn) || null;
             links.push({ source: ln.id, target: mn.id, kind: 'tree' });
-
-            BRANCHES.forEach((b, bi) => {
-              const ba = mn.angle + ((bi + 0.5) / BRANCHES.length - 0.5) * 0.85;
-              add({
-                id: `${m.id}::${b.id}`, type: 'branch', branchId: b.id, label: b.label, depth: 6,
-                angle: ba, orbit: 64, color: COLORS.mint, r: 0.11,
-                parentId: mn.id, countryId: country.id, clientId: brand.id, machineId: m.id,
-              });
-              links.push({ source: mn.id, target: `${m.id}::${b.id}`, kind: 'tree' });
-            });
           });
         });
       });
     });
+  });
+
+  const byOrbit = new Map();
+  nodes.forEach((n) => {
+    if (n.type === 'enterprise') return;
+    const key = String(n.orbit);
+    if (!byOrbit.has(key)) byOrbit.set(key, []);
+    byOrbit.get(key).push(n);
+  });
+  byOrbit.forEach((list) => {
+    list.sort((a, b) => a.angle - b.angle);
+    const min = 0.09;
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].angle - list[i - 1].angle < min) list[i].angle = list[i - 1].angle + min;
+    }
   });
 
   const qTilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), ORBIT_TILT);
@@ -162,6 +175,26 @@ function mount() {
   let filterMode = 'all';
   let filterHot = new Set();
   let pageHidden = false;
+  let inspectorSig = '';
+  let rafId = 0;
+  let hiddenTimer = 0;
+  function scheduleTick() {
+    if (rafId || hiddenTimer) return;
+    if (pageHidden) {
+      hiddenTimer = setTimeout(() => {
+        hiddenTimer = 0;
+        rafId = requestAnimationFrame(() => {
+          rafId = 0;
+          tick();
+        });
+      }, 200);
+      return;
+    }
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      tick();
+    });
+  }
   let pointerNX = 0;
   let pointerNY = 0;
   let orbitBase = null;
@@ -229,7 +262,7 @@ function mount() {
 
   const ringGroup = new THREE.Group();
   ringGroup.rotation.x = ORBIT_TILT;
-  [16, 36, 53].forEach((r) => {
+  Object.values(LEVEL_ORBIT).forEach((r) => {
     const pts = [];
     for (let i = 0; i <= 128; i++) {
       const a = (i / 128) * Math.PI * 2;
@@ -365,33 +398,47 @@ function mount() {
   scene.add(coreGroup);
   meshes.set(graph.core.id, { mesh: coreGroup, node: graph.core, halo: null });
 
+  function shapeFor(n) {
+    const r = n.r;
+    if (n.type === 'country') return new THREE.OctahedronGeometry(r, 0);
+    if (n.type === 'client') return new THREE.TetrahedronGeometry(r * 1.2, 0);
+    if (n.type === 'area') return new THREE.BoxGeometry(r * 1.5, r * 1.5, r * 1.5);
+    if (n.type === 'location') return new THREE.CylinderGeometry(r * 0.9, r * 0.9, r * 0.55, 6);
+    return new THREE.SphereGeometry(r, 16, 16);
+  }
   graph.nodes.forEach((n) => {
     if (n.type === 'enterprise') return;
-    const mat = new THREE.MeshStandardMaterial({
-      color: n.color, emissive: n.color,
-      emissiveIntensity: n.type === 'country' ? 0.55 : n.type === 'client' ? 0.42 : 0.28,
-      metalness: 0.08, roughness: 0.35, transparent: true,
-      opacity: n.status === 'future' || n.comingSoon ? 0.38 : 0.98,
-    });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(n.r, 24, 24), mat);
+    const planned = n.status === 'future' || n.planned;
+    const health = window.APOS_MAP_UTILS?.healthOf(n) || 'healthy';
+    const mat = planned
+      ? new THREE.MeshBasicMaterial({ color: 0x9aa8bc, wireframe: true, transparent: true, opacity: 0.9 })
+      : new THREE.MeshStandardMaterial({
+        color: n.color, emissive: n.color,
+        emissiveIntensity: n.alert ? 0.55 : 0.12,
+        metalness: 0.08, roughness: 0.4, transparent: true, opacity: 0.96,
+      });
+    const mesh = new THREE.Mesh(shapeFor(n), mat);
     mesh.position.copy(n.pos);
     mesh.userData.nodeId = n.id;
     scene.add(mesh);
-    // Soft volumetric halo (additive) — restrained glow, sized by level
     let halo = null;
-    if (n.depth <= 3) {
-      const haloScale = n.depth <= 1 ? 2.6 : n.depth === 2 ? 2.35 : 2.1;
-      const haloOp = n.depth <= 1 ? 0.16 : n.depth === 2 ? 0.12 : 0.08;
+    if (n.alert) {
       halo = new THREE.Mesh(
-        new THREE.SphereGeometry(n.r * haloScale, 20, 20),
+        new THREE.SphereGeometry(n.r * 2.1, 16, 16),
         new THREE.MeshBasicMaterial({
-          color: n.color, transparent: true, opacity: haloOp, depthWrite: false,
+          color: 0xff6b7a, transparent: true, opacity: 0.18, depthWrite: false,
           blending: THREE.AdditiveBlending,
         })
       );
       halo.position.copy(n.pos);
       scene.add(halo);
     }
+    const statusRing = new THREE.Mesh(
+      new THREE.TorusGeometry(n.r * 1.85, planned ? 0.012 : 0.018, 6, 28),
+      new THREE.MeshBasicMaterial({ color: HEALTH_HEX[health] || HEALTH_HEX.healthy, transparent: true, opacity: 0.95 })
+    );
+    statusRing.position.copy(n.pos);
+    scene.add(statusRing);
     const el = document.createElement('div');
     el.className = `m3d-label depth-${n.depth}`;
     el.dataset.nid = n.id;
@@ -399,10 +446,15 @@ function mount() {
     el.style.display = 'none';
     labelLayer.appendChild(el);
     labelEls.set(n.id, el);
+    const badge = document.createElement('div');
+    badge.className = 'm3d-badge';
+    badge.style.display = 'none';
+    labelLayer.appendChild(badge);
+    n._badgeEl = badge;
     n._baseAlert = !!n.alert;
     n._baseStatus = n.status;
     if (n.stock) n._baseFill = n.stock.fillPct;
-    meshes.set(n.id, { mesh, halo, node: n });
+    meshes.set(n.id, { mesh, halo, statusRing, node: n });
   });
 
   graph.links.forEach((L) => {
@@ -411,9 +463,11 @@ function mount() {
     if (!a || !b) return;
     const pts = curvePoints(a.pos, b.pos, 18);
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const depth = Math.min(a.depth || 0, b.depth || 0);
+    const opacities = [0.78, 0.58, 0.4, 0.28, 0.18, 0.12];
     const mat = new THREE.LineBasicMaterial({
-      color: L.kind === 'spine' ? 0x6a7a8a : a.color || 0x88aacc,
-      transparent: true, opacity: L.kind === 'spine' ? 0.35 : 0.32,
+      color: depth <= 1 ? 0xd5e4f5 : (a.color || 0x88aacc),
+      transparent: true, opacity: opacities[Math.min(depth, opacities.length - 1)],
     });
     const line = new THREE.Line(geo, mat);
     line.userData = { ...L };
@@ -438,8 +492,8 @@ function mount() {
       || opts.reserveDrawer);
     const right = drawerOpen ? ((drawer?.getBoundingClientRect().width || 300) + 16) : 0;
     const left = hudMode ? 220 : 0;
-    const bottom = hudMode ? 110 : 56;
-    return { w, h, left, right, bottom, top: 56 };
+    const bottom = hudMode ? 110 : 28;
+    return { w, h, left, right, bottom, top: 96 };
   }
 
   function resize() {
@@ -545,29 +599,6 @@ function mount() {
     setExpandedTo(n.id);
     idleOrbit = n.type === 'enterprise';
     lastInteract = performance.now();
-    // Bloom machine children in a local ring around the machine
-    if (n.type === 'machine') {
-      const kids = graph.nodes.filter((c) => c.parentId === n.id && c.type === 'branch');
-      kids.forEach((c, i) => {
-        const a = -Math.PI / 2 + (i / Math.max(kids.length, 1)) * Math.PI * 2;
-        const ring = 2.8;
-        c.pos = n.pos.clone().add(new THREE.Vector3(Math.cos(a) * ring, 0.35, Math.sin(a) * ring));
-        const entry = meshes.get(c.id);
-        if (entry) {
-          entry.mesh.position.copy(c.pos);
-          // rebuild link geometry parent→child
-        }
-      });
-      linkLines.forEach((line) => {
-        if (line.userData.source !== n.id) return;
-        const a = graph.byId.get(line.userData.source);
-        const b = graph.byId.get(line.userData.target);
-        if (!a || !b) return;
-        const pts = curvePoints(a.pos, b.pos, 16);
-        line.geometry.dispose();
-        line.geometry = new THREE.BufferGeometry().setFromPoints(pts);
-      });
-    }
 
     // Reserve drawer width on drill — inspector opens as the flight settles
     const insets = viewportInsets({ reserveDrawer: n.type !== 'enterprise' });
@@ -579,18 +610,18 @@ function mount() {
     if (n.type === 'enterprise') {
       center.set(0, 0.8, 0);
       // Fit full constellation (core + KW/AE/SA + KW brands) in ~70% of view
-      size.set(58, 32, 58);
+      size.set(90, 42, 90);
     } else {
       // Look at the focus itself. Distance still covers its children.
-      const kids = graph.nodes.filter((c) => c.parentId === n.id && c.type !== 'branch' || (n.type === 'machine' && c.parentId === n.id));
-      let reach = n.type === 'branch' ? 3.2 : 4;
+      const kids = graph.nodes.filter((c) => c.parentId === n.id);
+      let reach = 4;
       kids.forEach((c) => { reach = Math.max(reach, n.pos.distanceTo(c.pos) + (c.r || 1) * 2); });
       center.copy(n.pos);
       size.set(reach * 2, reach * 2, reach * 2);
     }
 
     const fitFrac = n.type === 'enterprise' ? 0.68 : 0.62;
-    const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 58 : 4);
+    const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 90 : 4);
     const fov = THREE.MathUtils.degToRad(camera.fov);
     let dist = (maxDim / fitFrac) / (2 * Math.tan(fov / 2));
     dist = THREE.MathUtils.clamp(dist, n.type === 'enterprise' ? 72 : 8, 140);
@@ -653,6 +684,30 @@ function mount() {
     applyLod();
   }
 
+  function pathText(n) {
+    const parts = [];
+    let c = n;
+    while (c) {
+      if (c.type !== 'enterprise') parts.unshift(c.fullLabel || c.label || c.id);
+      c = c.parentId ? graph.byId.get(c.parentId) : null;
+    }
+    return parts.join(' · ');
+  }
+
+  function incidentDetail(m, kind) {
+    const mins = Math.max(30, Math.round(((m && m.offlineHours) || 0.5) * 60));
+    return {
+      kind,
+      machineId: m?.id,
+      title: m?.label || '',
+      path: m ? pathText(m) : '',
+      severity: kind === 'offline' ? 'critical' : kind === 'lowstock' ? 'warning' : 'info',
+      happened: kind === 'offline' ? `Offline >${mins}m` : kind === 'lowstock' ? 'Low stock' : kind === 'task' ? 'Task assigned' : 'Sale recorded',
+      at: Date.now(),
+      label: m?.label || kind,
+    };
+  }
+
   function nodeFacts(id) {
     const n = graph.byId.get(id);
     if (!n) return null;
@@ -664,8 +719,12 @@ function mount() {
     const stockPct = n.stock?.fillPct ?? null;
     return {
       id: n.id, label: n.label || '', type: n.type,
-      status: n.status || (n.alert ? 'alert' : 'ok'),
+      status: window.APOS_MAP_UTILS?.healthOf(n) || n.status || (n.alert ? 'alert' : 'ok'),
       alerts, offline, revenueToday, stockPct, badge: n.alertCount || 0,
+      health: window.APOS_MAP_UTILS?.healthOf(n) || 'healthy',
+      lastSeen: n.lastSeen || n.operators?.lastVisit || null,
+      path: pathText(n),
+      sections: window.APOS_MAP_UTILS?.inspectorSections(n, DATA.people) || [],
     };
   }
 
@@ -750,7 +809,14 @@ function mount() {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.dataset.nid = p.id;
-      btn.textContent = p.type === 'enterprise' ? 'APOS' : p.label;
+      btn.textContent = p.type === 'enterprise' ? 'APOS' : (p.fullLabel || p.label);
+      const issues = p.type === 'machine' ? (p.alert ? 1 : 0) : (p.rollup?.alerts || p.alertCount || 0);
+      if (issues > 0) {
+        const mark = document.createElement('em');
+        mark.className = 'crumb-count';
+        mark.textContent = String(issues);
+        btn.appendChild(mark);
+      }
       if (i === path.length - 1) btn.classList.add('is-current');
       btn.addEventListener('click', () => {
         let idx = -1;
@@ -981,27 +1047,17 @@ function mount() {
         el.style.display = 'none';
         return;
       }
-      const badge = n.alertCount || 0;
-      const chipOn = offlineChip.has(n.id) && (n.type === 'machine' || n.depth <= 2);
-      const mark = badge + (chipOn ? '|off' : '');
-      if (el.dataset.mark !== mark) {
-        el.dataset.mark = mark;
-        el.dataset.badge = String(badge);
-        el.textContent = n.label || '';
-        if (badge > 0 && n.type !== 'machine') {
-          const b = document.createElement('span');
-          b.className = 'm3d-badge';
-          b.textContent = String(badge);
-          el.appendChild(b);
-        }
-        if (chipOn) {
-          const c = document.createElement('span');
-          c.className = 'm3d-off';
-          c.textContent = 'Offline';
-          el.appendChild(c);
-        }
-      }
+      el.textContent = n.label || '';
       el.style.display = 'block';
+      const health = window.APOS_MAP_UTILS?.healthOf(n) || 'healthy';
+      let pill = '';
+      if (n.type === 'machine') {
+        if (health === 'offline') pill = 'OFFLINE';
+        else if (health === 'unknown') pill = 'UNKNOWN';
+        else if (health === 'warning') pill = 'LOW';
+        else if (health === 'critical') pill = 'ALERT';
+      } else if (health === 'planned' && (n.type === 'country' || n.type === 'hub') && (focusId === graph.core.id || id === focusId)) pill = 'Planned';
+      else if ((n.alertCount || 0) > 0) pill = String(n.alertCount);
       const coreV = graph.core.pos.clone().project(camera);
       const cx = (coreV.x * 0.5 + 0.5) * w;
       const cy = (-coreV.y * 0.5 + 0.5) * h;
@@ -1047,15 +1103,40 @@ function mount() {
       el.classList.toggle('is-focus', id === focusId);
       el.classList.toggle('is-hub', n.depth <= 1);
       el.classList.toggle('is-child', n.parentId === focusId);
-      placed.push({
+      const labelBox = {
         x, y, id, w: boxW, h: boxH,
         l: x - boxW / 2, r: x + boxW / 2, t: y, b: y + boxH,
-      });
+      };
+      placed.push(labelBox);
+      const badgeEl = n._badgeEl;
+      if (badgeEl) {
+        if (!pill) {
+          badgeEl.style.display = 'none';
+        } else {
+          badgeEl.textContent = pill;
+          badgeEl.className = `m3d-badge is-${health}`;
+          badgeEl.style.display = 'block';
+          const bw = Math.max(18, pill.length * 7 + 8);
+          const bh = 14;
+          let bx = nx + 12;
+          let by = ny - 22;
+          const hitsB = (px, py) => placed.some((p) => px < p.r + 3 && px + bw > p.l - 3 && py < p.b + 3 && py + bh > p.t - 3);
+          let guard = 0;
+          while (guard < 8 && hitsB(bx, by)) { by -= bh + 2; guard += 1; }
+          badgeEl.style.left = `${bx}px`;
+          badgeEl.style.top = `${by}px`;
+          placed.push({ l: bx, r: bx + bw, t: by, b: by + bh, id: `${id}:badge` });
+        }
+      }
       visible.push({ id, label: n.label, x, y });
     });
     // Hide unused
     labelEls.forEach((el, id) => {
-      if (!want.has(id)) el.style.display = 'none';
+      if (!want.has(id)) {
+        el.style.display = 'none';
+        const n = graph.byId.get(id);
+        if (n?._badgeEl) n._badgeEl.style.display = 'none';
+      }
     });
     return visible;
   }
@@ -1166,7 +1247,10 @@ function mount() {
   });
   document.addEventListener('visibilitychange', () => {
     pageHidden = document.hidden;
-    if (!pageHidden) requestAnimationFrame(tick);
+    if (!pageHidden) {
+      if (hiddenTimer) { clearTimeout(hiddenTimer); hiddenTimer = 0; }
+      scheduleTick();
+    }
   });
 
   document.querySelectorAll('.zoom-btn').forEach((btn) => {
@@ -1328,27 +1412,49 @@ function mount() {
       }
       const low = (n.stock?.fillPct ?? 100) < 15;
       const task = (n._taskUntil || 0) > now;
-      n.alert = !!(n._baseAlert || n.status === 'offline' || low || task);
+      n.alert = window.APOS_MAP_UTILS?.computeAlert(n) || (task ? 'amber' : null);
       n.alertCount = n.alert ? 1 : 0;
       const entry = meshes.get(n.id);
-      if (entry?.mesh?.material?.emissive) {
-        entry.mesh.material.emissive.setHex(n.status === 'offline' ? 0xff3355 : (n.color || 0xffffff));
+      const health = window.APOS_MAP_UTILS?.healthOf(n) || 'healthy';
+      if (entry?.statusRing?.material?.color) entry.statusRing.material.color.setHex(HEALTH_HEX[health] || HEALTH_HEX.healthy);
+      if (entry?.mesh?.material?.emissive && !entry.mesh.material.wireframe) {
+        entry.mesh.material.emissive.setHex(n.status === 'offline' || n.alert === 'red' ? 0xff3355 : (n.color || 0xffffff));
+        entry.mesh.material.emissiveIntensity = n.alert ? 0.55 : 0.12;
       }
     });
     const roll = (id) => {
+      let total = 0;
+      let online = 0;
       let alerts = 0;
       let offline = 0;
+      let unknown = 0;
+      let maintenance = 0;
+      let planned = 0;
+      let low = 0;
       let revenueToday = 0;
       graph.nodes.forEach((c) => {
         if (c.parentId !== id || c.type === 'branch') return;
         if (c.type === 'machine') {
+          total += 1;
+          if (c.status === 'active') online += 1;
           alerts += c.alertCount || 0;
-          offline += c.status === 'offline' ? 1 : 0;
+          const stale = c.status === 'unknown' || c.stale;
+          if (stale) unknown += 1;
+          else if (c.status === 'offline') offline += 1;
+          else if (c.status === 'maintenance') maintenance += 1;
+          else if (c.status === 'planned' || c.status === 'future') planned += 1;
+          else if ((c.stock?.fillPct ?? 100) < 15) low += 1;
           revenueToday += c.revenue?.today || 0;
         } else {
           const sub = roll(c.id);
+          total += sub.total;
+          online += sub.online;
           alerts += sub.alerts;
           offline += sub.offline;
+          unknown += sub.unknown;
+          maintenance += sub.maintenance;
+          planned += sub.planned;
+          low += sub.low;
           revenueToday += sub.revenueToday;
         }
       });
@@ -1356,11 +1462,19 @@ function mount() {
       revenueToday = Math.round(revenueToday * 10) / 10;
       if (n && n.type !== 'machine') {
         n.alertCount = alerts;
-        n.rollup = { alerts, offline, revenueToday, tint: alerts > 0 };
+        n.rollup = { total, online, alerts, offline, unknown, maintenance, planned, low, revenueToday, tint: alerts > 0 };
       }
-      return { alerts, offline, revenueToday };
+      return { total, online, alerts, offline, unknown, maintenance, planned, low, revenueToday };
     };
     roll(graph.core.id);
+    const focus = graph.byId.get(focusId);
+    if (focus && focus.type !== 'enterprise') {
+      const sig = `${focus.alertCount}|${focus.rollup?.offline ?? 0}|${focus.rollup?.low ?? 0}|${focus.rollup?.revenueToday ?? 0}|${focus.status || ''}|${focus.alert || ''}`;
+      if (sig !== inspectorSig) {
+        inspectorSig = sig;
+        window.APOS_3D_MAP?.refreshInspector?.();
+      }
+    }
     const hudStat = document.getElementById('hud-live-stat');
     if (hudStat) {
       const coreRoll = graph.byId.get(graph.core.id);
@@ -1372,7 +1486,9 @@ function mount() {
         const stock = n.stock?.fillPct ?? 100;
         const hit = filterMode === 'alerts' ? !!n.alert
           : filterMode === 'offline' ? n.status === 'offline'
-          : n.type === 'machine' && stock < 15;
+          : filterMode === 'unknown' ? (n.status === 'unknown' || n.stale)
+          : filterMode === 'critical' ? (n.status === 'offline' || n.alert === 'red')
+          : n.type === 'machine' && n.status !== 'unknown' && stock < 15;
         if (!hit) return;
         let c = n;
         while (c) { filterHot.add(c.id); c = c.parentId ? graph.byId.get(c.parentId) : null; }
@@ -1392,7 +1508,7 @@ function mount() {
   const clock = new THREE.Clock();
   function tick() {
     if (pageHidden) {
-      setTimeout(() => requestAnimationFrame(tick), 200);
+      scheduleTick();
       return;
     }
     const workT0 = performance.now();
@@ -1438,6 +1554,7 @@ function mount() {
         mesh.position.y = node.pos.y + Math.sin(t * 0.85 + ph) * 0.06;
         const entry = meshes.get(node.id);
         if (entry?.halo) entry.halo.position.copy(mesh.position);
+        if (entry?.statusRing) entry.statusRing.position.copy(mesh.position);
         if (node.alert || node.status === 'offline') {
           mesh.material.emissiveIntensity = Math.max(mesh.material.emissiveIntensity, 0.2 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.1 + ph)));
         }
@@ -1502,7 +1619,7 @@ function mount() {
       frameSamples.push(work);
       if (frameSamples.length > 90) frameSamples.shift();
     }
-    requestAnimationFrame(tick);
+    scheduleTick();
   }
   document.getElementById('inspector-drawer')?.classList.remove('is-open');
   renderBreadcrumb();
@@ -1570,10 +1687,10 @@ function mount() {
       }
       recompute3dAlerts();
       spawn3dFlow(m.id, kind);
-      stage.dispatchEvent(new CustomEvent('apos-live', { detail: { kind, label: kind, title: m.label, body: kind + ' · ' + m.label, machineId: m.id } }));
+      stage.dispatchEvent(new CustomEvent('apos-live', { detail: incidentDetail(m, kind) }));
     }, 3600);
   }
-  requestAnimationFrame(tick);
+  scheduleTick();
   recompute3dAlerts();
 
   const api = {
@@ -1715,14 +1832,16 @@ function mount() {
       return { median: Math.round(mid * 10) / 10, p95: Math.round(p95 * 10) / 10, n: s.length };
     },
     setFilter: (mode) => {
-      filterMode = ['alerts', 'offline', 'lowstock'].includes(mode) ? mode : 'all';
+      filterMode = ['alerts', 'offline', 'lowstock', 'unknown', 'critical'].includes(mode) ? mode : 'all';
       filterHot = new Set();
       if (filterMode !== 'all') {
         graph.nodes.forEach((n) => {
           const stock = n.stock?.fillPct ?? 100;
           const hit = filterMode === 'alerts' ? !!n.alert
             : filterMode === 'offline' ? n.status === 'offline'
-            : n.type === 'machine' && stock < 15;
+            : filterMode === 'unknown' ? (n.status === 'unknown' || n.stale)
+            : filterMode === 'critical' ? (n.status === 'offline' || n.alert === 'red')
+            : n.type === 'machine' && n.status !== 'unknown' && stock < 15;
           if (!hit) return;
           let c = n;
           while (c) { filterHot.add(c.id); c = c.parentId ? graph.byId.get(c.parentId) : null; }
@@ -1740,11 +1859,15 @@ function mount() {
       });
       return n;
     },
+    fleetKpis: () => Object.assign(
+      window.APOS_MAP_UTILS?.fleetOf(graph.nodes.filter((n) => n.type === 'machine')) || {},
+      { refreshedAt: Date.now() }
+    ),
     searchNodes: (q) => {
       const s = String(q || '').trim().toLowerCase();
       if (!s) return [];
-      return graph.nodes.filter((n) => n.type !== 'branch' && (n.label || '').toLowerCase().includes(s))
-        .slice(0, 8).map((n) => ({ id: n.id, label: n.label, type: n.type }));
+      return graph.nodes.filter((n) => n.type !== 'branch' && ((n.label || '') + ' ' + pathText(n)).toLowerCase().includes(s))
+        .slice(0, 8).map((n) => ({ id: n.id, label: n.label, type: n.type, path: pathText(n) }));
     },
     getTransform: () => ({
       k: 55 / camera.position.distanceTo(controls.target),
@@ -1785,7 +1908,7 @@ function mount() {
       }
       recompute3dAlerts();
       spawn3dFlow(m.id, k);
-      stage.dispatchEvent(new CustomEvent('apos-live', { detail: { kind: k, label: k === 'offline' ? 'Machine offline' : k, title: m.label, body: (k === 'offline' ? 'Machine offline' : k) + ' · ' + m.label, machineId: m.id } }));
+      stage.dispatchEvent(new CustomEvent('apos-live', { detail: incidentDetail(m, k) }));
       return { id: m.id, status: m.status, alert: !!m.alert, kw: graph.byId.get('country-kw')?.alertCount || 0, leet: graph.byId.get('client-leet')?.alertCount || 0 };
     },
   };

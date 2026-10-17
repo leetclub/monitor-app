@@ -130,11 +130,20 @@
     document.getElementById('insp-title').textContent = payload.title || '—';
     const grid = document.getElementById('insp-grid');
     grid.innerHTML = '';
-    (payload.rows || []).forEach(([k, v]) => {
-      const row = document.createElement('div');
-      row.className = 'insp-row';
-      row.innerHTML = `<span>${k}</span><span>${v}</span>`;
-      grid.appendChild(row);
+    const sections = payload.sections && payload.sections.length ? payload.sections : [{ title: '', rows: payload.rows || [] }];
+    sections.forEach((sec) => {
+      if (sec.title) {
+        const h = document.createElement('h4');
+        h.className = 'insp-sec';
+        h.textContent = sec.title;
+        grid.appendChild(h);
+      }
+      (sec.rows || []).forEach(([k, v]) => {
+        const row = document.createElement('div');
+        row.className = 'insp-row';
+        row.innerHTML = `<span>${k}</span><span>${v}</span>`;
+        grid.appendChild(row);
+      });
     });
     d.classList.add('is-open');
     document.body.classList.add('inspector-open');
@@ -188,12 +197,13 @@
         openInspector({
           kicker: focus.type || 'node',
           title: facts?.label || focus.id,
+          sections: facts?.sections,
           rows: facts ? [
             ['Alerts', String(facts.alerts)],
             ['Offline', String(facts.offline)],
             ['Revenue today', facts.revenueToday == null ? '—' : `${facts.revenueToday} KWD`],
             ['Stock', facts.stockPct == null ? '—' : `${facts.stockPct}%`],
-            ['Status', facts.status],
+            ['Status', facts.health || facts.status],
           ] : [
             ['Level', String(focus.level ?? '—')],
           ],
@@ -213,6 +223,13 @@
       };
     }
     m.refreshInspector = paintInspector;
+    const prevIdle = m.waitForIdle?.bind(m);
+    if (prevIdle) {
+      m.waitForIdle = async () => {
+        await prevIdle();
+        paintInspector();
+      };
+    }
     const prevReset = m.reset?.bind(m);
     if (prevReset) {
       m.reset = (...args) => {
@@ -267,18 +284,35 @@
       if (!m || typeof m.searchNodes !== 'function') return [];
       return m.searchNodes(input.value);
     }
+    function triage() {
+      const m = api();
+      const f = m?.fleetKpis?.() || {};
+      return [
+        { id: '__offline', label: `${f.offline || 0} offline machines`, type: 'triage', filter: 'offline' },
+        { id: '__low', label: `${f.low || 0} low stock`, type: 'triage', filter: 'lowstock' },
+        { id: '__unk', label: `${f.unknown || 0} stale machines`, type: 'triage', filter: 'unknown' },
+        { id: '__crit', label: `${f.critical || 0} critical alerts`, type: 'triage', filter: 'critical' },
+      ];
+    }
     function paint() {
-      const rows = hits();
+      const rows = input.value.trim() ? hits() : triage();
       active = Math.min(active, Math.max(0, rows.length - 1));
       list.innerHTML = '';
       rows.forEach((h, i) => {
         const li = document.createElement('li');
         li.className = i === active ? 'is-active' : '';
-        li.innerHTML = `${h.label}<span class="hit-type">${h.type}</span>`;
+        const path = h.path ? `<span class="hit-path">${h.path}</span>` : '';
+        li.innerHTML = `<span class="hit-label">${h.label}</span>${path}<span class="hit-type">${h.type}</span>`;
         li.addEventListener('mousedown', (e) => {
           e.preventDefault();
           const m = api();
-          if (m) m.flyTo(h.id);
+          if (!m) return;
+          if (h.filter && m.setFilter) {
+            m.setFilter(h.filter);
+            document.querySelectorAll('[data-filter], [data-kpi]').forEach((b) => {
+              b.classList.toggle('is-on', b.dataset.filter === h.filter || b.dataset.kpi === h.filter);
+            });
+          } else m.flyTo(h.id);
           closeSearch();
         });
         list.appendChild(li);
@@ -298,7 +332,7 @@
     document.getElementById('map-search-btn').addEventListener('click', openSearch);
     input.addEventListener('input', () => { active = 0; paint(); });
     input.addEventListener('keydown', (e) => {
-      const rows = hits();
+      const rows = input.value.trim() ? hits() : triage();
       if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); return; }
       if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(rows.length - 1, active + 1); paint(); }
       if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); paint(); }
@@ -306,7 +340,9 @@
         e.preventDefault();
         e.stopPropagation();
         const m = api();
-        if (m) m.flyTo(rows[active].id);
+        const row = rows[active];
+        if (m && row.filter && m.setFilter) m.setFilter(row.filter);
+        else if (m) m.flyTo(row.id);
         closeSearch();
       }
     });
@@ -324,22 +360,106 @@
         else closeSearch();
       }
     });
+    const rank = { critical: 0, warning: 1, info: 2 };
     stage.addEventListener('apos-live', (e) => {
       const ev = e.detail || {};
       const li = document.createElement('li');
-      li.className = `kind-${ev.kind || 'sale'}`;
-      li.textContent = ev.body || ev.label || 'event';
-      feed.prepend(li);
+      const sev = ev.severity || (ev.kind === 'offline' ? 'critical' : ev.kind === 'lowstock' ? 'warning' : 'info');
+      li.className = `incident sev-${sev}`;
+      li.dataset.sev = sev;
+      const when = new Date(ev.at || Date.now());
+      const hh = String(when.getHours()).padStart(2, '0');
+      const mm = String(when.getMinutes()).padStart(2, '0');
+      li.innerHTML = `<span class="inc-sev" aria-hidden="true"></span><span class="inc-path">${ev.path || ev.title || ''}</span><span class="inc-what">${ev.happened || ev.label || 'Update'}</span><time class="inc-time">${hh}:${mm}</time>`;
+      if (ev.machineId) {
+        li.addEventListener('click', () => {
+          const map = api();
+          if (map) map.flyTo(ev.machineId);
+        });
+      }
+      const items = [...feed.children];
+      const slot = items.find((el) => (rank[el.dataset.sev] ?? 3) > (rank[sev] ?? 3));
+      if (slot) feed.insertBefore(li, slot);
+      else feed.appendChild(li);
       while (feed.children.length > 4) feed.removeChild(feed.lastChild);
       const map = api();
       if (map && typeof map.refreshInspector === 'function') map.refreshInspector();
+      paintKpis();
     });
+  }
+
+  function paintKpis() {
+    const bar = document.getElementById('fleet-kpis');
+    const m = api();
+    if (!bar || !m || typeof m.fleetKpis !== 'function') return;
+    const f = m.fleetKpis();
+    const when = new Date(f.refreshedAt || Date.now());
+    const clock = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
+    const cells = [
+      ['offline', 'Offline', f.offline],
+      ['critical', 'Critical', f.critical],
+      ['lowstock', 'Low stock', f.low],
+      ['revenue', 'Revenue', `${f.revenueToday} KWD`],
+      ['availability', 'Availability', `${f.availability}%`],
+      ['refresh', 'Updated', clock],
+    ];
+    cells.forEach(([key, label, value]) => {
+      const btn = bar.querySelector(`[data-kpi="${key}"]`);
+      if (!btn) return;
+      btn.querySelector('b').textContent = value == null ? '—' : String(value);
+      btn.querySelector('span').textContent = label;
+    });
+  }
+
+  function ensureFleetChrome() {
+    const header = document.querySelector('.space-top, .tree-top, .map3d-top');
+    if (header && !document.getElementById('fleet-kpis')) {
+      const bar = document.createElement('div');
+      bar.id = 'fleet-kpis';
+      bar.className = 'fleet-kpis';
+      bar.innerHTML = ['offline', 'critical', 'lowstock', 'revenue', 'availability', 'refresh']
+        .map((k) => `<button type="button" data-kpi="${k}"><span></span><b>—</b></button>`).join('');
+      header.appendChild(bar);
+      bar.querySelectorAll('[data-kpi]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.kpi;
+          if (key === 'revenue' || key === 'availability' || key === 'refresh') return;
+          const m = api();
+          if (!m || !m.setFilter) return;
+          const next = m.getFilter?.() === key ? 'all' : key;
+          m.setFilter(next);
+          bar.querySelectorAll('[data-kpi]').forEach((b) => b.classList.toggle('is-on', b.dataset.kpi === next));
+          document.querySelectorAll('[data-filter]').forEach((b) => b.classList.toggle('is-on', b.dataset.filter === next));
+        });
+      });
+    }
+    const stage = document.querySelector('.space-stage, .tree-stage, .map3d-stage');
+    if (stage && !document.getElementById('map-legend')) {
+      const legend = document.createElement('div');
+      legend.id = 'map-legend';
+      legend.className = 'map-legend';
+      legend.innerHTML = `
+        <span><i class="lg-shape lg-country"></i>Country</span>
+        <span><i class="lg-shape lg-brand"></i>Brand</span>
+        <span><i class="lg-shape lg-area"></i>Area</span>
+        <span><i class="lg-shape lg-site"></i>Site</span>
+        <span><i class="lg-shape lg-machine"></i>Machine</span>
+        <span><i class="lg-dot lg-healthy"></i>Healthy</span>
+        <span><i class="lg-dot lg-warning"></i>Warning</span>
+        <span><i class="lg-dot lg-critical"></i>Critical</span>
+        <span><i class="lg-dot lg-offline"></i>Offline</span>
+        <span><i class="lg-dot lg-unknown"></i>Unknown</span>
+        <span><i class="lg-shape lg-planned"></i>Planned</span>`;
+      stage.appendChild(legend);
+    }
+    paintKpis();
   }
 
   function boot() {
     ensureNav();
     ensureChrome();
     ensureLiveChrome();
+    ensureFleetChrome();
     bindInspectorBridge();
     paintHexOverlay();
     window.addEventListener('resize', () => paintHexOverlay());

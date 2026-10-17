@@ -196,10 +196,10 @@
     if (LAYOUT !== 'countryTree') return;
     const brands = (childrenOf.get(hub.id) || []).filter((c) => c.type === 'client' && !c.pad);
     if (brands.length < 2) return;
-    const minGap = (58 * Math.PI) / 180; // ≥40°; wide enough that titles don't crowd
-    const fan = Math.max((brands.length - 1) * minGap, (120 * Math.PI) / 180);
-    hub.wedge = Math.max(hub.wedge || 0, fan + 0.2);
-    const brandDist = TREE.area * 1.0;
+    const minGap = (72 * Math.PI) / 180;
+    const fan = Math.max((brands.length - 1) * minGap, (156 * Math.PI) / 180);
+    hub.wedge = Math.max(hub.wedge || 0, fan + 0.25);
+    const brandDist = TREE.area * 1.62;
     const shiftTree = (id, dx, dy) => {
       (childrenOf.get(id) || []).forEach((c) => {
         c.x += dx;
@@ -289,8 +289,8 @@
       const share = weights[i] / total;
       // Space countries with brands need a wide first-hop fan (≥40° between brands)
       const brandN = (childrenOf.get(hub.id) || []).filter((c) => c.type === 'client').length;
-      const minBrandFan = brandN >= 2 ? (brandN - 1) * ((40 * Math.PI) / 180) + 0.2 : 0.5;
-      const wedge = Math.max(0.5, minBrandFan, Math.min(1.85, share * usable));
+      const minBrandFan = brandN >= 2 ? (brandN - 1) * ((72 * Math.PI) / 180) + 0.35 : 0.5;
+      const wedge = Math.max(0.5, minBrandFan, Math.min(2.55, share * usable));
       hub.wedge = wedge;
       layoutHubSector(hub, wedge);
       reseatCountryBrandFan(hub);
@@ -541,29 +541,12 @@
                 r: 4.6,
                 alert: !!alert,
                 alertKind: alert,
+                lastSeen: m.lastSeen || null,
+                stale: !!m.stale,
               };
               addNode(mn);
               machines.push(mn);
               links.push({ source: ln.id, target: mn.id, kind: 'tree' });
-              BRANCHES.forEach((b) => {
-                const id = `${m.id}::${b.id}`;
-                const bn = {
-                  id,
-                  type: 'branch',
-                  branchId: b.id,
-                  label: b.label,
-                  parentId: m.id,
-                  machineId: m.id,
-                  countryId: country.id,
-                  clientId: client.id,
-                  hubId: hub.id,
-                  depth: 6,
-                  r: 4.2,
-                  status: 'active',
-                };
-                addNode(bn);
-                links.push({ source: m.id, target: id, kind: 'leaf' });
-              });
             });
           });
         });
@@ -812,31 +795,14 @@
               technical: m.technical,
               operators: m.operators,
               model: m.model,
+              lastSeen: m.lastSeen || null,
+              stale: !!m.stale,
               r: NODE_SCREEN_R * 0.9,
             };
             mn.alert = computeAlert(mn);
             addNode(mn);
             machines.push(mn);
             links.push({ source: loc.id, target: m.id, kind: 'tree' });
-
-            BRANCHES.forEach((b) => {
-              const id = `${m.id}::${b.id}`;
-              addNode({
-                id,
-                type: 'branch',
-                branchKey: b.key,
-                branchId: b.id,
-                label: b.label,
-                machineId: m.id,
-                parentId: m.id,
-                hubId: hub.id,
-                depth: mn.depth + 1,
-                status: 'active',
-                r: NODE_SCREEN_R * 0.85,
-                machine: mn,
-              });
-              links.push({ source: m.id, target: id, kind: 'leaf' });
-            });
           });
         });
       });
@@ -1456,6 +1422,7 @@
     resolveLabelCollisions();
     paintLod();
     syncDomLabels();
+    syncDomBadges();
     syncHubTitles();
     syncFocusTitle();
     renderBreadcrumb(focusNodeId);
@@ -1480,8 +1447,40 @@
     return deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
   }
 
+  function layoutPills() {
+    nodes.forEach((n) => { n._pillBox = null; });
+    const pills = [];
+    nodes.forEach((n) => {
+      const text = pillTextFor(n);
+      if (!text) return;
+      const p = worldToScreen(n.x, n.y);
+      const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
+      const w = Math.max(18, 8 + text.length * 6.4);
+      const h = 14;
+      pills.push({ n, text, x: p.x + sr * 0.45 + 6, y: p.y - sr - h - 3, w, h });
+    });
+    const obstacles = [];
+    document.querySelectorAll('.hub-title-dom, .focus-title').forEach((el) => {
+      if (el.style.display === 'none') return;
+      const r = el.getBoundingClientRect();
+      const stageR = stage.getBoundingClientRect();
+      if (r.width < 2) return;
+      obstacles.push({ x: r.left - stageR.left, y: r.top - stageR.top, w: r.width, h: r.height });
+    });
+    pills.forEach((a, i) => {
+      for (let g = 0; g < 8; g++) {
+        const hit = pills.slice(0, i).some((b) => a.x < b.x + b.w + 3 && a.x + a.w > b.x - 3 && a.y < b.y + b.h + 3 && a.y + a.h > b.y - 3)
+          || obstacles.some((b) => a.x < b.x + b.w + 2 && a.x + a.w > b.x - 2 && a.y < b.y + b.h + 2 && a.y + a.h > b.y - 2);
+        if (!hit) break;
+        a.y -= a.h + 2;
+      }
+      a.n._pillBox = { l: a.x, t: a.y, r: a.x + a.w, b: a.y + a.h, text: a.text, w: a.w, h: a.h };
+    });
+  }
+
   /** Labels outward along link; clear full text box from disc + pill (not just center) */
   function resolveLabelCollisions() {
+    layoutPills();
     const labeled = nodes.filter((n) => n.labelOn && n.draw && n.label && !n.ancestorOnly);
 
     function textHalf(n) {
@@ -1497,12 +1496,14 @@
         hh: overviewBrand ? 14 : n.type === 'branch' ? 9 : 8,
       };
     }
-    function placeAt(p, ang, sr, hw, hh, hasPill) {
+    function placeAt(p, ang, sr, hw, hh, pillBox) {
       // Dist so near edge of centered text box clears disc by radius+6
       let dist = sr + 6 + hw * Math.abs(Math.cos(ang)) + hh * Math.abs(Math.sin(ang)) + 2;
       let sx = p.x + Math.cos(ang) * dist;
       let sy = p.y + Math.sin(ang) * dist;
-      const pill = hasPill ? { x: p.x + sr * 0.55 + 10, y: p.y - sr * 0.55 - 6, rw: 12, rh: 8 } : null;
+      const pill = pillBox
+        ? { x: (pillBox.l + pillBox.r) / 2, y: (pillBox.t + pillBox.b) / 2, rw: pillBox.w / 2 + 2, rh: pillBox.h / 2 + 2 }
+        : null;
       for (let g = 0; g < 10; g++) {
         const box = { l: sx - hw, r: sx + hw, t: sy - hh, b: sy + hh };
         const closestX = Math.max(box.l, Math.min(p.x, box.r));
@@ -1543,8 +1544,7 @@
       const p = worldToScreen(n.x, n.y);
       const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
       const { hw, hh } = textHalf(n);
-      const hasPill = !!(n._pill0 && (n.type === 'hub' || n.type === 'country' || n.type === 'client' || n.type === 'area' || n.type === 'location'));
-      const placed = placeAt(p, ang, sr, hw, hh, hasPill);
+      const placed = placeAt(p, ang, sr, hw, hh, n._pillBox);
       n._labelAng = placed.ang;
       n._labelSx = placed.sx;
       n._labelSy = placed.sy;
@@ -1556,6 +1556,11 @@
 
     labeled.sort((a, b) => (a._labelAng || 0) - (b._labelAng || 0));
     const placed = [];
+    nodes.forEach((n) => {
+      const b = n._pillBox;
+      if (!b) return;
+      placed.push({ sx: (b.l + b.r) / 2, sy: (b.t + b.b) / 2, hw: b.w / 2 + 2, hh: b.h / 2 + 2 });
+    });
     labeled.forEach((n) => {
       let sx = n._labelSx;
       let sy = n._labelSy;
@@ -1650,6 +1655,38 @@
     });
     root.querySelectorAll('[data-nid]').forEach((el) => {
       if (!want.has(el.dataset.nid)) el.style.display = 'none';
+    });
+  }
+
+  function syncDomBadges() {
+    const layer = document.getElementById(DOM.labelLayer);
+    if (!layer) return;
+    let root = layer.querySelector('.node-badges');
+    if (!root) {
+      root = document.createElement('div');
+      root.className = 'node-badges';
+      layer.appendChild(root);
+    }
+    const want = new Set();
+    nodes.forEach((n) => {
+      const box = n._pillBox;
+      if (!box) return;
+      want.add(n.id);
+      let el = root.querySelector(`[data-badge="${CSS.escape(n.id)}"]`);
+      if (!el) {
+        el = document.createElement('div');
+        el.dataset.badge = n.id;
+        root.appendChild(el);
+      }
+      const health = UTILS ? UTILS.healthOf(n) : 'warning';
+      el.className = `node-badge is-${health}`;
+      el.textContent = box.text;
+      el.style.left = `${box.l}px`;
+      el.style.top = `${box.t}px`;
+      el.style.display = '';
+    });
+    root.querySelectorAll('[data-badge]').forEach((el) => {
+      if (!want.has(el.dataset.badge)) el.style.display = 'none';
     });
   }
 
@@ -2029,8 +2066,8 @@
       right = Math.round(dw + 20);
     }
     const left = 16;
-    const top = 64;
-    const bottom = 78;
+    const top = 96;
+    const bottom = 36;
     const x = left;
     const y = top;
     const w = Math.max(220, W - left - right);
@@ -2214,12 +2251,19 @@
         : 1.25;
       const lo = kLocal + 0.05 < prefer ? floor : prefer;
       k = Math.max(lo, Math.min(kLocal, 80));
-      cx = (lMinX + lMaxX) / 2;
+      const midX = (lMinX + lMaxX) / 2;
       // Focus title stack (~title + subtitle) below the focus disc
       const titleBottom = 148 / k;
       const blockMaxY = Math.max(lMaxY, centerNode.y + titleBottom);
       const blockMinY = Math.min(lMinY, centerNode.y) - labelPad / k;
-      cy = (blockMinY + blockMaxY) / 2;
+      const midY = (blockMinY + blockMaxY) / 2;
+      cx = midX;
+      cy = midY;
+      // If children sit all to one side, pull the focus back toward the usable centre.
+      const estDx = Math.abs(centerNode.x - cx) * k / Math.max(fit.w, 1);
+      const estDy = Math.abs(centerNode.y - cy) * k / Math.max(fit.h, 1);
+      if (estDx > 0.16) cx += (centerNode.x - cx) * ((estDx - 0.14) / estDx);
+      if (estDy > 0.16) cy += (centerNode.y - cy) * ((estDy - 0.14) / estDy);
       return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
     }
     return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
@@ -2437,6 +2481,13 @@
       btn.type = 'button';
       btn.dataset.nid = nid;
       btn.textContent = n.type === 'enterprise' ? 'APOS' : n.label;
+      const issues = n.type === 'machine' ? (n.alert ? 1 : 0) : (n.rollup?.alerts || n.alertCount || 0);
+      if (issues > 0) {
+        const mark = document.createElement('em');
+        mark.className = 'crumb-count';
+        mark.textContent = String(issues);
+        btn.appendChild(mark);
+      }
       btn.addEventListener('click', () => jumpToAncestor(n));
       btn.addEventListener('mouseenter', () => {
         crumbHoverId = nid;
@@ -3070,7 +3121,9 @@
     if (!n || n.type !== 'machine') return false;
     if (filterMode === 'alerts') return !!n.alert;
     if (filterMode === 'offline') return n.status === 'offline' || (n.offlineHours || 0) >= (THRESH?.offlineHours || 2);
-    if (filterMode === 'lowstock') return (n.stock?.fillPct ?? 100) < (THRESH?.stockLowPct || 15);
+    if (filterMode === 'lowstock') return n.status !== 'unknown' && !n.stale && (n.stock?.fillPct ?? 100) < (THRESH?.stockLowPct || 15);
+    if (filterMode === 'unknown') return n.status === 'unknown' || !!n.stale;
+    if (filterMode === 'critical') return n.status === 'offline' || n.alert === 'red';
     return true;
   }
 
@@ -3108,8 +3161,21 @@
     return Math.round(avg);
   }
 
+  function pathLabel(n) {
+    const parts = [];
+    let c = n;
+    while (c) {
+      if (c.type !== 'enterprise') parts.unshift(c.label || c.bgLabel || c.id);
+      c = c.parentId ? nodeById.get(c.parentId) : null;
+    }
+    return parts.join(' · ');
+  }
+
+  let dataRefreshedAt = Date.now();
+
   function statusLabel(n) {
     if (!n) return '—';
+    if (n.status === 'unknown' || n.stale) return 'unknown';
     if (n.alert === 'red' || n.status === 'offline') return 'offline';
     if (n.alert) return 'alert';
     if ((n.stock?.fillPct ?? 100) < (THRESH?.stockLowPct || 15)) return 'low stock';
@@ -3236,6 +3302,74 @@
     return null;
   }
 
+
+  const HEALTH_RGB = {
+    healthy: '94, 214, 176',
+    warning: '232, 192, 120',
+    critical: '255, 107, 122',
+    offline: '255, 107, 122',
+    unknown: '148, 163, 184',
+    planned: '154, 168, 188',
+  };
+
+  function traceTypeShape(ctx, x, y, r, type) {
+    ctx.beginPath();
+    if (type === 'client') {
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r * 0.86, y);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r * 0.86, y);
+      ctx.closePath();
+    } else if (type === 'area') {
+      ctx.rect(x - r * 0.82, y - r * 0.82, r * 1.64, r * 1.64);
+    } else if (type === 'location') {
+      for (let i = 0; i < 6; i++) {
+        const a = -Math.PI / 2 + (i / 6) * Math.PI * 2;
+        const px = x + Math.cos(a) * r;
+        const py = y + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    } else {
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+  }
+
+  function strokeStatusRing(ctx, x, y, r, n, alpha, ts) {
+    const health = UTILS ? UTILS.healthOf(n) : 'healthy';
+    const col = HEALTH_RGB[health] || HEALTH_RGB.unknown;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.lineWidth = health === 'planned' ? 1.2 : 2;
+    if (health === 'planned') ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = `rgba(${col}, ${(health === 'healthy' ? 0.8 : 0.95) * alpha})`;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if ((health === 'critical' || health === 'offline') && !reduceMotion) {
+      const beat = 0.5 + 0.5 * Math.sin((ts || 0) / 520 + (hash(n.id) % 20));
+      ctx.beginPath();
+      ctx.arc(x, y, r + 3 + beat * 5, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${col}, ${(0.15 + 0.35 * (1 - beat)) * alpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+  }
+
+  function pillTextFor(n) {
+    if (!n || !n.draw || n.preview || n.pad || n.type === 'enterprise' || n.type === 'branch') return '';
+    const health = UTILS ? UTILS.healthOf(n) : 'healthy';
+    if (n.type === 'machine') {
+      if (health === 'offline') return 'OFFLINE';
+      if (health === 'unknown') return 'UNKNOWN';
+      if (health === 'warning') return 'LOW';
+      if (health === 'critical') return 'ALERT';
+      return '';
+    }
+    if (health === 'planned') return (n.type === 'country' || n.type === 'hub') ? 'Planned' : '';
+    if ((n.alertCount || 0) > 0) return String(n.alertCount);
+    return '';
+  }
 
   /** Simple white line icons inside hub discs (brand glyphs) */
   function drawHubGlyph(ctx, x, y, s, hubId, alpha) {
@@ -3457,14 +3591,15 @@
       const fromHub = s.type === 'hub' || t.type === 'hub' || s.type === 'country' || t.type === 'country';
       const hubNode = (s.type === 'hub' || s.type === 'country') ? s : ((t.type === 'hub' || t.type === 'country') ? t : null);
       const firstHopRgb = hubNode ? accentRgb(hubNode.ring || 'teal') : null;
-      let rgb = [255, 255, 255];
-      let lineW = L.kind === 'spine' ? 1.15 : 1.25;
+      let rgb = [226, 236, 248];
+      const depthRank = Math.min(s.depth ?? 0, t.depth ?? 0);
+      const byLevel = [2.7, 2.15, 1.55, 1.05, 0.7, 0.45];
+      let lineW = byLevel[Math.min(depthRank, byLevel.length - 1)];
       if (onPath || crumbPath) {
         rgb = accent || [0, 210, 230];
-        lineW = 2.15;
+        lineW += 0.55;
       } else if (fromHub && firstHopRgb && L.kind === 'tree' && !preview) {
         rgb = firstHopRgb;
-        lineW = 1.2;
       }
 
       pctx.beginPath();
@@ -3473,13 +3608,17 @@
       pctx.lineWidth = lineW;
       pctx.lineCap = 'round';
       pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
-      if (onPath || crumbPath) {
-        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.45)`;
-        pctx.shadowBlur = 6;
+      const alertLink = !!(s.alert || t.alert || s.status === 'offline' || t.status === 'offline');
+      if (future) pctx.setLineDash([5, 4]);
+      else pctx.setLineDash([]);
+      if ((onPath || crumbPath) || alertLink) {
+        pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alertLink && !onPath ? 0.35 : 0.45})`;
+        pctx.shadowBlur = onPath || crumbPath ? 6 : 4;
       } else {
         pctx.shadowBlur = 0;
       }
       pctx.stroke();
+      pctx.setLineDash([]);
       pctx.shadowBlur = 0;
 
       // Flowing packet toward APOS along the ancestor path
@@ -3782,6 +3921,28 @@
           pctx.fillText('apos', p.x, p.y);
         }
         pctx.globalAlpha = 1;
+        if (UTILS && overviewMode) {
+          const fleet = UTILS.fleetOf(machines);
+          const parts = [
+            { n: fleet.online, color: '94, 214, 176' },
+            { n: fleet.offline, color: '255, 107, 122' },
+            { n: fleet.low, color: '232, 192, 120' },
+            { n: fleet.unknown, color: '148, 163, 184' },
+          ].filter((seg) => seg.n > 0);
+          const sum = parts.reduce((s, seg) => s + seg.n, 0) || 1;
+          const ringR = discR * 1.35;
+          let a0 = -Math.PI / 2;
+          pctx.lineWidth = 2.25;
+          pctx.lineCap = 'butt';
+          parts.forEach((seg) => {
+            const sweep = (seg.n / sum) * Math.PI * 2;
+            pctx.beginPath();
+            pctx.arc(p.x, p.y, ringR, a0, a0 + sweep - 0.03);
+            pctx.strokeStyle = `rgba(${seg.color}, 0.95)`;
+            pctx.stroke();
+            a0 += sweep;
+          });
+        }
         return;
       }
       if (n.type === 'hub' || n.type === 'country') {
@@ -3789,124 +3950,59 @@
         const breathe = reduceMotion ? 1 : 1 + Math.sin(ts / 1100 + (n.angle || 0)) * 0.028;
         const rr = (deep ? DEEP_HUB_R : HUB_SCREEN_R) * breathe;
         const focusedHub = focusNodeId === n.id || (!overviewMode && n.id === focusHubId);
-        const bloom = pctx.createRadialGradient(p.x, p.y, rr * 0.2, p.x, p.y, rr + 18);
-        bloom.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.55 * alpha})`);
-        bloom.addColorStop(0.55, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.2 * alpha})`);
-        bloom.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
-        pctx.fillStyle = bloom;
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr + 18, 0, Math.PI * 2);
-        pctx.fill();
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr + 5, 0, Math.PI * 2);
-        pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(focusedHub ? 0.95 : 0.82) * alpha})`;
-        pctx.lineWidth = focusedHub ? 3 : 2.4;
-        pctx.stroke();
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.78 * alpha})`;
-        pctx.fill();
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr * 0.5, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.95 * alpha})`;
-        pctx.fill();
-        drawHubGlyph(pctx, p.x, p.y, rr * 0.62, n.id, alpha);
-      } else if (n.type === 'branch') {
-        const rr = r;
-        const halo = pctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.4);
-        halo.addColorStop(0, `rgba(255,255,255,${0.35 * alpha})`);
-        halo.addColorStop(1, 'rgba(255,255,255,0)');
-        pctx.fillStyle = halo;
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr * 2.4, 0, Math.PI * 2);
-        pctx.fill();
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(255,255,255,${0.96 * alpha})`;
-        pctx.fill();
-        if (accent) {
+        const plannedNode = n.status === 'future' || n.planned;
+        const hot = focusedHub || (UTILS && (UTILS.healthOf(n) === 'critical' || UTILS.healthOf(n) === 'offline'));
+        if (hot && !plannedNode) {
+          const bloom = pctx.createRadialGradient(p.x, p.y, rr * 0.2, p.x, p.y, rr + 18);
+          bloom.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.45 * alpha})`);
+          bloom.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+          pctx.fillStyle = bloom;
           pctx.beginPath();
-          pctx.arc(p.x, p.y, rr + 2.2, 0, Math.PI * 2);
-          pctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},${0.75 * alpha})`;
-          pctx.lineWidth = 1.6;
-          pctx.stroke();
+          pctx.arc(p.x, p.y, rr + 18, 0, Math.PI * 2);
+          pctx.fill();
         }
-        drawBranchGlyph(pctx, p.x, p.y, rr * 0.7, n.branchKey, alpha);
-      } else {
-        // Consistent: white disc + soft glow; status as thin ring (not offset dot)
-        const rr = r;
-        const isAlert = !!(n.alert || (n.type === 'machine' && n.alert));
-        const isMaint =
-          n.status === 'maintenance' ||
-          (n.type === 'machine' && (n.technical?.openTickets || 0) > 0 && !isAlert);
-        const halo = pctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.4);
-        halo.addColorStop(0, `rgba(255,255,255,${0.4 * alpha})`);
-        halo.addColorStop(1, 'rgba(255,255,255,0)');
-        pctx.fillStyle = halo;
-        pctx.beginPath();
-        pctx.arc(p.x, p.y, rr * 2.4, 0, Math.PI * 2);
-        pctx.fill();
         pctx.beginPath();
         pctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        pctx.fillStyle = `rgba(255,255,255,${0.97 * alpha})`;
-        pctx.fill();
-        if (isAlert || isMaint) {
-          pctx.beginPath();
-          pctx.arc(p.x, p.y, rr + 2.5, 0, Math.PI * 2);
-          pctx.strokeStyle = isAlert ? `rgba(255,107,122,${0.95 * alpha})` : `rgba(232,192,120,${0.95 * alpha})`;
-          pctx.lineWidth = 2.2;
-          pctx.stroke();
-          if (isAlert && !reduceMotion) {
-            const beat = 0.5 + 0.5 * Math.sin((ts || 0) / 520 + (hash(n.id) % 20));
-            pctx.beginPath();
-            pctx.arc(p.x, p.y, rr + 5 + beat * 8, 0, Math.PI * 2);
-            pctx.strokeStyle = `rgba(255,90,110,${(0.12 + 0.4 * (1 - beat)) * alpha})`;
-            pctx.lineWidth = 1.35;
-            pctx.stroke();
-          }
-        } else if ((n.type === 'area' || n.type === 'client') && overviewMode) {
-          const rgb = accentRgb(nodeById.get(n.hubId || n.countryId)?.ring || n.ring || 'teal');
-          pctx.beginPath();
-          pctx.arc(p.x, p.y, rr + 2, 0, Math.PI * 2);
-          pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.55 * alpha})`;
+        if (plannedNode) {
+          pctx.setLineDash([4, 3]);
+          pctx.strokeStyle = `rgba(154, 168, 188, ${0.92 * alpha})`;
           pctx.lineWidth = 1.5;
           pctx.stroke();
+          pctx.setLineDash([]);
+        } else {
+          pctx.fillStyle = `rgba(8, 16, 28, ${0.72 * alpha})`;
+          pctx.fill();
+          pctx.lineWidth = focusedHub ? 2.6 : 1.8;
+          pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(focusedHub ? 0.95 : 0.8) * alpha})`;
+          pctx.stroke();
+          drawHubGlyph(pctx, p.x, p.y, rr * 0.55, n.id, alpha);
         }
-        if (hoverId === n.id) {
-          pctx.beginPath();
-          pctx.arc(p.x, p.y, rr * 1.45, 0, Math.PI * 2);
-          pctx.strokeStyle = 'rgba(255,255,255,0.55)';
-          pctx.lineWidth = 1.3;
+        strokeStatusRing(pctx, p.x, p.y, rr + 4, n, alpha, ts);
+      } else if (n.type !== 'branch') {
+        const rr = r;
+        const plannedNode = n.status === 'future' || n.planned;
+        traceTypeShape(pctx, p.x, p.y, rr, n.type);
+        if (plannedNode) {
+          pctx.setLineDash([3, 3]);
+          pctx.strokeStyle = `rgba(154, 168, 188, ${0.9 * alpha})`;
+          pctx.lineWidth = 1.25;
+          pctx.stroke();
+          pctx.setLineDash([]);
+        } else {
+          pctx.fillStyle = `rgba(10, 18, 32, ${0.88 * alpha})`;
+          pctx.fill();
+          traceTypeShape(pctx, p.x, p.y, rr, n.type);
+          pctx.strokeStyle = `rgba(226, 236, 248, ${0.72 * alpha})`;
+          pctx.lineWidth = 1.15;
           pctx.stroke();
         }
-      }
-
-      // Tidy rollup pills (not glitchy offset dots)
-      if (
-        n.alertCount > 0 &&
-        (n.type === 'hub' || n.type === 'country' || n.type === 'client' || n.type === 'area' || n.type === 'location') &&
-        !n.pad &&
-        !n.preview
-      ) {
-        const txt = String(n.alertCount);
-        const tw = Math.max(16, 9 + txt.length * 6);
-        const bx = p.x + r * 0.55 + 10;
-        const by = p.y - r * 0.55 - 6;
-        const x0 = bx - tw / 2, y0 = by - 6, bw = tw, bh = 12, rad = 6;
-        pctx.beginPath();
-        pctx.moveTo(x0 + rad, y0);
-        pctx.arcTo(x0 + bw, y0, x0 + bw, y0 + bh, rad);
-        pctx.arcTo(x0 + bw, y0 + bh, x0, y0 + bh, rad);
-        pctx.arcTo(x0, y0 + bh, x0, y0, rad);
-        pctx.arcTo(x0, y0, x0 + bw, y0, rad);
-        pctx.closePath();
-        pctx.fillStyle = ALERT;
-        pctx.fill();
-        pctx.fillStyle = '#fff';
-        pctx.font = '700 8px Manrope, sans-serif';
-        pctx.textAlign = 'center';
-        pctx.textBaseline = 'middle';
-        pctx.fillText(txt, bx, by + 0.5);
+        strokeStatusRing(pctx, p.x, p.y, rr + 3.2, n, alpha, ts);
+        if (hoverId === n.id || focusNodeId === n.id) {
+          traceTypeShape(pctx, p.x, p.y, rr + 5, n.type);
+          pctx.strokeStyle = 'rgba(255,255,255,0.55)';
+          pctx.lineWidth = 1.2;
+          pctx.stroke();
+        }
       }
       // Collapsed deep-subtree count on dimmed parents
       if (n.collapsedCount > 0 && n.draw && n.preview) {
@@ -3939,33 +4035,6 @@
           pctx.globalAlpha = 1;
         }
       }
-    });
-    // Live offline: chip sits on the machine, or the nearest drawn ancestor in overview.
-    const chipped = new Set();
-    machines.forEach((m) => {
-      if (m.status !== 'offline' || !m._offlineUntil) return;
-      let host = m;
-      while (host && (!host.draw || host.lodAlpha < 0.2 || host.type === 'enterprise')) {
-        host = nodeById.get(host.parentId);
-      }
-      if (!host || chipped.has(host.id)) return;
-      chipped.add(host.id);
-      const p = screenOf(host);
-      const chip = 'Offline';
-      pctx.save();
-      pctx.font = '700 9px Manrope, sans-serif';
-      const tw = Math.ceil(pctx.measureText(chip).width) + 10;
-      const bx = p.x + 14;
-      const by = p.y + 10;
-      pctx.beginPath();
-      pctx.roundRect(bx, by, tw, 14, 7);
-      pctx.fillStyle = 'rgba(255,107,122,0.96)';
-      pctx.fill();
-      pctx.fillStyle = '#fff';
-      pctx.textAlign = 'left';
-      pctx.textBaseline = 'middle';
-      pctx.fillText(chip, bx + 5, by + 7);
-      pctx.restore();
     });
     if (!reduceMotion) {
       for (let i = ripples.length - 1; i >= 0; i--) {
@@ -4234,6 +4303,7 @@
       `alerts ${alerts}`,
       `offline ${offline}`,
       statusLabel(d),
+      (d.status === 'unknown' || d.stale) ? `last seen ${d.lastSeen || '—'}` : null,
     ].filter(Boolean).join(' · ');
     tooltipEl.hidden = false;
     tooltipEl.innerHTML = `<strong>${d.label || d.bgLabel || d.id}</strong>${stat ? `<span>${stat}</span>` : ''}`;
@@ -4298,6 +4368,18 @@
   }
 
   function emitLive(ev) {
+    const m0 = nodeById.get(ev.machineId);
+    if (m0) {
+      ev.path = pathLabel(m0);
+      ev.severity = ev.kind === 'offline' ? 'critical' : (ev.kind === 'lowstock' ? 'warning' : 'info');
+      const mins = Math.max(30, Math.round((m0.offlineHours || 0.5) * 60));
+      ev.happened = ev.kind === 'offline' ? `Offline >${mins}m`
+        : ev.kind === 'lowstock' ? 'Low stock'
+        : ev.kind === 'task' ? 'Task assigned'
+        : 'Sale recorded';
+      ev.at = ev.at || Date.now();
+    }
+    dataRefreshedAt = Date.now();
     liveLog.push(ev);
     if (liveLog.length > 16) liveLog.shift();
     const m = nodeById.get(ev.machineId);
@@ -4762,6 +4844,10 @@
         alerts,
         offline,
         badge: n.alertCount || 0,
+        health: UTILS ? UTILS.healthOf(n) : statusLabel(n),
+        lastSeen: n.lastSeen || n.operators?.lastVisit || null,
+        path: pathLabel(n),
+        sections: UTILS ? UTILS.inspectorSections(n, people) : [],
       };
     },
     auditData: () => {
@@ -4822,11 +4908,12 @@
       return { median: Math.round(mid * 10) / 10, p95: Math.round(p95 * 10) / 10, n: s.length };
     },
     setFilter: (mode) => {
-      filterMode = ['alerts', 'offline', 'lowstock'].includes(mode) ? mode : 'all';
+      filterMode = ['alerts', 'offline', 'lowstock', 'unknown', 'critical'].includes(mode) ? mode : 'all';
       refreshFilter();
       paintLod();
       return filterMode;
     },
+    fleetKpis: () => Object.assign(UTILS ? UTILS.fleetOf(machines) : {}, { refreshedAt: dataRefreshedAt }),
     getFilter: () => filterMode,
     getFilterDimmedCount: () => {
       if (filterMode === 'all') return 0;
@@ -4836,9 +4923,9 @@
       const s = String(q || '').trim().toLowerCase();
       if (!s) return [];
       return nodes
-        .filter((n) => n.type !== 'artic' && n.type !== 'branch' && ((n.label || '') + ' ' + (n.bgLabel || '')).toLowerCase().includes(s))
+        .filter((n) => n.type !== 'artic' && n.type !== 'branch' && ((n.label || '') + ' ' + (n.bgLabel || '') + ' ' + pathLabel(n)).toLowerCase().includes(s))
         .slice(0, 8)
-        .map((n) => ({ id: n.id, label: n.label || n.bgLabel || n.id, type: n.type }));
+        .map((n) => ({ id: n.id, label: n.label || n.bgLabel || n.id, type: n.type, path: pathLabel(n) }));
     },
     getLiveLog: () => liveLog.slice(-8),
     setLive,
