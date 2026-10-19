@@ -81,6 +81,63 @@ async function journey(page, def) {
   if (!brand.open) fail(`${def.id} brand inspector closed`);
   if (!/Leet/i.test(brand.title)) fail(`${def.id} brand title ${brand.title}`);
   if (!brand.framed) fail(`${def.id} Leet outside usable frame`);
+  const brandView = await page.evaluate((apiName) => {
+    const api = window[apiName];
+    const nodes = api.listNodes();
+    const frame = api.getUsableFrame();
+    const ids = new Set(['client-leet']);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      nodes.forEach((n) => {
+        if (n.parentId && ids.has(n.parentId) && !ids.has(n.id) && n.type !== 'branch' && n.type !== 'artic') {
+          ids.add(n.id);
+          grew = true;
+        }
+      });
+    }
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, seen = 0;
+    ids.forEach((id) => {
+      if ((api.getNodeAlpha(id) || 0) < 0.2) return;
+      const p = api.nodeScreenPos(id);
+      if (!p || p.behind) return;
+      seen += 1;
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    });
+    const geo = api.focusPathScreen ? api.focusPathScreen() : null;
+    const chip = api.getAposEdgeHint ? api.getAposEdgeHint() : null;
+    const offenders = [];
+    if (geo) {
+      (geo.nodes || []).forEach((n) => {
+        const r = n.r || 14;
+        const onStage = !n.behind && n.y > -40 && n.y < frame.H + 40 && n.x > -r && n.x < frame.W + r;
+        if (onStage && n.x + r > geo.limit + 0.5) offenders.push(`node ${n.id}`);
+      });
+      (geo.samples || []).forEach((s) => {
+        const onStageY = s.y >= -4 && s.y <= frame.H + 4;
+        if (onStageY && s.x > geo.limit + 0.5) offenders.push('link');
+      });
+      if (chip && geo.drawerLeft != null && chip.x + 84 > geo.drawerLeft - 24) offenders.push('chip');
+    }
+    return {
+      seen,
+      bboxW: Number.isFinite(maxX) ? maxX - minX : 0,
+      canvasW: frame.W,
+      k: api.getTransform().k,
+      offenders: offenders.slice(0, 6),
+      chip: !!chip,
+      limit: geo?.limit,
+    };
+  }, def.api);
+  const dk = Math.abs(brandView.k - overview.k);
+  if (dk < 0.05) fail(`${def.id} brand camera did not move (${brandView.k} vs ${overview.k})`);
+  if (def.id === 'tree') {
+    if (dk < 0.25) fail(`${def.id} brand camera barely changed (${brandView.k} vs ${overview.k})`);
+    const frac = brandView.bboxW / Math.max(brandView.canvasW, 1);
+    if (frac < 0.4) fail(`${def.id} brand bbox ${(frac * 100).toFixed(0)}% of canvas (${brandView.seen} nodes)`);
+  }
+  if (brandView.offenders.length) fail(`${def.id} path within 24px of drawer: ${brandView.offenders.join(', ')}`);
 
   const machineId = await page.evaluate((apiName) => {
     const nodes = window[apiName].listNodes();
@@ -100,6 +157,23 @@ async function journey(page, def) {
   if (!machine.open) fail(`${def.id} machine inspector closed`);
   if (!machine.framed) fail(`${def.id} machine outside usable frame`);
   if (!/Overview|Performance|Stock|Support|Contract/i.test(machine.grid)) fail(`${def.id} machine sections missing`);
+  const ghosts = await page.evaluate(({ apiName, machineId }) => {
+    const api = window[apiName];
+    const nodes = api.listNodes();
+    const machine = nodes.find((n) => n.id === machineId);
+    const site = nodes.find((n) => n.id === machine?.parentId);
+    const area = nodes.find((n) => n.id === site?.parentId);
+    const sibs = nodes.filter((n) => n.parentId === site?.id && n.type === 'machine' && n.id !== machineId);
+    const frame = api.getUsableFrame();
+    const hits = [site, area, ...sibs].filter(Boolean).filter((n) => {
+      const p = api.nodeScreenPos(n.id);
+      const alpha = api.getNodeAlpha(n.id) || 0;
+      if (!p || p.behind || alpha < 0.3) return false;
+      return p.x >= frame.x && p.x <= frame.x + frame.w && p.y >= frame.y && p.y <= frame.y + frame.h;
+    }).map((n) => `${n.id}:${(api.getNodeAlpha(n.id) || 0).toFixed(2)}`);
+    return hits;
+  }, { apiName: def.api, machineId });
+  if (ghosts.length < 3) fail(`${def.id} machine cluster ghosts ${ghosts.length} (${ghosts.join(', ')})`);
 
   await page.keyboard.press('Escape');
   await page.waitForTimeout(80);

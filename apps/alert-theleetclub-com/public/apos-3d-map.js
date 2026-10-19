@@ -622,16 +622,29 @@ function mount() {
       center.set(0, 0.8, 0);
       // Fit full constellation (core + KW/AE/SA + KW brands) in ~70% of view
       size.set(90, 42, 90);
+    } else if (n.type === 'machine') {
+      const parent = n.parentId ? graph.byId.get(n.parentId) : null;
+      const area = parent?.parentId ? graph.byId.get(parent.parentId) : null;
+      const cluster = [n, parent, area].filter((p) => p && p.type !== 'enterprise');
+      graph.nodes.filter((c) => c.parentId === n.parentId && c.type === 'machine').forEach((c) => cluster.push(c));
+      let reach = 6;
+      cluster.forEach((p) => { reach = Math.max(reach, n.pos.distanceTo(p.pos) + 2.2); });
+      center.copy(n.pos);
+      size.set(reach * 2, reach * 2, reach * 2);
     } else {
-      // Look at the focus itself. Distance still covers its children.
+      // Look at the focus itself. Distance still covers its children and, for a brand, its country.
       const kids = graph.nodes.filter((c) => c.parentId === n.id);
       let reach = 4;
       kids.forEach((c) => { reach = Math.max(reach, n.pos.distanceTo(c.pos) + (c.r || 1) * 2); });
+      if (n.type === 'client' && n.parentId) {
+        const country = graph.byId.get(n.parentId);
+        if (country) reach = Math.max(reach, n.pos.distanceTo(country.pos) + 3);
+      }
       center.copy(n.pos);
       size.set(reach * 2, reach * 2, reach * 2);
     }
 
-    const fitFrac = n.type === 'enterprise' ? 0.68 : 0.62;
+    const fitFrac = n.type === 'enterprise' ? 0.68 : (n.type === 'machine' ? 0.58 : 0.62);
     const maxDim = Math.max(size.x, size.y, size.z, n.type === 'enterprise' ? 90 : 4);
     const fov = THREE.MathUtils.degToRad(camera.fov);
     let dist = (maxDim / fitFrac) / (2 * Math.tan(fov / 2));
@@ -947,7 +960,10 @@ function mount() {
         op = 0.98;
       } else if (focus?.type === 'machine' && (node.id === focus.parentId || (node.type === 'machine' && node.parentId === focus.parentId))) {
         show = true;
-        op = node.id === focusId ? 0.98 : 0.2;
+        op = node.id === focusId ? 0.98 : 0.42;
+      } else if (focus?.type === 'machine' && focus.parentId && node.id === graph.byId.get(focus.parentId)?.parentId && node.type !== 'enterprise') {
+        show = true;
+        op = 0.74;
       } else if (focus?.type === 'client' && (isChild || node.parentId && childrenOf(focusId).some((c) => c.id === node.parentId))) {
         show = true;
         op = isChild ? 1 : 0.72;
@@ -1064,7 +1080,12 @@ function mount() {
       } else {
         let sx = (v.x * 0.5 + 0.5) * w;
         let sy = (-v.y * 0.5 + 0.5) * h;
-        sx = Math.min(w - 48, Math.max(48, sx));
+        const drawer = document.getElementById('inspector-drawer');
+        const drawerLeft = (drawer && drawer.classList.contains('is-open'))
+          ? drawer.getBoundingClientRect().left
+          : w;
+        const maxX = Math.min(w - 48, drawerLeft - 24 - 84);
+        sx = Math.min(maxX, Math.max(48, sx));
         sy = Math.min(h - 48, Math.max(64, sy));
         chip.hidden = false;
         chip.style.left = `${sx}px`;
@@ -1727,6 +1748,18 @@ function mount() {
     applyLod();
     syncLinkEndpoints();
     syncLabels();
+    const drawerEl = document.getElementById('inspector-drawer');
+    const drawerOpen = !!(drawerEl && drawerEl.classList.contains('is-open'));
+    if (drawerOpen && focusId !== graph.core.id) {
+      const dw = drawerEl.getBoundingClientRect().width || 320;
+      const sw = stage.clientWidth || renderer.domElement.width;
+      const sh = stage.clientHeight || renderer.domElement.height;
+      const limit = Math.max(80, Math.round(sw - dw - 16 - 24));
+      renderer.setScissorTest(true);
+      renderer.setScissor(0, 0, limit, sh);
+    } else {
+      renderer.setScissorTest(false);
+    }
     if (composer && !window.__APOS_3D_NO_BLOOM__) composer.render();
     else renderer.render(scene, camera);
     if (wordmark.visible) {
@@ -1734,6 +1767,17 @@ function mount() {
       renderer.clearDepth();
       renderer.render(labelScene, camera);
       renderer.autoClear = true;
+    }
+    if (drawerOpen && focusId !== graph.core.id) {
+      const dw2 = drawerEl.getBoundingClientRect().width || 320;
+      const sw2 = stage.clientWidth || renderer.domElement.width;
+      const sh2 = stage.clientHeight || renderer.domElement.height;
+      const cut = Math.max(80, Math.round(sw2 - dw2 - 16 - 24));
+      renderer.setScissorTest(true);
+      renderer.setScissor(cut, 0, Math.max(1, sw2 - cut), sh2);
+      renderer.setClearColor(0x04080e, 1);
+      renderer.clear(true, true, false);
+      renderer.setScissorTest(false);
     }
     const work = performance.now() - workT0;
     frameWarm += 1;
@@ -2018,6 +2062,39 @@ function mount() {
       x: camera.position.x, y: camera.position.y, z: camera.position.z,
       tx: controls.target.x, ty: controls.target.y, tz: controls.target.z,
     }),
+    focusPathScreen: () => {
+      const frame = api.getUsableFrame();
+      const limit = frame.x + frame.w - 24;
+      const path = [];
+      let cur = graph.byId.get(focusId);
+      while (cur) { path.push(cur.id); cur = cur.parentId ? graph.byId.get(cur.parentId) : null; }
+      const pathSet = new Set(path);
+      const outNodes = path.map((id) => {
+        const p = api.nodeScreenPos(id);
+        if (!p) return null;
+        return { id, x: p.x, y: p.y, r: 16, behind: !!p.behind };
+      }).filter(Boolean);
+      const samples = [];
+      linkLines.forEach((line) => {
+        const a = line.userData.source;
+        const b = line.userData.target;
+        if (!pathSet.has(a) || !pathSet.has(b)) return;
+        const na = graph.byId.get(a);
+        const nb = graph.byId.get(b);
+        if (!na?.pos || !nb?.pos) return;
+        curvePoints(na.pos, nb.pos, 12).forEach((pt) => {
+          const v = pt.clone().project(camera);
+          const x = (v.x * 0.5 + 0.5) * (stage.clientWidth || 1);
+          const y = (-v.y * 0.5 + 0.5) * (stage.clientHeight || 1);
+          samples.push({ x, y, source: a, target: b });
+        });
+      });
+      const drawerEl = document.getElementById('inspector-drawer');
+      const drawerLeft = (drawerEl && drawerEl.classList.contains('is-open'))
+        ? drawerEl.getBoundingClientRect().left
+        : frame.W;
+      return { limit, drawerLeft, nodes: outNodes, samples };
+    },
     nodeScreenPos: (id) => {
       const n = graph.byId.get(id);
       if (!n) return null;

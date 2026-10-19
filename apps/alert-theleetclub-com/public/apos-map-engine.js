@@ -328,6 +328,14 @@
     const x2 = t.x;
     const y2 = t.y;
     const dist = Math.hypot(x2 - x1, y2 - y1) || 1;
+    if (s._clustered && t._clustered) {
+      return {
+        c1x: x1 + (x2 - x1) * 0.35,
+        c1y: y1 + (y2 - y1) * 0.35,
+        c2x: x1 + (x2 - x1) * 0.7,
+        c2y: y1 + (y2 - y1) * 0.7,
+      };
+    }
     // Gemini signal arcs: P1 = P0+(P0-core)*0.25, P2 = P3-(P3-core)*0.25
     if (kind === 'signal') {
       // core assumed at origin; mild inward bow, never looping
@@ -968,6 +976,7 @@
 
   function restoreLayoutHomes() {
     nodes.forEach((n) => {
+      n._clustered = false;
       if (n._homeX == null) return;
       n.x = n._homeX;
       n.y = n._homeY;
@@ -982,29 +991,91 @@
     n._homeY = n.y;
   }
 
-  /** Pull a machine's site and sibling machines into the usable frame so the focus never floats alone. */
+  /** Site, sibling machines, and the parent area, balanced around the focused machine. */
   function applyMachineCluster(focus) {
-    restoreLayoutHomes();
     if (!focus || focus.type !== 'machine') return;
-    const parent = nodeById.get(focus.parentId);
-    if (!parent) return;
-    const sibs = (childrenOf.get(parent.id) || []).filter((c) => c.type === 'machine' && c.id !== focus.id);
-    const fit = viewportFitRect({ reserveDrawer: true });
-    const k = 2.5;
-    const halfW = (fit.w * 0.36) / k;
-    const halfH = (fit.h * 0.36) / k;
-    const pull = (n, ang, dist) => {
-      if (!n) return;
-      const dx = n.x - focus.x;
-      const dy = n.y - focus.y;
-      if (Math.abs(dx) <= halfW && Math.abs(dy) <= halfH) return;
+    const site = nodeById.get(focus.parentId);
+    if (!site) return;
+    const area = site.parentId ? nodeById.get(site.parentId) : null;
+    const sibs = (childrenOf.get(site.id) || []).filter((c) => c.type === 'machine' && c.id !== focus.id);
+    const placeAt = (n, dx, dy) => {
+      if (!n || n.type === 'enterprise') return;
       rememberHome(n);
-      const r = Math.min(dist, halfW * 0.9, halfH * 0.9);
-      n.x = focus.x + Math.cos(ang) * r;
-      n.y = focus.y + Math.sin(ang) * r;
+      n._clustered = true;
+      n.x = focus.x + dx;
+      n.y = focus.y + dy;
+      n.angle = Math.atan2(dy, dx);
     };
-    pull(parent, -2.4, 52);
-    sibs.forEach((s, i) => pull(s, -0.35 + i * 0.62, 68));
+    focus._clustered = true;
+    // Wide cluster: area → site → machine, siblings beside it, filling the drawer-free canvas.
+    placeAt(site, -70, -36);
+    placeAt(area, -132, -78);
+    sibs.forEach((s, i) => {
+      const t = sibs.length === 1 ? 0.5 : i / Math.max(sibs.length - 1, 1);
+      placeAt(s, -10 + t * 150, 48 + (i % 2) * 36);
+    });
+  }
+
+  /**
+   * Pack a brand's areas, sites, and machines into a ring around the brand
+   * so the camera can zoom until that subtree fills the drawer-free canvas.
+   * Other brands stay on their home ring and fall to the dim edge.
+   */
+  function applyBrandCluster(focus) {
+    if (!focus || (focus.type !== 'hub' && focus.type !== 'client')) return;
+    const areas = (childrenOf.get(focus.id) || []).filter((c) => (c.type === 'area' || c.type === 'location') && !c.pad);
+    if (!areas.length) return;
+    const weight = (n) => {
+      const kids = (childrenOf.get(n.id) || []).filter((c) => !c.pad && c.type !== 'branch' && c.type !== 'artic');
+      if (!kids.length || n.type === 'machine') return 1;
+      return kids.reduce((sum, c) => sum + weight(c), 0);
+    };
+    const total = areas.reduce((sum, a) => sum + weight(a), 0) || 1;
+    const parent = focus.parentId ? nodeById.get(focus.parentId) : null;
+    const parentAng = parent
+      ? Math.atan2(parent.y - focus.y, parent.x - focus.x)
+      : ((focus.outAngle != null ? focus.outAngle : -Math.PI / 2) + Math.PI);
+    const gap = 0.85;
+    const sweep = Math.PI * 2 - gap;
+    const Rarea = 58;
+    const Rsite = 104;
+    const Rmach = 148;
+    const place = (n, ang, dist) => {
+      rememberHome(n);
+      n._clustered = true;
+      n.x = focus.x + Math.cos(ang) * dist;
+      n.y = focus.y + Math.sin(ang) * dist;
+      n.angle = ang;
+    };
+    focus._clustered = true;
+    let cursor = parentAng + gap / 2;
+    areas.forEach((area) => {
+      const span = sweep * (weight(area) / total);
+      const aAng = cursor + span / 2;
+      if (area.type === 'area' || area.type === 'location') place(area, aAng, area.type === 'location' ? Rsite : Rarea);
+      const locs = area.type === 'location'
+        ? [area]
+        : (childrenOf.get(area.id) || []).filter((c) => c.type === 'location' && !c.pad);
+      const lw = locs.reduce((sum, l) => sum + weight(l), 0) || 1;
+      let lc = cursor;
+      locs.forEach((loc) => {
+        const ls = span * (weight(loc) / lw);
+        const lang = lc + ls / 2;
+        if (loc !== area) place(loc, lang, Rsite);
+        const ms = (childrenOf.get(loc.id) || []).filter((c) => c.type === 'machine');
+        ms.forEach((m, i) => {
+          const share = ms.length === 1 ? 0 : (ls * 0.82) / ms.length;
+          const mang = ms.length === 1 ? lang : (lang - (ms.length - 1) * share / 2 + i * share);
+          place(m, mang, Rmach);
+        });
+        lc += ls;
+      });
+      cursor += span;
+    });
+    // Parent country (KW on space) sits in the open wedge, inside the machine ring.
+    if (parent && parent.type !== 'enterprise') {
+      place(parent, parentAng, 86);
+    }
   }
 
   function setOverviewExpansion() {
@@ -1057,7 +1128,12 @@
         // hub→area→location  OR  country→client→area
         (childrenOf.get(ch.id) || []).forEach((g) => {
           if (g.pad || g.type === 'branch') return;
-          if (focus.type === 'hub' && g.type === 'location') expandedPath.add(g.id);
+          if (focus.type === 'hub' && g.type === 'location') {
+            expandedPath.add(g.id);
+            (childrenOf.get(g.id) || []).forEach((m) => {
+              if (m.type === 'machine') expandedPath.add(m.id);
+            });
+          }
           if (focus.type === 'country' && (g.type === 'area' || g.type === 'client')) expandedPath.add(g.id);
         });
       });
@@ -1066,7 +1142,12 @@
         if (!area.pad && area.type === 'area') {
           expandedPath.add(area.id);
           (childrenOf.get(area.id) || []).forEach((loc) => {
-            if (!loc.pad && loc.type === 'location') expandedPath.add(loc.id);
+            if (!loc.pad && loc.type === 'location') {
+              expandedPath.add(loc.id);
+              (childrenOf.get(loc.id) || []).forEach((m) => {
+                if (m.type === 'machine') expandedPath.add(m.id);
+              });
+            }
           });
         }
       });
@@ -1102,6 +1183,7 @@
         if (sib.type === 'hub') expandedPath.add(sib.id);
       });
     }
+    if (focus.type === 'hub' || focus.type === 'client') applyBrandCluster(focus);
     if (focus.type === 'machine') applyMachineCluster(focus);
   }
 
@@ -1257,6 +1339,12 @@
       title.className = `hub-title hub-title-dom ${h.ring || ''} ${focused ? 'is-focus' : ''} ${overviewMode ? '' : (focused ? '' : 'muted')}`;
       sub.textContent = h.subtitle || '';
       sub.className = 'hub-sub';
+      if (focused && h._clustered && focus?.id === h.id) {
+        el.style.display = 'none';
+        title.style.opacity = '0';
+        sub.style.opacity = '0';
+        return;
+      }
       // Overview: planned countries → titles outside; active with brands → title
       // sits inward of the hub (toward core) so it never fights brand labels.
       // Hex: titles sit on the cell (equal planned AE/SA cells stay in the cluster).
@@ -1270,6 +1358,14 @@
         // Label under the occupied cell centre
         wx = h.x;
         wy = h.y + 42;
+      } else if (focused && h._clustered) {
+        const parent = h.parentId ? nodeById.get(h.parentId) : null;
+        const ang = parent
+          ? Math.atan2(parent.y - h.y, parent.x - h.x)
+          : h.outAngle + Math.PI;
+        wx = h.x + Math.cos(ang) * 18;
+        wy = h.y + Math.sin(ang) * 18;
+        sub.textContent = '';
       } else if (focused) {
         // Opposite the children, then swing until the title block misses their links.
         const kids = (childrenOf.get(h.id) || []).filter((c) => c.draw && !c.pad);
@@ -1566,18 +1662,27 @@
       n.ghost = false;
       if (focus?.type === 'machine') {
         const siteId = focus.parentId;
+        const areaId = nodeById.get(siteId)?.parentId;
         const localGhost = n.id === siteId || (n.type === 'machine' && n.parentId === siteId && n.id !== focus.id);
         if (localGhost) {
           n.draw = true;
           n.ghost = true;
-          n.preview = true;
-          n.lodAlpha = 0.2;
-          n.labelOn = false;
+          n.preview = false;
+          n.lodAlpha = 0.45;
+          n.labelOn = !!n.label;
+          return;
+        }
+        if (areaId && n.id === areaId && n.type !== 'enterprise') {
+          n.draw = true;
+          n.lodAlpha = 0.78;
+          n.labelOn = !!n.label;
           return;
         }
         if (onPath && n.id !== focus.id) {
-          n.draw = true;
-          n.lodAlpha = 0.04;
+          // Farther ancestors stay off this frame so their spokes cannot cross the cluster.
+          // The APOS edge chip carries the rest of the chain.
+          n.draw = false;
+          n.lodAlpha = 0;
           n.labelOn = false;
           return;
         }
@@ -1613,6 +1718,13 @@
           n.draw = true;
           n.lodAlpha = 0.85;
           n.labelOn = !!n.label && (n.type === 'location' || n.type === 'machine' || n.type === 'area');
+          return;
+        }
+        // Brand focus: machines under site under area (areas / sites / machines readable)
+        if ((focus.type === 'hub' || focus.type === 'client') && n._clustered && n.type === 'machine') {
+          n.draw = true;
+          n.lodAlpha = 0.95;
+          n.labelOn = !!n.label;
           return;
         }
       }
@@ -1666,9 +1778,72 @@
     syncHubTitles();
     syncFocusTitle();
     separateBadgesFromTitles();
+    separateClusterLabels();
     renderBreadcrumb(focusNodeId);
     syncAposEdgeChip();
     syncWatermark();
+  }
+
+  /** Push brand-focus labels apart when estimated boxes still overlap on screen. */
+  function separateClusterLabels() {
+    if (targetTransform) {
+      const dk = Math.abs((targetTransform.k || 0) - (transform.k || 0));
+      const dx = Math.abs((targetTransform.x || 0) - (transform.x || 0));
+      const dy = Math.abs((targetTransform.y || 0) - (transform.y || 0));
+      if (dk > 0.02 || dx > 1.5 || dy > 1.5) return;
+    }
+    const els = [...document.querySelectorAll('.node-label-dom')].filter((el) => {
+      const n = nodeById.get(el.dataset.nid);
+      if (!n?._clustered || !n.labelOn) return false;
+      const st = getComputedStyle(el);
+      return st.display !== 'none' && Number.parseFloat(st.opacity || '1') >= 0.2;
+    });
+    linkSampleCache = null;
+    const samples = linkScreenSamples();
+    const stageR = stage.getBoundingClientRect();
+    const onLink = (el) => {
+      const r = el.getBoundingClientRect();
+      const box = {
+        l: r.left - stageR.left, t: r.top - stageR.top,
+        r: r.right - stageR.left, b: r.bottom - stageR.top,
+      };
+      return samples.some((p) => p.x > box.l - 3 && p.x < box.r + 3 && p.y > box.t - 3 && p.y < box.b + 3);
+    };
+    for (let pass = 0; pass < 10; pass++) {
+      let moved = false;
+      for (let i = 0; i < els.length; i++) {
+        for (let j = i + 1; j < els.length; j++) {
+          const a = els[i].getBoundingClientRect();
+          const b = els[j].getBoundingClientRect();
+          const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (overlapX <= 2 || overlapY <= 2) continue;
+          const n = nodeById.get(els[j].dataset.nid);
+          if (!n) continue;
+          const tang = (n._labelAng || 0) + Math.PI / 2;
+          const shift = Math.min(overlapX, overlapY) + 8;
+          const prevL = n._labelSx;
+          const prevT = n._labelSy;
+          let placed = false;
+          for (const sign of [1, -1]) {
+            n._labelSx = (prevL || 0) + Math.cos(tang) * shift * sign;
+            n._labelSy = (prevT || 0) + Math.sin(tang) * shift * sign;
+            els[j].style.left = `${n._labelSx}px`;
+            els[j].style.top = `${n._labelSy}px`;
+            if (!onLink(els[j])) { placed = true; break; }
+          }
+          if (!placed) {
+            n._labelSx = prevL;
+            n._labelSy = prevT;
+            els[j].style.left = `${prevL}px`;
+            els[j].style.top = `${prevT}px`;
+            continue;
+          }
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
   }
 
   function syncWatermark() {
@@ -1681,7 +1856,8 @@
       stage.appendChild(el);
     }
     const focus = nodeById.get(focusNodeId);
-    if (overviewMode || !focus || focus.type !== 'machine') {
+    // The site and area nodes carry their own labels in machine focus.
+    if (overviewMode || !focus || focus.type !== 'machine' || focus._clustered) {
       el.hidden = true;
       return;
     }
@@ -1705,11 +1881,15 @@
 
   function nodeScreenRadius(n) {
     const deep = !overviewMode;
-    if (n.type === 'hub' || n.type === 'country') return deep ? DEEP_HUB_R : HUB_SCREEN_R;
-    if (n.type === 'branch') return deep ? (DEEP_NODE_R.branch || 14) : 5;
-    if (n.type === 'enterprise') return 8;
-    if (n.type === 'client') return deep ? (DEEP_NODE_R.area || 16) : 7.2;
-    return deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
+    let r;
+    if (n.type === 'hub' || n.type === 'country') r = deep ? DEEP_HUB_R : HUB_SCREEN_R;
+    else if (n.type === 'branch') r = deep ? (DEEP_NODE_R.branch || 14) : 5;
+    else if (n.type === 'enterprise') r = 8;
+    else if (n.type === 'client') r = deep ? (DEEP_NODE_R.area || 16) : 7.2;
+    else r = deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
+    if (n._clustered) r *= n.type === 'machine' ? 1.55 : 1.4;
+    if ((n.type === 'hub' || n.type === 'country') && n.id === focusNodeId && !overviewMode) r *= 1.45;
+    return r;
   }
 
   function layoutPills() {
@@ -1788,6 +1968,17 @@
           clearPill = !(box.l < pill.x + pill.rw && box.r > pill.x - pill.rw && box.t < pill.y + pill.rh && box.b > pill.y - pill.rh);
         }
         if (clearNode && clearPill) {
+          // Cluster labels sit beside the spoke so they don't cover the ring links.
+          if (n && n._clustered) {
+            const tang = ang + Math.PI / 2;
+            const mag = sr + 8 + Math.max(16, hw * 0.35);
+            return {
+              sx: p.x + Math.cos(tang) * mag,
+              sy: p.y + Math.sin(tang) * mag,
+              dist,
+              ang: tang,
+            };
+          }
           // Area and site names sit beside the spoke, not on it.
           if (n && (n.type === 'area' || n.type === 'location' || n.type === 'machine')) {
             const tang = ang + Math.PI / 2;
@@ -2070,7 +2261,7 @@
       }
       el.textContent = n.label; // full label (incl. Technical Support)
       const overviewBrand = overviewMode && n.type === 'client';
-      el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}${overviewBrand ? ' overview-brand' : ''}`;
+      el.className = `node-label-dom type-${n.type}${n.type === 'branch' ? ' branch' : ''}${overviewBrand ? ' overview-brand' : ''}${n.ghost ? ' is-ghost' : ''}`;
       const base = worldToScreen(n.x, n.y);
       const sx = n._labelSx != null ? n._labelSx : base.x;
       const sy = n._labelSy != null ? n._labelSy : base.y + 20;
@@ -2092,7 +2283,9 @@
       let lop = 1;
       const zk = transform.k || 1;
       const isLeafish = n.type === 'location' || n.type === 'machine' || n.type === 'branch' || n.type === 'area';
-      if (isLeafish && !overviewMode) {
+      if (n._clustered && (n.ghost || focusNodeId && n.id !== focusNodeId)) {
+        lop = n.ghost ? 0.45 : (n.type === 'machine' ? 0.95 : 1);
+      } else if (isLeafish && !overviewMode) {
         const focusChild = n.parentId === focusNodeId;
         if (focusChild) lop = 1;
         else if (zk <= 1.2) lop = 0;
@@ -2456,7 +2649,12 @@
         if (area.type !== 'area' && area.type !== 'location') return;
         pts.push(area);
         (childrenOf.get(area.id) || []).forEach((loc) => {
-          if (loc.type === 'location' && !loc.pad) pts.push(loc);
+          if (loc.type === 'location' && !loc.pad) {
+            pts.push(loc);
+            (childrenOf.get(loc.id) || []).forEach((m) => {
+              if (m.type === 'machine') pts.push(m);
+            });
+          }
         });
       });
     } else if (node.type === 'country') {
@@ -2471,7 +2669,12 @@
       kids.filter((c) => c.type === 'area').forEach((area) => {
         pts.push(area);
         (childrenOf.get(area.id) || []).forEach((loc) => {
-          if (loc.type === 'location' && !loc.pad) pts.push(loc);
+          if (loc.type === 'location' && !loc.pad) {
+            pts.push(loc);
+            (childrenOf.get(loc.id) || []).forEach((m) => {
+              if (m.type === 'machine') pts.push(m);
+            });
+          }
         });
       });
     } else if (node.type === 'area') {
@@ -2480,7 +2683,11 @@
       kids.filter((c) => c.type === 'machine').forEach((m) => pts.push(m));
     } else if (node.type === 'machine') {
       const parent = nodeById.get(node.parentId);
-      if (parent) pts.push(parent);
+      if (parent) {
+        pts.push(parent);
+        const area = parent.parentId ? nodeById.get(parent.parentId) : null;
+        if (area && area.type !== 'enterprise') pts.push(area);
+      }
       (childrenOf.get(node.parentId) || []).forEach((s) => {
         if (s.type === 'machine') pts.push(s);
       });
@@ -2505,7 +2712,9 @@
       path.forEach((id) => {
         if (seen.has(id)) return;
         const n = nodeById.get(id);
-        if (!n) return;
+        if (!n || n.type === 'enterprise') return;
+        // Brand focus frames the subtree, not the APOS core (core is the edge chip).
+        if (node.type === 'hub') return;
         pts.push(n);
         seen.add(id);
       });
@@ -2594,7 +2803,7 @@
         minY = Math.min(minY, n.y - 64);
       });
     }
-    if (node.type === 'hub' || node.type === 'country') {
+    if ((node.type === 'hub' || node.type === 'country') && !node._clustered) {
       const tipR = TREE.area + TREE.location;
       const along = node.outAngle || -Math.PI / 2;
       const tx = node.x + Math.cos(along) * tipR;
@@ -2695,6 +2904,27 @@
     }
     let cx = centerNode ? centerNode.x : bbox.x + bbox.w / 2;
     let cy = centerNode ? centerNode.y : bbox.y + bbox.h / 2;
+    if (centerNode?._clustered && (centerNode.type === 'hub' || centerNode.type === 'client')) {
+      // Zoom until the brand ring itself — not the whole APOS map — fills the view.
+      const locals = focusFrameNodes(centerNode);
+      let maxR = 64;
+      locals.forEach((n) => {
+        maxR = Math.max(maxR, Math.hypot(n.x - centerNode.x, n.y - centerNode.y));
+      });
+      const half = Math.min(fit.w, fit.h) * 0.46;
+      k = half / maxR;
+      const nodeSpan = maxR * 2;
+      const core = nodeById.get(DATA.enterprise.id);
+      const coreDist = core ? Math.hypot(centerNode.x - core.x, centerNode.y - core.y) : 0;
+      if (coreDist > 40) {
+        const pushOff = (Math.min(fit.W, fit.H) * 0.58) / coreDist;
+        if (pushOff > k) k = pushOff;
+      }
+      if (nodeSpan * k < fit.W * 0.48) k = (fit.W * 0.48) / nodeSpan;
+      const cap = Math.min(fit.w * 0.70, fit.h * 0.90) / nodeSpan;
+      k = Math.min(Math.max(k, 1.45), cap);
+      return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-centerNode.x, -centerNode.y);
+    }
     if (centerNode?.type === 'hub' || centerNode?.type === 'country') {
       // Frame focus + children + ancestor spine in the usable (drawer-aware) area.
       const margin = 0.08;
@@ -2714,6 +2944,25 @@
       cx += Math.cos(along) * bias;
       cy += Math.sin(along) * bias;
       return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
+    }
+    if (centerNode && centerNode.type === 'machine') {
+      const locals = focusFrameNodes(centerNode);
+      let lMinX = Infinity, lMaxX = -Infinity, lMinY = Infinity, lMaxY = -Infinity;
+      (locals.length ? locals : [centerNode]).forEach((n) => {
+        lMinX = Math.min(lMinX, n.x); lMaxX = Math.max(lMaxX, n.x);
+        lMinY = Math.min(lMinY, n.y); lMaxY = Math.max(lMaxY, n.y);
+      });
+      const localW = Math.max(64, lMaxX - lMinX);
+      const localH = Math.max(64, lMaxY - lMinY);
+      k = Math.min((fit.w * 0.64) / localW, (fit.h * 0.66) / localH);
+      k = Math.max(1.7, Math.min(k, 8));
+      let midX = (lMinX + lMaxX) / 2;
+      let midY = (lMinY + lMaxY) / 2;
+      const estDx = Math.abs(centerNode.x - midX) * k / Math.max(fit.w, 1);
+      const estDy = Math.abs(centerNode.y - midY) * k / Math.max(fit.h, 1);
+      if (estDx > 0.14) midX += (centerNode.x - midX) * ((estDx - 0.12) / estDx);
+      if (estDy > 0.14) midY += (centerNode.y - midY) * ((estDy - 0.12) / estDy);
+      return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-midX, -midY);
     }
     if (centerNode && (centerNode.type === 'client' || centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
       // Prioritise focus + children + local ghosts, centred in the usable viewport (minus drawer).
@@ -3788,15 +4037,27 @@
       }
     }
     el.hidden = false;
-    el.style.left = `${aposEdgeHint.x}px`;
-    el.style.top = `${aposEdgeHint.y}px`;
+    const fit = viewportFitRect({ reserveDrawer: true });
+    const drawer = document.getElementById('inspector-drawer');
+    const drawerLeft = (drawer && drawer.classList.contains('is-open'))
+      ? drawer.getBoundingClientRect().left
+      : (stage.clientWidth - 12);
+    // Chip is centered; keep its right edge 24px clear of the drawer.
+    const maxX = Math.min(fit.x + fit.w - 24 - 84, drawerLeft - 24 - 84);
+    const x = Math.max(40, Math.min(aposEdgeHint.x, maxX));
+    const y = Math.max(88, Math.min(stage.clientHeight - 44, aposEdgeHint.y));
+    aposEdgeHint.x = x;
+    aposEdgeHint.y = y;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
   }
 
   /** Sample a screen-space cubic and find where it leaves the padded stage (for edge chip). */
   function curveEdgeExit(x0, y0, c1x, c1y, c2x, c2y, x1, y1, pad = 28) {
     const w = stage.clientWidth;
     const h = stage.clientHeight;
-    const L = pad, R = w - pad, T = pad + 48, B = h - pad - 40;
+    const fit = viewportFitRect({ reserveDrawer: !overviewMode });
+    const L = pad, R = Math.min(w - pad, fit.x + fit.w - 24), T = pad + 48, B = h - pad - 40;
     const inside = (x, y) => x >= L && x <= R && y >= T && y <= B;
     const steps = 36;
     let prevIn = inside(x0, y0);
@@ -4032,13 +4293,16 @@
     const h = stage.clientHeight;
     pctx.save();
     const focus = nodeById.get(focusNodeId);
-    if (!overviewMode && focus && focus.type !== 'enterprise') {
+      if (!overviewMode && focus && focus.type !== 'enterprise') {
       const usable = viewportFitRect({ reserveDrawer: true });
       pctx.beginPath();
-      pctx.rect(0, 0, usable.x + usable.w, h);
+      // Stop strokes 24px before the inspector so a spoke cannot run under the drawer.
+      pctx.rect(0, 0, Math.max(80, usable.x + usable.w - 24), h);
       pctx.clip();
     }
     const focusPath = new Set(pathToRoot(focusNodeId));
+    const pathFit = viewportFitRect({ reserveDrawer: !overviewMode });
+    const pathLimit = pathFit.x + pathFit.w - 24;
     const focusHubId = focus?.type === 'hub' ? focus.id : focus?.hubId;
     const accent = focusHubId ? accentRgb((UTILS && UTILS.HUB_ACCENT[focusHubId]) || nodeById.get(focusHubId)?.ring || 'teal') : null;
     const localIds = new Set((focus ? localFrameNodes(focus) : []).map((n) => n.id));
@@ -4064,13 +4328,32 @@
       }
 
       const onPath = focusPath.has(L.source) && focusPath.has(L.target);
-      // Ghost siblings are outlines only — a spoke through them reads as a line under the label.
-      if (s.ghost || t.ghost) return;
-      if (focus?.type === 'machine' && onPath) {
-        const siteId = focus.parentId;
-        const near = (id) => id === focus.id || id === siteId;
-        if (!(near(s.id) && near(t.id))) return;
+      const clusterEnds = !!(s._clustered && t._clustered);
+      // Machine focus only strokes the short chain (machine, site, siblings, area).
+      if (focus?.type === 'machine' && !clusterEnds) {
+        if (onPath) {
+          const a0 = screenOf(s);
+          const b0 = screenOf(t);
+          const cc0 = curveControls(s, t, L.kind);
+          const c1x = cc0.c1x * transform.k + transform.x;
+          const c1y = cc0.c1y * transform.k + transform.y;
+          const c2x = cc0.c2x * transform.k + transform.x;
+          const c2y = cc0.c2y * transform.k + transform.y;
+          const coreIsS = s.type === 'enterprise' || ((s.depth ?? 99) < (t.depth ?? 99));
+          const exit = coreIsS
+            ? curveEdgeExit(b0.x, b0.y, c2x, c2y, c1x, c1y, a0.x, a0.y, 32)
+            : curveEdgeExit(a0.x, a0.y, c1x, c1y, c2x, c2y, b0.x, b0.y, 32);
+          if (exit) {
+            const touchesCore = s.type === 'enterprise' || t.type === 'enterprise';
+            const depthRank = Math.min(s.depth ?? 99, t.depth ?? 99);
+            if (!aposEdgeHint || touchesCore || depthRank <= (aposEdgeHint.depthRank ?? 99)) {
+              aposEdgeHint = { x: exit.x, y: exit.y, side: exit.side, depthRank: touchesCore ? -1 : depthRank };
+            }
+          }
+        }
+        return;
       }
+      if ((s.ghost || t.ghost) && !clusterEnds) return;
       const crumbPath = !!(crumbHot && crumbHot.has(L.source) && crumbHot.has(L.target));
       // Always draw the focus→…→APOS chain; context links when both ends are drawn
       if (!onPath && !crumbPath) {
@@ -4098,6 +4381,7 @@
         op = (L.kind === 'spine' ? 0.28 : 0.22) + 0.3 * restore;
       }
       if (future && !onPath && !overviewMode) op = Math.min(op, 0.28);
+      if (clusterEnds && (s.ghost || t.ghost) && !onPath) op = Math.max(op, 0.4);
       if (hoverHotDraw && !(hoverHotDraw.has(L.source) && hoverHotDraw.has(L.target)) && !onPath) {
         op = Math.min(op, 0.05);
       }
@@ -4146,14 +4430,40 @@
         rgb = firstHopRgb;
       }
 
+      // Focused path must not paint a segment into the drawer margin.
+      // Off-screen ancestors stop at the last on-canvas point; the edge chip carries the rest.
+      let strokePts = null;
+      if (onPath && !overviewMode) {
+        const limit = pathLimit;
+        const steps = 18;
+        const pts = [];
+        let crossed = false;
+        for (let i = 0; i <= steps; i++) {
+          const u = 1 - i / steps;
+          const tt = i / steps;
+          const x = u * u * u * ax + 3 * u * u * tt * c1x + 3 * u * tt * tt * c2x + tt * tt * tt * bx;
+          const y = u * u * u * ay + 3 * u * u * tt * c1y + 3 * u * tt * tt * c2y + tt * tt * tt * by;
+          const onStageY = y >= -2 && y <= h + 2;
+          if (onStageY && x > limit) { crossed = true; break; }
+          pts.push({ x, y });
+        }
+        if (crossed) strokePts = pts;
+      }
+
       pctx.beginPath();
-      pctx.moveTo(ax, ay);
-      pctx.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by);
+      if (strokePts && strokePts.length > 1) {
+        pctx.moveTo(strokePts[0].x, strokePts[0].y);
+        for (let i = 1; i < strokePts.length; i++) pctx.lineTo(strokePts[i].x, strokePts[i].y);
+      } else {
+        pctx.moveTo(ax, ay);
+        pctx.bezierCurveTo(c1x, c1y, c2x, c2y, bx, by);
+      }
       pctx.lineWidth = lineW;
       pctx.lineCap = 'round';
       pctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${op})`;
       const alertLink = !!(s.alert || t.alert || s.status === 'offline' || t.status === 'offline');
       if (future) pctx.setLineDash([5, 4]);
+      else if (s.ghost || t.ghost) pctx.setLineDash([5, 4]);
       else pctx.setLineDash([]);
       if ((onPath || crumbPath) || alertLink) {
         pctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alertLink && !onPath ? 0.35 : 0.45})`;
@@ -4427,6 +4737,8 @@
       else if (n.type === 'enterprise') r = 0;
       else if (n.type === 'branch') r = deep ? (DEEP_NODE_R.branch || 14) : 5;
       else r = deep ? (DEEP_NODE_R[n.type] || 11) : (NODE_R_BY_TYPE[n.type] || NODE_SCREEN_R);
+      if (n._clustered) r *= n.type === 'machine' ? 1.55 : 1.4;
+      if ((n.type === 'hub' || n.type === 'country') && n.id === focusNodeId && !overviewMode) r *= 1.45;
       r *= grow * revealScale(n);
       const springTarget = hoverId === n.id ? 1.16 : (hoverHotDraw && hoverHotDraw.has(n.id) ? 1.045 : 1);
       const springK = reduceMotion ? 1 : 0.18;
@@ -4520,10 +4832,13 @@
       } else if (n.ghost) {
         traceTypeShape(pctx, p.x, p.y, r, n.type);
         pctx.save();
-        pctx.globalAlpha = 0.2;
-        pctx.strokeStyle = 'rgba(226, 236, 248, 0.95)';
-        pctx.lineWidth = 1.35;
-        pctx.setLineDash([3, 3]);
+        pctx.globalAlpha = 0.45;
+        pctx.fillStyle = 'rgba(186, 214, 236, 0.55)';
+        pctx.fill();
+        traceTypeShape(pctx, p.x, p.y, r, n.type);
+        pctx.strokeStyle = 'rgba(236, 244, 252, 1)';
+        pctx.lineWidth = 2;
+        pctx.setLineDash([5, 3]);
         pctx.stroke();
         pctx.restore();
       } else if (n.type !== 'branch') {
@@ -5259,6 +5574,42 @@
     },
     setZoomK,
     getTransform: () => ({ k: transform.k, x: transform.x, y: transform.y }),
+    /** Screen discs and clipped samples of the focused path. Points stop 24px before the drawer. */
+    focusPathScreen: () => {
+      const fit = viewportFitRect({ reserveDrawer: !overviewMode });
+      const limit = fit.x + fit.w - 24;
+      const path = pathToRoot(focusNodeId);
+      const pathSet = new Set(path);
+      const outNodes = path.map((id) => {
+        const n = nodeById.get(id);
+        if (!n) return null;
+        const p = worldToScreen(n.x, n.y);
+        return {
+          id, type: n.type, x: p.x, y: p.y,
+          r: nodeScreenRadius(n),
+          alpha: n.lodAlpha || 0,
+          draw: !!n.draw,
+        };
+      }).filter(Boolean);
+      const samples = [];
+      links.forEach((L) => {
+        if (L.kind === 'signal') return;
+        if (!pathSet.has(L.source) || !pathSet.has(L.target)) return;
+        const s = nodeById.get(L.source);
+        const t = nodeById.get(L.target);
+        if (!s || !t) return;
+        const cc = curveControls(s, t, L.kind);
+        sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 16).forEach((pt) => {
+          const q = worldToScreen(pt[0], pt[1]);
+          samples.push({ x: q.x, y: q.y, source: L.source, target: L.target });
+        });
+      });
+      const drawerEl = document.getElementById('inspector-drawer');
+      const drawerLeft = (drawerEl && drawerEl.classList.contains('is-open'))
+        ? drawerEl.getBoundingClientRect().left
+        : fit.W;
+      return { limit, drawerLeft, nodes: outNodes, samples };
+    },
     nodeScreenPos: (id) => {
       const n = nodeById.get(id);
       return n ? worldToScreen(n.x, n.y) : null;

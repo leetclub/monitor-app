@@ -419,7 +419,10 @@ async function stills(page, pageDef) {
   mkdirSync(dir, { recursive: true });
   const picks = await page.evaluate((apiName) => {
     const nodes = window[apiName].listNodes();
-    const brand = nodes.find((n) => n.type === 'client') || nodes.find((n) => n.type === 'country');
+    const brand = nodes.find((n) => n.id === 'client-leet')
+      || nodes.find((n) => n.type === 'hub')
+      || nodes.find((n) => n.type === 'client')
+      || nodes.find((n) => n.type === 'country');
     const area = nodes.find((n) => n.type === 'area') || nodes.find((n) => n.type === 'location');
     const machine = nodes.find((n) => n.id === 'm-ee-4') || nodes.find((n) => n.type === 'machine');
     return { brand: brand?.id, area: area?.id, machine: machine?.id };
