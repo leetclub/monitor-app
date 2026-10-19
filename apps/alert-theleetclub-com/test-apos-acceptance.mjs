@@ -67,7 +67,7 @@ async function walk(page, pageDef, score) {
       };
     };
     const labelBoxes = () => {
-      const sel = '.node-label-dom, .hub-title-dom, .focus-title, .m3d-label, .node-badge, .m3d-badge';
+      const sel = '.node-label-dom, .hub-title-dom, .hub-sub, .focus-title, .m3d-label, .node-badge, .m3d-badge, .orbit-level';
       const out = [];
       document.querySelectorAll(sel).forEach((el) => {
         const st = getComputedStyle(el);
@@ -109,6 +109,9 @@ async function walk(page, pageDef, score) {
       await api.waitForIdle();
       await new Promise((r) => setTimeout(r, 60));
       overlapPairs(labelBoxes()).slice(0, 4).forEach((msg) => fail('C1', `${tag} ${msg}`));
+      if (typeof api.countLabelLinkHits === 'function' && api.countLabelLinkHits() > 0) {
+        fail('C1', `${tag} link crosses label ${api.countLabelLinkHits()}`);
+      }
     };
     await zoomCollision('overview');
     const mid = nodes.find((n) => n.type === 'client') || nodes.find((n) => n.type === 'area') || nodes.find((n) => n.type === 'country');
@@ -117,6 +120,34 @@ async function walk(page, pageDef, score) {
     if (machine) await zoomCollision('focus', machine.id);
     api.reset();
     await api.waitForIdle();
+    if (typeof api.fleetSnapshot === 'function') {
+      const agree = () => {
+        const s = api.fleetSnapshot();
+        const kpi = (document.querySelector('[data-kpi="offline"] b')?.textContent || '').trim();
+        const crumb = document.getElementById('crumb-list')?.dataset.offline;
+        const cards = [...document.querySelectorAll('#map-event-feed .incident[data-kind="offline"]')];
+        const ids = new Set(cards.map((c) => c.dataset.machine).filter(Boolean));
+        const ringOff = (api.getHealthRing?.() || []).find((p) => p.key === 'offline')?.n || 0;
+        const ent = api.getRollup?.('ent-apos');
+        if (kpi !== String(s.offline)) fail('D2', `kpi offline ${kpi} != snapshot ${s.offline}`);
+        if (crumb != null && crumb !== String(s.offline)) fail('D2', `crumb offline ${crumb} != ${s.offline}`);
+        if (cards.length !== (s.openIncidents || []).filter((i) => i.kind === 'offline').length) fail('D2', `offline cards ${cards.length}`);
+        if (ids.size !== (s.machinesOfflineNow || []).length) fail('D2', `offline machines ${ids.size} != ${s.machinesOfflineNow.length}`);
+        if (ringOff !== s.offline) fail('D2', `health ring offline ${ringOff} != ${s.offline}`);
+        if (ent && ent.offline !== s.offline) fail('D2', `rollup offline ${ent.offline} != ${s.offline}`);
+      };
+      agree();
+      const victim = nodes.find((n) => n.type === 'machine' && n.id === 'm-ee-4') || nodes.find((n) => n.type === 'machine');
+      if (victim && api.emitTestEvent) {
+        api.emitTestEvent(victim.id, 'offline');
+        api.emitTestEvent(victim.id, 'offline');
+        await new Promise((r) => setTimeout(r, 40));
+        agree();
+        const s2 = api.fleetSnapshot();
+        if ((s2.historyCount || 0) < 2) fail('D2', `history did not keep repeats (${s2.historyCount})`);
+        if ((s2.machinesOfflineNow || []).filter((id) => id === victim.id).length !== 1) fail('D2', 'offline machine not unique');
+      }
+    }
     let smoothChecked = 0;
     for (const n of targets) {
       api.reset();

@@ -36,8 +36,19 @@
       if (L.id === PAGE) a.classList.add('is-active');
       nav.appendChild(a);
     });
+    let tools = header.querySelector('.header-tools');
+    if (!tools) {
+      tools = document.createElement('div');
+      tools.className = 'header-tools';
+      header.insertBefore(tools, header.firstChild);
+    }
+    const brand = header.querySelector('.brand-mark');
+    if (brand) tools.appendChild(brand);
+    tools.appendChild(nav);
     const toggle = header.querySelector('.view-toggle');
-    header.insertBefore(nav, toggle || null);
+    if (toggle) tools.appendChild(toggle);
+    const layout = header.querySelector('.layout-mode-toggle');
+    if (layout) tools.appendChild(layout);
   }
 
   function ensureChrome() {
@@ -360,39 +371,51 @@
         else closeSearch();
       }
     });
-    const rank = { critical: 0, warning: 1, info: 2 };
-    stage.addEventListener('apos-live', (e) => {
-      const ev = e.detail || {};
-      const li = document.createElement('li');
-      const sev = ev.severity || (ev.kind === 'offline' ? 'critical' : ev.kind === 'lowstock' ? 'warning' : 'info');
-      li.className = `incident sev-${sev}`;
-      li.dataset.sev = sev;
-      const when = new Date(ev.at || Date.now());
-      const hh = String(when.getHours()).padStart(2, '0');
-      const mm = String(when.getMinutes()).padStart(2, '0');
-      li.innerHTML = `<span class="inc-sev" aria-hidden="true"></span><span class="inc-path">${ev.path || ev.title || ''}</span><span class="inc-what">${ev.happened || ev.label || 'Update'}</span><time class="inc-time">${hh}:${mm}</time>`;
-      if (ev.machineId) {
-        li.addEventListener('click', () => {
-          const map = api();
-          if (map) map.flyTo(ev.machineId);
-        });
-      }
-      const items = [...feed.children];
-      const slot = items.find((el) => (rank[el.dataset.sev] ?? 3) > (rank[sev] ?? 3));
-      if (slot) feed.insertBefore(li, slot);
-      else feed.appendChild(li);
-      while (feed.children.length > 4) feed.removeChild(feed.lastChild);
+    stage.addEventListener('apos-live', () => {
       const map = api();
+      if (map && map.fleetSnapshot) map.fleetSnapshot();
       if (map && typeof map.refreshInspector === 'function') map.refreshInspector();
-      paintKpis();
     });
+    stage.addEventListener('apos-fleet-sync', (e) => {
+      renderIncidents(e.detail || null);
+      if (e.detail) paintKpisFrom(e.detail);
+    });
+    function renderIncidents(snap) {
+      const map = api();
+      if (!snap) return;
+      feed.innerHTML = '';
+      if (!snap) return;
+      feed.dataset.offline = String(snap.offline || 0);
+      feed.dataset.open = String((snap.openIncidents || []).length);
+      feed.dataset.history = String(snap.historyCount || 0);
+      (snap.openIncidents || []).slice(0, 6).forEach((ev) => {
+        const li = document.createElement('li');
+        const sev = ev.severity || 'info';
+        li.className = `incident sev-${sev}`;
+        li.dataset.sev = sev;
+        li.dataset.kind = ev.kind || '';
+        li.dataset.machine = ev.machineId || '';
+        const when = new Date(ev.at || Date.now());
+        const hh = String(when.getHours()).padStart(2, '0');
+        const mm = String(when.getMinutes()).padStart(2, '0');
+        const facts = ev.machineId && map.nodeFacts ? map.nodeFacts(ev.machineId) : null;
+        li.innerHTML = `<span class="inc-sev" aria-hidden="true"></span><span class="inc-path">${facts?.path || ev.label || ''}</span><span class="inc-what">${ev.happened || ev.label || 'Update'}</span><time class="inc-time">${hh}:${mm}</time>`;
+        if (ev.machineId) {
+          li.addEventListener('click', () => {
+            const current = api();
+            if (!current) return;
+            if (current.focusIncident) current.focusIncident(Object.assign({}, ev, { path: facts?.path || ev.label, happened: ev.happened, severity: sev }));
+            current.flyTo(ev.machineId);
+          });
+        }
+        feed.appendChild(li);
+      });
+    }
   }
 
-  function paintKpis() {
+  function paintKpisFrom(f) {
     const bar = document.getElementById('fleet-kpis');
-    const m = api();
-    if (!bar || !m || typeof m.fleetKpis !== 'function') return;
-    const f = m.fleetKpis();
+    if (!bar || !f) return;
     const when = new Date(f.refreshedAt || Date.now());
     const clock = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
     const cells = [
@@ -409,6 +432,12 @@
       btn.querySelector('b').textContent = value == null ? '—' : String(value);
       btn.querySelector('span').textContent = label;
     });
+  }
+
+  function paintKpis() {
+    const m = api();
+    if (!m || typeof m.fleetKpis !== 'function') return;
+    paintKpisFrom(m.fleetKpis());
   }
 
   function ensureFleetChrome() {
@@ -453,6 +482,13 @@
       stage.appendChild(legend);
     }
     paintKpis();
+    const crumb = document.querySelector('.crumb-pill, .space-crumb, .map3d-crumb');
+    if (crumb && header && crumb.parentElement !== header) header.appendChild(crumb);
+    const tools = header && header.querySelector('.header-tools');
+    const cmd = document.getElementById('map-command');
+    if (tools && cmd && cmd.parentElement !== tools) tools.appendChild(cmd);
+    const layout = header && header.querySelector('.layout-mode-toggle');
+    if (tools && layout && layout.parentElement !== tools) tools.appendChild(layout);
   }
 
   function boot() {

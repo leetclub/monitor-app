@@ -164,6 +164,9 @@ function mount() {
   const labelEls = new Map();
 
   let focusId = graph.core.id;
+  let pinnedIncident = null;
+  const history3d = [];
+  const rippleRings = [];
   let expanded = new Set();
   let flying = false;
   let hudMode = false;
@@ -547,6 +550,13 @@ function mount() {
       box.expandByScalar(6);
       return box;
     }
+    if (root.type === 'machine') {
+      const parent = root.parentId ? graph.byId.get(root.parentId) : null;
+      if (parent) box.expandByPoint(parent.pos);
+      graph.nodes.filter((c) => c.parentId === root.parentId && c.type === 'machine').forEach((c) => box.expandByPoint(c.pos));
+      box.expandByScalar(1.4);
+      return box;
+    }
     if (!deep) {
       // Hub/country/client: include ancestor chain toward APOS
       let a = root.parentId ? graph.byId.get(root.parentId) : null;
@@ -596,6 +606,7 @@ function mount() {
       }
     }
     focusId = n.id;
+    if (pinnedIncident && n.id !== pinnedIncident.machineId) pinnedIncident = null;
     setExpandedTo(n.id);
     idleOrbit = n.type === 'enterprise';
     lastInteract = performance.now();
@@ -660,6 +671,32 @@ function mount() {
 
     const startCam = camera.position.clone();
     const startTarget = controls.target.clone();
+    const spherical = (cam, target) => {
+      const dx = cam.x - target.x;
+      const dy = cam.y - target.y;
+      const dz = cam.z - target.z;
+      const dist = Math.hypot(dx, dy, dz) || 1;
+      return {
+        dist,
+        pitch: Math.asin(THREE.MathUtils.clamp(dy / dist, -1, 1)),
+        yaw: Math.atan2(dx, dz),
+      };
+    };
+    const startSph = spherical(startCam, startTarget);
+    let endSph = spherical(endCam, endTarget);
+    const maxPitch = THREE.MathUtils.degToRad(25);
+    const pitchDelta = THREE.MathUtils.clamp(endSph.pitch - startSph.pitch, -maxPitch, maxPitch);
+    endSph = {
+      dist: endSph.dist,
+      pitch: startSph.pitch + pitchDelta,
+      yaw: endSph.yaw,
+    };
+    const fromSph = (sph, target) => new THREE.Vector3(
+      target.x + Math.sin(sph.yaw) * Math.cos(sph.pitch) * sph.dist,
+      target.y + Math.sin(sph.pitch) * sph.dist,
+      target.z + Math.cos(sph.yaw) * Math.cos(sph.pitch) * sph.dist,
+    );
+    if (!(restoring && opts.snap)) endCam.copy(fromSph(endSph, endTarget));
     flying = true;
     const myGen = ++flyGen;
     const dur = reduceMotion ? 0 : (flyQuery > 0 ? flyQuery : (n.type === 'enterprise' ? 550 : 900));
@@ -668,8 +705,17 @@ function mount() {
       if (myGen !== flyGen) return;
       const u = dur === 0 ? 1 : Math.min(1, (now - t0) / dur);
       const e = 1 - Math.pow(1 - u, 3);
-      camera.position.lerpVectors(startCam, endCam, e);
-      controls.target.lerpVectors(startTarget, endTarget, e);
+      const yawDelta = Math.atan2(Math.sin(endSph.yaw - startSph.yaw), Math.cos(endSph.yaw - startSph.yaw));
+      const sph = {
+        dist: startSph.dist + (endSph.dist - startSph.dist) * e,
+        pitch: startSph.pitch + (endSph.pitch - startSph.pitch) * e,
+        yaw: startSph.yaw + yawDelta * e,
+      };
+      const tgt = startTarget.clone().lerp(endTarget, e);
+      const pos = (restoring && opts.snap) ? startCam.clone().lerp(endCam, e) : fromSph(sph, tgt);
+      camera.position.copy(pos);
+      camera.up.set(0, 1, 0);
+      controls.target.copy(tgt);
       controls.update();
       if (u < 1) requestAnimationFrame(step);
       else {
@@ -692,6 +738,26 @@ function mount() {
       c = c.parentId ? graph.byId.get(c.parentId) : null;
     }
     return parts.join(' · ');
+  }
+
+  function spawn3dRipple(id) {
+    if (reduceMotion) return;
+    let n = graph.byId.get(id);
+    let i = 0;
+    while (n && i < 6) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.1, 0.16, 18),
+        new THREE.MeshBasicMaterial({ color: 0x5ed6c8, transparent: true, opacity: 0.01, side: THREE.DoubleSide, depthWrite: false })
+      );
+      const src = n.type === 'enterprise' ? coreGroup.position : (meshes.get(n.id)?.mesh.position || n.pos);
+      ring.position.copy(src);
+      ring.lookAt(camera.position);
+      ring.userData.t0 = performance.now() + i * 170;
+      scene.add(ring);
+      rippleRings.push(ring);
+      i += 1;
+      n = n.parentId ? graph.byId.get(n.parentId) : null;
+    }
   }
 
   function incidentDetail(m, kind) {
@@ -724,7 +790,7 @@ function mount() {
       health: window.APOS_MAP_UTILS?.healthOf(n) || 'healthy',
       lastSeen: n.lastSeen || n.operators?.lastVisit || null,
       path: pathText(n),
-      sections: window.APOS_MAP_UTILS?.inspectorSections(n, DATA.people) || [],
+      sections: window.APOS_MAP_UTILS?.inspectorSections(n, DATA.people, pinnedIncident) || [],
     };
   }
 
@@ -775,22 +841,21 @@ function mount() {
     document.getElementById('insp-title').textContent = n.label;
     const grid = document.getElementById('insp-grid');
     grid.innerHTML = '';
-    const rows = [
-      ['Id', n.id], ['Depth', String(n.depth)],
-      ['Status', n.status || (n.alert ? 'alert' : n.comingSoon ? 'soon' : 'ok')],
-    ];
     const facts = nodeFacts(n.id);
-    if (facts) {
-      rows.push(['Alerts', String(facts.alerts)]);
-      rows.push(['Offline', String(facts.offline)]);
-      if (facts.revenueToday != null) rows.push(['Today', `${facts.revenueToday} KWD`]);
-      if (facts.stockPct != null) rows.push(['Stock', `${facts.stockPct}%`]);
-    }
-    rows.forEach(([k, v]) => {
-      const row = document.createElement('div');
-      row.className = 'insp-row';
-      row.innerHTML = `<span>${k}</span><span>${v}</span>`;
-      grid.appendChild(row);
+    const sections = facts?.sections?.length ? facts.sections : [{ title: '', rows: [['Status', n.status || 'ok']] }];
+    sections.forEach((sec) => {
+      if (sec.title) {
+        const h = document.createElement('h4');
+        h.className = 'insp-sec';
+        h.textContent = sec.title;
+        grid.appendChild(h);
+      }
+      (sec.rows || []).forEach(([k, v]) => {
+        const row = document.createElement('div');
+        row.className = 'insp-row';
+        row.innerHTML = `<span>${k}</span><span>${v}</span>`;
+        grid.appendChild(row);
+      });
     });
     d.classList.add('is-open');
     resize();
@@ -800,6 +865,8 @@ function mount() {
   function renderBreadcrumb() {
     const ol = document.getElementById('crumb-list');
     if (!ol) return;
+    const snap = window.APOS_MAP_UTILS?.fleetSnapshot(graph.nodes.filter((n) => n.type === 'machine'), history3d);
+    ol.dataset.offline = String(snap?.offline || 0);
     ol.innerHTML = '';
     const path = [];
     let n = graph.byId.get(focusId);
@@ -878,10 +945,23 @@ function mount() {
       } else if (node.type === 'branch') {
         show = focus?.type === 'machine' && isChild;
         op = 0.98;
+      } else if (focus?.type === 'machine' && (node.id === focus.parentId || (node.type === 'machine' && node.parentId === focus.parentId))) {
+        show = true;
+        op = node.id === focusId ? 0.98 : 0.2;
+      } else if (focus?.type === 'client' && (isChild || node.parentId && childrenOf(focusId).some((c) => c.id === node.parentId))) {
+        show = true;
+        op = isChild ? 1 : 0.72;
       } else if (onPath || isChild) {
-        // Ancestor chain + focus children always present
         show = true;
         op = node.status === 'future' || node.comingSoon ? 0.4 : 0.98;
+      } else if (focus?.type === 'client' && node.type === 'client') {
+        show = true;
+        op = 0.16;
+      } else if (focus?.type === 'client' && node.depth === 1 && node.id !== focus.parentId) {
+        show = true;
+        op = 0.12;
+      } else if (focus?.type === 'client' && node.depth >= 3) {
+        show = false;
       } else if (node.depth <= 2) {
         // Other hubs/brands — dim, never remove
         show = true;
@@ -993,6 +1073,30 @@ function mount() {
     }
   }
 
+  const ORBIT_LEVEL_NAME = { 1: 'Country', 2: 'Brand', 3: 'Area', 4: 'Site', 5: 'Machine' };
+  const orbitLabelEls = new Map();
+  function syncOrbitLabels(w, h) {
+    const show = focusId === graph.core.id;
+    Object.entries(LEVEL_ORBIT).forEach(([depth, radius]) => {
+      let el = orbitLabelEls.get(depth);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'orbit-level';
+        el.textContent = ORBIT_LEVEL_NAME[depth] || '';
+        labelLayer.appendChild(el);
+        orbitLabelEls.set(depth, el);
+      }
+      if (!show) { el.style.display = 'none'; return; }
+      const p = new THREE.Vector3(Math.cos(0.55) * radius, 0.2, Math.sin(0.55) * radius);
+      p.applyMatrix4(ringGroup.matrixWorld);
+      const v = p.project(camera);
+      if (Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05 || v.z > 1) { el.style.display = 'none'; return; }
+      el.style.display = 'block';
+      el.style.left = `${(v.x * 0.5 + 0.5) * w}px`;
+      el.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+    });
+  }
+
   function syncLabels() {
     const w = stage.clientWidth || 1920;
     const h = stage.clientHeight || 1080;
@@ -1024,9 +1128,14 @@ function mount() {
         if ((focus?.type === 'machine' || focus?.type === 'location') && n.depth > 2) return;
         want.add(id);
       });
-      graph.nodes.forEach((n) => {
-        if (n.depth === 1) want.add(n.id);
-      });
+      const focusNode = graph.byId.get(focusId);
+      if (focusNode?.type === 'client') {
+        want.add(focusNode.parentId);
+      } else {
+        graph.nodes.forEach((n) => {
+          if (n.depth === 1) want.add(n.id);
+        });
+      }
     }
     const placed = [];
     const visible = [];
@@ -1130,6 +1239,7 @@ function mount() {
       }
       visible.push({ id, label: n.label, x, y });
     });
+    syncOrbitLabels(w, h);
     // Hide unused
     labelEls.forEach((el, id) => {
       if (!want.has(id)) {
@@ -1579,6 +1689,21 @@ function mount() {
       dot.position.lerpVectors(pa, pb, f - hi);
       dot.material.color.setHex(ev.color);
     }
+    for (let i = rippleRings.length - 1; i >= 0; i--) {
+      const ring = rippleRings[i];
+      const age = (performance.now() - ring.userData.t0) / 1100;
+      if (age < 0) continue;
+      if (age > 1) {
+        scene.remove(ring);
+        ring.geometry.dispose();
+        ring.material.dispose();
+        rippleRings.splice(i, 1);
+        continue;
+      }
+      ring.scale.setScalar(1 + age * 4);
+      ring.material.opacity = (1 - age) * 0.28;
+      ring.lookAt(camera.position);
+    }
     if (!flying && !reduceMotion && focusId === graph.core.id) {
       if (performance.now() - lastInteract > 5000) idleOrbit = true;
       if (idleOrbit) {
@@ -1692,6 +1817,17 @@ function mount() {
   }
   scheduleTick();
   recompute3dAlerts();
+
+  function snapshot3d() {
+    const snap = Object.assign(
+      window.APOS_MAP_UTILS?.fleetSnapshot(graph.nodes.filter((n) => n.type === 'machine'), history3d) || {},
+      { refreshedAt: Date.now() }
+    );
+    const crumb = document.getElementById('crumb-list');
+    if (crumb) crumb.dataset.offline = String(snap.offline || 0);
+    try { stage.dispatchEvent(new CustomEvent('apos-fleet-sync', { detail: snap })); } catch (_) { /* paint */ }
+    return snap;
+  }
 
   const api = {
     getFocus: () => {
@@ -1859,10 +1995,18 @@ function mount() {
       });
       return n;
     },
-    fleetKpis: () => Object.assign(
-      window.APOS_MAP_UTILS?.fleetOf(graph.nodes.filter((n) => n.type === 'machine')) || {},
-      { refreshedAt: Date.now() }
-    ),
+    fleetKpis: () => snapshot3d(),
+    fleetSnapshot: () => snapshot3d(),
+    getHealthRing: () => {
+      const s = snapshot3d();
+      return [
+        { key: 'online', n: s.online || 0 },
+        { key: 'offline', n: s.offline || 0 },
+        { key: 'low', n: s.low || 0 },
+        { key: 'unknown', n: s.unknown || 0 },
+      ].filter((p) => p.n > 0);
+    },
+    focusIncident: (ev) => { pinnedIncident = ev || null; return pinnedIncident; },
     searchNodes: (q) => {
       const s = String(q || '').trim().toLowerCase();
       if (!s) return [];
@@ -1908,7 +2052,11 @@ function mount() {
       }
       recompute3dAlerts();
       spawn3dFlow(m.id, k);
-      stage.dispatchEvent(new CustomEvent('apos-live', { detail: incidentDetail(m, k) }));
+      spawn3dRipple(m.id);
+      const detail = incidentDetail(m, k);
+      history3d.push(detail);
+      if (history3d.length > 16) history3d.shift();
+      stage.dispatchEvent(new CustomEvent('apos-live', { detail }));
       return { id: m.id, status: m.status, alert: !!m.alert, kw: graph.byId.get('country-kw')?.alertCount || 0, leet: graph.byId.get('client-leet')?.alertCount || 0 };
     },
   };

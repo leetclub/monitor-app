@@ -372,14 +372,35 @@
 }
 
 /* Shared dark system: crumbs, KPIs, badges, incidents, legend */
+.tree-app, .space-app, .map3d-app { width: 100vw; max-width: 100vw; overflow: hidden; }
+.space-top, .tree-top, .map3d-top {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  position: relative;
+  z-index: 40;
+  width: 100%;
+  max-width: 100vw;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.nav-chevron { display: none !important; }
 .crumb-pill,
 .space-crumb,
 .map3d-crumb {
   position: absolute !important;
-  top: 58px;
+  top: 50%;
   left: 50%;
   bottom: auto !important;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 32;
   display: flex;
   align-items: center;
@@ -413,17 +434,39 @@
 }
 .fleet-kpis button {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.4rem;
   align-items: baseline;
   border: 1px solid rgba(170, 200, 235, 0.2);
   background: rgba(6, 12, 22, 0.55);
   color: #e8f1fb;
   border-radius: 999px;
-  padding: 0.18rem 0.5rem;
-  font: 500 0.68rem/1.2 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  padding: 0.32rem 0.72rem;
+  font: 500 0.8rem/1.2 'IBM Plex Sans', 'Segoe UI', sans-serif;
   cursor: pointer;
 }
-.fleet-kpis button b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.fleet-kpis button b { font-weight: 650; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+.focus-watermark {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font: 600 2.4rem/1 'IBM Plex Sans', sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(226, 236, 248, 0.14);
+  white-space: nowrap;
+}
+.map-command { position: static; top: auto; left: auto; }
+.orbit-level {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  font: 500 0.62rem/1 'IBM Plex Sans', sans-serif;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(210, 224, 240, 0.38);
+  transform: translate(-50%, -50%);
+}
 .fleet-kpis button.is-on { border-color: #ff6b7a; color: #fff; }
 .fleet-kpis button span { opacity: 0.65; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.58rem; }
 .node-label-dom,

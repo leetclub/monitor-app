@@ -475,14 +475,15 @@ window.APOS_SPACE_DATA = {
         },
         {
           id: 'client-park',
-          label: 'Park',
+          label: 'Park Mall',
           brand: 'Park Mall',
           status: 'future',
           comingSoon: true,
+          planned: true,
           areas: [
             {
               id: 'area-park-mall',
-              label: 'Park Mall',
+              label: 'Mall floors',
               areaManagerId: null,
               locations: [
                 {
@@ -696,7 +697,53 @@ window.APOS_MAP_UTILS = (function () {
     return { total: ops.length, online: Math.max(0, online), offline, unknown, low, critical, revenueToday, availability };
   }
 
-  function inspectorSections(n, people) {
+  /** One fleet reading: unique machines offline now, open incidents, and history stay separate. */
+  function fleetSnapshot(machines, history) {
+    const base = fleetOf(machines);
+    const ops = (machines || []).filter((m) => m && m.status !== 'planned' && m.status !== 'future' && !m.planned);
+    const t = THRESH();
+    const offlineIds = [];
+    const openIncidents = [];
+    ops.forEach((m) => {
+      if (m.status === 'offline') {
+        offlineIds.push(m.id);
+        openIncidents.push({
+          machineId: m.id, kind: 'offline', severity: 'critical',
+          label: m.label || m.id, happened: 'Offline now', at: m._offlineAt || 0,
+        });
+      } else if (m.status === 'unknown' || m.stale) {
+        openIncidents.push({
+          machineId: m.id, kind: 'unknown', severity: 'warning',
+          label: m.label || m.id, happened: 'No heartbeat', at: 0,
+        });
+      } else if ((m.stock?.fillPct ?? 100) < t.stockLowPct) {
+        openIncidents.push({
+          machineId: m.id, kind: 'lowstock', severity: 'warning',
+          label: m.label || m.id, happened: 'Low stock', at: 0,
+        });
+      }
+    });
+    const hist = Array.isArray(history) ? history : [];
+    const rank = { offline: 0, unknown: 1, lowstock: 2 };
+    openIncidents.sort((a, b) => (rank[a.kind] ?? 3) - (rank[b.kind] ?? 3));
+    return Object.assign({}, base, {
+      offline: offlineIds.length,
+      machinesOfflineNow: offlineIds,
+      openIncidents,
+      openIncidentCount: openIncidents.length,
+      history: hist.slice(-16),
+      historyCount: hist.length,
+    });
+  }
+
+  function nextActionFor(kind) {
+    if (kind === 'offline') return 'Dispatch the technician';
+    if (kind === 'lowstock') return 'Schedule a refill';
+    if (kind === 'unknown') return 'Confirm the heartbeat';
+    return 'No field action';
+  }
+
+  function inspectorSections(n, people, incident) {
     const person = (id) => (people && people[id] && people[id].name) || '—';
     const money = (v) => (v == null || !Number.isFinite(Number(v)) ? '—' : `${v} KWD`);
     const health = healthOf(n);
@@ -707,13 +754,21 @@ window.APOS_MAP_UTILS = (function () {
         : (n.operators?.lastVisit || 'live');
       const alerts = n.alert ? 1 : 0;
       const offline = n.status === 'offline' ? 1 : 0;
-      return [
+      const sections = [
         { title: 'Overview', rows: [['Status', health], ['Last heartbeat', String(seen)], ['Alerts', String(alerts)], ['Offline', String(offline)]] },
         { title: 'Performance', rows: [['Revenue today', money(n.revenue?.today ?? 0)]] },
         { title: 'Stock', rows: [['Fill', `${n.stock?.fillPct ?? '—'}%`], ['Top product', (n.stock?.topProducts || [])[0] || '—']] },
         { title: 'Support', rows: [['Operator', person(n.operatorId)], ['Technician', person(n.technicianId)]] },
         { title: 'Contract', rows: [['Vendor', n.contract?.vendor || '—'], ['Renewal', n.contract?.renewal || '—']] },
       ];
+      if (incident && incident.machineId === n.id) {
+        sections.unshift(
+          { title: 'Impact', rows: [['Event', incident.happened || incident.kind || 'Update'], ['Severity', incident.severity || 'info']] },
+          { title: 'Owner', rows: [['Operator', person(n.operatorId)], ['Technician', person(n.technicianId)]] },
+          { title: 'Next action', rows: [['Do', nextActionFor(incident.kind)]] },
+        );
+      }
+      return sections;
     }
     const r = n.rollup || {};
     return [
@@ -735,6 +790,8 @@ window.APOS_MAP_UTILS = (function () {
     kpiRows,
     healthOf,
     fleetOf,
+    fleetSnapshot,
+    nextActionFor,
     inspectorSections,
   };
 })();

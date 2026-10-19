@@ -392,6 +392,42 @@
   }
 
   /** Sample drawn tree curves; count improper crossings (non-adjacent links) */
+  function countLabelLinkHits() {
+    window.__LINK_HIT = null;
+    const stageR = stage.getBoundingClientRect();
+    const boxes = [];
+    document.querySelectorAll('.hub-title, .hub-sub, .node-label-dom, .node-badge, .focus-title-main, .focus-title-sub').forEach((el) => {
+      const st = getComputedStyle(el);
+      if (st.display === 'none' || st.visibility === 'hidden') return;
+      if (Number.parseFloat(st.opacity || '1') < 0.2) return;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      boxes.push({
+        l: r.left - stageR.left, t: r.top - stageR.top, r: r.right - stageR.left, b: r.bottom - stageR.top,
+        text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40),
+        badge: el.classList.contains('node-badge'),
+      });
+    });
+    const pointIn = (p, b) => p.x > b.l + 1 && p.x < b.r - 1 && p.y > b.t + 1 && p.y < b.b - 1;
+    let hits = 0;
+    linkSampleCache = null;
+    linkScreenSamples().forEach((p) => {
+      const hitBox = boxes.find((b) => pointIn(p, b));
+      if (hitBox) {
+        if (hitBox.badge && p.link) {
+          const ids = p.link.split('->');
+          const ends = ids.map((id) => nodeById.get(id)).filter(Boolean).map((n) => worldToScreen(n.x, n.y));
+          const cx = (hitBox.l + hitBox.r) / 2;
+          const cy = (hitBox.t + hitBox.b) / 2;
+          if (ends.some((e) => Math.hypot(cx - e.x, cy - e.y) < 72)) return;
+        }
+        hits += 1;
+        window.__LINK_HIT = { link: p.link, text: hitBox.text, x: p.x, y: p.y };
+      }
+    });
+    return hits;
+  }
+
   function countLinkCrossings() {
     const segs = [];
     links.forEach((L) => {
@@ -441,7 +477,7 @@
         type: 'country',
         label: country.label,
         bgLabel: (country.code || country.label).toUpperCase(),
-        subtitle: isFuture ? 'planned' : 'brands · sites · machines',
+        subtitle: isFuture ? '3 planned sites' : 'brands · sites · machines',
         status: isFuture ? 'future' : 'active',
         parentId: core.id,
         countryId: country.id,
@@ -579,8 +615,28 @@
     }
 
     layoutAllHubTrees();
+    stretchKuwait(1.25);
     addGeminiSignalArcs();
     seedRollups();
+  }
+
+  /** Space overview: give the KW hub 25% more radius so its label, subtitle, and badge clear the stems. */
+  function stretchKuwait(factor) {
+    if (LAYOUT !== 'countryTree') return;
+    const hub = nodeById.get('country-kw');
+    if (!hub || !factor || factor === 1) return;
+    const dx = hub.x * (factor - 1);
+    const dy = hub.y * (factor - 1);
+    const shiftKids = (id) => {
+      (childrenOf.get(id) || []).forEach((c) => {
+        c.x += dx;
+        c.y += dy;
+        shiftKids(c.id);
+      });
+    };
+    shiftKids(hub.id);
+    hub.x += dx;
+    hub.y += dy;
   }
 
   function buildWorld() {
@@ -716,22 +772,21 @@
 
       // Future hubs: 2–3 labelled stub areas only (hint of depth, no fake deep trees)
       if ((def.status === 'future' || def.planned) && !def.areas.length) {
-        const twigs = 3;
-        for (let i = 0; i < twigs; i++) {
-          const id = `future-twig-${def.id}-${i}`;
-          addNode({
-            id,
-            type: 'area',
-            label: `Reserved ${i + 1}`,
-            parentId: hub.id,
-            hubId: hub.id,
-            depth: 2,
-            status: 'future',
-            r: NODE_SCREEN_R,
-            stubHint: 2,
-          });
-          links.push({ source: hub.id, target: id, kind: 'tree' });
-        }
+        hub.subtitle = '3 planned sites';
+        const id = `planned-sites-${def.id}`;
+        addNode({
+          id,
+          type: 'area',
+          label: '3 planned sites',
+          parentId: hub.id,
+          hubId: hub.id,
+          depth: 2,
+          status: 'future',
+          planned: true,
+          summary: true,
+          r: NODE_SCREEN_R,
+        });
+        links.push({ source: hub.id, target: id, kind: 'tree' });
         return;
       }
 
@@ -911,7 +966,49 @@
     return hubs.map((h) => h.id);
   }
 
+  function restoreLayoutHomes() {
+    nodes.forEach((n) => {
+      if (n._homeX == null) return;
+      n.x = n._homeX;
+      n.y = n._homeY;
+      n._homeX = null;
+      n._homeY = null;
+    });
+  }
+
+  function rememberHome(n) {
+    if (!n || n._homeX != null) return;
+    n._homeX = n.x;
+    n._homeY = n.y;
+  }
+
+  /** Pull a machine's site and sibling machines into the usable frame so the focus never floats alone. */
+  function applyMachineCluster(focus) {
+    restoreLayoutHomes();
+    if (!focus || focus.type !== 'machine') return;
+    const parent = nodeById.get(focus.parentId);
+    if (!parent) return;
+    const sibs = (childrenOf.get(parent.id) || []).filter((c) => c.type === 'machine' && c.id !== focus.id);
+    const fit = viewportFitRect({ reserveDrawer: true });
+    const k = 2.5;
+    const halfW = (fit.w * 0.36) / k;
+    const halfH = (fit.h * 0.36) / k;
+    const pull = (n, ang, dist) => {
+      if (!n) return;
+      const dx = n.x - focus.x;
+      const dy = n.y - focus.y;
+      if (Math.abs(dx) <= halfW && Math.abs(dy) <= halfH) return;
+      rememberHome(n);
+      const r = Math.min(dist, halfW * 0.9, halfH * 0.9);
+      n.x = focus.x + Math.cos(ang) * r;
+      n.y = focus.y + Math.sin(ang) * r;
+    };
+    pull(parent, -2.4, 52);
+    sibs.forEach((s, i) => pull(s, -0.35 + i * 0.62, 68));
+  }
+
   function setOverviewExpansion() {
+    restoreLayoutHomes();
     // Overview: inspector stays closed
     const _insp = document.getElementById('inspector-drawer');
     if (_insp) _insp.classList.remove('is-open');
@@ -945,6 +1042,7 @@
   }
 
   function setExpandedTo(nodeId) {
+    restoreLayoutHomes();
     overviewMode = false;
     expandedPath = new Set(pathToRoot(nodeId));
     focusNodeId = nodeId;
@@ -1004,6 +1102,7 @@
         if (sib.type === 'hub') expandedPath.add(sib.id);
       });
     }
+    if (focus.type === 'machine') applyMachineCluster(focus);
   }
 
   function pathToRoot(id) {
@@ -1124,6 +1223,7 @@
 
   
   function syncHubTitles() {
+    linkSampleCache = null;
     const layer = document.getElementById(DOM.labelLayer);
     if (!layer) return;
     let root = layer.querySelector('.hub-titles');
@@ -1154,7 +1254,7 @@
       const sub = el.querySelector('.hub-sub');
       const focused = !overviewMode && (focusHubId === h.id || focusNodeId === h.id);
       title.textContent = h.bgLabel || h.label;
-      title.className = `hub-title ${h.ring || ''} ${focused ? 'is-focus' : ''} ${overviewMode ? '' : (focused ? '' : 'muted')}`;
+      title.className = `hub-title hub-title-dom ${h.ring || ''} ${focused ? 'is-focus' : ''} ${overviewMode ? '' : (focused ? '' : 'muted')}`;
       sub.textContent = h.subtitle || '';
       sub.className = 'hub-sub';
       // Overview: planned countries → titles outside; active with brands → title
@@ -1163,6 +1263,7 @@
       // Focus: under orb along inward radial.
       let wx, wy;
       const inward = h.outAngle + Math.PI;
+      const sideAng = h.outAngle + Math.PI / 2;
       const brands = (childrenOf.get(h.id) || []).filter((c) => c.type === 'client' && c.draw && c.label);
       const titleInward = overviewMode && layoutMode !== 'hex' && brands.length > 0 && h.status !== 'future';
       if (layoutMode === 'hex' && overviewMode) {
@@ -1170,8 +1271,30 @@
         wx = h.x;
         wy = h.y + 42;
       } else if (focused) {
-        wx = h.x + Math.cos(inward) * 34;
-        wy = h.y + Math.sin(inward) * 34;
+        // Opposite the children, then swing until the title block misses their links.
+        const kids = (childrenOf.get(h.id) || []).filter((c) => c.draw && !c.pad);
+        let fx = 0;
+        let fy = 0;
+        kids.forEach((c) => { fx += c.x - h.x; fy += c.y - h.y; });
+        let ang = kids.length ? Math.atan2(-fy, -fx) : h.outAngle + Math.PI;
+        const blocksSpoke = (a) => {
+          const tx = h.x + Math.cos(a) * 96;
+          const ty = h.y + Math.sin(a) * 96;
+          return kids.some((c) => {
+            const mx = (h.x + c.x) / 2;
+            const my = (h.y + c.y) / 2;
+            return Math.hypot(tx - mx, ty - my) < 70 || Math.hypot(tx - c.x, ty - c.y) < 54;
+          });
+        };
+        if (blocksSpoke(ang)) {
+          for (let step = 1; step <= 8; step++) {
+            const delta = step * 0.35;
+            if (!blocksSpoke(ang + delta)) { ang += delta; break; }
+            if (!blocksSpoke(ang - delta)) { ang -= delta; break; }
+          }
+        }
+        wx = h.x + Math.cos(ang) * 96;
+        wy = h.y + Math.sin(ang) * 96;
       } else if (titleInward) {
         wx = h.x + Math.cos(inward) * 110;
         wy = h.y + Math.sin(inward) * 110;
@@ -1202,51 +1325,60 @@
           sub.style.opacity = '0.55';
         }
       } else if (!focused) {
-        let tx;
-        let ty;
-        if (titleInward) {
-          tx = s.x;
-          ty = s.y;
-        } else {
-          // Push past area tips/labels/pills along the ray
-          let push = 18;
-          const areas = (childrenOf.get(h.id) || []).filter((c) => (c.type === 'area' || c.type === 'client') && c.draw && c.label);
-          for (let guard = 0; guard < 8; guard++) {
-            const px = s.x + ax * push;
-            const py = s.y + ay * push;
-            let hit = false;
+        let tx = s.x;
+        let ty = s.y;
+        const areas = (childrenOf.get(h.id) || []).filter((c) => (c.type === 'area' || c.type === 'client') && c.draw && c.label);
+        // Shift off the stem first, then walk outward until title AND subtitle
+        // clear area/brand labels (a post-shift would land the subtitle on them).
+        const side = titleInward ? 188 : 86;
+        const perpX = titleInward ? Math.cos(sideAng) : -ay;
+        const perpY = titleInward ? Math.sin(sideAng) : ax;
+        tx += perpX * side;
+        ty += perpY * side;
+        const labelPts = [];
+        nodes.forEach((n) => {
+          if (!n.labelOn || !n.draw || n._labelSx == null) return;
+          labelPts.push({ x: n._labelSx, y: n._labelSy, clear: n.type === 'client' ? 64 : 46 });
+        });
+        let push = titleInward ? 0 : 18;
+        for (let guard = 0; guard < 10; guard++) {
+          const px = tx + ax * push;
+          const py = ty + ay * push;
+          const spots = [{ x: px, y: py }, { x: px, y: py + 36 }];
+          let hit = false;
+          spots.forEach((spot) => {
             areas.forEach((a) => {
               const ap = worldToScreen(a.x, a.y);
               const lab = a._labelSx != null ? { x: a._labelSx, y: a._labelSy } : ap;
               const clear = a.type === 'client' ? 56 : 42;
-              if (Math.hypot(px - ap.x, py - ap.y) < 36) hit = true;
-              if (Math.hypot(px - lab.x, py - lab.y) < clear) hit = true;
-              if (Math.hypot(px - (ap.x + 14), py - (ap.y - 12)) < 28) hit = true;
-              if (Math.hypot(px - lab.x, py + 22 - lab.y) < clear) hit = true;
+              if (Math.hypot(spot.x - ap.x, spot.y - ap.y) < 36) hit = true;
+              if (Math.hypot(spot.x - lab.x, spot.y - lab.y) < clear) hit = true;
             });
-            if (!hit) break;
-            push += 14;
-          }
-          tx = s.x + ax * push;
-          ty = s.y + ay * push;
+            labelPts.forEach((lab) => {
+              if (Math.hypot(spot.x - lab.x, spot.y - lab.y) < lab.clear) hit = true;
+            });
+          });
+          if (!hit) break;
+          push += 16;
         }
-        // Keep titles inside the stage (never under the app header / off the left edge)
-        tx = Math.max(56, Math.min(stage.clientWidth - 56, tx));
-        ty = Math.max(40, Math.min(stage.clientHeight - 40, ty));
+        tx += ax * push;
+        ty += ay * push;
+        if (overviewMode || focused) {
+          tx = Math.max(56, Math.min(stage.clientWidth - 56, tx));
+          ty = Math.max(40, Math.min(stage.clientHeight - 40, ty));
+        }
         title.style.left = `${tx}px`;
         title.style.top = `${ty}px`;
         title.style.transform = 'translate(-50%, -50%)';
-        // Inward KW title: subtitle toward the hub (outward); planned: further out
-        const subDy = titleInward ? (ay >= 0 ? 22 : -28) : 22;
         sub.style.left = `${tx}px`;
-        sub.style.top = `${ty + subDy}px`;
+        sub.style.top = `${ty + 36}px`;
         sub.style.transform = 'translate(-50%, 0)';
       } else {
         title.style.left = `${s.x}px`;
         title.style.top = `${s.y}px`;
         title.style.transform = 'translate(-50%, 0)';
         sub.style.left = `${s.x}px`;
-        sub.style.top = `${s.y + 34}px`;
+        sub.style.top = `${s.y + 58}px`;
         sub.style.transform = 'translate(-50%, 0)';
       }
       // Keep hub titles on path / dimmed context while drilled (never blank the relation to APOS)
@@ -1256,12 +1388,96 @@
         op = h.status === 'future' ? 0.72 : 1;
       } else if (focused || onPath) {
         op = h.status === 'future' ? 0.75 : 1;
+      } else if (contextRestoreT() < 0.22) {
+        op = 0;
       } else {
-        op = 0.25 + 0.5 * contextRestoreT();
+        op = 0.15 + 0.85 * contextRestoreT();
       }
       el.style.opacity = String(op);
-      el.style.display = h.draw === false ? 'none' : '';
+      title.style.opacity = String(op);
+      sub.style.opacity = String(op);
+      el.style.display = (h.draw === false || op < 0.05) ? 'none' : '';
+      if (op >= 0.2 && layoutMode !== 'hex') shiftHubChrome(title, sub, ax, ay);
     });
+    separateBadgesFromTitles();
+  }
+
+  let linkSampleCache = null;
+  function linkScreenSamples() {
+    if (linkSampleCache) return linkSampleCache;
+    const pts = [];
+    links.forEach((L) => {
+      if (L.kind === 'signal') return;
+      const s = nodeById.get(L.source);
+      const t = nodeById.get(L.target);
+      if (!s?.draw || !t?.draw || s.ghost || t.ghost || (s.lodAlpha || 0) < 0.2 || (t.lodAlpha || 0) < 0.2) return;
+      const cc = curveControls(s, t, L.kind);
+      const a = worldToScreen(s.x, s.y);
+      const b = worldToScreen(t.x, t.y);
+      sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 14).forEach((p) => {
+        const q = worldToScreen(p[0], p[1]);
+        if (Math.hypot(q.x - a.x, q.y - a.y) < 22 || Math.hypot(q.x - b.x, q.y - b.y) < 22) return;
+        pts.push({ x: q.x, y: q.y, link: `${L.source}->${L.target}` });
+      });
+    });
+    linkSampleCache = pts;
+    return pts;
+  }
+
+  /** Walk the hub title until its real box misses labels and spokes. */
+  function shiftHubChrome(title, sub, ax, ay) {
+    const stageR = stage.getBoundingClientRect();
+    const samples = linkScreenSamples();
+    const boxOf = (el) => {
+      const r = el.getBoundingClientRect();
+      return { l: r.left - stageR.left, t: r.top - stageR.top, r: r.right - stageR.left, b: r.bottom - stageR.top, w: r.width, h: r.height };
+    };
+    const offender = () => {
+      const boxes = [title, sub].map(boxOf).filter((b) => b.w > 2 && b.h > 2);
+      const labels = [];
+      document.querySelectorAll('.node-label-dom, .node-badge').forEach((el) => {
+        const st = getComputedStyle(el);
+        if (st.display === 'none' || Number.parseFloat(st.opacity || '1') < 0.2) return;
+        const b = boxOf(el);
+        if (b.w > 2) labels.push(b);
+      });
+      let best = null;
+      let bestD = 1e9;
+      boxes.forEach((b) => {
+        const cx = (b.l + b.r) / 2;
+        const cy = (b.t + b.b) / 2;
+        labels.forEach((q) => {
+          if (!(b.l < q.r - 1 && b.r > q.l + 1 && b.t < q.b - 1 && b.b > q.t + 1)) return;
+          const qx = (q.l + q.r) / 2;
+          const qy = (q.t + q.b) / 2;
+          const d = Math.hypot(cx - qx, cy - qy);
+          if (d < bestD) { bestD = d; best = { x: qx, y: qy, cx, cy }; }
+        });
+        samples.forEach((p) => {
+          if (!(p.x > b.l - 6 && p.x < b.r + 6 && p.y > b.t - 6 && p.y < b.b + 6)) return;
+          const d = Math.hypot(cx - p.x, cy - p.y);
+          if (d < bestD) { bestD = d; best = { x: p.x, y: p.y, cx, cy }; }
+        });
+      });
+      return best;
+    };
+    for (let g = 0; g < 12; g++) {
+      const hit = offender();
+      if (!hit) break;
+      let dx = hit.cx - hit.x;
+      let dy = hit.cy - hit.y;
+      const mag = Math.hypot(dx, dy) || 1;
+      dx = (dx / mag) * 18;
+      dy = (dy / mag) * 18;
+      if (mag < 8) { dx = -ay * 22; dy = ax * 22; }
+      const lx = parseFloat(title.style.left) || 0;
+      const ty = parseFloat(title.style.top) || 0;
+      const sy = parseFloat(sub.style.top) || 0;
+      title.style.left = `${lx + dx}px`;
+      title.style.top = `${ty + dy}px`;
+      sub.style.left = `${lx + dx}px`;
+      sub.style.top = `${sy + dy}px`;
+    }
   }
 
   /** Context opacity rises as the user zooms out — every frame, no settle delay. */
@@ -1287,6 +1503,7 @@
 
     nodes.forEach((n) => {
       n.preview = false;
+      n.ghost = false;
       n.labelOx = n.labelOx || 0;
       n.labelOy = n.labelOy || 18;
       n.ancestorOnly = false;
@@ -1346,12 +1563,31 @@
         return;
       }
 
+      n.ghost = false;
+      if (focus?.type === 'machine') {
+        const siteId = focus.parentId;
+        const localGhost = n.id === siteId || (n.type === 'machine' && n.parentId === siteId && n.id !== focus.id);
+        if (localGhost) {
+          n.draw = true;
+          n.ghost = true;
+          n.preview = true;
+          n.lodAlpha = 0.2;
+          n.labelOn = false;
+          return;
+        }
+        if (onPath && n.id !== focus.id) {
+          n.draw = true;
+          n.lodAlpha = 0.04;
+          n.labelOn = false;
+          return;
+        }
+      }
       // Focus path ancestors + focus: bright continuous chain
       if (onPath) {
         n.draw = true;
         n.lodAlpha = n.status === 'future' ? 0.45 : 1;
-        if (isFocus) n.labelOn = false;
-        else n.labelOn = !!(n.label) && (n.type === 'hub' || n.type === 'country' || n.type === 'client'
+        if (isFocus || n.type === 'hub' || n.type === 'country') n.labelOn = false;
+        else n.labelOn = !!(n.label) && (n.type === 'client'
           || n.type === 'area' || n.type === 'location' || n.type === 'machine');
         return;
       }
@@ -1381,12 +1617,13 @@
         }
       }
 
-      // Other hubs / brands / siblings — always visible, dimmed (restore on zoom-out)
+      // Other hubs / brands / siblings — always visible, dimmed (restore on zoom-out).
+      // Hub and country names live on the title DOM, so a second node label would pile up.
       if (n.type === 'hub' || n.type === 'country' || n.type === 'client') {
         n.draw = true;
         n.preview = true;
         n.lodAlpha = dimNode * (n.status === 'future' || n.comingSoon ? 0.7 : 1);
-        n.labelOn = !!n.label;
+        n.labelOn = n.type === 'client' && !!n.label;
         return;
       }
 
@@ -1424,9 +1661,37 @@
     syncDomLabels();
     syncDomBadges();
     syncHubTitles();
+    settleNodeLabels();
+    syncDomLabels();
+    syncHubTitles();
     syncFocusTitle();
+    separateBadgesFromTitles();
     renderBreadcrumb(focusNodeId);
     syncAposEdgeChip();
+    syncWatermark();
+  }
+
+  function syncWatermark() {
+    if (!stage) return;
+    let el = document.getElementById('focus-watermark');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'focus-watermark';
+      el.className = 'focus-watermark';
+      stage.appendChild(el);
+    }
+    const focus = nodeById.get(focusNodeId);
+    if (overviewMode || !focus || focus.type !== 'machine') {
+      el.hidden = true;
+      return;
+    }
+    const site = nodeById.get(focus.parentId);
+    const area = site ? nodeById.get(site.parentId) : null;
+    el.hidden = false;
+    el.textContent = [area?.label, site?.label].filter(Boolean).join('   ·   ');
+    const fit = viewportFitRect({ reserveDrawer: true });
+    el.style.left = `${fit.cx}px`;
+    el.style.top = `${fit.cy - fit.h * 0.28}px`;
   }
 
   function focusPathHasHubNeighbor(focusHubId, hubId) {
@@ -1457,10 +1722,19 @@
       const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
       const w = Math.max(18, 8 + text.length * 6.4);
       const h = 14;
-      pills.push({ n, text, x: p.x + sr * 0.45 + 6, y: p.y - sr - h - 3, w, h });
+      const kids = (childrenOf.get(n.id) || []).filter((c) => c.draw && !c.pad);
+      const ref = kids[0] || (n.parentId ? nodeById.get(n.parentId) : null);
+      const spoke = ref
+        ? Math.atan2(ref.y - n.y, ref.x - n.x)
+        : (n.outAngle != null ? n.outAngle : Math.atan2(n.y, n.x));
+      const ang = spoke + Math.PI / 2;
+      const dist = sr + Math.max(w, h) / 2 + (n.type === 'hub' || n.type === 'country' ? 18 : 8);
+      const bx = p.x + Math.cos(ang) * dist - w / 2;
+      const by = p.y + Math.sin(ang) * dist - h / 2;
+      pills.push({ n, text, w, h, x: bx, y: by });
     });
     const obstacles = [];
-    document.querySelectorAll('.hub-title-dom, .focus-title').forEach((el) => {
+    document.querySelectorAll('.hub-title-dom, .hub-sub, .focus-title').forEach((el) => {
       if (el.style.display === 'none') return;
       const r = el.getBoundingClientRect();
       const stageR = stage.getBoundingClientRect();
@@ -1496,7 +1770,7 @@
         hh: overviewBrand ? 14 : n.type === 'branch' ? 9 : 8,
       };
     }
-    function placeAt(p, ang, sr, hw, hh, pillBox) {
+    function placeAt(p, ang, sr, hw, hh, pillBox, n) {
       // Dist so near edge of centered text box clears disc by radius+6
       let dist = sr + 6 + hw * Math.abs(Math.cos(ang)) + hh * Math.abs(Math.sin(ang)) + 2;
       let sx = p.x + Math.cos(ang) * dist;
@@ -1513,7 +1787,16 @@
         if (pill) {
           clearPill = !(box.l < pill.x + pill.rw && box.r > pill.x - pill.rw && box.t < pill.y + pill.rh && box.b > pill.y - pill.rh);
         }
-        if (clearNode && clearPill) return { sx, sy, dist, ang };
+        if (clearNode && clearPill) {
+          // Area and site names sit beside the spoke, not on it.
+          if (n && (n.type === 'area' || n.type === 'location' || n.type === 'machine')) {
+            const tang = ang + Math.PI / 2;
+            const mag = Math.max(18, hw * 0.72);
+            sx += Math.cos(tang) * mag;
+            sy += Math.sin(tang) * mag;
+          }
+          return { sx, sy, dist, ang };
+        }
         dist += 7;
         sx = p.x + Math.cos(ang) * dist;
         sy = p.y + Math.sin(ang) * dist;
@@ -1544,7 +1827,7 @@
       const p = worldToScreen(n.x, n.y);
       const sr = nodeScreenRadius(n) * (n.grow == null ? 1 : n.grow);
       const { hw, hh } = textHalf(n);
-      const placed = placeAt(p, ang, sr, hw, hh, n._pillBox);
+      const placed = placeAt(p, ang, sr, hw, hh, n._pillBox, n);
       n._labelAng = placed.ang;
       n._labelSx = placed.sx;
       n._labelSy = placed.sy;
@@ -1585,6 +1868,182 @@
       n._labelSx = sx;
       n._labelSy = sy;
       placed.push({ sx, sy, hw, hh });
+    });
+    nudgeLabelsOffLinks(placed);
+  }
+
+  function separateBadgesFromTitles() {
+    const stageR = stage.getBoundingClientRect();
+    const box = (el) => {
+      const r = el.getBoundingClientRect();
+      return { l: r.left - stageR.left, t: r.top - stageR.top, r: r.right - stageR.left, b: r.bottom - stageR.top, w: r.width };
+    };
+    const titles = () => [...document.querySelectorAll('.hub-title, .hub-sub, .focus-title, .node-label-dom')].filter((el) => {
+      const st = getComputedStyle(el);
+      return st.display !== 'none' && Number.parseFloat(st.opacity || '1') >= 0.2;
+    });
+    document.querySelectorAll('.node-badge').forEach((el) => {
+      const n = el.dataset.badge ? nodeById.get(el.dataset.badge) : null;
+      for (let g = 0; g < 10; g++) {
+        const b = box(el);
+        if (b.w < 2) return;
+        const hit = titles().some((t) => {
+          if (t === el) return false;
+          const q = box(t);
+          return b.l < q.r - 1 && b.r > q.l + 1 && b.t < q.b - 1 && b.b > q.t + 1;
+        });
+        if (!hit) break;
+        const top = (parseFloat(el.style.top) || b.t) - (b.b - b.t + 4);
+        el.style.top = `${top}px`;
+        if (n?._pillBox) {
+          const h = n._pillBox.b - n._pillBox.t;
+          n._pillBox.t = top;
+          n._pillBox.b = top + h;
+        }
+      }
+    });
+  }
+
+  /** After DOM labels exist, slide any that still sit on a spoke. */
+  function settleNodeLabels() {
+    linkSampleCache = null;
+    const stageR = stage.getBoundingClientRect();
+    const samples = linkScreenSamples();
+    const fit = viewportFitRect({ reserveDrawer: true });
+    nodes.forEach((n) => {
+      if (!n.labelOn || !n.draw || !n.label) return;
+      const el = document.querySelector(`[data-nid="${CSS.escape(n.id)}"]`);
+      if (!el || el.style.display === 'none') return;
+      for (let g = 0; g < 14; g++) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 2) return;
+        const box = {
+          l: r.left - stageR.left, t: r.top - stageR.top,
+          r: r.right - stageR.left, b: r.bottom - stageR.top,
+        };
+        const cx = (box.l + box.r) / 2;
+        const cy = (box.t + box.b) / 2;
+        let hx = null;
+        let hy = null;
+        let best = 1e9;
+        samples.forEach((p) => {
+          if (!(p.x > box.l - 6 && p.x < box.r + 6 && p.y > box.t - 6 && p.y < box.b + 6)) return;
+          const d = Math.hypot(cx - p.x, cy - p.y);
+          if (d < best) { best = d; hx = p.x; hy = p.y; }
+        });
+        if (hx == null) {
+          const inside = box.l >= fit.x - 2 && box.t >= fit.y - 2 && box.r <= fit.x + fit.w + 2 && box.b <= fit.y + fit.h + 2;
+          if (!inside && (n.parentId === focusNodeId || n.id === focusNodeId)) {
+            const pullX = fit.cx - cx;
+            const pullY = fit.cy - cy;
+            const pm = Math.hypot(pullX, pullY) || 1;
+            n._labelSx += (pullX / pm) * 12;
+            n._labelSy += (pullY / pm) * 12;
+            el.style.left = `${n._labelSx}px`;
+            el.style.top = `${n._labelSy}px`;
+            continue;
+          }
+          break;
+        }
+        let dx = cx - hx;
+        let dy = cy - hy;
+        const mag = Math.hypot(dx, dy) || 1;
+        const tang = (n._labelAng || 0) + Math.PI / 2;
+        if (mag < 8) {
+          dx = Math.cos(tang) * 24;
+          dy = Math.sin(tang) * 24;
+        } else {
+          dx = (dx / mag) * 24;
+          dy = (dy / mag) * 24;
+        }
+        n._labelSx = (n._labelSx || cx) + dx;
+        n._labelSy = (n._labelSy || cy) + dy;
+        el.style.left = `${n._labelSx}px`;
+        el.style.top = `${n._labelSy}px`;
+      }
+    });
+    document.querySelectorAll('.node-badge').forEach((el) => {
+      const id = el.dataset.badge;
+      const n = id ? nodeById.get(id) : null;
+      if (!n || !n._pillBox) return;
+      for (let g = 0; g < 8; g++) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 2) return;
+        const box = {
+          l: r.left - stageR.left, t: r.top - stageR.top,
+          r: r.right - stageR.left, b: r.bottom - stageR.top,
+        };
+        const cx = (box.l + box.r) / 2;
+        const cy = (box.t + box.b) / 2;
+        let hx = null;
+        let hy = null;
+        let best = 1e9;
+        samples.forEach((p) => {
+          if (!(p.x > box.l - 6 && p.x < box.r + 6 && p.y > box.t - 6 && p.y < box.b + 6)) return;
+          const d = Math.hypot(cx - p.x, cy - p.y);
+          if (d < best) { best = d; hx = p.x; hy = p.y; }
+        });
+        if (hx == null) break;
+        let dx = cx - hx;
+        let dy = cy - hy;
+        const mag = Math.hypot(dx, dy) || 1;
+        dx = (dx / mag) * 16;
+        dy = (dy / mag) * 16;
+        n._pillBox.l += dx;
+        n._pillBox.r += dx;
+        n._pillBox.t += dy;
+        n._pillBox.b += dy;
+        el.style.left = `${n._pillBox.l}px`;
+        el.style.top = `${n._pillBox.t}px`;
+      }
+    });
+  }
+
+  /** Slide a label off any drawn link without landing on another label. */
+  function nudgeLabelsOffLinks(placed) {
+    const labeled = nodes.filter((n) => n.labelOn && n.draw && n.label && n._labelSx != null && !n.ancestorOnly);
+    const pointIn = (p, box) => p.x > box.l + 1 && p.x < box.r - 1 && p.y > box.t + 1 && p.y < box.b - 1;
+    labeled.forEach((n) => {
+      const hw = n._labelHw || 36;
+      const hh = n._labelHh || 8;
+      const baseSx = n._labelSx;
+      const baseSy = n._labelSy;
+      const ang = n._labelAng || 0;
+      const tang = ang + Math.PI / 2;
+      const hitsLink = (sx, sy) => {
+        const box = { l: sx - hw, r: sx + hw, t: sy - hh, b: sy + hh };
+        for (let i = 0; i < links.length; i++) {
+          const L = links[i];
+          if (L.kind === 'signal') continue;
+          const s = nodeById.get(L.source);
+          const t = nodeById.get(L.target);
+          if (!s?.draw || !t?.draw || s.ghost || t.ghost || (s.lodAlpha || 0) < 0.2 || (t.lodAlpha || 0) < 0.2) continue;
+          const cc = curveControls(s, t, L.kind);
+          const pts = sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 8);
+          for (let k = 0; k < pts.length; k++) {
+            const q = worldToScreen(pts[k][0], pts[k][1]);
+            if (pointIn(q, box)) return true;
+          }
+        }
+        return false;
+      };
+      if (!hitsLink(baseSx, baseSy)) return;
+      let chosen = null;
+      for (let step = 1; step <= 8 && !chosen; step++) {
+        const mag = 12 + step * 8;
+        const dirs = [1, -1];
+        for (let d = 0; d < dirs.length; d++) {
+          const sx = baseSx + Math.cos(tang) * dirs[d] * mag;
+          const sy = baseSy + Math.sin(tang) * dirs[d] * mag;
+          const crowded = placed.some((q) => q.sx !== baseSx && Math.abs(sx - q.sx) < hw + q.hw + 4 && Math.abs(sy - q.sy) < hh + q.hh + 4);
+          if (!crowded && !hitsLink(sx, sy)) { chosen = { sx, sy }; break; }
+        }
+      }
+      if (!chosen) return;
+      n._labelSx = chosen.sx;
+      n._labelSy = chosen.sy;
+      const slot = placed.find((q) => q.sx === baseSx && q.sy === baseSy);
+      if (slot) { slot.sx = chosen.sx; slot.sy = chosen.sy; }
     });
   }
 
@@ -1634,15 +2093,19 @@
       const zk = transform.k || 1;
       const isLeafish = n.type === 'location' || n.type === 'machine' || n.type === 'branch' || n.type === 'area';
       if (isLeafish && !overviewMode) {
-        if (zk <= 1.2) lop = 0;
+        const focusChild = n.parentId === focusNodeId;
+        if (focusChild) lop = 1;
+        else if (zk <= 1.2) lop = 0;
         else if (zk < 1.4) lop = 0;
         else if (zk < 2.0) lop = (zk - 1.4) / 0.6;
         else lop = 1;
         // Dim far context when deep-zoomed — never the focus or its direct children
-        const focusChild = n.parentId === focusNodeId;
         if (zk > 2.6 && n.id !== focusNodeId && !focusChild && !pathToRoot(focusNodeId).includes(n.id)) {
           lop *= 0.08;
         }
+      }
+      if (!overviewMode && n.preview && n.parentId !== focusNodeId && n.id !== focusNodeId) {
+        lop = Math.min(lop, (n.lodAlpha || 0) * 0.4);
       }
       el.style.opacity = String(lop);
       if (lop < 0.05) el.style.display = 'none';
@@ -1713,15 +2176,36 @@
     main.className = `focus-title-main ${hub?.ring || 'teal'}`;
     const s = worldToScreen(focus.x, focus.y);
     const sr = nodeScreenRadius(focus);
-    // Place under the disc, or above it when a child label already occupies that band.
-    let top = s.y + sr + 16;
-    const crowded = nodes.some((n) => n.labelOn && n.draw && n._labelSx != null
-      && Math.abs(n._labelSx - s.x) < 110
-      && n._labelSy > s.y && n._labelSy < top + 42);
-    if (crowded) top = s.y - sr - 48;
-    el.style.display = '';
-    el.style.left = `${s.x}px`;
-    el.style.top = `${top}px`;
+    const parent = focus.parentId ? nodeById.get(focus.parentId) : null;
+    const spoke = parent
+      ? Math.atan2(s.y - worldToScreen(parent.x, parent.y).y, s.x - worldToScreen(parent.x, parent.y).x)
+      : Math.atan2(focus.y, focus.x);
+    let ang = spoke + Math.PI / 2;
+    let left = s.x + Math.cos(ang) * (sr + 46);
+    let top = s.y + Math.sin(ang) * (sr + 46);
+    const samples = linkScreenSamples();
+    for (let g = 0; g < 8; g++) {
+      el.style.display = '';
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      const r = el.getBoundingClientRect();
+      const stageR = stage.getBoundingClientRect();
+      const box = { l: r.left - stageR.left, t: r.top - stageR.top, r: r.right - stageR.left, b: r.bottom - stageR.top };
+      const stageR2 = stage.getBoundingClientRect();
+      const overlapsChrome = [...document.querySelectorAll('.node-badge, .hub-title, .hub-sub, .node-label-dom')].some((other) => {
+        if (other === el || other.closest('.focus-title')) return false;
+        const st = getComputedStyle(other);
+        if (st.display === 'none' || Number.parseFloat(st.opacity || '1') < 0.2) return false;
+        const q = other.getBoundingClientRect();
+        const b = { l: q.left - stageR2.left, t: q.top - stageR2.top, r: q.right - stageR2.left, b: q.bottom - stageR2.top };
+        return box.l < b.r - 1 && box.r > b.l + 1 && box.t < b.b - 1 && box.b > b.t + 1;
+      });
+      const hit = overlapsChrome || samples.some((p) => p.x > box.l - 4 && p.x < box.r + 4 && p.y > box.t - 4 && p.y < box.b + 4);
+      if (!hit) break;
+      ang += 0.4;
+      left = s.x + Math.cos(ang) * (sr + 46 + g * 8);
+      top = s.y + Math.sin(ang) * (sr + 46 + g * 8);
+    }
   }
 
   function hubLabelWorld(d) {
@@ -1995,7 +2479,11 @@
     } else if (node.type === 'location') {
       kids.filter((c) => c.type === 'machine').forEach((m) => pts.push(m));
     } else if (node.type === 'machine') {
-      kids.filter((c) => c.type === 'branch').forEach((b) => pts.push(b));
+      const parent = nodeById.get(node.parentId);
+      if (parent) pts.push(parent);
+      (childrenOf.get(node.parentId) || []).forEach((s) => {
+        if (s.type === 'machine') pts.push(s);
+      });
     }
     return pts;
   }
@@ -2031,11 +2519,13 @@
     });
     const localSpan = Math.max(maxX - minX, maxY - minY, 40);
     let added = 0;
+    const ancestorCap = node.type === 'machine' ? 1 : 2;
     for (const id of path) {
       if (id === node.id || seen.has(id)) continue;
-      if (added >= 2) break;
+      if (added >= ancestorCap) break;
       const n = nodeById.get(id);
       if (!n || n.type === 'enterprise') break;
+      if (node.type === 'machine' && n.id !== node.parentId) break;
       const nx = Math.min(minX, n.x);
       const xx = Math.max(maxX, n.x);
       const ny = Math.min(minY, n.y);
@@ -2226,13 +2716,23 @@
       return d3.zoomIdentity.translate(fit.cx, fit.cy).scale(k).translate(-cx, -cy);
     }
     if (centerNode && (centerNode.type === 'client' || centerNode.type === 'area' || centerNode.type === 'location' || centerNode.type === 'machine')) {
-      // Prioritise focus + children, centred in the usable viewport (minus drawer).
-      // Ancestors may trail off via continuous curve → edge APOS chip.
-      const locals = localFrameNodes(centerNode);
+      // Prioritise focus + children + local ghosts, centred in the usable viewport (minus drawer).
+      const locals = focusFrameNodes(centerNode);
       let lMinX = Infinity, lMaxX = -Infinity, lMinY = Infinity, lMaxY = -Infinity;
-      (locals.length ? locals : [centerNode]).forEach((n) => {
-        lMinX = Math.min(lMinX, n.x); lMaxX = Math.max(lMaxX, n.x);
-        lMinY = Math.min(lMinY, n.y); lMaxY = Math.max(lMaxY, n.y);
+      const growLocal = (x, y) => {
+        lMinX = Math.min(lMinX, x); lMaxX = Math.max(lMaxX, x);
+        lMinY = Math.min(lMinY, y); lMaxY = Math.max(lMaxY, y);
+      };
+      (locals.length ? locals : [centerNode]).forEach((n) => growLocal(n.x, n.y));
+      const localIds = new Set(locals.map((n) => n.id));
+      links.forEach((L) => {
+        if (L.kind === 'signal') return;
+        if (!localIds.has(L.source) || !localIds.has(L.target)) return;
+        const s = nodeById.get(L.source);
+        const t = nodeById.get(L.target);
+        if (!s || !t) return;
+        const cc = curveControls(s, t, L.kind);
+        sampleCubic(s.x, s.y, cc.c1x, cc.c1y, cc.c2x, cc.c2y, t.x, t.y, 6).forEach((p) => growLocal(p[0], p[1]));
       });
       // Room for branch/child labels around discs
       const labelPad = centerNode.type === 'machine' ? 64 : 48;
@@ -2378,6 +2878,7 @@
 
   function flyToNode(node) {
     if (!node) return;
+    if (pinnedIncident && node.id !== pinnedIncident.machineId) pinnedIncident = null;
     if (node.type === 'enterprise') {
       flyToGalaxy();
       return;
@@ -2392,6 +2893,7 @@
   }
 
   function flyToGalaxy(_geminiInsp) {
+    pinnedIncident = null;
     viewStack.length = 0;
     setOverviewExpansion();
     focusPinned = true;
@@ -2481,7 +2983,9 @@
       btn.type = 'button';
       btn.dataset.nid = nid;
       btn.textContent = n.type === 'enterprise' ? 'APOS' : n.label;
-      const issues = n.type === 'machine' ? (n.alert ? 1 : 0) : (n.rollup?.alerts || n.alertCount || 0);
+      const fleetNow = currentFleet();
+    if (crumbList) crumbList.dataset.offline = String(fleetNow.offline || 0);
+    const issues = n.type === 'machine' ? (n.alert ? 1 : 0) : (n.rollup?.alerts || n.alertCount || 0);
       if (issues > 0) {
         const mark = document.createElement('em');
         mark.className = 'crumb-count';
@@ -3172,6 +3676,29 @@
   }
 
   let dataRefreshedAt = Date.now();
+  let pinnedIncident = null;
+  let healthRingParts = [];
+
+  function currentFleet() {
+    const snap = UTILS
+      ? UTILS.fleetSnapshot(machines, liveLog)
+      : { online: 0, offline: 0, low: 0, unknown: 0, critical: 0, revenueToday: 0, availability: 100, openIncidents: [], machinesOfflineNow: [], history: liveLog };
+    healthRingParts = [
+      { key: 'online', n: snap.online || 0, color: '94, 214, 176' },
+      { key: 'offline', n: snap.offline || 0, color: '255, 107, 122' },
+      { key: 'low', n: snap.low || 0, color: '232, 192, 120' },
+      { key: 'unknown', n: snap.unknown || 0, color: '148, 163, 184' },
+    ].filter((seg) => seg.n > 0);
+    return snap;
+  }
+
+  function publishFleet() {
+    const snap = currentFleet();
+    const crumb = document.getElementById('crumb-list');
+    if (crumb) crumb.dataset.offline = String(snap.offline || 0);
+    try { stage?.dispatchEvent(new CustomEvent('apos-fleet-sync', { detail: snap })); } catch (_) { /* paint */ }
+    return snap;
+  }
 
   function statusLabel(n) {
     if (!n) return '—';
@@ -3366,7 +3893,11 @@
       if (health === 'critical') return 'ALERT';
       return '';
     }
-    if (health === 'planned') return (n.type === 'country' || n.type === 'hub') ? 'Planned' : '';
+    if (health === 'planned') {
+      if (n.summary) return '';
+      if (n.type === 'country' || n.type === 'hub' || n.type === 'client') return 'Planned';
+      return '';
+    }
     if ((n.alertCount || 0) > 0) return String(n.alertCount);
     return '';
   }
@@ -3501,6 +4032,12 @@
     const h = stage.clientHeight;
     pctx.save();
     const focus = nodeById.get(focusNodeId);
+    if (!overviewMode && focus && focus.type !== 'enterprise') {
+      const usable = viewportFitRect({ reserveDrawer: true });
+      pctx.beginPath();
+      pctx.rect(0, 0, usable.x + usable.w, h);
+      pctx.clip();
+    }
     const focusPath = new Set(pathToRoot(focusNodeId));
     const focusHubId = focus?.type === 'hub' ? focus.id : focus?.hubId;
     const accent = focusHubId ? accentRgb((UTILS && UTILS.HUB_ACCENT[focusHubId]) || nodeById.get(focusHubId)?.ring || 'teal') : null;
@@ -3527,6 +4064,13 @@
       }
 
       const onPath = focusPath.has(L.source) && focusPath.has(L.target);
+      // Ghost siblings are outlines only — a spoke through them reads as a line under the label.
+      if (s.ghost || t.ghost) return;
+      if (focus?.type === 'machine' && onPath) {
+        const siteId = focus.parentId;
+        const near = (id) => id === focus.id || id === siteId;
+        if (!(near(s.id) && near(t.id))) return;
+      }
       const crumbPath = !!(crumbHot && crumbHot.has(L.source) && crumbHot.has(L.target));
       // Always draw the focus→…→APOS chain; context links when both ends are drawn
       if (!onPath && !crumbPath) {
@@ -3922,13 +4466,8 @@
         }
         pctx.globalAlpha = 1;
         if (UTILS && overviewMode) {
-          const fleet = UTILS.fleetOf(machines);
-          const parts = [
-            { n: fleet.online, color: '94, 214, 176' },
-            { n: fleet.offline, color: '255, 107, 122' },
-            { n: fleet.low, color: '232, 192, 120' },
-            { n: fleet.unknown, color: '148, 163, 184' },
-          ].filter((seg) => seg.n > 0);
+          currentFleet();
+          const parts = healthRingParts;
           const sum = parts.reduce((s, seg) => s + seg.n, 0) || 1;
           const ringR = discR * 1.35;
           let a0 = -Math.PI / 2;
@@ -3978,6 +4517,15 @@
           drawHubGlyph(pctx, p.x, p.y, rr * 0.55, n.id, alpha);
         }
         strokeStatusRing(pctx, p.x, p.y, rr + 4, n, alpha, ts);
+      } else if (n.ghost) {
+        traceTypeShape(pctx, p.x, p.y, r, n.type);
+        pctx.save();
+        pctx.globalAlpha = 0.2;
+        pctx.strokeStyle = 'rgba(226, 236, 248, 0.95)';
+        pctx.lineWidth = 1.35;
+        pctx.setLineDash([3, 3]);
+        pctx.stroke();
+        pctx.restore();
       } else if (n.type !== 'branch') {
         const rr = r;
         const plannedNode = n.status === 'future' || n.planned;
@@ -4039,15 +4587,19 @@
     if (!reduceMotion) {
       for (let i = ripples.length - 1; i >= 0; i--) {
         const rp = ripples[i];
-        const age = ((ts || 0) - rp.t0) / 680;
+        const age = ((ts || 0) - rp.t0) / (rp.restrained ? 1100 : 680);
+        if (age < 0) continue;
         if (age > 1) { ripples.splice(i, 1); continue; }
         const n = nodeById.get(rp.id);
-        if (!n?.draw) continue;
+        if (!n?.draw && n?.lodAlpha < 0.04) continue;
+        if (!n) continue;
         const p = screenOf(n);
+        const amp = rp.restrained ? 0.22 : 0.55;
+        const radius = rp.restrained ? 5 + age * 22 : 6 + age * 34;
         pctx.beginPath();
-        pctx.arc(p.x, p.y, 6 + age * 34, 0, Math.PI * 2);
-        pctx.strokeStyle = `rgba(255,255,255,${(1 - age) * 0.55})`;
-        pctx.lineWidth = 1.4;
+        pctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        pctx.strokeStyle = `rgba(0, 210, 200, ${(1 - age) * amp})`;
+        pctx.lineWidth = rp.restrained ? 1 : 1.4;
         pctx.stroke();
       }
     }
@@ -4403,6 +4955,7 @@
       m.status = 'offline';
       m.offlineHours = Math.max(m.offlineHours || 0, (THRESH?.offlineHours || 2) + 1);
       m._offlineUntil = performance.now() + 9000;
+      m._offlineAt = ev.at || Date.now();
     }
     if (m && ev.kind === 'lowstock' && m.stock) {
       const floor = (THRESH?.stockLowPct || 15) - 1;
@@ -4414,7 +4967,17 @@
       refreshAlertRollups();
     }
     spawnFlow(ev.machineId, ev.kind);
+    spawnPathRipple(ev.machineId);
     stage?.dispatchEvent(new CustomEvent('apos-live', { detail: ev }));
+  }
+
+  function spawnPathRipple(machineId) {
+    if (reduceMotion) return;
+    const path = pathToRoot(machineId);
+    const now = performance.now();
+    path.forEach((nid, i) => {
+      ripples.push({ id: nid, t0: now + i * 160, restrained: true });
+    });
   }
 
   function spawnPathSignal(machineId, kind) {
@@ -4472,6 +5035,13 @@
     if (!on) {
       if (liveTimer) clearInterval(liveTimer);
       liveTimer = 0;
+      // Finish simulated offline/stock timers so a later read is not mid-event.
+      let dirty = false;
+      machines.forEach((m) => {
+        if (m._offlineUntil) { m._offlineUntil = 1; dirty = true; }
+        if (m._lowUntil) { m._lowUntil = 1; dirty = true; }
+      });
+      if (dirty) refreshAlertRollups();
       return false;
     }
     startSignalTimers();
@@ -4847,7 +5417,7 @@
         health: UTILS ? UTILS.healthOf(n) : statusLabel(n),
         lastSeen: n.lastSeen || n.operators?.lastVisit || null,
         path: pathLabel(n),
-        sections: UTILS ? UTILS.inspectorSections(n, people) : [],
+        sections: UTILS ? UTILS.inspectorSections(n, people, pinnedIncident) : [],
       };
     },
     auditData: () => {
@@ -4913,7 +5483,11 @@
       paintLod();
       return filterMode;
     },
-    fleetKpis: () => Object.assign(UTILS ? UTILS.fleetOf(machines) : {}, { refreshedAt: dataRefreshedAt }),
+    fleetKpis: () => Object.assign(publishFleet(), { refreshedAt: dataRefreshedAt }),
+    fleetSnapshot: () => Object.assign(publishFleet(), { refreshedAt: dataRefreshedAt }),
+    getHealthRing: () => healthRingParts.map((p) => ({ key: p.key, n: p.n, color: p.color })),
+    focusIncident: (ev) => { pinnedIncident = ev || null; return pinnedIncident; },
+    countLabelLinkHits: () => countLabelLinkHits(),
     getFilter: () => filterMode,
     getFilterDimmedCount: () => {
       if (filterMode === 'all') return 0;
@@ -5069,6 +5643,8 @@
       } else if (Math.abs(dx) + Math.abs(dy) + Math.abs(dk) > 0) {
         transform = targetTransform;
         gRoot.attr('transform', transform);
+        applyLod();
+        applyLabelCounterScale();
       }
     }
     if (machines.some((m) => (m._offlineUntil && performance.now() >= m._offlineUntil) || (m._lowUntil && performance.now() >= m._lowUntil))) refreshAlertRollups();
