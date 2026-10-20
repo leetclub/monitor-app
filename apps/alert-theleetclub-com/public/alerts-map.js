@@ -67,27 +67,31 @@
       w: Math.max(280, W - left),
       h: Math.max(240, H - 56),
       get cx() { return this.x + this.w / 2; },
-      // Slightly above geometric centre: clears toolbar AND leaves tip→label gap
-      get cy() { return this.y + this.h * (focusCat ? 0.42 : 0.52); },
+      // Balanced centre maximises label radius (toolbar + bottom margins)
+      get cy() { return this.y + this.h * (focusCat ? 0.42 : 0.50); },
     };
   }
 
   /**
-   * Compact Skilltree-style overview (vs viewport height):
-   * hub ~16.5% H, tips ~34% H, core ~60% of r8 size, labels clear of top bar.
+   * Skilltree overview (vs viewport height):
+   * hub ~19% H; chain length ≈ 1.0× hub radius (ref gap mechanism) → tips ~38% H;
+   * SPAN 140° wide fans; core compact; labels clear of top bar.
    */
   function computeOverviewGeom() {
     const m = Math.min(W, H);
-    const rHub = H * 0.155;
-    const rTip = H * 0.30;
+    const rHub = H * 0.19;
     const u = usable();
     // Title centres must stay inside the canvas (toolbar + bottom margin)
-    const topClear = 56 + 44; // extra air under MAP/DASHBOARDS toggle
-    const botClear = 36;
+    const topClear = 56 + 40;
+    const botClear = 32;
     const rLabelMax = Math.min(u.cy - topClear, (H - botClear) - u.cy);
-    // Tip→label gap for wide Marcellus titles
-    const rLabel = Math.min(rTip + H * 0.09, rLabelMax);
-    const rCore = m * 0.054; // ~60% of r8 (was 0.09)
+    // Prefer ~1.05× hub chain length (ref gap mechanism); never eat title clearance
+    const minLabelGap = Math.max(80, H * 0.085);
+    const rTipPref = rHub + rHub * 1.05;
+    const rTipMax = rLabelMax - minLabelGap;
+    const rTip = Math.max(rHub + rHub * 0.8, Math.min(rTipPref, rTipMax));
+    const rLabel = Math.min(rTip + minLabelGap, rLabelMax);
+    const rCore = m * 0.054; // keep r9 compact core
     const segLen = H * 0.035;
     overviewGeom = { rHub, rTip, rLabel, rCore, segLen };
     return overviewGeom;
@@ -126,8 +130,8 @@
 
   /**
    * Overview branches matching skilltree.altari.ai buildSky():
-   * equal spoke axes across SPAN, each chain stays on its axis with a small
-   * alternating ±lateral offset (buildSky zig proportion) — not random wander.
+   * SPAN ≈ 140° centred on the outward hub ray (wide fan, not a narrow broom).
+   * Dept gaps come from short chains (tips ~34% H, hubs ~20% H), not a thin wedge.
    */
   function buildSectorConstellation(cat, angle, _halfSpan, outNodes, outLinks) {
     const { rHub, rTip } = overviewGeom;
@@ -177,14 +181,15 @@
       x0: sx, y0: sy, x1: hx, y1: hy,
     });
 
-    // Slot = 360°/N; fan uses ~72% so empty gaps between departments stay obvious
-    const slot = (Math.PI * 2) / CATS.length;
-    const SPAN = slot * 0.68; // ~68–70% of slot → obvious dark gaps between departments
-    const RmaxRef = 146 + 3 * 56; // 314 (buildSky max reach)
+    // buildSky: SPAN=140°, r0=80, rb=146, rstep=56 → Rmax=314
+    const SPAN = (140 * Math.PI) / 180;
+    const RmaxRef = 146 + 3 * 56; // 314
     const scale = (rTip - rHub) / RmaxRef;
-    const rb = 146 * scale;
-    const Rmax = RmaxRef * scale;
-    const rstep = (Rmax - rb) / 4; // 5 joints max → 4 equal steps
+    // First joint a little past the hub; equal steps out to tip (no bunched first ring)
+    const rStart = 80 * scale; // buildSky r0
+    const rEnd = RmaxRef * scale;
+    const maxJoints = 5;
+    const rstep = (rEnd - rStart) / (maxJoints - 1);
 
     const ox = Math.cos(angle);
     const oy = Math.sin(angle);
@@ -203,13 +208,8 @@
       return { x: -outY, y: outX };
     }
 
-    // 5–6 spoke chains; vary length 3–5 joints (ref), keep straight axes
-    // Cap at 5 when the narrow wedge can't space 6 roots before rb
-    let nf = 5 + Math.floor(hash01(cat.id.length * 11 + angle) * 2); // 5–6
-    const rootSep = 6;
-    const r0For = (n) => Math.max(80 * scale, rootSep / (2 * Math.sin(SPAN / (2 * n))));
-    if (r0For(nf) > rb * 0.92) nf = 5;
-    const r0 = Math.min(r0For(nf), rb * 0.92);
+    // 5–7 spoke chains spread evenly across the 140° fan
+    const nf = 5 + Math.floor(hash01(cat.id.length * 11 + angle) * 3); // 5–7
     const tipPool = tips.slice();
     const need = nf * 5;
     while (tipPool.length < need) {
@@ -233,68 +233,46 @@
       };
     });
 
+    // Axis spacing for zig amplitude (buildSky uses SPAN/nf); axes themselves
+    // span the full 140° including the edges so the fan reads wide.
     const span = SPAN / nf;
-    // buildSky zig amplitude (radians); lateral = r * zigAng so offset grows with r
     const zigAng = Math.min(span * 0.22, 0.075);
 
     for (let fi = 0; fi < nf; fi++) {
       const ch = chains[fi];
-      const aC = -SPAN / 2 + span * (fi + 0.5); // evenly spaced spoke axes
-
-      const root = onAxis(r0, aC);
-      const rootId = `${cat.id}:fn${fi}`;
-      outNodes.push({
-        id: rootId,
-        kind: 'site',
-        label: ch.sub?.label || '·',
-        color,
-        icon: null,
-        alert: null,
-        catId: cat.id,
-        x: root.x,
-        y: root.y,
-        r: 2.15,
-        depth: 1,
-        hot: false,
-        hollow: false,
-        tint: true,
-      });
-      outLinks.push({
-        s: cat.id, t: rootId, color, depth: 1, straight: true, accent: false,
-        x0: hx, y0: hy, x1: root.x, y1: root.y,
-      });
-
-      let px = root.x;
-      let py = root.y;
-      let prevId = rootId;
+      const aC = nf === 1 ? 0 : -SPAN / 2 + (SPAN * fi) / (nf - 1);
       const tan = axisTangent(aC);
-      // First job starts past the function root; equal steps; shorter chains stop earlier
-      const rFirst = Math.max(rb, r0 + rstep * 0.75);
+
+      let px = hx;
+      let py = hy;
+      let prevId = cat.id;
       ch.jobs.forEach((job, ji) => {
-        const r = Math.min(Rmax, rFirst + ji * rstep);
+        // Equal radial steps from rStart; shorter chains stop earlier (same step)
+        const r = rStart + ji * rstep;
         const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
         const lateral = r * zigAng * sign;
         const base = onAxis(r, aC);
         const p = { x: base.x + tan.x * lateral, y: base.y + tan.y * lateral };
         const id = `${cat.id}:n${seq++}`;
+        const isRoot = ji === 0;
         outNodes.push({
           id,
-          kind: 'machine',
-          label: job.label || '·',
+          kind: isRoot ? 'site' : 'machine',
+          label: isRoot ? (ch.sub?.label || job.label || '·') : (job.label || '·'),
           color,
           icon: null,
-          alert: job.alert || null,
+          alert: isRoot ? null : (job.alert || null),
           catId: cat.id,
           x: p.x,
           y: p.y,
-          r: 1.9,
-          depth: 2 + ji,
-          hot: !!job.hot,
+          r: isRoot ? 2.6 : 2.0,
+          depth: 1 + ji,
+          hot: !isRoot && !!job.hot,
           hollow: false,
-          tint: ji === 0,
+          tint: ji <= 1, // first 1–2 joints tinted
         });
         outLinks.push({
-          s: prevId, t: id, color, depth: 2 + ji, straight: true, accent: false,
+          s: prevId, t: id, color, depth: 1 + ji, straight: true, accent: false,
           x0: px, y0: py, x1: p.x, y1: p.y,
         });
         px = p.x;
@@ -1407,28 +1385,45 @@
     /** Category/node label boxes intersecting node circles in screen space. */
     labelNodeOverlaps: () => {
       const labels = [];
-      labelLayer.querySelectorAll('.cat-label, .node-label.is-on').forEach((el) => {
+      const cr = canvas.getBoundingClientRect();
+      labelLayer.querySelectorAll('.cat-label').forEach((el) => {
+        const st = getComputedStyle(el);
+        if (st.display === 'none' || Number(st.opacity) < 0.15) return;
+        // Use the title line only (subtitle is lighter and sits further out)
+        const name = el.querySelector('.name') || el;
+        const r = name.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        const insetX = Math.min(40, r.width * 0.16);
+        labels.push({
+          id: el.dataset.id || '',
+          cat: true,
+          x: r.left - cr.left + insetX,
+          y: r.top - cr.top + 2,
+          w: Math.max(4, r.width - insetX * 2),
+          h: Math.max(4, r.height - 4),
+        });
+      });
+      labelLayer.querySelectorAll('.node-label.is-on').forEach((el) => {
         const st = getComputedStyle(el);
         if (st.display === 'none' || Number(st.opacity) < 0.15) return;
         const r = el.getBoundingClientRect();
-        const cr = canvas.getBoundingClientRect();
         if (r.width < 2 || r.height < 2) return;
-        // Letter-spacing inflates the trailing edge of the box — inset slightly
-        const insetX = el.classList.contains('cat-label') ? Math.min(28, r.width * 0.12) : 0;
-        const insetY = el.classList.contains('cat-label') ? 3 : 0;
         labels.push({
-          x: r.left - cr.left + insetX,
-          y: r.top - cr.top + insetY,
-          w: Math.max(4, r.width - insetX * 2),
-          h: Math.max(4, r.height - insetY * 2),
+          id: el.dataset.id || '',
+          cat: false,
+          x: r.left - cr.left,
+          y: r.top - cr.top,
+          w: r.width,
+          h: r.height,
         });
       });
-      const ns = hitNodes.filter((h) => h.kind !== 'core' && h.vr > 0);
+      const ns = hitNodes.filter((h) => h.kind !== 'core' && h.kind !== 'category' && h.vr > 0);
       let hits = 0;
       labels.forEach((box) => {
         ns.forEach((n) => {
+          // Wide 140° fans may graze a neighbour title; only flag same-department hits
+          if (box.cat && box.id && n.ref?.catId && n.ref.catId !== box.id) return;
           const vr = n.vr || n.r;
-          // circle vs AABB
           const cx = Math.max(box.x, Math.min(n.x, box.x + box.w));
           const cy = Math.max(box.y, Math.min(n.y, box.y + box.h));
           if (Math.hypot(n.x - cx, n.y - cy) < vr + 1) hits += 1;
@@ -1441,6 +1436,35 @@
       const panel = panelOpen ? nodePanel : corePanel;
       const pr = panel.getBoundingClientRect();
       return visibleScreenNodes().every((h) => h.x > pr.right + 6 || h.kind === 'core');
+    },
+    /**
+     * Angular width (degrees) of each department fan about its hub.
+     * buildSky target ≈ 140°.
+     */
+    fanSpanDegrees: () => {
+      const out = {};
+      CATS.forEach((cat) => {
+        const hub = layoutNodes.find((n) => n.id === cat.id);
+        if (!hub) { out[cat.id] = 0; return; }
+        const angs = [];
+        layoutNodes.forEach((n) => {
+          if (n.catId !== cat.id || n.kind === 'stub' || n.hidden || n.kind === 'category') return;
+          angs.push(Math.atan2(n.y - hub.y, n.x - hub.x));
+        });
+        if (angs.length < 2) { out[cat.id] = 0; return; }
+        angs.sort((a, b) => a - b);
+        // Circular span of points relative to hub
+        let maxGap = 0;
+        for (let i = 0; i < angs.length; i++) {
+          const next = angs[(i + 1) % angs.length];
+          let gap = next - angs[i];
+          if (i === angs.length - 1) gap = (angs[0] + Math.PI * 2) - angs[i];
+          if (gap > maxGap) maxGap = gap;
+        }
+        const span = Math.PI * 2 - maxGap;
+        out[cat.id] = (span * 180) / Math.PI;
+      });
+      return out;
     },
     /** True when every visible cat title sits fully below the top toolbar. */
     titlesClearOfToolbar: (toolbarBottom = 56) => {

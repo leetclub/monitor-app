@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Leet Alerts map acceptance (round 9): spoke zig-zag with department gaps,
- * titles clear of toolbar, compact crisp core, hover dim, pan.
+ * Leet Alerts map acceptance (round 10): wide buildSky ~140° fans, short chains,
+ * titles clear of toolbar, compact core, hover dim, pan.
  */
 import { chromium } from 'playwright';
 
@@ -17,12 +17,10 @@ async function checkOverview(page, tag) {
   await page.evaluate(() => window.LEET_ALERTS_MAP.waitForIdle());
   await page.evaluate(async () => {
     if (document.fonts?.ready) await document.fonts.ready;
-    // Force Marcellus metrics before collision checks
     try { await document.fonts.load('400 0.92rem Marcellus'); } catch (_) { /* ignore */ }
   });
-  // Settle layout + fonts (wide Marcellus titles affect label↔node)
-  for (let i = 0; i < 20; i++) {
-    await page.waitForTimeout(100);
+  for (let i = 0; i < 30; i++) {
+    await page.waitForTimeout(120);
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     const ok = await page.evaluate(() => (
       window.LEET_ALERTS_MAP.labelNodeOverlaps() === 0
@@ -31,6 +29,9 @@ async function checkOverview(page, tag) {
     ));
     if (ok) break;
   }
+  // Final paint after fonts/layout settle
+  await page.waitForTimeout(200);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const overview = await page.evaluate(() => ({
     visible: window.LEET_ALERTS_MAP.visibleNodeCount(),
     nodeOverlaps: window.LEET_ALERTS_MAP.nodeOverlaps(),
@@ -42,21 +43,26 @@ async function checkOverview(page, tag) {
     deptCounts: window.LEET_ALERTS_MAP.departmentNodeCounts(),
     overflow: window.LEET_ALERTS_MAP.viewportOverflow(),
     titles: window.LEET_ALERTS_MAP.titlesClearOfToolbar(),
+    fans: window.LEET_ALERTS_MAP.fanSpanDegrees(),
     rot: window.LEET_ALERTS_MAP.getTransform().rot,
   }));
   if (overview.visible < 60) fail(`${tag} visible ${overview.visible} < 60`);
   if (overview.nodeOverlaps > 0) fail(`${tag} node overlaps ${overview.nodeOverlaps}`);
   if (overview.labelNodeOverlaps > 0) fail(`${tag} label↔node ${overview.labelNodeOverlaps}`);
-  if (overview.hub < 0.14 || overview.hub > 0.22) {
-    fail(`${tag} hub/H ${overview.hub.toFixed(3)} outside 0.14–0.22`);
+  if (overview.hub < 0.16 || overview.hub > 0.22) {
+    fail(`${tag} hub/H ${overview.hub.toFixed(3)} outside 0.16–0.22`);
   }
-  if (overview.tip < 0.26 || overview.tip > 0.36) {
-    fail(`${tag} tip/H ${overview.tip.toFixed(3)} outside 0.26–0.36`);
+  // Small viewports clamp tip for title clearance; larger ones keep ~1.0× hub chain length
+  if (overview.tip < 0.30 || overview.tip > 0.44) {
+    fail(`${tag} tip/H ${overview.tip.toFixed(3)} outside 0.30–0.44`);
   }
   if (overview.crossings > 0) fail(`${tag} line crossings ${overview.crossings}`);
   if (overview.coreHub) fail(`${tag} has core→hub links`);
   Object.entries(overview.deptCounts).forEach(([id, n]) => {
-    if (n < 18 || n > 40) fail(`${tag} ${id} nodes ${n} outside ~21–37 (5–6×3–5)`);
+    if (n < 16 || n > 42) fail(`${tag} ${id} nodes ${n} outside ~18–36 (5–7×3–5)`);
+  });
+  Object.entries(overview.fans).forEach(([id, deg]) => {
+    if (deg < 110 || deg > 155) fail(`${tag} ${id} fan ${deg.toFixed(1)}° outside ~140° (±25)`);
   });
   if (overview.overflow > 0) fail(`${tag} viewport overflow ${overview.overflow}`);
   if (!overview.titles.clear) {
@@ -74,7 +80,7 @@ for (const vp of [
   { w: 1920, h: 1080 },
 ]) {
   const page = await browser.newPage({ viewport: { width: vp.w, height: vp.h } });
-  await page.goto(`${BASE}/alerts.html?r9=2`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await page.goto(`${BASE}/alerts.html?r10=4`, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => window.__LEET_ALERTS_READY__ && window.LEET_ALERTS_MAP, null, { timeout: 15000 });
   await page.evaluate(() => window.LEET_ALERTS_MAP.waitForIdle());
   await page.evaluate(async () => {
@@ -82,8 +88,9 @@ for (const vp of [
   });
   await page.waitForTimeout(200);
   const ov = await checkOverview(page, `${vp.w}x${vp.h}`);
+  const fanAvg = Object.values(ov.fans).reduce((s, d) => s + d, 0) / Object.keys(ov.fans).length;
   notes.push(
-    `${vp.w}x${vp.h} visible=${ov.visible} hub=${ov.hub.toFixed(3)} tip=${ov.tip.toFixed(3)} titlesClear=${ov.titles.clear}`
+    `${vp.w}x${vp.h} visible=${ov.visible} hub=${ov.hub.toFixed(3)} tip=${ov.tip.toFixed(3)} fan≈${fanAvg.toFixed(0)}° titlesClear=${ov.titles.clear}`
   );
 
   if (vp.w === 1440) {

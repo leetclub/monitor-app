@@ -168,8 +168,8 @@ html, body {
   pointer-events: none;
 }
 .cat-label .name {
-  font: 400 0.92rem/1.15 var(--font-display);
-  letter-spacing: 0.42em;
+  font: 400 0.84rem/1.15 var(--font-display);
+  letter-spacing: 0.38em;
   text-transform: uppercase;
   color: #f2efe8;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.65);
