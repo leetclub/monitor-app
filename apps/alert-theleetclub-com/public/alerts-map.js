@@ -20,7 +20,6 @@
   // Interaction constants from skilltree INTERACTION-NOTES (ref is source of truth)
   const EASE_CAM = 0.13;
   const EASE_WHEEL = 0.11;
-  const EASE_HOVER = 0.18;
   const DIM_OTHERS = 0.18;
   const NODE_FADED = 0.25;
   const HOVER_NODE_SCALE = 1.12;
@@ -38,9 +37,15 @@
   const R0_FAN = 248;
   const R_BASE = 410;
   const R_STEP = 214;
-  const DIVE_ALIGN_MS = 220; // wheel seat → morph start
-  const DIVE_MORPH_MS = 520; // branching morph (frame-step 0…520ms)
-  const RISE_MS = 380;
+  // Align short; morph long enough for ≥12 distinct frames @30fps (~400ms min)
+  const DIVE_ALIGN_MS = 280;
+  const DIVE_MORPH_MS = 900; // node/camera lerp (ref swap~520 + branch settle)
+  const RISE_MS = 700;
+  const HOVER_FADE_MS = 350; // ref CSS transitionMs
+  const WHEEL_FRICTION = 0.92; // dial coast per frame @60fps-ish
+  const WHEEL_COAST_MIN = 0.08; // deg/ms → snap when below
+  const FLICK_EMA = 0.75;
+  const FLICK_THRESH = 0.18; // ref mobile flickV threshold (px/ms)
   const N = CATS.length;
   const W_STEP = 360 / N;
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -51,7 +56,11 @@
   // Sky wheel dial (degrees). Rest = 0 → cat0 (OFFLINE) at top (r10 overview).
   // Seat department i at bottom when wheelT = 180 - i*W_STEP (dive / dial snap).
   let wheelA = 0, wheelT = 0;
+  let wheelV = 0; // deg/ms coast velocity (sky dial)
+  let flickV = 0; // px/ms EMA (ref)
+  let flickT = 0;
   let wheelIdle = null;
+  let wheelCoasting = false;
   let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
   let hoverCat = null;
@@ -66,6 +75,7 @@
   let lastX = 0, lastY = 0;
   let dragDist = 0;
   let lastMoveTs = 0;
+  let lastTickTs = 0;
   let zoomLockUntil = 0;
   let zoomIntent = 0;
   let searchQ = '';
@@ -335,8 +345,10 @@
   }
 
   function snapWheel() {
+    wheelV = 0;
+    wheelCoasting = false;
     wheelT = 180 + Math.round((wheelT - 180) / W_STEP) * W_STEP;
-    // Nudge ease so a department seats at the bottom (ref dial snap)
+    // Leave wheelA ≠ wheelT so EASE_WHEEL coasts into the detent
     if (Math.abs(wheelT - wheelA) < 0.01) {
       wheelA = wheelT;
       layoutWheel();
@@ -346,6 +358,9 @@
   function stepWheel(d) {
     if (mapState !== 'sky' && mapState !== 'aligning') return;
     clearTimeout(wheelIdle);
+    wheelV = 0;
+    wheelCoasting = false;
+    // Snap lattice then step — ease via EASE_WHEEL (same as dial snap)
     wheelT = 180 + Math.round((wheelT - 180) / W_STEP) * W_STEP - d * W_STEP;
   }
 
@@ -468,7 +483,8 @@
         maxR = Math.max(maxR, r);
         const [x, y] = P(r, a);
         const id = job.id || `${cat.id}:f${fi}n${ji}`;
-        const mk = `${cat.id}:c${fi}:j${ji}`;
+        // j0 = joint (above); jobs are j1.. so they match overview site/machine keys
+        const mk = `${cat.id}:c${fi}:j${ji + 1}`;
         nodes.push({
           id, kind: job.kind || 'machine', label: job.label || '·', color: cat.color,
           icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
@@ -514,12 +530,15 @@
     return { nmap, lmap };
   }
 
-  function beginMorph({ dir, focusId, from, to, duration }) {
+  function beginMorph({ dir, focusId, from, to, duration, camFrom, camTo, otherFrom }) {
     morph = {
       dir, focusId,
       t0: performance.now(),
-      dur: reduceMotion ? 1 : duration,
+      dur: reduceMotion ? 1 : Math.max(400, duration),
       from, to,
+      camFrom: camFrom || { zoom, camX, camY },
+      camTo: camTo || { zoom: targetZoom, camX: tCamX, camY: tCamY },
+      otherFrom: otherFrom || [],
     };
   }
 
@@ -529,117 +548,124 @@
     return Math.max(0, Math.min(1, u));
   }
 
-  /** Interpolated draw lists during dive/rise — no jump cut. */
+  function easeInOutCubic(u) {
+    const t = Math.max(0, Math.min(1, u));
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  /** Interpolated draw lists during dive/rise — camera + nodes share one eased clock. */
   function morphDisplay() {
     if (!morph) return null;
     const raw = morphProgress();
-    const e = easeOutCubic(raw);
+    const e = easeInOutCubic(raw);
     const fromN = morph.from.nmap;
     const toN = morph.to.nmap;
     const keys = new Set([...fromN.keys(), ...toN.keys()]);
-    const hubFrom = fromN.get(`${morph.focusId}:hub`) || { x: 0, y: 0, r: 8 };
-    const hubTo = toN.get(`${morph.focusId}:hub`) || { x: 0, y: 0, r: 20 };
+    const hubFrom = fromN.get(`${morph.focusId}:hub`) || { x: 0, y: 0, r: 8, color: '#e9e4d6' };
+    const hubTo = toN.get(`${morph.focusId}:hub`) || { x: 0, y: 0, r: 20, color: '#e9e4d6' };
     const nodes = [];
     keys.forEach((k) => {
       const A = fromN.get(k);
       const B = toN.get(k);
-      const a = A || { x: hubFrom.x, y: hubFrom.y, r: 0, color: hubFrom.color, catId: morph.focusId, kind: 'machine', label: '', morphKey: k, chain: -1, hot: false };
-      const b = B || { x: hubTo.x, y: hubTo.y, r: 0, color: hubTo.color, catId: morph.focusId, kind: 'machine', label: '', morphKey: k, chain: -1, hot: false };
-      const opA = A ? 1 : 0;
-      const opB = B ? 1 : 0;
+      const src = B || A;
+      const a = A || {
+        x: hubFrom.x, y: hubFrom.y, r: 0, color: hubFrom.color,
+        catId: morph.focusId, kind: src.kind || 'machine', label: src.label || '',
+        morphKey: k, chain: src.chain != null ? src.chain : -1, hot: false, id: src.id,
+      };
+      const b = B || {
+        x: hubTo.x, y: hubTo.y, r: 0, color: hubTo.color,
+        catId: morph.focusId, kind: src.kind || 'machine', label: src.label || '',
+        morphKey: k, chain: src.chain != null ? src.chain : -1, hot: false, id: src.id,
+      };
       nodes.push({
-        ...b, ...a,
-        id: (B || A).id,
-        kind: (B || A).kind,
-        label: (B || A).label,
-        color: (B || A).color,
-        icon: (B || A).icon,
-        alert: (B || A).alert,
+        id: src.id,
+        kind: src.kind,
+        label: src.label,
+        color: src.color,
+        icon: src.icon,
+        alert: src.alert,
         catId: morph.focusId,
-        chain: (B || A).chain,
+        chain: src.chain,
         morphKey: k,
-        hot: !!(B || A).hot,
+        hot: !!src.hot,
+        depth: src.depth,
         x: lerp(a.x, b.x, e),
         y: lerp(a.y, b.y, e),
         r: lerp(a.r || 2, b.r || 2, e),
-        morphOp: lerp(opA, opB, e),
+        morphOp: 1,
+        morphing: true,
       });
     });
-    // other departments: fade / drift toward core
+
+    // Other departments: dive → fade/fly off; rise → fade back in from dim
     const otherNodes = [];
-    if (morph.dir === 1) {
-      layoutNodes.forEach((n) => {
-        if (n.catId === morph.focusId || n.kind === 'stub') return;
-        const pull = e * 0.35;
+    const others = morph.otherFrom.length ? morph.otherFrom : [];
+    others.forEach((n) => {
+      if (n.kind === 'stub') return;
+      if (morph.dir === 1) {
+        const fly = e * e;
         otherNodes.push({
           ...n,
-          x: lerp(n.x, 0, pull),
-          y: lerp(n.y, 0, pull),
-          morphOp: lerp(1, 0.12, e),
+          x: lerp(n.x, n.x * 1.35, fly),
+          y: lerp(n.y, n.y * 1.35, fly),
+          morphOp: lerp(1, 0, e),
           otherDim: true,
         });
-      });
-    } else {
-      layoutNodes.forEach((n) => {
-        if (n.catId === morph.focusId || n.kind === 'stub') return;
-        const pull = (1 - e) * 0.35;
+      } else {
         otherNodes.push({
           ...n,
-          x: lerp(n.x, 0, pull),
-          y: lerp(n.y, 0, pull),
-          morphOp: lerp(0.12, 1, e),
+          x: lerp(n.x * 1.25, n.x, e),
+          y: lerp(n.y * 1.25, n.y, e),
+          morphOp: lerp(0, 1, e),
           otherDim: true,
         });
-      });
-    }
-    const fromL = morph.from.lmap;
-    const toL = morph.to.lmap;
-    const lkeys = new Set([...fromL.keys(), ...toL.keys()]);
-    const byKey = new Map(nodes.map((n) => [n.morphKey, n]));
-    const links = [];
-    lkeys.forEach((k) => {
-      const A = fromL.get(k);
-      const B = toL.get(k);
-      if (!A && !B) return;
-      const sKey = (B || A).s === '__core__' ? null : null;
-      // resolve endpoints via morphKey of endpoints when possible
-      const sId = (B || A).s;
-      const tId = (B || A).t;
-      let sNode = nodes.find((n) => n.id === sId) || (sId === '__core__' ? { x: 0, y: 0 } : null);
-      let tNode = nodes.find((n) => n.id === tId);
-      if (!sNode || !tNode) {
-        // try morph keys on overview/focus originals
-        return;
       }
-      links.push({
-        s: sId, t: tId, color: (B || A).color, chain: (B || A).chain,
-        straight: true, morphOp: lerp(A ? 1 : 0, B ? 1 : 0, e),
-        x0: sNode.x, y0: sNode.y, x1: tNode.x, y1: tNode.y,
+    });
+
+    // Links from interpolated node positions (chain order — reliable during morph)
+    const links = [];
+    const byChain = new Map();
+    nodes.forEach((n) => {
+      if (n.chain == null || n.chain < 0) return;
+      if (!byChain.has(n.chain)) byChain.set(n.chain, []);
+      byChain.get(n.chain).push(n);
+    });
+    const hub = nodes.find((n) => n.morphKey === `${morph.focusId}:hub`);
+    byChain.forEach((arr) => {
+      arr.sort((a, b) => (a.depth || 0) - (b.depth || 0));
+      let prev = hub;
+      arr.forEach((n) => {
+        if (!prev) return;
+        links.push({
+          s: prev.id, t: n.id, color: n.color, chain: n.chain, straight: true,
+          morphOp: 1, morphing: true, x0: prev.x, y0: prev.y, x1: n.x, y1: n.y,
+        });
+        prev = n;
       });
     });
-    // also connect morphing nodes by chain order as fallback for missing link keys
-    if (!links.length) {
-      const byChain = new Map();
-      nodes.forEach((n) => {
-        if (n.chain == null || n.chain < 0) return;
-        if (!byChain.has(n.chain)) byChain.set(n.chain, []);
-        byChain.get(n.chain).push(n);
-      });
-      const hub = nodes.find((n) => n.morphKey === `${morph.focusId}:hub`);
-      byChain.forEach((arr) => {
-        arr.sort((a, b) => (a.depth || 0) - (b.depth || 0));
-        let prev = hub;
-        arr.forEach((n) => {
-          if (!prev) return;
+    // other-dept links (straight stubs between consecutive depths)
+    const otherByCat = new Map();
+    otherNodes.forEach((n) => {
+      if (!otherByCat.has(n.catId)) otherByCat.set(n.catId, []);
+      otherByCat.get(n.catId).push(n);
+    });
+    otherByCat.forEach((arr) => {
+      const hubN = arr.find((n) => n.kind === 'category');
+      if (!hubN) return;
+      arr.forEach((n) => {
+        if (n === hubN || n.kind === 'category') return;
+        // connect first-depth sites to hub
+        if ((n.depth || 0) <= 1) {
           links.push({
-            s: prev.id, t: n.id, color: n.color, chain: n.chain, straight: true,
-            morphOp: n.morphOp, x0: prev.x, y0: prev.y, x1: n.x, y1: n.y,
+            s: hubN.id, t: n.id, color: n.color, straight: true,
+            morphOp: n.morphOp, otherDim: true, x0: hubN.x, y0: hubN.y, x1: n.x, y1: n.y,
           });
-          prev = n;
-        });
+        }
       });
-    }
-    return { nodes: nodes.concat(otherNodes), links, e: raw, done: raw >= 1 };
+    });
+
+    return { nodes: nodes.concat(otherNodes), links, e: raw, ease: e, done: raw >= 1 };
   }
 
   function activeNodes() {
@@ -898,13 +924,42 @@
       if (chainFaded(L) || chainFaded(tN)) op *= NODE_FADED;
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
-      if (!focusCat && mapState !== 'fan' && (L.straight || L.s === '__core__')) {
+      if (!focusCat && mapState !== 'fan' && mapState !== 'diving' && (L.straight || L.s === '__core__' || L.morphing)) {
+        const hovered = !!(hoverCat && catId === hoverCat && !L.otherDim);
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
-        const lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
-        ctx.strokeStyle = `rgba(233,228,214,${lineOp * op})`;
-        ctx.lineWidth = L.stub ? 1.1 : 1;
+        if (hovered) {
+          // Ref: hovered department paths read as bright solid glow (not dashed)
+          ctx.strokeStyle = hexAlpha(L.color || tN.color || '#e9e4d6', 0.92 * op);
+          ctx.lineWidth = 2.4;
+          ctx.lineCap = 'round';
+          ctx.shadowColor = hexAlpha(L.color || tN.color || '#e9e4d6', 0.55);
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        } else if (L.morphing) {
+          ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', 0.55 * op);
+          ctx.lineWidth = 1.6;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        } else {
+          const lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
+          ctx.strokeStyle = `rgba(233,228,214,${lineOp * op})`;
+          ctx.lineWidth = L.stub ? 1.1 : 1;
+          ctx.setLineDash([]);
+          ctx.stroke();
+        }
+        return;
+      }
+      // During morph dive, keep straight solid strokes (no bezier flash)
+      if (morph && (mapState === 'diving' || mapState === 'rising')) {
+        ctx.beginPath();
+        ctx.moveTo(a0.x, a0.y);
+        ctx.lineTo(a1.x, a1.y);
+        ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', (L.otherDim ? 0.2 : 0.55) * op);
+        ctx.lineWidth = L.otherDim ? 1 : 1.7;
+        ctx.lineCap = 'round';
         ctx.stroke();
         return;
       }
@@ -977,15 +1032,20 @@
       if (mapState === 'sky' && isCat) r = 8 * zScale * hoverBoost;
 
       if ((mapState === 'sky' || morph) && (n.kind === 'machine' || n.kind === 'site')) {
-        if (n.tint) {
+        const lit = mapState === 'sky' && hoverCat && n.catId === hoverCat;
+        if (lit) {
+          ctx.shadowColor = hexAlpha(n.color, 0.55);
+          ctx.shadowBlur = 10;
+        }
+        if (n.tint || lit) {
           ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, 0.55 * op);
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = hexAlpha(n.color, (lit ? 0.85 : 0.55) * op);
+          ctx.arc(p.x, p.y, r * (lit ? 1.08 : 1), 0, Math.PI * 2);
           ctx.fill();
           ctx.beginPath();
-          ctx.strokeStyle = hexAlpha(n.color, 0.75 * op);
-          ctx.lineWidth = 1;
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.strokeStyle = hexAlpha(n.color, 0.85 * op);
+          ctx.lineWidth = lit ? 1.4 : 1;
+          ctx.arc(p.x, p.y, r * (lit ? 1.08 : 1), 0, Math.PI * 2);
           ctx.stroke();
         } else {
           ctx.beginPath();
@@ -993,6 +1053,7 @@
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
         }
+        if (lit) ctx.shadowBlur = 0;
       } else if (isHub) {
         // Thin outlined ring, faint tint, no glow halo
         ctx.globalAlpha = op;
@@ -1132,35 +1193,64 @@
 
   function tick(ts) {
     const t = ts / 1000;
+    const dt = lastTickTs ? Math.min(48, ts - lastTickTs) : 16;
+    lastTickTs = ts;
     const ease = reduceMotion ? 1 : EASE_CAM;
 
-    // Wheel dial ease (ref 0.11)
-    if (Math.abs(wheelT - wheelA) > 0.01) {
+    // Sky dial: coast with friction, then ease to detent (ref flick + snapWheel)
+    if ((mapState === 'sky' || mapState === 'aligning') && !dragging) {
+      if (wheelCoasting && Math.abs(wheelV) > WHEEL_COAST_MIN) {
+        wheelA += wheelV * dt;
+        wheelT = wheelA;
+        wheelV *= Math.pow(WHEEL_FRICTION, dt / 16.67);
+        layoutWheel();
+        if (Math.abs(wheelV) <= WHEEL_COAST_MIN) {
+          wheelV = 0;
+          wheelCoasting = false;
+          snapWheel();
+        }
+      } else if (Math.abs(wheelT - wheelA) > 0.01) {
+        wheelA += (wheelT - wheelA) * (reduceMotion ? 1 : EASE_WHEEL);
+        layoutWheel();
+      } else {
+        wheelA = wheelT;
+      }
+    } else if (Math.abs(wheelT - wheelA) > 0.01) {
       wheelA += (wheelT - wheelA) * (reduceMotion ? 1 : EASE_WHEEL);
       if (mapState === 'sky' || mapState === 'aligning') layoutWheel();
     } else {
       wheelA = wheelT;
     }
 
-    // Hover dim (sky whole-department only — ref CSS :has(.mini:hover))
+    // Hover dim — time-based ease over HOVER_FADE_MS (ref 350ms)
     if (mapState === 'sky' || mapState === 'aligning') {
+      const k = reduceMotion ? 1 : (1 - Math.pow(0.05, dt / HOVER_FADE_MS));
       CATS.forEach((cat) => {
         let target = 1;
         if (hoverCat) target = cat.id === hoverCat ? 1 : DIM_OTHERS;
         const cur = hoverAlpha[cat.id] ?? 1;
-        hoverAlpha[cat.id] = cur + (target - cur) * EASE_HOVER;
-        if (Math.abs(hoverAlpha[cat.id] - target) < 0.005) hoverAlpha[cat.id] = target;
+        hoverAlpha[cat.id] = cur + (target - cur) * k;
+        if (Math.abs(hoverAlpha[cat.id] - target) < 0.004) hoverAlpha[cat.id] = target;
       });
     }
 
-    // Morph completion
+    // Morph: drive camera from shared ease clock; complete without layout flash
     if (morph && (mapState === 'diving' || mapState === 'rising')) {
       const u = morphProgress();
+      const e = easeInOutCubic(u);
+      const cf = morph.camFrom;
+      const ct = morph.camTo;
+      zoom = targetZoom = lerp(cf.zoom, ct.zoom, e);
+      camX = tCamX = lerp(cf.camX, ct.camX, e);
+      camY = tCamY = lerp(cf.camY, ct.camY, e);
       if (u >= 1) {
         if (mapState === 'diving') {
           focusCat = morph.focusId;
           mapState = 'fan';
           setFanMode(true);
+          zoom = targetZoom = ct.zoom;
+          camX = tCamX = ct.camX;
+          camY = tCamY = ct.camY;
           morph = null;
           const cat = CATS.find((c) => c.id === focusCat);
           if (cat) {
@@ -1169,9 +1259,12 @@
             focusSub.textContent = cat.subtitle;
             focusTitle.style.color = cat.color;
           }
-          rebuildFocusLayout(focusCat, { setCamera: true });
+          // focusLayout already built at morph start — do not rebuild (avoids flash)
           setTimeout(() => setTransitioning(false), 40);
         } else if (mapState === 'rising') {
+          zoom = targetZoom = ct.zoom;
+          camX = tCamX = ct.camX;
+          camY = tCamY = ct.camY;
           morph = null;
           focusCat = null;
           focusLayout = null;
@@ -1179,18 +1272,15 @@
           mapState = 'sky';
           setFanMode(false);
           focusBar.hidden = true;
-          rebuildOverviewLayout();
-          targetZoom = clampZSky(1);
-          tCamX = 0; tCamY = -H * 0.04;
           setTimeout(() => setTransitioning(false), 40);
         }
       }
+    } else {
+      // Normal camera ease (not during morph)
+      zoom += (targetZoom - zoom) * ease;
+      camX += (tCamX - camX) * ease;
+      camY += (tCamY - camY) * ease;
     }
-
-    // NO inertial pan (ref fan/sky: no velocity decay on pan)
-    zoom += (targetZoom - zoom) * ease;
-    camX += (tCamX - camX) * ease;
-    camY += (tCamY - camY) * ease;
     clampPanSoft();
 
     if (viewMode === 'map') {
@@ -1243,43 +1333,43 @@
 
     const startMorph = () => {
       mapState = 'diving';
-      // Capture FROM (overview after layoutWheel) then build TO (focus)
       layoutWheel();
-      const from = snapshotLayout(
-        layoutNodes.filter((n) => n.catId === id || n.id === id),
-        layoutLinks.filter((L) => {
-          const t = layoutNodes.find((n) => n.id === L.t);
-          return t && t.catId === id;
-        }),
-      );
-      // also include hub
-      layoutNodes.filter((n) => n.catId === id).forEach((n) => {
-        if (n.morphKey) from.nmap.set(n.morphKey, { ...n });
-      });
+      const focusNodes = layoutNodes.filter((n) => n.catId === id);
+      const from = snapshotLayout(focusNodes, layoutLinks.filter((L) => {
+        const tN = layoutNodes.find((n) => n.id === L.t);
+        return tN && tN.catId === id;
+      }));
+      const otherFrom = layoutNodes
+        .filter((n) => n.catId !== id && n.kind !== 'stub')
+        .map((n) => ({ ...n }));
 
-      rebuildFocusLayout(id, { setCamera: false });
-      const to = snapshotLayout(focusLayout.nodes, focusLayout.links);
-
-      // Camera: rise out of root then fit (ref)
-      zoom = 0.5; camX = 0; camY = 120;
+      // Build TO (fan) + camera targets WITHOUT snapping current camera
       rebuildFocusLayout(id, { setCamera: true });
+      const to = snapshotLayout(focusLayout.nodes, focusLayout.links);
+      const camFrom = { zoom, camX, camY };
+      const camTo = { zoom: targetZoom, camX: tCamX, camY: tCamY };
 
-      beginMorph({ dir: 1, focusId: id, from, to, duration: DIVE_MORPH_MS });
-      // Keep focusCat null until morph completes so labels/other fade via morphDisplay
+      // Keep drawing morph until complete — never flash raw focusLayout early
       focusCat = null;
+      beginMorph({
+        dir: 1, focusId: id, from, to, duration: DIVE_MORPH_MS,
+        camFrom, camTo, otherFrom,
+      });
     };
 
-    // Dim others immediately
-    CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : 0.12; });
-    // Soft camera push toward hub during align
+    // Soft dim toward focus during align (eased by hover tick)
+    hoverCat = id;
+    CATS.forEach((c) => {
+      if (c.id !== id) hoverAlpha[c.id] = Math.min(hoverAlpha[c.id] ?? 1, 0.55);
+    });
     const hub = layoutNodes.find((n) => n.id === id);
     if (hub) {
-      targetZoom = clampZSky(Math.min(1.45, Math.max(zoom, 1.1)));
-      tCamX = -hub.x * 0.2;
-      tCamY = -hub.y * 0.2;
+      targetZoom = clampZSky(Math.min(1.35, Math.max(zoom, 1.05)));
+      tCamX = -hub.x * 0.15;
+      tCamY = -hub.y * 0.15;
     }
 
-    setTimeout(startMorph, reduceMotion ? 0 : wait);
+    setTimeout(startMorph, reduceMotion ? 0 : Math.max(DIVE_ALIGN_MS, wait));
   }
 
   function clearFocus({ immediate = false } = {}) {
@@ -1311,24 +1401,31 @@
       return;
     }
 
-    // Capture focus layout as FROM before clearing
     if (!focusLayout) rebuildFocusLayout(id, { setCamera: false });
     const from = snapshotLayout(focusLayout.nodes, focusLayout.links);
+    const camFrom = { zoom, camX, camY };
     mapState = 'rising';
     focusCat = null;
     setFanMode(false);
     focusBar.hidden = true;
+    // Rebuild overview for TO + other departments (wheel stays seated)
     rebuildOverviewLayout();
     const toNodes = layoutNodes.filter((n) => n.catId === id);
-    const toLinks = layoutLinks.filter((L) => {
+    const to = snapshotLayout(toNodes, layoutLinks.filter((L) => {
       const tn = layoutNodes.find((n) => n.id === L.t);
       return tn && tn.catId === id;
+    }));
+    const otherFrom = layoutNodes
+      .filter((n) => n.catId !== id && n.kind !== 'stub')
+      .map((n) => ({ ...n }));
+    const camTo = { zoom: clampZSky(1), camX: 0, camY: -H * 0.04 };
+    targetZoom = camTo.zoom;
+    tCamX = camTo.camX;
+    tCamY = camTo.camY;
+    beginMorph({
+      dir: -1, focusId: id, from, to, duration: RISE_MS,
+      camFrom, camTo, otherFrom,
     });
-    const to = snapshotLayout(toNodes, toLinks);
-    beginMorph({ dir: -1, focusId: id, from, to, duration: RISE_MS });
-    targetZoom = clampZSky(1);
-    tCamX = 0;
-    tCamY = -H * 0.04;
   }
 
   function stepCategory(dir) {
@@ -1551,9 +1648,9 @@
       hoverCat = null;
       return;
     }
+    // Only set target; tick eases hoverAlpha over HOVER_FADE_MS (no instant snap)
     hoverCat = id || null;
     hoverNodeId = null;
-    CATS.forEach((c) => { hoverAlpha[c.id] = !id ? 1 : (c.id === id ? 1 : DIM_OTHERS); });
     canvas.style.cursor = hoverCat ? 'pointer' : 'grab';
   }
 
@@ -1578,6 +1675,10 @@
     dragging = true;
     lastX = e.clientX; lastY = e.clientY;
     lastMoveTs = performance.now();
+    flickV = 0;
+    flickT = lastMoveTs;
+    wheelV = 0;
+    wheelCoasting = false;
     dragDist = 0;
     canvas.classList.add('is-dragging');
     canvas.style.cursor = 'grabbing';
@@ -1622,19 +1723,26 @@
       const x1 = e.clientX - rect.left, y1 = e.clientY - rect.top;
       const r0x = x0 - ox, r0y = y0 - oy;
       const r1x = x1 - ox, r1y = y1 - oy;
+      let dA = 0;
       if (Math.hypot(r0x, r0y) > 48 && Math.hypot(r1x, r1y) > 48) {
-        let dA = (Math.atan2(r1y, r1x) - Math.atan2(r0y, r0x)) * 180 / Math.PI;
+        dA = (Math.atan2(r1y, r1x) - Math.atan2(r0y, r0x)) * 180 / Math.PI;
         if (dA > 180) dA -= 360; if (dA < -180) dA += 360;
         wheelA += dA;
       } else {
-        wheelA -= dx * 0.12;
+        dA = -dx * 0.12;
+        wheelA += dA;
       }
+      const now2 = performance.now();
+      const dtm = Math.max(1, now2 - flickT);
+      // Angular velocity (deg/ms) + px EMA for flick threshold (ref)
+      wheelV = FLICK_EMA * wheelV + (1 - FLICK_EMA) * (dA / dtm);
+      flickV = FLICK_EMA * flickV + (1 - FLICK_EMA) * (dx / dtm);
+      flickT = now2;
       wheelT = wheelA;
       layoutWheel();
       clearTimeout(wheelIdle);
-      wheelIdle = setTimeout(snapWheel, 260);
     } else if (mapState === 'fan' || focusCat) {
-      // Direct pan, no inertia (ref)
+      // Direct pan, no inertia (ref fan)
       camX += dx; tCamX = camX;
       camY += dy; tCamY = camY;
     }
@@ -1654,7 +1762,23 @@
     canvas.classList.remove('is-dragging');
     if (mapState === 'sky') {
       clearTimeout(wheelIdle);
-      wheelIdle = setTimeout(snapWheel, 260);
+      // Coast with momentum then snap to bottom detent (desktop + mobile)
+      const brisk = Math.abs(flickV) > FLICK_THRESH || Math.abs(wheelV) > 0.05;
+      if (brisk) {
+        // Ref: contA capped ±1.6*W_STEP from flick, then snap lattice
+        const contA = Math.max(-1.6 * W_STEP, Math.min(1.6 * W_STEP, wheelV * 140));
+        wheelT = wheelA + contA;
+        wheelCoasting = true;
+        // Keep wheelV for friction coast; ensure non-zero
+        if (Math.abs(wheelV) < 0.12) wheelV = (contA >= 0 ? 1 : -1) * 0.22;
+        wheelIdle = setTimeout(() => {
+          if (Math.abs(wheelV) <= WHEEL_COAST_MIN) snapWheel();
+        }, 420);
+      } else {
+        wheelV = 0;
+        wheelCoasting = false;
+        wheelIdle = setTimeout(snapWheel, 260);
+      }
     }
     canvas.style.cursor = (hoverCat || hoverNodeId) ? 'pointer' : 'grab';
   };
@@ -1839,12 +1963,16 @@
     }),
     getTransform: () => ({ zoom, camX, camY, tCamX, tCamY, targetZoom, wheelA, wheelT }),
     interactionConstants: () => ({
-      EASE_CAM, EASE_WHEEL, EASE_HOVER, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
+      EASE_CAM, EASE_WHEEL, EASE_HOVER: 1 - Math.pow(0.05, 16.67 / HOVER_FADE_MS),
+      HOVER_FADE_MS, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
       DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
       Z_FAN_MIN, Z_FAN_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
       DIVE_ALIGN_MS, DIVE_MORPH_MS, DIVE_SWAP_MS: DIVE_MORPH_MS, RISE_MS, W_STEP, N,
-      fanInertia: false, skyDial: true, morphDive: true,
+      WHEEL_FRICTION, FLICK_THRESH, fanInertia: false, skyDial: true, morphDive: true,
+      dialCoast: true,
     }),
+    getMorphProgress: () => (morph ? morphProgress() : (mapState === 'fan' || mapState === 'sky' ? (mapState === 'fan' ? 1 : 0) : 0)),
+    getMapState: () => mapState,
     focusCategory: (id) => focusCategory(id),
     clearFocus: (opts) => clearFocus(opts || {}),
     stepCategory: (d) => stepCategory(d),
