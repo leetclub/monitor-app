@@ -8,7 +8,7 @@
     {
       id: 'offline',
       label: 'OFFLINE',
-      subtitle: 'machines · heartbeat · connectivity',
+      subtitle: 'Machines · Heartbeat · Connectivity',
       color: '#ff6b8a',
       icon: 'offline',
       action: 'Assign technician →',
@@ -22,7 +22,7 @@
     {
       id: 'lowstock',
       label: 'LOW STOCK',
-      subtitle: 'fill · restock · products',
+      subtitle: 'Fill · Restock · Products',
       color: '#f5c15c',
       icon: 'stock',
       action: 'Schedule restock →',
@@ -36,7 +36,7 @@
     {
       id: 'revenue',
       label: 'REVENUE',
-      subtitle: 'last tx · stale sale · sales',
+      subtitle: 'Last tx · Stale sale · Sales',
       color: '#5eead4',
       icon: 'revenue',
       action: 'Open sales detail →',
@@ -50,7 +50,7 @@
     {
       id: 'tasks',
       label: 'TASKS',
-      subtitle: 'GO CHECK · maintenance · tech visit',
+      subtitle: 'Go check · Maintenance · Tech visit',
       color: '#60a5fa',
       icon: 'tasks',
       action: 'Create GO CHECK →',
@@ -64,7 +64,7 @@
     {
       id: 'support',
       label: 'SUPPORT',
-      subtitle: 'tickets · Call OP · Call AM',
+      subtitle: 'Tickets · Call OP · Call AM',
       color: '#e879f9',
       icon: 'support',
       action: 'Open ticket →',
@@ -78,7 +78,7 @@
     {
       id: 'cleaning',
       label: 'CLEANING',
-      subtitle: 'overdue · schedule · windows',
+      subtitle: 'Overdue · Schedule · Windows',
       color: '#2dd4bf',
       icon: 'cleaning',
       action: 'Flag cleaning overdue →',
@@ -92,7 +92,7 @@
     {
       id: 'unknown',
       label: 'UNKNOWN',
-      subtitle: 'no heartbeat · stale · telemetry',
+      subtitle: 'No heartbeat · Stale · Telemetry',
       color: '#fb7185',
       icon: 'unknown',
       action: 'Investigate telemetry →',

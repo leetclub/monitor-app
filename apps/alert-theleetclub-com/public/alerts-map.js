@@ -25,14 +25,22 @@
   const HOVER_NODE_SCALE = 1.12;
   const FEATURED_SCALE = 1.05;
   const DRAG_CLICK_CANCEL = 8;
-  const WHEEL_ZOOM_EXP = 0.01;
+  const WHEEL_ZOOM_EXP = 0.0018; // plain-scroll feel (marketing video: smooth continuous)
   const ZOOM_STEP_IN = 1.25;
   const ZOOM_STEP_OUT = 0.8;
   const Z_FAN_MIN = 0.42;
   const Z_FAN_MAX = 1.9;
-  const Z_SKY_MIN = 0.55;
-  const Z_SKY_MAX = 1.85;
+  // Continuous canvas: full map (~1) → deep branch (3–5 nodes fill frame)
+  const Z_SKY_MIN = 0.42;
+  const Z_SKY_MAX = 5.8;
   const RISE_SCALE = 0.43;
+  // LOD label thresholds (sky continuous zoom)
+  const LOD_GROUP_IN = 1.25;
+  const LOD_GROUP_FULL = 1.85;
+  const LOD_NODE_IN = 2.35;
+  const LOD_NODE_FULL = 3.2;
+  const LOD_CAT_FADE_START = 1.45;
+  const LOD_CAT_FADE_END = 2.4;
   const FAN_SPAN = 182 * Math.PI / 180;
   const R0_FAN = 248;
   const R_BASE = 410;
@@ -92,6 +100,7 @@
   const hitNodes = [];
   const labelEls = new Map();
   const nodeLabelEls = new Map();
+  const groupLabelEls = new Map();
   const ptrs = new Map();
   let pinchD0 = 0, pinchS0 = 1, pinchRatio = 1, pinchAX = 0, pinchAY = 0;
 
@@ -101,6 +110,27 @@
   function clampZSky(v) { return Math.max(Z_SKY_MIN, Math.min(Z_SKY_MAX, v)); }
   function clampZFan(v) { return Math.max(Z_FAN_MIN, Math.min(Z_FAN_MAX, v)); }
   function clampZoom(v) { return (focusCat || mapState === 'fan' || mapState === 'diving') ? clampZFan(v) : clampZSky(v); }
+
+  function lodAlpha(z, zIn, zFull) {
+    if (z <= zIn) return 0;
+    if (z >= zFull) return 1;
+    return (z - zIn) / Math.max(1e-6, zFull - zIn);
+  }
+
+  /** Department groups from subtitle line (video LOD: ENRICHMENT-style primary branches). */
+  function groupsFromSubtitle(cat) {
+    const parts = String(cat.subtitle || '')
+      .split(/[·•|]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const fallback = ['GROUP A', 'GROUP B', 'GROUP C'];
+    const src = parts.length ? parts : fallback;
+    return src.slice(0, 3).map((p, i) => ({
+      id: `${cat.id}:grp${i}`,
+      label: p.replace(/\s+/g, ' ').toUpperCase(),
+      index: i,
+    }));
+  }
 
   function setTransitioning(on) {
     document.body.classList.toggle('transitioning', !!on);
@@ -201,6 +231,7 @@
 
   /**
    * Build one department fan in LOCAL coords (hub at 0,0, outward +Y).
+   * r16: exactly 3 primary branches from subtitle groups; tips are site·machine nodes.
    * layoutWheel() places these on the sky dial via wheelA.
    */
   function buildSectorLocal(cat, catIndex) {
@@ -208,10 +239,10 @@
     const color = cat.color;
     const ov = cat.overviewTree || {};
     const tips = ov.tips || [];
-    const subtypes = ov.subtypes || [];
     let seq = 0;
     const nodes = [];
     const links = [];
+    const groups = groupsFromSubtitle(cat);
 
     nodes.push({
       id: cat.id, kind: 'category', label: cat.label, color, icon: cat.icon,
@@ -222,62 +253,78 @@
     const SPAN = (140 * Math.PI) / 180;
     const RmaxRef = 146 + 3 * 56;
     const scale = (rTip - rHub) / RmaxRef;
-    const rStart = 80 * scale;
+    const rGroup = 72 * scale;
+    const rStart = 110 * scale;
     const rEnd = RmaxRef * scale;
     const maxJoints = 5;
     const rstep = (rEnd - rStart) / (maxJoints - 1);
 
-    const nf = 5 + Math.floor(hash01(cat.id.length * 11 + catIndex * 3.1) * 3);
+    const nf = groups.length; // 3 primary branches
     const tipPool = tips.slice();
     const need = nf * 5;
     while (tipPool.length < need) {
       const srcTip = tips[tipPool.length % Math.max(1, tips.length)] || {
-        id: `${cat.id}:pad`, label: '·', alert: null, hot: false,
+        id: `${cat.id}:pad`, label: '·', alert: null, hot: false, site: '',
       };
       tipPool.push({ ...srcTip, id: `${cat.id}:pad${tipPool.length}`, label: srcTip.label || '·' });
     }
     let tipCursor = 0;
-    const chains = Array.from({ length: nf }, (_, i) => {
+    const chains = groups.map((grp, i) => {
       const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + i * 3.7 + catIndex) * 3);
       const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
       tipCursor += nJobs;
-      return { sub: subtypes[i % Math.max(1, subtypes.length)] || null, jobs };
+      return { group: grp, jobs };
     });
 
-    const span = SPAN / nf;
-    const zigAng = Math.min(span * 0.22, 0.075);
+    const zigAng = Math.min((SPAN / nf) * 0.22, 0.075);
 
     for (let fi = 0; fi < nf; fi++) {
       const ch = chains[fi];
       const aC = nf === 1 ? 0 : -SPAN / 2 + (SPAN * fi) / (nf - 1);
-      let prevId = cat.id;
-      let plx = 0, ply = 0;
+      // Group joint on primary spoke (LOD label anchors here)
+      const glx = rGroup * Math.sin(aC);
+      const gly = rGroup * Math.cos(aC);
+      const groupId = ch.group.id;
+      nodes.push({
+        id: groupId, kind: 'group', label: ch.group.label, color, icon: null,
+        alert: null, catId: cat.id, lx: glx, ly: gly, r: 3.2, depth: 1,
+        hot: false, tint: true, chain: fi, morphKey: `${cat.id}:c${fi}:j0`,
+        groupLabel: ch.group.label,
+      });
+      links.push({
+        s: cat.id, t: groupId, color, depth: 1, straight: true,
+        chain: fi, morphKey: `${cat.id}:L:c${fi}:j0`,
+      });
+
+      let prevId = groupId;
       ch.jobs.forEach((job, ji) => {
         const r = rStart + ji * rstep;
         const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
         const zig = zigAng * sign;
         const a = aC + zig;
-        // local: outward +Y, lateral +X
         const lx = r * Math.sin(a);
         const ly = r * Math.cos(a);
         const id = `${cat.id}:n${seq++}`;
-        const isRoot = ji === 0;
+        const site = job.site || '';
+        const leaf = job.label || '·';
+        const nodeLabel = site ? `${site} · ${leaf}` : leaf;
         nodes.push({
-          id, kind: isRoot ? 'site' : 'machine',
-          label: isRoot ? (ch.sub?.label || job.label || '·') : (job.label || '·'),
-          color, icon: null, alert: isRoot ? null : (job.alert || null),
-          catId: cat.id, lx, ly, r: isRoot ? 2.6 : 2.0, depth: 1 + ji,
-          hot: !isRoot && !!job.hot, tint: ji <= 1,
-          chain: fi, morphKey: `${cat.id}:c${fi}:j${ji}`,
+          id, kind: 'machine',
+          label: nodeLabel,
+          color, icon: null, alert: job.alert || null,
+          catId: cat.id, lx, ly, r: 2.0, depth: 2 + ji,
+          hot: !!job.hot, tint: ji === 0,
+          chain: fi, morphKey: `${cat.id}:c${fi}:j${ji + 1}`,
+          groupId,
         });
         links.push({
-          s: prevId, t: id, color, depth: 1 + ji, straight: true,
-          chain: fi, morphKey: `${cat.id}:L:c${fi}:j${ji}`,
+          s: prevId, t: id, color, depth: 2 + ji, straight: true,
+          chain: fi, morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`,
         });
-        plx = lx; ply = ly; prevId = id;
+        prevId = id;
       });
     }
-    return { cat, catIndex, nodes, links, rHub };
+    return { cat, catIndex, nodes, links, rHub, groups };
   }
 
   /** Place local sectors onto the wheel using current wheelA (ref layoutWheel). */
@@ -424,25 +471,23 @@
     const nodes = [];
     const links = [];
     const root = { ...cat.tree, icon: cat.icon, catId: cat.id };
-    const subtypes = (root.children || []).filter((c) => c.kind === 'subtype' || c.children?.length);
+    const groups = groupsFromSubtitle(cat);
     const tips = [];
     walk(root, (n) => {
       if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) tips.push(n);
     });
     const tipPool = tips.slice();
-    const chains = subtypes.length
-      ? subtypes.map((sub, i) => {
-          const leafs = [];
-          walk(sub, (n) => {
-            if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) leafs.push(n);
-          });
-          if (!leafs.length) {
-            const pad = tipPool[i % Math.max(1, tipPool.length)];
-            if (pad) leafs.push(pad);
-          }
-          return { sub, jobs: leafs.slice(0, 6) };
-        })
-      : [{ sub: null, jobs: tipPool.slice(0, 8) }];
+    // Partition tips across subtitle groups (3 primary branches)
+    const per = Math.max(1, Math.ceil(tipPool.length / Math.max(1, groups.length)));
+    const chains = groups.map((grp, i) => ({
+      group: grp,
+      jobs: tipPool.slice(i * per, i * per + Math.min(6, per)),
+    }));
+    chains.forEach((ch, i) => {
+      if (ch.jobs.length) return;
+      const pad = tipPool[i % Math.max(1, tipPool.length)];
+      if (pad) ch.jobs = [pad];
+    });
 
     const totalJobs = Math.max(1, chains.reduce((s, c) => s + Math.max(1, c.jobs.length), 0));
     const P = (r, a) => [r * Math.sin(a), -r * Math.cos(a)];
@@ -466,12 +511,12 @@
       const span = FAN_SPAN * nJobs / totalJobs;
       const aC = cursor + span / 2;
       const [ex, ey] = P(sR0, aC);
-      const jointId = `${cat.id}:j${fi}`;
-      // joint shares morph with overview first joint (j0)
+      const jointId = ch.group.id;
       nodes.push({
-        id: jointId, kind: 'subtype', label: ch.sub?.label || cat.label, color: cat.color,
-        icon: ch.sub?.icon || null, alert: null, catId: cat.id, x: ex, y: ey, r: 11,
+        id: jointId, kind: 'group', label: ch.group.label, color: cat.color,
+        icon: null, alert: null, catId: cat.id, x: ex, y: ey, r: 11,
         depth: 1, hot: false, chain: fi, morphKey: `${cat.id}:c${fi}:j0`,
+        groupLabel: ch.group.label,
       });
       links.push({ s: cat.id, t: jointId, color: cat.color, depth: 1, chain: fi, morphKey: `${cat.id}:L:c${fi}:j0` });
 
@@ -483,13 +528,16 @@
         maxR = Math.max(maxR, r);
         const [x, y] = P(r, a);
         const id = job.id || `${cat.id}:f${fi}n${ji}`;
-        // j0 = joint (above); jobs are j1.. so they match overview site/machine keys
         const mk = `${cat.id}:c${fi}:j${ji + 1}`;
+        const site = job.alert?.machine?.site || job.site || '';
+        const leaf = job.label || '·';
         nodes.push({
-          id, kind: job.kind || 'machine', label: job.label || '·', color: cat.color,
+          id, kind: job.kind || 'machine',
+          label: site ? `${site} · ${leaf}` : leaf,
+          color: cat.color,
           icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
           r: job.alert ? 7 : 6, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
-          chain: fi, morphKey: mk,
+          chain: fi, morphKey: mk, groupId: jointId,
         });
         links.push({
           s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi,
@@ -717,6 +765,19 @@
     return el;
   }
 
+  function ensureGroupLabel(id, text) {
+    let el = groupLabelEls.get(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'group-label';
+      el.dataset.id = id;
+      labelLayer.appendChild(el);
+      groupLabelEls.set(id, el);
+    }
+    el.textContent = text;
+    return el;
+  }
+
   /** Snap a DOM label off — no fade linger that can orphan after leave/morph/dial. */
   function hideDomLabel(el) {
     if (!el) return;
@@ -734,7 +795,14 @@
   /** Force every floating label off (used on blur / leave / layout swap). */
   function clearFloatingLabels() {
     nodeLabelEls.forEach((el) => hideDomLabel(el));
+    groupLabelEls.forEach((el) => hideDomLabel(el));
     labelEls.forEach((el) => hideDomLabel(el));
+  }
+
+  /** Simple AABB overlap — skip later labels that collide (r15/r16 no-overlap). */
+  function labelBoxesOverlap(a, b, pad = 4) {
+    return !(a.x + a.w + pad < b.x || b.x + b.w + pad < a.x
+      || a.y + a.h + pad < b.y || b.y + b.h + pad < a.y);
   }
 
   function syncZoomPct() {
@@ -751,29 +819,18 @@
     }
   }
 
-  /** Ref zoomStep: + dives from sky / zooms fan; − zooms out (rise past RISE_SCALE). */
+  /** +/- buttons: continuous zoom (r16 video); fan zoom-out past floor rises. */
   function zoomStep(dir) {
     if (viewMode !== 'map') return;
     if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
     const u = usable();
     const sx = u.cx;
     const sy = u.cy;
-    if (mapState === 'sky') {
-      if (dir > 0) {
-        focusCategory(CATS[focusedIdx()].id);
-        return;
-      }
-      // Overview zoom-out to min (ref minus is sky-noop; we honour user zoom-out)
-      zoomAtScreen(sx, sy, zoom * ZOOM_STEP_OUT);
-      zoomIntent = 0;
-      return;
-    }
-    if (mapState === 'fan' || focusCat) {
-      const next = clampZFan(zoom * (dir > 0 ? ZOOM_STEP_IN : ZOOM_STEP_OUT));
-      zoomAtScreen(sx, sy, next);
-      if (dir < 0 && next <= RISE_SCALE) {
-        clearFocus();
-      }
+    const next = clampZoom(zoom * (dir > 0 ? ZOOM_STEP_IN : ZOOM_STEP_OUT));
+    zoomAtScreen(sx, sy, next);
+    zoomIntent = 0;
+    if ((mapState === 'fan' || focusCat) && dir < 0 && next <= RISE_SCALE) {
+      clearFocus();
     }
   }
 
@@ -1072,8 +1129,19 @@
     }
 
     // nodes
-    const showLabels = !!(focusCat || mapState === 'fan') && !morph;
+    const inSky = (mapState === 'sky' || mapState === 'aligning') && !morph && !focusCat;
+    const inFan = !!(focusCat || mapState === 'fan') && !morph;
+    // r16 LOD: continuous sky zoom drives label tiers; fan shows groups+nodes
+    const groupLod = inSky ? lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL)
+      : (inFan ? 1 : 0);
+    const nodeLod = inSky ? lodAlpha(zoom, LOD_NODE_IN, LOD_NODE_FULL)
+      : (inFan ? 1 : 0);
+    const catLod = inSky
+      ? (1 - lodAlpha(zoom, LOD_CAT_FADE_START, LOD_CAT_FADE_END))
+      : 0;
     const wantedNodeLabels = new Map();
+    const wantedGroupLabels = new Map();
+    const placedBoxes = [];
     const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
     const featuredCatId = (mapState === 'sky') ? CATS[focusedIdx()]?.id : null;
     nodes.forEach((n) => {
@@ -1083,7 +1151,7 @@
       if (p.x < -60 || p.x > W + 60 || p.y < -60 || p.y > H + 60) return;
       const selected = selectedAlert && n.alert && selectedAlert.id === n.alert.id;
       const isCat = n.kind === 'category';
-      const isHub = isCat || n.kind === 'subtype';
+      const isHub = isCat || n.kind === 'subtype' || n.kind === 'group';
       let op = catOpacity(n.catId);
       if (n.morphOp != null) op *= n.morphOp;
       if (chainFaded(n)) op *= NODE_FADED;
@@ -1157,42 +1225,73 @@
         ref: n,
       });
 
-      // Node labels collected below — never leave is-on without a live position
-      if (showLabels && !(n.kind === 'category' && !focusCat)) {
-        const labelOn = n.kind !== 'machine' || n.hot || n.depth <= 4;
+      // Group labels (primary branch names) — LOD mid tier
+      if (n.kind === 'group' && groupLod > 0.02) {
+        const gx = p.x + (inFan ? 0 : 10);
+        const gy = p.y + (inFan ? r + 10 : -10);
+        wantedGroupLabels.set(n.id, {
+          text: n.groupLabel || n.label,
+          x: gx,
+          y: gy,
+          opacity: groupLod * catOpacity(n.catId),
+        });
+      }
+      // Node / leaf labels — LOD deep tier (fan always when inFan)
+      if (n.kind !== 'category' && n.kind !== 'group' && nodeLod > 0.02) {
+        const labelOn = n.kind !== 'machine' || n.hot || n.depth <= 4 || inSky;
         if (labelOn) {
           wantedNodeLabels.set(n.id, {
             text: n.label,
             x: p.x,
             y: p.y + r + 2,
-            opacity: n.kind === 'machine' && !n.hot ? 0.65 : 1,
+            opacity: nodeLod * (n.kind === 'machine' && !n.hot ? 0.7 : 1) * catOpacity(n.catId),
           });
         }
       }
     });
 
+    function placeLabel(want, makeEl) {
+      if (!want || want.opacity < 0.03) return null;
+      // Rough box for overlap cull (letter-spaced labels ≈ 7px/char)
+      const w = Math.max(28, (want.text || '').length * 6.2);
+      const h = 14;
+      const box = { x: want.x - w / 2, y: want.y, w, h };
+      if (box.x < 4 || box.x + box.w > W - 4 || box.y < 48 || box.y > H - 12) return null;
+      for (let i = 0; i < placedBoxes.length; i++) {
+        if (labelBoxesOverlap(box, placedBoxes[i], 8)) return null;
+      }
+      placedBoxes.push(box);
+      const el = makeEl();
+      el.style.left = `${want.x}px`;
+      el.style.top = `${want.y}px`;
+      el.style.opacity = String(want.opacity);
+      el.style.visibility = 'visible';
+      el.classList.add('is-on');
+      return el;
+    }
+
+    // Sync group labels
+    groupLabelEls.forEach((el, id) => {
+      const want = wantedGroupLabels.get(id);
+      if (!want || want.opacity < 0.03) { hideDomLabel(el); wantedGroupLabels.delete(id); return; }
+      el.textContent = want.text;
+      if (!placeLabel(want, () => el)) hideDomLabel(el);
+      wantedGroupLabels.delete(id);
+    });
+    wantedGroupLabels.forEach((want, id) => {
+      placeLabel(want, () => ensureGroupLabel(id, want.text));
+    });
+
     // Sync node labels from current frame only (derive-or-clear; follow nodes)
     nodeLabelEls.forEach((el, id) => {
       const want = wantedNodeLabels.get(id);
-      if (!want) {
-        hideDomLabel(el);
-        return;
-      }
+      if (!want || want.opacity < 0.03) { hideDomLabel(el); wantedNodeLabels.delete(id); return; }
       el.textContent = want.text;
-      el.style.left = `${want.x}px`;
-      el.style.top = `${want.y}px`;
-      el.style.opacity = String(want.opacity);
-      el.style.visibility = 'visible';
-      el.classList.add('is-on');
+      if (!placeLabel(want, () => el)) hideDomLabel(el);
       wantedNodeLabels.delete(id);
     });
     wantedNodeLabels.forEach((want, id) => {
-      const el = ensureNodeLabel(id, want.text);
-      el.style.left = `${want.x}px`;
-      el.style.top = `${want.y}px`;
-      el.style.opacity = String(want.opacity);
-      el.style.visibility = 'visible';
-      el.classList.add('is-on');
+      placeLabel(want, () => ensureNodeLabel(id, want.text));
     });
 
     // Dim core when a department is hovered (ref hub/spokes → 0.3)
@@ -1207,10 +1306,9 @@
       drawCore(t);
     }
 
-    // overview category labels — outer edge; follow wheel every frame
+    // overview category labels — outer edge; fade as LOD deepens
     const sidePad = 40;
-    const showCatLabels = !focusCat && mapState !== 'fan' && !morph
-      && (mapState === 'sky' || mapState === 'aligning');
+    const showCatLabels = inSky && catLod > 0.04;
     CATS.forEach((cat) => {
       const el = ensureCatLabel(cat);
       if (!showCatLabels) {
@@ -1220,13 +1318,23 @@
       const wp = catLabelWorld.get(cat.id);
       if (!wp) { hideDomLabel(el); return; }
       const p = worldToScreen(wp.x, wp.y);
-      el.style.left = `${Math.max(sidePad, Math.min(W - sidePad, p.x))}px`;
-      el.style.top = `${p.y}px`;
-      const op = catOpacity(cat.id);
+      const lx = Math.max(sidePad, Math.min(W - sidePad, p.x));
+      const ly = p.y;
+      const op = catOpacity(cat.id) * catLod;
+      if (op < 0.04 || ly < 40 || ly > H - 8) { hideDomLabel(el); return; }
+      const w = Math.max(40, cat.label.length * 9);
+      const box = { x: lx - w / 2, y: ly - 18, w, h: 36 };
+      let clash = false;
+      for (let i = 0; i < placedBoxes.length; i++) {
+        if (labelBoxesOverlap(box, placedBoxes[i], 2)) { clash = true; break; }
+      }
+      if (clash && zoom > LOD_GROUP_FULL) { hideDomLabel(el); return; }
+      placedBoxes.push(box);
+      el.style.left = `${lx}px`;
+      el.style.top = `${ly}px`;
       el.style.opacity = String(op);
-      el.style.visibility = op > 0.02 ? 'visible' : 'hidden';
-      if (op > 0.02) el.classList.add('is-on');
-      else el.classList.remove('is-on');
+      el.style.visibility = 'visible';
+      el.classList.add('is-on');
       const featured = CATS[focusedIdx()]?.id === cat.id;
       el.style.filter = (hoverCat && cat.id === hoverCat) || featured
         ? 'brightness(1.15)'
@@ -1245,13 +1353,14 @@
   }
 
   function clampPanSoft() {
-    // Sky: small drift bounds like ref ±40 / ±50; fan: keep content near frame
     if (mapState === 'diving' || mapState === 'rising') return;
+    // Deep sky zoom needs wide pan so a department can fill the frame
     if (!focusCat && mapState === 'sky') {
-      tCamX = Math.max(-40, Math.min(40, tCamX));
-      tCamY = Math.max(-50, Math.min(50, tCamY));
-      camX = Math.max(-40, Math.min(40, camX));
-      camY = Math.max(-50, Math.min(50, camY));
+      const M = 60 + Math.max(0, zoom - 1) * 320;
+      tCamX = Math.max(-M, Math.min(M, tCamX));
+      tCamY = Math.max(-M, Math.min(M, tCamY));
+      camX = Math.max(-M, Math.min(M, camX));
+      camY = Math.max(-M, Math.min(M, camY));
       return;
     }
     const M = 420;
@@ -1786,8 +1895,8 @@
       const vals = [...ptrs.values()];
       const dist = Math.hypot(vals[0][0] - vals[1][0], vals[0][1] - vals[1][1]);
       pinchRatio = dist / pinchD0;
-      if (mapState === 'fan' || focusCat) {
-        const zn = clampZFan(pinchS0 * pinchRatio);
+      if (mapState === 'sky' || mapState === 'fan' || focusCat) {
+        const zn = clampZoom(pinchS0 * pinchRatio);
         const mx = (vals[0][0] + vals[1][0]) / 2 - rect.left;
         const my = (vals[0][1] + vals[1][1]) / 2 - rect.top;
         const u = usable();
@@ -1807,36 +1916,47 @@
     dragDist += Math.hypot(dx, dy);
 
     if (mapState === 'sky' || mapState === 'aligning') {
-      // Angular dial (ref): rotate about screen-space core; dead zone uses dx*0.12
+      // r16 video: drag pans the canvas. Dial rotate stays on arrows (+ snap).
+      // At near-rest zoom, outer angular drag still spins the dial (no scroll conflict).
       const u = usable();
       const ox = u.cx + camX * zoom;
       const oy = u.cy + camY * zoom;
-      const x0 = lastX - dx - rect.left, y0 = lastY - dy - rect.top;
       const x1 = e.clientX - rect.left, y1 = e.clientY - rect.top;
-      const r0x = x0 - ox, r0y = y0 - oy;
-      const r1x = x1 - ox, r1y = y1 - oy;
-      let dA = 0;
-      if (Math.hypot(r0x, r0y) > 48 && Math.hypot(r1x, r1y) > 48) {
-        dA = (Math.atan2(r1y, r1x) - Math.atan2(r0y, r0x)) * 180 / Math.PI;
-        if (dA > 180) dA -= 360; if (dA < -180) dA += 360;
-        wheelA += dA;
+      const rad = Math.hypot(x1 - ox, y1 - oy);
+      const dialGrab = zoom < 1.35 && rad > Math.min(W, H) * 0.22;
+      if (dialGrab) {
+        const x0 = lastX - dx - rect.left, y0 = lastY - dy - rect.top;
+        const r0x = x0 - ox, r0y = y0 - oy;
+        const r1x = x1 - ox, r1y = y1 - oy;
+        let dA = 0;
+        if (Math.hypot(r0x, r0y) > 48 && Math.hypot(r1x, r1y) > 48) {
+          dA = (Math.atan2(r1y, r1x) - Math.atan2(r0y, r0x)) * 180 / Math.PI;
+          if (dA > 180) dA -= 360; if (dA < -180) dA += 360;
+          wheelA += dA;
+        } else {
+          dA = -dx * 0.12;
+          wheelA += dA;
+        }
+        const now2 = performance.now();
+        const dtm = Math.max(1, now2 - flickT);
+        wheelV = FLICK_EMA * wheelV + (1 - FLICK_EMA) * (dA / dtm);
+        flickV = FLICK_EMA * flickV + (1 - FLICK_EMA) * (dx / dtm);
+        flickT = now2;
+        wheelT = wheelA;
+        layoutWheel();
+        clearTimeout(wheelIdle);
       } else {
-        dA = -dx * 0.12;
-        wheelA += dA;
+        const inv = 1 / Math.max(zoom, 0.05);
+        camX += dx * inv; tCamX = camX;
+        camY += dy * inv; tCamY = camY;
+        wheelV = 0;
+        wheelCoasting = false;
       }
-      const now2 = performance.now();
-      const dtm = Math.max(1, now2 - flickT);
-      // Angular velocity (deg/ms) + px EMA for flick threshold (ref)
-      wheelV = FLICK_EMA * wheelV + (1 - FLICK_EMA) * (dA / dtm);
-      flickV = FLICK_EMA * flickV + (1 - FLICK_EMA) * (dx / dtm);
-      flickT = now2;
-      wheelT = wheelA;
-      layoutWheel();
-      clearTimeout(wheelIdle);
     } else if (mapState === 'fan' || focusCat) {
       // Direct pan, no inertia (ref fan)
-      camX += dx; tCamX = camX;
-      camY += dy; tCamY = camY;
+      const inv = 1 / Math.max(zoom, 0.05);
+      camX += dx * inv; tCamX = camX;
+      camY += dy * inv; tCamY = camY;
     }
   });
 
@@ -1895,60 +2015,36 @@
     if (viewMode !== 'map') return;
     if (e.target.closest?.('.side-panel, .core-panel, .map-controls')) return;
     e.preventDefault();
+    if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
     const now = performance.now();
+    if (now < zoomLockUntil) return;
     const rect = canvas.getBoundingClientRect();
     const lx = e.clientX - rect.left;
     const ly = e.clientY - rect.top;
 
-    // Trackpad pinch / ctrl-wheel: zoom-to-cursor (both directions). Dive/rise via intent.
-    if (e.ctrlKey || e.metaKey) {
-      if (now < zoomLockUntil) return;
-      if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
-
-      if (mapState === 'sky') {
-        // Overview: real zoom-to-cursor both ways (r15). Dive only after hitting max + more pinch-in.
-        const zn = clampZSky(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
-        zoomAtScreen(lx, ly, zn);
-        if (e.deltaY < 0 && zn >= Z_SKY_MAX - 0.02) {
-          zoomIntent += -e.deltaY;
-          if (zoomIntent > 110) {
-            focusCategory(CATS[focusedIdx()].id);
-            zoomIntent = 0;
-            zoomLockUntil = now + 900;
-          }
-        } else {
-          zoomIntent = 0;
-        }
-        return;
-      }
-
-      if (mapState === 'fan' || focusCat) {
-        // Always apply clamped zoom (do not swallow negative deltas at the floor)
-        const zn = clampZFan(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
-        zoomAtScreen(lx, ly, zn);
-        if (e.deltaY > 0 && zn <= RISE_SCALE) {
-          zoomIntent += -e.deltaY;
-          if (zoomIntent < -110) {
-            clearFocus();
-            zoomIntent = 0;
-            zoomLockUntil = now + 900;
-          }
-        } else if (e.deltaY < 0) {
-          zoomIntent = 0;
-        }
-      }
+    // r16 marketing video: PLAIN scroll zooms (ctrl/pinch too). Never rotates the dial.
+    const dominantY = Math.abs(e.deltaY) >= Math.abs(e.deltaX) * 0.85;
+    if (!dominantY && Math.abs(e.deltaX) > 0.5) {
+      // Mostly-horizontal trackpad → pan only
+      const inv = 1 / Math.max(zoom, 0.05);
+      camX -= e.deltaX * inv; tCamX = camX;
+      camY -= e.deltaY * inv; tCamY = camY;
       return;
     }
 
-    // Plain scroll: sky rotates wheel; fan pans (ref)
-    if (mapState === 'fan' || focusCat) {
-      camX -= e.deltaX; tCamX = camX;
-      camY -= e.deltaY; tCamY = camY;
-    } else if (mapState === 'sky') {
-      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      wheelT += d * 0.1;
-      clearTimeout(wheelIdle);
-      wheelIdle = setTimeout(snapWheel, 300);
+    const zn = clampZoom(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
+    zoomAtScreen(lx, ly, zn);
+
+    // Fan: zooming out past floor still rises (Escape/back parity)
+    if ((mapState === 'fan' || focusCat) && e.deltaY > 0 && zn <= RISE_SCALE) {
+      zoomIntent += -e.deltaY;
+      if (zoomIntent < -110) {
+        clearFocus();
+        zoomIntent = 0;
+        zoomLockUntil = now + 900;
+      }
+    } else if (e.deltaY < 0) {
+      zoomIntent = 0;
     }
   }, { passive: false });
 
@@ -2104,7 +2200,9 @@
       EASE_CAM, EASE_WHEEL, EASE_HOVER: 1 - Math.pow(0.05, 16.67 / HOVER_FADE_MS),
       HOVER_FADE_MS, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
       DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
-      Z_FAN_MIN, Z_FAN_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
+      Z_FAN_MIN, Z_FAN_MAX, Z_SKY_MIN, Z_SKY_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
+      LOD_GROUP_IN, LOD_GROUP_FULL, LOD_NODE_IN, LOD_NODE_FULL,
+      plainWheelZooms: true, scrollNeverRotatesDial: true,
       DIVE_ALIGN_MS, DIVE_MORPH_MS, DIVE_SWAP_MS: DIVE_MORPH_MS, RISE_MS, W_STEP, N,
       WHEEL_FRICTION, FLICK_THRESH, fanInertia: false, skyDial: true, morphDive: true,
       dialCoast: true,
@@ -2161,31 +2259,74 @@
     zoomStep: (dir) => zoomStep(dir),
     fitCurrent: () => fitCurrent(),
     recenter: () => recenterMap({ immediate: true }),
+    worldToScreen: (x, y) => worldToScreen(x, y),
+    hubScreen: (catId) => {
+      const hub = (focusCat && focusLayout ? focusLayout.nodes : layoutNodes)
+        .find((n) => n.id === catId && n.kind === 'category');
+      if (!hub) return null;
+      return worldToScreen(hub.x, hub.y);
+    },
     /** Labels that are lit but must not be (orphans after leave/morph/dial). */
     orphanLabels: () => {
       const out = [];
-      const showCat = !focusCat && !morph && (mapState === 'sky' || mapState === 'aligning');
-      const showNode = !!(focusCat || mapState === 'fan') && !morph;
+      const inSky = !focusCat && !morph && (mapState === 'sky' || mapState === 'aligning');
+      const inFan = !!(focusCat || mapState === 'fan') && !morph;
+      const catLod = inSky ? (1 - lodAlpha(zoom, LOD_CAT_FADE_START, LOD_CAT_FADE_END)) : 0;
+      const allowCat = catLod > 0.04;
+      const allowGroup = (inSky && lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL) > 0.02) || inFan;
+      const allowNode = (inSky && lodAlpha(zoom, LOD_NODE_IN, LOD_NODE_FULL) > 0.02) || inFan;
       labelLayer.querySelectorAll('.cat-label').forEach((el) => {
         const st = getComputedStyle(el);
         const lit = Number(st.opacity) > 0.05 && st.visibility !== 'hidden';
-        if (lit && !showCat) out.push({ kind: 'cat', id: el.dataset.id || '' });
+        if (lit && !allowCat) out.push({ kind: 'cat', id: el.dataset.id || '' });
+      });
+      labelLayer.querySelectorAll('.group-label').forEach((el) => {
+        const st = getComputedStyle(el);
+        const lit = Number(st.opacity) > 0.05 && st.visibility !== 'hidden';
+        if (lit && !allowGroup) out.push({ kind: 'group', id: el.dataset.id || '' });
       });
       labelLayer.querySelectorAll('.node-label').forEach((el) => {
         const st = getComputedStyle(el);
         const lit = el.classList.contains('is-on')
           || (Number(st.opacity) > 0.05 && st.visibility !== 'hidden');
-        if (lit && !showNode) out.push({ kind: 'node', id: el.dataset.id || '' });
+        if (lit && !allowNode) out.push({ kind: 'node', id: el.dataset.id || '' });
       });
       return out;
     },
     litLabelCount: () => {
       let n = 0;
-      labelLayer.querySelectorAll('.cat-label, .node-label').forEach((el) => {
+      labelLayer.querySelectorAll('.cat-label, .group-label, .node-label').forEach((el) => {
         const st = getComputedStyle(el);
         if (Number(st.opacity) > 0.05 && st.visibility !== 'hidden') n += 1;
       });
       return n;
+    },
+    lodState: () => ({
+      zoom,
+      group: lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL),
+      node: lodAlpha(zoom, LOD_NODE_IN, LOD_NODE_FULL),
+      cat: 1 - lodAlpha(zoom, LOD_CAT_FADE_START, LOD_CAT_FADE_END),
+      thresholds: {
+        LOD_GROUP_IN, LOD_GROUP_FULL, LOD_NODE_IN, LOD_NODE_FULL,
+        Z_SKY_MIN, Z_SKY_MAX,
+      },
+    }),
+    labelOverlapCount: () => {
+      const boxes = [];
+      labelLayer.querySelectorAll('.cat-label.is-on, .group-label.is-on, .node-label.is-on').forEach((el) => {
+        const st = getComputedStyle(el);
+        if (Number(st.opacity) < 0.05 || st.visibility === 'hidden') return;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        boxes.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+      });
+      let hits = 0;
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          if (labelBoxesOverlap(boxes[i], boxes[j], 1)) hits += 1;
+        }
+      }
+      return hits;
     },
     /** Hub distance / viewport height (target ~0.17–0.20). */
     hubRadiusRatio: () => {

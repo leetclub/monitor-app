@@ -213,6 +213,24 @@ body:not(.map-ready) .wchev { opacity: 0; }
   opacity: 1;
   visibility: visible;
 }
+.group-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: 500 0.58rem/1 var(--font-display);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(242, 239, 232, 0.9);
+  white-space: nowrap;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: none;
+}
+.group-label.is-on {
+  opacity: 1;
+  visibility: visible;
+}
 
 /* Zoom chrome (skilltree #controls parity) */
 .map-controls {
