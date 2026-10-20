@@ -98,6 +98,14 @@ async function runSuite(browserType, name, viewport) {
       spokes,
     });
 
+    // r9 titlesClear: ≥40px below toolbar/toggle at rest
+    const titles = await page.evaluate(() => window.LEET_ALERTS_MAP.titlesClearOfToolbar(56, 40));
+    results.push({
+      name: `${tag}/titles-clear-40px`,
+      ok: !!titles.clear,
+      titles,
+    });
+
     // Plain wheel zooms, not dial
     const before = await page.evaluate(() => ({
       z: window.LEET_ALERTS_MAP.getTransform().zoom,
@@ -154,12 +162,36 @@ async function runSuite(browserType, name, viewport) {
         overlaps: window.LEET_ALERTS_MAP.labelOverlapCount(),
         orphans: window.LEET_ALERTS_MAP.orphanLabels(),
         lod: window.LEET_ALERTS_MAP.lodState(),
+        groups: [...document.querySelectorAll('.group-label.is-on')]
+          .filter((el) => Number(getComputedStyle(el).opacity) > 0.15)
+          .map((el) => (el.textContent || '').trim()),
+        nodeLabels: [...document.querySelectorAll('.node-label.is-on')]
+          .filter((el) => Number(getComputedStyle(el).opacity) > 0.15)
+          .map((el) => (el.textContent || '').trim()),
       }));
       results.push({
         name: `${tag}/overlap-zero-${tier}`,
         ok: snap.overlaps === 0 && snap.orphans.length === 0,
         snap,
       });
+      if (tier === 'group') {
+        const need = ['MACHINES', 'HEARTBEAT', 'CONNECTIVITY'];
+        const hasAll = need.every((g) => snap.groups.includes(g));
+        results.push({
+          name: `${tag}/group-tier-all-three-offline`,
+          ok: hasAll && snap.groups.length >= 3,
+          groups: snap.groups,
+        });
+      }
+      if (tier === 'node') {
+        const perCat = await page.evaluate(() => window.LEET_ALERTS_MAP.nodeLabelsUniquePerCategory());
+        const ok = Object.values(perCat).every((c) => c.total >= 3 && c.total === c.unique);
+        results.push({
+          name: `${tag}/node-labels-unique-per-cat`,
+          ok,
+          perCat,
+        });
+      }
     }
 
     // Deep zoom + settle → empty area ≤ 25%

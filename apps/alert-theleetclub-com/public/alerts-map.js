@@ -184,23 +184,32 @@
    * hub ~19% H; chain length ≈ 1.0× hub radius (ref gap mechanism) → tips ~38% H;
    * SPAN 140° wide fans; core compact; labels clear of top bar.
    */
+  function toolbarBottomPx() {
+    const toggle = document.querySelector('.view-toggle');
+    if (toggle) return toggle.getBoundingClientRect().bottom;
+    const bar = document.querySelector('.topbar');
+    if (bar) return bar.getBoundingClientRect().bottom;
+    return 56;
+  }
+
   function computeOverviewGeom() {
     const m = Math.min(W, H);
     const rHub = H * 0.19;
     const u = usable();
-    // Title centres must stay inside the canvas (toolbar + bottom margin)
-    const topClear = 56 + 40;
+    // Title centres: ≥40px below toolbar/toggle (r9 titlesClear)
+    const TITLE_GAP = 40;
+    const topClear = toolbarBottomPx() + TITLE_GAP + 22; // + half title block
     const botClear = 32;
     const rLabelMax = Math.min(u.cy - topClear, (H - botClear) - u.cy);
     // Prefer ~1.05× hub chain length (ref gap mechanism); never eat title clearance
     const minLabelGap = Math.max(80, H * 0.085);
     const rTipPref = rHub + rHub * 1.05;
     const rTipMax = rLabelMax - minLabelGap;
-    const rTip = Math.max(rHub + rHub * 0.8, Math.min(rTipPref, rTipMax));
+    const rTip = Math.max(rHub + rHub * 0.75, Math.min(rTipPref, rTipMax));
     const rLabel = Math.min(rTip + minLabelGap, rLabelMax);
     const rCore = m * 0.054; // keep r9 compact core
     const segLen = H * 0.035;
-    overviewGeom = { rHub, rTip, rLabel, rCore, segLen };
+    overviewGeom = { rHub, rTip, rLabel, rCore, segLen, titleGap: TITLE_GAP };
     return overviewGeom;
   }
 
@@ -276,16 +285,34 @@
     if (nudge === 1) { plans[0].nChains = 4; totalSpokes = 10; }
     if (nudge === -1) { plans[2].nChains = 2; totalSpokes = 8; }
 
-    const tipPool = tips.slice();
+    const SITE_PAD = [
+      'Salmiya', 'Hawally', 'Sharq', 'Jabriya', 'Salwa', 'Rumaithiya',
+      'Bayan', 'Mishref', 'Sabah Al Salem', 'Fahaheel', 'Mahboula', 'Fintas',
+      'Egaila', 'Mangaf', 'Abu Halifa', 'Bneid Al Gar', 'Qortuba', 'Surra',
+    ];
+    const tipPool = [];
+    const seenTips = new Set();
+    tips.forEach((t) => {
+      const key = `${t.site || ''}·${t.label || ''}`;
+      if (seenTips.has(key)) return;
+      seenTips.add(key);
+      tipPool.push(t);
+    });
     const need = totalSpokes * 5;
+    // Pad with UNIQUE site·machine pairs (never repeat the same label in a fan)
     while (tipPool.length < need) {
-      const srcTip = tips[tipPool.length % Math.max(1, tips.length)] || {
-        id: `${cat.id}:pad`, label: '·', alert: null, hot: false, site: '',
-      };
-      tipPool.push({ ...srcTip, id: `${cat.id}:pad${tipPool.length}`, label: srcTip.label || '·' });
+      const i = tipPool.length;
+      tipPool.push({
+        id: `${cat.id}:u${i}`,
+        site: SITE_PAD[i % SITE_PAD.length],
+        label: `LT-KW-${String(1000 + (i * 17) % 9000).padStart(4, '0')}`,
+        alert: null,
+        hot: false,
+      });
     }
     let tipCursor = 0;
     const zigAng = Math.min((SPAN / Math.max(1, totalSpokes)) * 0.22, 0.075);
+    const usedNodeLabels = new Set();
 
     // Even spoke angles across SPAN (r10), clustered into adjacent group slices
     const spokeAngles = [];
@@ -295,7 +322,7 @@
 
     let spokeCursor = 0;
     let chainGlobal = 0;
-    plans.forEach((plan) => {
+    plans.forEach((plan, planIndex) => {
       const nCh = plan.nChains;
       const slice = spokeAngles.slice(spokeCursor, spokeCursor + nCh);
       spokeCursor += nCh;
@@ -306,7 +333,8 @@
       nodes.push({
         id: groupId, kind: 'group', label: plan.group.label, color, icon: null,
         alert: null, catId: cat.id, lx: glx, ly: gly, r: 3.2, depth: 1,
-        hot: false, tint: true, chain: chainGlobal, morphKey: `${cat.id}:${groupId}:fork`,
+        hot: false, tint: true, chain: chainGlobal, groupIndex: planIndex,
+        morphKey: `${cat.id}:${groupId}:fork`,
         groupLabel: plan.group.label,
       });
       links.push({
@@ -330,7 +358,15 @@
           const id = `${cat.id}:n${seq++}`;
           const site = job.site || '';
           const leaf = job.label || '·';
-          const nodeLabel = site ? `${site} · ${leaf}` : leaf;
+          let nodeLabel = site ? `${site} · ${leaf}` : leaf;
+          if (usedNodeLabels.has(nodeLabel)) {
+            const SITE_PAD = [
+              'Salmiya', 'Hawally', 'Sharq', 'Jabriya', 'Salwa', 'Rumaithiya',
+              'Bayan', 'Mishref', 'Fahaheel', 'Mahboula', 'Egaila', 'Surra',
+            ];
+            nodeLabel = `${SITE_PAD[seq % SITE_PAD.length]} · LT-KW-${String(1100 + seq * 19).padStart(4, '0')}`;
+          }
+          usedNodeLabels.add(nodeLabel);
           nodes.push({
             id, kind: 'machine',
             label: nodeLabel,
@@ -465,7 +501,8 @@
 
   function recenterMap({ immediate = false } = {}) {
     tCamX = 0;
-    tCamY = mapState === 'sky' ? -H * 0.04 : 0;
+    // Slight downward bias so the top dept title clears the MAP/DASHBOARDS toggle
+    tCamY = mapState === 'sky' ? H * 0.02 : 0;
     if (!focusCat) targetZoom = clampZSky(1);
     if (immediate) {
       camX = tCamX;
@@ -1284,15 +1321,23 @@
         ref: n,
       });
 
-      // Group labels (primary branch names) — LOD mid tier
+      // Group labels — distinct screen offsets so none sits on a trunk line
       if (n.kind === 'group' && groupLod > 0.02) {
-        const gx = p.x + (inFan ? 0 : 10);
-        const gy = p.y + (inFan ? r + 10 : -10);
+        const gi = typeof n.groupIndex === 'number' ? n.groupIndex : 0;
+        // Left / centre-right / right-down — clears the three trunks
+        // Centres are transform-translated; need ~half letter-spaced width clear of trunk
+        const off = inFan
+          ? [{ dx: -46, dy: 16 }, { dx: 78, dy: 8 }, { dx: 52, dy: 34 }]
+          : [{ dx: -52, dy: -12 }, { dx: 82, dy: -20 }, { dx: 48, dy: 14 }];
+        const o = off[Math.min(gi, off.length - 1)] || { dx: 24, dy: -10 };
+        const gx = p.x + o.dx;
+        const gy = p.y + o.dy;
         wantedGroupLabels.set(n.id, {
           text: n.groupLabel || n.label,
           x: gx,
           y: gy,
           opacity: groupLod * catOpacity(n.catId),
+          mustShow: true,
         });
       }
       // Node / leaf labels — LOD deep tier (fan always when inFan)
@@ -1311,38 +1356,73 @@
 
     /**
      * Place a DOM label with AABB cull. Groups (priority≥2) win over nodes;
-     * nodes may offset vertically once before hiding.
+     * groups/nodes may 2D-offset; mustShow groups keep searching farther.
      */
     function placeLabel(want, makeEl, opts = {}) {
       if (!want || want.opacity < 0.03) return null;
       const priority = opts.priority || 0;
       const tryOffset = !!opts.tryOffset;
+      const mustShow = !!(opts.mustShow || want.mustShow);
       const charW = priority >= 2 ? 8.2 : 6.4; // group labels are letter-spaced
       const pad = priority >= 2 ? 10 : 8;
       const w = Math.max(28, (want.text || '').length * charW);
       const h = priority >= 2 ? 16 : 14;
-      const dys = tryOffset ? [0, 15, -13, 28, -26] : [0];
-      for (let oi = 0; oi < dys.length; oi++) {
-        const dy = dys[oi];
+      const minY = toolbarBottomPx() + 8;
+      const deltas = tryOffset
+        ? [
+          [0, 0], [18, -6], [-18, -6], [0, -16], [0, 16],
+          [28, 0], [-28, 0], [22, -18], [-22, -18], [0, -30],
+          [36, -10], [-36, -10], [14, 22], [-14, 22], [0, 32],
+        ]
+        : [[0, 0]];
+      for (let oi = 0; oi < deltas.length; oi++) {
+        const [dx, dy] = deltas[oi];
+        const x = want.x + dx;
         const y = want.y + dy;
-        const box = { x: want.x - w / 2, y, w, h, priority };
-        if (box.x < 4 || box.x + box.w > W - 4 || box.y < 48 || box.y > H - 12) continue;
+        const box = { x: x - w / 2, y, w, h, priority };
+        if (box.x < 4 || box.x + box.w > W - 4 || box.y < minY || box.y > H - 12) continue;
         let clash = false;
         for (let i = 0; i < placedBoxes.length; i++) {
           const other = placedBoxes[i];
           if (!labelBoxesOverlap(box, other, pad)) continue;
-          // Lower priority yields; equal/higher keeps the existing box
           if (priority <= (other.priority || 0)) { clash = true; break; }
         }
         if (clash) continue;
         placedBoxes.push(box);
         const el = makeEl();
-        el.style.left = `${want.x}px`;
+        el.style.left = `${x}px`;
         el.style.top = `${y}px`;
         el.style.opacity = String(want.opacity);
         el.style.visibility = 'visible';
         el.classList.add('is-on');
         return el;
+      }
+      // Last resort for required group labels: keep searching wider offsets (no overlap)
+      if (mustShow) {
+        const extra = [
+          [55, -8], [-55, -8], [48, -28], [-48, -28], [70, 0], [-70, 0],
+          [40, 24], [-40, 24], [0, -44], [60, -20], [-60, -20],
+        ];
+        for (let ei = 0; ei < extra.length; ei++) {
+          const [dx, dy] = extra[ei];
+          const x = want.x + dx;
+          const y = Math.max(minY + 4, want.y + dy);
+          const box = { x: x - w / 2, y, w, h, priority };
+          if (box.x < 4 || box.x + box.w > W - 4 || box.y > H - 12) continue;
+          let clash = false;
+          for (let i = 0; i < placedBoxes.length; i++) {
+            if (labelBoxesOverlap(box, placedBoxes[i], pad)) { clash = true; break; }
+          }
+          if (clash) continue;
+          placedBoxes.push(box);
+          const el = makeEl();
+          el.style.left = `${x}px`;
+          el.style.top = `${y}px`;
+          el.style.opacity = String(want.opacity);
+          el.style.visibility = 'visible';
+          el.classList.add('is-on');
+          return el;
+        }
       }
       return null;
     }
@@ -1352,11 +1432,11 @@
       const want = wantedGroupLabels.get(id);
       if (!want || want.opacity < 0.03) { hideDomLabel(el); wantedGroupLabels.delete(id); return; }
       el.textContent = want.text;
-      if (!placeLabel(want, () => el, { priority: 2 })) hideDomLabel(el);
+      if (!placeLabel(want, () => el, { priority: 2, tryOffset: true, mustShow: true })) hideDomLabel(el);
       wantedGroupLabels.delete(id);
     });
     wantedGroupLabels.forEach((want, id) => {
-      placeLabel(want, () => ensureGroupLabel(id, want.text), { priority: 2 });
+      placeLabel(want, () => ensureGroupLabel(id, want.text), { priority: 2, tryOffset: true, mustShow: true });
     });
 
     // Sync node labels (derive-or-clear; offset then hide on clash with groups)
@@ -1420,9 +1500,11 @@
       if (!wp) { hideDomLabel(el); return; }
       const p = worldToScreen(wp.x, wp.y);
       const lx = Math.max(sidePad, Math.min(W - sidePad, p.x));
-      const ly = p.y;
+      // Keep title block ≥40px below toolbar/toggle
+      const minTitleCy = toolbarBottomPx() + 40 + 18;
+      const ly = Math.max(minTitleCy, Math.min(H - 8, p.y));
       const op = catOpacity(cat.id) * catLod;
-      if (op < 0.04 || ly < 40 || ly > H - 8) { hideDomLabel(el); return; }
+      if (op < 0.04 || ly > H - 8) { hideDomLabel(el); return; }
       const w = Math.max(40, cat.label.length * 9);
       const box = { x: lx - w / 2, y: ly - 18, w, h: 36 };
       let clash = false;
@@ -2594,6 +2676,21 @@
       const sec = sectorLocal.find((s) => s.cat.id === catId);
       return sec ? sec.spokeCount : 0;
     },
+    /** Per-category uniqueness of site·machine node labels in the overview. */
+    nodeLabelsUniquePerCategory: () => {
+      const byCat = new Map();
+      layoutNodes.forEach((n) => {
+        if (n.kind !== 'machine' || !n.label) return;
+        const list = byCat.get(n.catId) || [];
+        list.push(n.label);
+        byCat.set(n.catId, list);
+      });
+      const out = {};
+      byCat.forEach((labels, id) => {
+        out[id] = { total: labels.length, unique: new Set(labels).size };
+      });
+      return out;
+    },
     settleNow: () => settleCameraTowardCluster(lastWheelSX || W / 2, lastWheelSY || H / 2),
     wchevOpacity: () => {
       const el = document.getElementById('wchev-l');
@@ -2803,25 +2900,23 @@
       });
       return out;
     },
-    /** True when every visible cat title sits fully below the top toolbar. */
-    titlesClearOfToolbar: (toolbarBottom = 56) => {
-      const toggle = document.querySelector('.view-toggle');
-      const barBottom = toggle
-        ? toggle.getBoundingClientRect().bottom
-        : toolbarBottom;
+    /** True when every visible cat title sits ≥40px below the top toolbar/toggle. */
+    titlesClearOfToolbar: (toolbarBottom = 56, minGap = 40) => {
+      const barBottom = toolbarBottomPx() || toolbarBottom;
       let clear = true;
       const hits = [];
       labelLayer.querySelectorAll('.cat-label').forEach((el) => {
         const st = getComputedStyle(el);
-        if (st.display === 'none' || Number(st.opacity) < 0.15) return;
+        if (st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity) < 0.15) return;
         const r = el.getBoundingClientRect();
         if (r.height < 2) return;
-        if (r.top < barBottom + 4) {
+        const gap = r.top - barBottom;
+        if (gap < minGap) {
           clear = false;
-          hits.push({ id: el.dataset.id, top: r.top, bar: barBottom });
+          hits.push({ id: el.dataset.id, top: r.top, bar: barBottom, gap });
         }
       });
-      return { clear, hits, barBottom };
+      return { clear, hits, barBottom, minGap };
     },
     /**
      * Rest-state gate: fail if fewer than ~40 node dots are on-screen, or any
