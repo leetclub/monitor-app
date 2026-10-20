@@ -73,15 +73,16 @@
 
   /**
    * Short stubby Skilltree overview (vs viewport height):
-   * hub ~17–20% H, tips ~32–36% H, labels far out, core diameter ~15% min(W,H).
+   * hub ~20% H, tips ~32–36% H, labels closer to tips, core diameter ~15% min(W,H).
    */
   function computeOverviewGeom() {
     const m = Math.min(W, H);
-    const rHub = H * 0.185;
-    const rTip = H * 0.345;
-    const rLabel = H * 0.46;
+    const rHub = H * 0.20;
+    const rTip = H * 0.335;
+    // Empty band tip→label reduced ~25% vs r6 (was ~0.115H → ~0.09H)
+    const rLabel = rTip + H * 0.09;
     const rCore = m * 0.075; // radius → diameter ~15%
-    const segLen = H * 0.038;
+    const segLen = H * 0.035;
     overviewGeom = { rHub, rTip, rLabel, rCore, segLen };
     return overviewGeom;
   }
@@ -101,17 +102,34 @@
     return x - Math.floor(x);
   }
 
+  function normAngle(a) {
+    return ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  }
+
+  function angleDelta(a, b) {
+    return normAngle(a - b);
+  }
+
+  function segIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+    const denom = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx);
+    if (Math.abs(denom) < 1e-9) return false;
+    const ua = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / denom;
+    const ub = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / denom;
+    return ua > 0.02 && ua < 0.98 && ub > 0.02 && ub < 0.98;
+  }
+
   /**
-   * Short skill-tree sector: hub + stub toward core (no core line) + 5–9 stubby chains.
-   * Wedge-partitioned growth guarantees non-crossing straight segments.
+   * Overview branches matching skilltree.altari.ai/map.html buildSky():
+   * 140° SPAN, equal function wedges, zig-zag job chains (not parallel rays).
+   * Geometry scaled so hubs sit ~20% H and tips ~34.5% H from center.
    */
-  function buildSectorConstellation(cat, angle, halfSpan, outNodes, outLinks) {
-    const { rHub, rTip, segLen } = overviewGeom;
+  function buildSectorConstellation(cat, angle, _halfSpan, outNodes, outLinks) {
+    const { rHub, rTip } = overviewGeom;
     const color = cat.color;
     const ov = cat.overviewTree || {};
     const tips = ov.tips || [];
+    const subtypes = ov.subtypes || [];
     let tipIdx = 0;
-    let nodeCount = 0;
     let seq = 0;
 
     const hx = Math.cos(angle) * rHub;
@@ -126,14 +144,13 @@
       catId: cat.id,
       x: hx,
       y: hy,
-      r: 13, // ~26px
+      r: 13,
       depth: 0,
       hot: false,
     });
-    nodeCount += 1;
 
-    // Tiny stub on the inner side of the hub pointing at the core (does NOT reach core)
-    const stubLen = Math.min(14, rHub * 0.12);
+    // Inner stub only (leet overview keeps the core→hub gap; no dashed spokes)
+    const stubLen = Math.min(14, rHub * 0.1);
     const sx = hx - Math.cos(angle) * stubLen;
     const sy = hy - Math.sin(angle) * stubLen;
     const stubId = `${cat.id}:stub`;
@@ -155,138 +172,131 @@
       x0: sx, y0: sy, x1: hx, y1: hy,
     });
 
-    const branchCount = 5 + Math.floor(hash01(cat.id.length * 17 + angle) * 4); // 5–8
-    // Keep clear empty angular gaps between departments
-    const spanUse = halfSpan * 1.45;
-    const a0 = angle - spanUse / 2;
+    // Reference constants from buildSky (map.html): SPAN=140°, r0=80, rb=146, rstep=56
+    const SPAN = (140 * Math.PI) / 180;
+    const RmaxRef = 146 + 3 * 56; // 314
+    const scale = (rTip - rHub) / RmaxRef;
+    const r0 = 80 * scale;
+    const rb = 146 * scale;
+    const Rmax = RmaxRef * scale;
+    const rNear = 36 * scale;
 
-    function addNode(id, kind, x, y, depth, tip, hollow) {
-      const tipData = tip || null;
+    // Local polar → world: aLocal=0 is outward along `angle`
+    const ox = Math.cos(angle);
+    const oy = Math.sin(angle);
+    const tx = -Math.sin(angle);
+    const ty = Math.cos(angle);
+    function LP(r, aLocal) {
+      const out = r * Math.cos(aLocal);
+      const side = r * Math.sin(aLocal);
+      return { x: hx + ox * out + tx * side, y: hy + oy * out + ty * side };
+    }
+
+    // 4–5 function wedges (Skilltree uses ~3–6 functions); tips → zig-zag chains
+    const nf = Math.max(4, Math.min(5, subtypes.length || 4));
+    const chains = Array.from({ length: nf }, (_, i) => ({
+      sub: subtypes[i] || null,
+      jobs: [],
+    }));
+    const tipPool = tips.slice();
+    // Pad so each department lands ~25–35 nodes (hub + nf roots + jobs)
+    const targetJobs = 22 + Math.floor(hash01(cat.id.length * 9 + angle) * 6); // 22–27 jobs
+    while (tipPool.length < targetJobs) {
+      const src = tips[tipPool.length % Math.max(1, tips.length)] || {
+        id: `${cat.id}:pad`, label: '·', alert: null, hot: false,
+      };
+      tipPool.push({
+        ...src,
+        id: `${cat.id}:pad${tipPool.length}`,
+        label: src.label || '·',
+      });
+    }
+    tipPool.forEach((t, i) => { chains[i % nf].jobs.push(t); });
+    const maxJobs = Math.max(4, Math.ceil(targetJobs / nf));
+    chains.forEach((ch) => { if (ch.jobs.length > maxJobs) ch.jobs.length = maxJobs; });
+
+    let cursor = -SPAN / 2;
+    chains.forEach((ch, fi) => {
+      const jobs = ch.jobs;
+      const span = SPAN / nf;
+      const aC = cursor + span / 2;
+
+      // Function root (colored) at r0 — first fork point out of the hub
+      const near = LP(rNear, aC);
+      const root = LP(r0, aC);
+      const rootId = `${cat.id}:fn${fi}`;
       outNodes.push({
-        id,
-        kind,
-        label: tipData?.label || '·',
+        id: rootId,
+        kind: 'site',
+        label: ch.sub?.label || '·',
         color,
         icon: null,
-        alert: tipData?.alert || null,
+        alert: null,
         catId: cat.id,
-        x,
-        y,
-        r: hollow ? 3.0 : (kind === 'machine' ? 2.5 : 2.3),
-        depth,
-        hot: !!(tipData && tipData.hot),
-        hollow: !!hollow,
+        x: root.x,
+        y: root.y,
+        r: 3.6,
+        depth: 1,
+        hot: false,
+        hollow: true,
       });
-      nodeCount += 1;
-      return id;
-    }
-
-    /**
-     * Grow inside [lo, hi] angular wedge. Children get disjoint sub-wedges → no crossings.
-     * Place each node on a ray inside the wedge at increasing radius (no tip yank).
-     */
-    function grow(prevId, px, py, lo, hi, segsLeft, depth, seed) {
-      if (segsLeft <= 0 || nodeCount > 36) return;
-      const mid = (lo + hi) / 2;
-      const zig = (hash01(seed * 3.7 + depth) - 0.5) * (hi - lo) * 0.28;
-      let ang = mid + zig;
-      if (ang < lo) ang = lo;
-      if (ang > hi) ang = hi;
-
-      const parentR = Math.hypot(px, py);
-      const len = segLen * (0.96 + hash01(seed * 9 + depth) * 0.1);
-      let rad = parentR + len;
-      const isTip = segsLeft === 1 || rad >= rTip * 0.985 || nodeCount >= 35;
-      if (isTip) {
-        const jitter = (hash01(seed * 1.9 + depth) - 0.5) * segLen * 0.4;
-        rad = Math.min(rTip, Math.max(rad, rHub + segLen * 3.25 + jitter, rTip * 0.94));
-      } else if (rad > rTip - segLen * 0.5) {
-        rad = rTip - segLen * 0.5;
-      }
-
-      const nx = Math.cos(ang) * rad;
-      const ny = Math.sin(ang) * rad;
-
-      const tip = tips.length ? tips[tipIdx++ % tips.length] : null;
-      const id = `${cat.id}:n${seq++}`;
-      const hollow = !isTip && (depth === 2 || hash01(seed + depth) > 0.8);
-      addNode(id, isTip ? 'machine' : 'site', nx, ny, depth, isTip ? tip : null, hollow);
       outLinks.push({
-        s: prevId, t: id, color, depth, straight: true,
-        accent: depth === 1,
-        x0: px, y0: py, x1: nx, y1: ny,
+        s: cat.id, t: rootId, color, depth: 1, straight: true, accent: true,
+        x0: near.x, y0: near.y, x1: root.x, y1: root.y,
+      });
+      // Also draw near→ visually from hub: store hub as start for hit/particles
+      outLinks[outLinks.length - 1].x0 = hx;
+      outLinks[outLinks.length - 1].y0 = hy;
+
+      let px = root.x;
+      let py = root.y;
+      let prevId = rootId;
+      jobs.forEach((job, ji) => {
+        // Alternating zig — the Skilltree signature (not parallel rays)
+        const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
+        const r = rb + (jobs.length > 1 ? (ji * (Rmax - rb)) / (jobs.length - 1) : 0);
+        const p = LP(r, aC + zig);
+        const id = `${cat.id}:n${seq++}`;
+        const tip = job;
+        tipIdx += 1;
+        outNodes.push({
+          id,
+          kind: 'machine',
+          label: tip.label || '·',
+          color,
+          icon: null,
+          alert: tip.alert || null,
+          catId: cat.id,
+          x: p.x,
+          y: p.y,
+          r: 2.5,
+          depth: 2 + ji,
+          hot: !!tip.hot,
+          hollow: false,
+        });
+        outLinks.push({
+          s: prevId, t: id, color, depth: 2 + ji, straight: true, accent: false,
+          x0: px, y0: py, x1: p.x, y1: p.y,
+        });
+        px = p.x;
+        py = p.y;
+        prevId = id;
       });
 
-      if (isTip) return;
-
-      const forkRoll = hash01(seed * 13 + depth * 7);
-      const width = hi - lo;
-      let childN = 1;
-      // Only fork when the wedge is wide enough to keep tips separated
-      if (forkRoll > 0.48 && segsLeft >= 2 && width > 0.055) childN = 2;
-      if (forkRoll > 0.9 && segsLeft >= 2 && width > 0.11) childN = 3;
-
-      const pad = width * 0.06;
-      const usableW = Math.max(0.02, width - pad * 2);
-      const slice = usableW / childN;
-      for (let c = 0; c < childN; c++) {
-        const clo = lo + pad + c * slice;
-        const chi = clo + slice;
-        grow(id, nx, ny, clo, chi, segsLeft - 1, depth + 1, seed * 10 + c + 1);
-      }
-    }
-
-    // Partition hub sector into branch wedges
-    const edgePad = spanUse * 0.05;
-    const usable = spanUse - edgePad * 2;
-    const slice = usable / branchCount;
-    for (let b = 0; b < branchCount; b++) {
-      const lo = a0 + edgePad + b * slice;
-      const hi = lo + slice;
-      const segs = 2 + Math.floor(hash01(b * 5 + angle) * 3); // 2–4
-      grow(cat.id, hx, hy, lo, hi, segs, 1, b + 1);
-    }
+      cursor += span;
+    });
   }
 
-  /** Soft radial/angular nudge — angular first to avoid introducing crossings. */
-  function separateOverviewNodes(nodes) {
-    const { rHub, rTip } = overviewGeom;
-    for (let iter = 0; iter < 36; iter++) {
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i];
-          const b = nodes[j];
-          if (a.kind === 'category' || b.kind === 'category' || a.kind === 'stub' || b.kind === 'stub') continue;
-          if (a.catId !== b.catId) continue;
-          let dx = b.x - a.x;
-          let dy = b.y - a.y;
-          let dist = Math.hypot(dx, dy) || 0.001;
-          const min = a.r + b.r + 3.4;
-          if (dist >= min) continue;
-          const ra = Math.hypot(a.x, a.y) || 1;
-          const rb = Math.hypot(b.x, b.y) || 1;
-          let aa = Math.atan2(a.y, a.x);
-          let ab = Math.atan2(b.y, b.x);
-          let dAng = ((ab - aa + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-          if (Math.abs(dAng) < 1e-4) dAng = (i % 2 ? 1 : -1) * 0.02;
-          const pushAng = 0.018 * (1 - dist / min);
-          aa -= Math.sign(dAng) * pushAng;
-          ab += Math.sign(dAng) * pushAng;
-          // Slight radial offset when nearly same angle
-          let ra2 = ra;
-          let rb2 = rb;
-          if (Math.abs(dAng) < 0.04) {
-            const dr = (min - dist) * 0.35;
-            if (ra <= rb) { ra2 = Math.max(rHub + 8, ra - dr); rb2 = Math.min(rTip, rb + dr); }
-            else { rb2 = Math.max(rHub + 8, rb - dr); ra2 = Math.min(rTip, ra + dr); }
-          }
-          a.x = Math.cos(aa) * ra2;
-          a.y = Math.sin(aa) * ra2;
-          b.x = Math.cos(ab) * rb2;
-          b.y = Math.sin(ab) * rb2;
-        }
+  function syncOverviewLinks(nodes, links) {
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    links.forEach((L) => {
+      if (L.stub) return;
+      const s = byId.get(L.s);
+      const t = byId.get(L.t);
+      if (s && t) {
+        L.x0 = s.x; L.y0 = s.y; L.x1 = t.x; L.y1 = t.y;
       }
-    }
+    });
   }
 
   function rebuildOverviewLayout() {
@@ -294,15 +304,14 @@
     const nodes = [];
     const links = [];
     catLabelWorld = new Map();
-    // Narrow sectors → clear empty angular gaps between departments
-    const halfSpan = (Math.PI * 2) / CATS.length * 0.28;
+    const halfSpan = (Math.PI * 2) / CATS.length * 0.5; // unused by zig layout; kept for API compat
 
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
       buildSectorConstellation(cat, a, halfSpan, nodes, links);
       hoverAlpha[cat.id] = hoverAlpha[cat.id] ?? 1;
     });
-    // No force-separation: wedge growth is already non-crossing; nudging introduces crossings.
+    syncOverviewLinks(nodes, links);
 
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
@@ -313,7 +322,6 @@
       });
     });
 
-    // Keep link endpoints in sync after separation (draw/hits use node positions)
     const byId = new Map(nodes.map((n) => [n.id, n]));
     links.forEach((L) => {
       const s = byId.get(L.s);
