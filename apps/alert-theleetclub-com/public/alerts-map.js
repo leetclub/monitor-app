@@ -41,6 +41,9 @@
   const LOD_NODE_FULL = 3.2;
   const LOD_CAT_FADE_START = 1.45;
   const LOD_CAT_FADE_END = 2.4;
+  const SETTLE_MS = 250; // post-wheel camera settle (ref)
+  const ARROW_FADE_ZOOM = 1.2; // hide ‹ › once zoomed past ~120%
+  const MAX_VIEW_EMPTY = 0.25; // while zoomed in, ≤25% of viewport empty
   const FAN_SPAN = 182 * Math.PI / 180;
   const R0_FAN = 248;
   const R_BASE = 410;
@@ -68,6 +71,9 @@
   let flickV = 0; // px/ms EMA (ref)
   let flickT = 0;
   let wheelIdle = null;
+  let settleTimer = null;
+  let lastWheelSX = 0;
+  let lastWheelSY = 0;
   let wheelCoasting = false;
   let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
@@ -231,7 +237,8 @@
 
   /**
    * Build one department fan in LOCAL coords (hub at 0,0, outward +Y).
-   * r16: exactly 3 primary branches from subtitle groups; tips are site·machine nodes.
+   * r17: 3 subtitle groups; each group = short trunk → fork, then 2–4 job chains
+   * (r10 density ≈ 7–10 spokes / dept, straight-spoke zig-zag).
    * layoutWheel() places these on the sky dial via wheelA.
    */
   function buildSectorLocal(cat, catIndex) {
@@ -253,15 +260,24 @@
     const SPAN = (140 * Math.PI) / 180;
     const RmaxRef = 146 + 3 * 56;
     const scale = (rTip - rHub) / RmaxRef;
-    const rGroup = 72 * scale;
+    const rTrunk = 78 * scale; // short shared trunk from hub → group fork (visible cluster)
     const rStart = 110 * scale;
     const rEnd = RmaxRef * scale;
     const maxJoints = 5;
     const rstep = (rEnd - rStart) / (maxJoints - 1);
 
-    const nf = groups.length; // 3 primary branches
+    // 3 chains per group → 9 spokes (r10 density); nudge 8–10 via hash
+    const plans = groups.map((grp, gi) => ({
+      group: grp,
+      nChains: 3,
+    }));
+    let totalSpokes = 9;
+    const nudge = Math.floor(hash01(cat.id.length * 13 + catIndex * 2.1) * 3) - 1; // -1..1
+    if (nudge === 1) { plans[0].nChains = 4; totalSpokes = 10; }
+    if (nudge === -1) { plans[2].nChains = 2; totalSpokes = 8; }
+
     const tipPool = tips.slice();
-    const need = nf * 5;
+    const need = totalSpokes * 5;
     while (tipPool.length < need) {
       const srcTip = tips[tipPool.length % Math.max(1, tips.length)] || {
         id: `${cat.id}:pad`, label: '·', alert: null, hot: false, site: '',
@@ -269,62 +285,73 @@
       tipPool.push({ ...srcTip, id: `${cat.id}:pad${tipPool.length}`, label: srcTip.label || '·' });
     }
     let tipCursor = 0;
-    const chains = groups.map((grp, i) => {
-      const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + i * 3.7 + catIndex) * 3);
-      const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
-      tipCursor += nJobs;
-      return { group: grp, jobs };
-    });
+    const zigAng = Math.min((SPAN / Math.max(1, totalSpokes)) * 0.22, 0.075);
 
-    const zigAng = Math.min((SPAN / nf) * 0.22, 0.075);
+    // Even spoke angles across SPAN (r10), clustered into adjacent group slices
+    const spokeAngles = [];
+    for (let fi = 0; fi < totalSpokes; fi++) {
+      spokeAngles.push(totalSpokes === 1 ? 0 : -SPAN / 2 + (SPAN * fi) / (totalSpokes - 1));
+    }
 
-    for (let fi = 0; fi < nf; fi++) {
-      const ch = chains[fi];
-      const aC = nf === 1 ? 0 : -SPAN / 2 + (SPAN * fi) / (nf - 1);
-      // Group joint on primary spoke (LOD label anchors here)
-      const glx = rGroup * Math.sin(aC);
-      const gly = rGroup * Math.cos(aC);
-      const groupId = ch.group.id;
+    let spokeCursor = 0;
+    let chainGlobal = 0;
+    plans.forEach((plan) => {
+      const nCh = plan.nChains;
+      const slice = spokeAngles.slice(spokeCursor, spokeCursor + nCh);
+      spokeCursor += nCh;
+      const aGroup = slice.reduce((s, a) => s + a, 0) / Math.max(1, slice.length);
+      const groupId = plan.group.id;
+      const glx = rTrunk * Math.sin(aGroup);
+      const gly = rTrunk * Math.cos(aGroup);
       nodes.push({
-        id: groupId, kind: 'group', label: ch.group.label, color, icon: null,
+        id: groupId, kind: 'group', label: plan.group.label, color, icon: null,
         alert: null, catId: cat.id, lx: glx, ly: gly, r: 3.2, depth: 1,
-        hot: false, tint: true, chain: fi, morphKey: `${cat.id}:c${fi}:j0`,
-        groupLabel: ch.group.label,
+        hot: false, tint: true, chain: chainGlobal, morphKey: `${cat.id}:${groupId}:fork`,
+        groupLabel: plan.group.label,
       });
       links.push({
         s: cat.id, t: groupId, color, depth: 1, straight: true,
-        chain: fi, morphKey: `${cat.id}:L:c${fi}:j0`,
+        chain: chainGlobal, morphKey: `${cat.id}:L:${groupId}:trunk`,
       });
 
-      let prevId = groupId;
-      ch.jobs.forEach((job, ji) => {
-        const r = rStart + ji * rstep;
-        const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
-        const zig = zigAng * sign;
-        const a = aC + zig;
-        const lx = r * Math.sin(a);
-        const ly = r * Math.cos(a);
-        const id = `${cat.id}:n${seq++}`;
-        const site = job.site || '';
-        const leaf = job.label || '·';
-        const nodeLabel = site ? `${site} · ${leaf}` : leaf;
-        nodes.push({
-          id, kind: 'machine',
-          label: nodeLabel,
-          color, icon: null, alert: job.alert || null,
-          catId: cat.id, lx, ly, r: 2.0, depth: 2 + ji,
-          hot: !!job.hot, tint: ji === 0,
-          chain: fi, morphKey: `${cat.id}:c${fi}:j${ji + 1}`,
-          groupId,
+      for (let ci = 0; ci < nCh; ci++) {
+        const aC = slice[ci];
+        const fi = chainGlobal++;
+        const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + fi * 3.7 + catIndex) * 3); // 3–5
+        const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
+        tipCursor += nJobs;
+        let prevId = groupId;
+        jobs.forEach((job, ji) => {
+          const r = rStart + ji * rstep;
+          const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
+          const a = aC + zigAng * sign;
+          const lx = r * Math.sin(a);
+          const ly = r * Math.cos(a);
+          const id = `${cat.id}:n${seq++}`;
+          const site = job.site || '';
+          const leaf = job.label || '·';
+          const nodeLabel = site ? `${site} · ${leaf}` : leaf;
+          nodes.push({
+            id, kind: 'machine',
+            label: nodeLabel,
+            color, icon: null, alert: job.alert || null,
+            catId: cat.id, lx, ly, r: 2.0, depth: 2 + ji,
+            hot: !!job.hot, tint: ji === 0,
+            chain: fi, morphKey: `${cat.id}:c${fi}:j${ji + 1}`,
+            groupId,
+          });
+          links.push({
+            s: prevId, t: id, color, depth: 2 + ji, straight: true,
+            chain: fi, morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`,
+          });
+          prevId = id;
         });
-        links.push({
-          s: prevId, t: id, color, depth: 2 + ji, straight: true,
-          chain: fi, morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`,
-        });
-        prevId = id;
-      });
-    }
-    return { cat, catIndex, nodes, links, rHub, groups };
+      }
+    });
+    return {
+      cat, catIndex, nodes, links, rHub, groups,
+      spokeCount: totalSpokes,
+    };
   }
 
   /** Place local sectors onto the wheel using current wheelA (ref layoutWheel). */
@@ -477,25 +504,36 @@
       if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) tips.push(n);
     });
     const tipPool = tips.slice();
-    // Partition tips across subtitle groups (3 primary branches)
-    const per = Math.max(1, Math.ceil(tipPool.length / Math.max(1, groups.length)));
-    const chains = groups.map((grp, i) => ({
+    // r17: each group forks into 2–3 job chains (dense fan parity with overview)
+    const plans = groups.map((grp, gi) => ({
       group: grp,
-      jobs: tipPool.slice(i * per, i * per + Math.min(6, per)),
+      nChains: 2 + Math.floor(hash01(cat.id.length * 9 + gi * 4.1) * 2), // 2–3
     }));
-    chains.forEach((ch, i) => {
-      if (ch.jobs.length) return;
-      const pad = tipPool[i % Math.max(1, tipPool.length)];
-      if (pad) ch.jobs = [pad];
+    let tipCursor = 0;
+    const chainSpecs = [];
+    plans.forEach((plan) => {
+      const share = Math.max(1, Math.ceil(tipPool.length / Math.max(1, plans.length)));
+      const pool = tipPool.slice(tipCursor, tipCursor + share);
+      tipCursor += share;
+      const per = Math.max(1, Math.ceil(Math.max(pool.length, plan.nChains) / plan.nChains));
+      for (let ci = 0; ci < plan.nChains; ci++) {
+        let jobs = pool.slice(ci * per, ci * per + Math.min(5, per));
+        if (!jobs.length) {
+          const pad = tipPool[(ci + tipCursor) % Math.max(1, tipPool.length)];
+          if (pad) jobs = [pad];
+        }
+        chainSpecs.push({ group: plan.group, jobs });
+      }
     });
 
-    const totalJobs = Math.max(1, chains.reduce((s, c) => s + Math.max(1, c.jobs.length), 0));
+    const totalJobs = Math.max(1, chainSpecs.reduce((s, c) => s + Math.max(1, c.jobs.length), 0));
     const P = (r, a) => [r * Math.sin(a), -r * Math.cos(a)];
     const u = usable();
     const fit = Math.min(u.w / 1700, u.h / 1500);
     const sR0 = R0_FAN * fit;
     const sBase = R_BASE * fit;
     const sStep = R_STEP * fit;
+    const sTrunk = sR0 * 0.42;
 
     nodes.push({
       id: cat.id, kind: 'category', label: cat.label, color: cat.color, icon: cat.icon,
@@ -504,48 +542,66 @@
     });
     links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true, morphKey: `${cat.id}:L:core` });
 
+    // Place forks first (one per group), then spokes from each fork
+    const byGroup = new Map();
+    chainSpecs.forEach((ch, fi) => {
+      const list = byGroup.get(ch.group.id) || [];
+      list.push({ ch, fi });
+      byGroup.set(ch.group.id, list);
+    });
+
     let cursor = -FAN_SPAN / 2;
     let maxR = sR0;
-    chains.forEach((ch, fi) => {
-      const nJobs = Math.max(1, ch.jobs.length);
-      const span = FAN_SPAN * nJobs / totalJobs;
-      const aC = cursor + span / 2;
-      const [ex, ey] = P(sR0, aC);
-      const jointId = ch.group.id;
+    byGroup.forEach((list, groupId) => {
+      const nJobsGroup = list.reduce((s, x) => s + Math.max(1, x.ch.jobs.length), 0);
+      const groupSpan = FAN_SPAN * nJobsGroup / totalJobs;
+      const aGroup = cursor + groupSpan / 2;
+      const [ex, ey] = P(sTrunk, aGroup);
+      const grp = list[0].ch.group;
       nodes.push({
-        id: jointId, kind: 'group', label: ch.group.label, color: cat.color,
+        id: groupId, kind: 'group', label: grp.label, color: cat.color,
         icon: null, alert: null, catId: cat.id, x: ex, y: ey, r: 11,
-        depth: 1, hot: false, chain: fi, morphKey: `${cat.id}:c${fi}:j0`,
-        groupLabel: ch.group.label,
+        depth: 1, hot: false, chain: list[0].fi, morphKey: `${cat.id}:${groupId}:fork`,
+        groupLabel: grp.label,
       });
-      links.push({ s: cat.id, t: jointId, color: cat.color, depth: 1, chain: fi, morphKey: `${cat.id}:L:c${fi}:j0` });
+      links.push({
+        s: cat.id, t: groupId, color: cat.color, depth: 1, chain: list[0].fi,
+        morphKey: `${cat.id}:L:${groupId}:trunk`,
+      });
 
-      let px = ex, py = ey, prevId = jointId;
-      ch.jobs.forEach((job, ji) => {
-        const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
-        const a = aC + zig;
-        const r = sBase + ji * sStep;
-        maxR = Math.max(maxR, r);
-        const [x, y] = P(r, a);
-        const id = job.id || `${cat.id}:f${fi}n${ji}`;
-        const mk = `${cat.id}:c${fi}:j${ji + 1}`;
-        const site = job.alert?.machine?.site || job.site || '';
-        const leaf = job.label || '·';
-        nodes.push({
-          id, kind: job.kind || 'machine',
-          label: site ? `${site} · ${leaf}` : leaf,
-          color: cat.color,
-          icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
-          r: job.alert ? 7 : 6, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
-          chain: fi, morphKey: mk, groupId: jointId,
+      let inner = cursor;
+      list.forEach(({ ch, fi }) => {
+        const nJobs = Math.max(1, ch.jobs.length);
+        const span = FAN_SPAN * nJobs / totalJobs;
+        const aC = inner + span / 2;
+        let px = ex, py = ey, prevId = groupId;
+        ch.jobs.forEach((job, ji) => {
+          const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
+          const a = aC + zig;
+          const r = sBase + ji * sStep;
+          maxR = Math.max(maxR, r);
+          const [x, y] = P(r, a);
+          const id = job.id || `${cat.id}:f${fi}n${ji}`;
+          const mk = `${cat.id}:c${fi}:j${ji + 1}`;
+          const site = job.alert?.machine?.site || job.site || '';
+          const leaf = job.label || '·';
+          nodes.push({
+            id, kind: job.kind || 'machine',
+            label: site ? `${site} · ${leaf}` : leaf,
+            color: cat.color,
+            icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
+            r: job.alert ? 7 : 6, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
+            chain: fi, morphKey: mk, groupId,
+          });
+          links.push({
+            s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi,
+            morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`, x0: px, y0: py, x1: x, y1: y,
+          });
+          px = x; py = y; prevId = id;
         });
-        links.push({
-          s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi,
-          morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`, x0: px, y0: py, x1: x, y1: y,
-        });
-        px = x; py = y; prevId = id;
+        inner += span;
       });
-      cursor += span;
+      cursor += groupSpan;
     });
 
     rebuildParentIndex(links);
@@ -830,6 +886,7 @@
     const sy = u.cy;
     const next = clampZoom(zoom * (dir > 0 ? ZOOM_STEP_IN : ZOOM_STEP_OUT));
     zoomAtScreen(sx, sy, next);
+    scheduleCameraSettle(sx, sy);
     zoomIntent = 0;
     if ((mapState === 'fan' || focusCat) && dir < 0 && next <= RISE_SCALE) {
       clearFocus();
@@ -1252,49 +1309,91 @@
       }
     });
 
-    function placeLabel(want, makeEl) {
+    /**
+     * Place a DOM label with AABB cull. Groups (priority≥2) win over nodes;
+     * nodes may offset vertically once before hiding.
+     */
+    function placeLabel(want, makeEl, opts = {}) {
       if (!want || want.opacity < 0.03) return null;
-      // Rough box for overlap cull (letter-spaced labels ≈ 7px/char)
-      const w = Math.max(28, (want.text || '').length * 6.2);
-      const h = 14;
-      const box = { x: want.x - w / 2, y: want.y, w, h };
-      if (box.x < 4 || box.x + box.w > W - 4 || box.y < 48 || box.y > H - 12) return null;
-      for (let i = 0; i < placedBoxes.length; i++) {
-        if (labelBoxesOverlap(box, placedBoxes[i], 8)) return null;
+      const priority = opts.priority || 0;
+      const tryOffset = !!opts.tryOffset;
+      const charW = priority >= 2 ? 8.2 : 6.4; // group labels are letter-spaced
+      const pad = priority >= 2 ? 10 : 8;
+      const w = Math.max(28, (want.text || '').length * charW);
+      const h = priority >= 2 ? 16 : 14;
+      const dys = tryOffset ? [0, 15, -13, 28, -26] : [0];
+      for (let oi = 0; oi < dys.length; oi++) {
+        const dy = dys[oi];
+        const y = want.y + dy;
+        const box = { x: want.x - w / 2, y, w, h, priority };
+        if (box.x < 4 || box.x + box.w > W - 4 || box.y < 48 || box.y > H - 12) continue;
+        let clash = false;
+        for (let i = 0; i < placedBoxes.length; i++) {
+          const other = placedBoxes[i];
+          if (!labelBoxesOverlap(box, other, pad)) continue;
+          // Lower priority yields; equal/higher keeps the existing box
+          if (priority <= (other.priority || 0)) { clash = true; break; }
+        }
+        if (clash) continue;
+        placedBoxes.push(box);
+        const el = makeEl();
+        el.style.left = `${want.x}px`;
+        el.style.top = `${y}px`;
+        el.style.opacity = String(want.opacity);
+        el.style.visibility = 'visible';
+        el.classList.add('is-on');
+        return el;
       }
-      placedBoxes.push(box);
-      const el = makeEl();
-      el.style.left = `${want.x}px`;
-      el.style.top = `${want.y}px`;
-      el.style.opacity = String(want.opacity);
-      el.style.visibility = 'visible';
-      el.classList.add('is-on');
-      return el;
+      return null;
     }
 
-    // Sync group labels
+    // Sync group labels first (higher priority — win over node labels)
     groupLabelEls.forEach((el, id) => {
       const want = wantedGroupLabels.get(id);
       if (!want || want.opacity < 0.03) { hideDomLabel(el); wantedGroupLabels.delete(id); return; }
       el.textContent = want.text;
-      if (!placeLabel(want, () => el)) hideDomLabel(el);
+      if (!placeLabel(want, () => el, { priority: 2 })) hideDomLabel(el);
       wantedGroupLabels.delete(id);
     });
     wantedGroupLabels.forEach((want, id) => {
-      placeLabel(want, () => ensureGroupLabel(id, want.text));
+      placeLabel(want, () => ensureGroupLabel(id, want.text), { priority: 2 });
     });
 
-    // Sync node labels from current frame only (derive-or-clear; follow nodes)
+    // Sync node labels (derive-or-clear; offset then hide on clash with groups)
     nodeLabelEls.forEach((el, id) => {
       const want = wantedNodeLabels.get(id);
       if (!want || want.opacity < 0.03) { hideDomLabel(el); wantedNodeLabels.delete(id); return; }
       el.textContent = want.text;
-      if (!placeLabel(want, () => el)) hideDomLabel(el);
+      if (!placeLabel(want, () => el, { priority: 0, tryOffset: true })) hideDomLabel(el);
       wantedNodeLabels.delete(id);
     });
     wantedNodeLabels.forEach((want, id) => {
-      placeLabel(want, () => ensureNodeLabel(id, want.text));
+      placeLabel(want, () => ensureNodeLabel(id, want.text), { priority: 0, tryOffset: true });
     });
+
+    // Hard pass: real DOM rects — group labels always win over node labels
+    const groupRects = [];
+    groupLabelEls.forEach((el) => {
+      if (!el.classList.contains('is-on')) return;
+      if (Number(getComputedStyle(el).opacity) < 0.05) return;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2) return;
+      groupRects.push(r);
+    });
+    if (groupRects.length) {
+      nodeLabelEls.forEach((el) => {
+        if (!el.classList.contains('is-on')) return;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2) return;
+        for (let i = 0; i < groupRects.length; i++) {
+          const g = groupRects[i];
+          const pad = 14;
+          const overlap = !(r.right + pad < g.left || r.left - pad > g.right
+            || r.bottom + pad < g.top || r.top - pad > g.bottom);
+          if (overlap) { hideDomLabel(el); return; }
+        }
+      });
+    }
 
     // Dim core when a department is hovered (ref hub/spokes → 0.3)
     let coreDim = 1;
@@ -1308,9 +1407,9 @@
       drawCore(t);
     }
 
-    // overview category labels — outer edge; fade as LOD deepens
+    // overview category titles — fade as groups take over (clear space for group labels)
     const sidePad = 40;
-    const showCatLabels = inSky && catLod > 0.04;
+    const showCatLabels = inSky && catLod > 0.04 && groupLod < 0.88;
     CATS.forEach((cat) => {
       const el = ensureCatLabel(cat);
       if (!showCatLabels) {
@@ -1330,7 +1429,7 @@
       for (let i = 0; i < placedBoxes.length; i++) {
         if (labelBoxesOverlap(box, placedBoxes[i], 2)) { clash = true; break; }
       }
-      if (clash && zoom > LOD_GROUP_FULL) { hideDomLabel(el); return; }
+      if (clash && zoom >= LOD_GROUP_IN) { hideDomLabel(el); return; }
       placedBoxes.push(box);
       el.style.left = `${lx}px`;
       el.style.top = `${ly}px`;
@@ -1354,20 +1453,176 @@
     return `rgba(${r},${g},${b},${a})`;
   }
 
-  function clampPanSoft() {
+  function contentWorldBounds(catId = null) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let n = 0;
+    layoutNodes.forEach((node) => {
+      if (catId && node.catId !== catId) return;
+      if (node.kind === 'stub' || node.hidden) return;
+      minX = Math.min(minX, node.x);
+      maxX = Math.max(maxX, node.x);
+      minY = Math.min(minY, node.y);
+      maxY = Math.max(maxY, node.y);
+      n += 1;
+    });
+    if (!n) return null;
+    return {
+      minX, maxX, minY, maxY,
+      cx: (minX + maxX) / 2,
+      cy: (minY + maxY) / 2,
+    };
+  }
+
+  /** Nearest department cluster to the current view centre (for deep-zoom framing). */
+  function activeClusterBounds(camXRef = camX, camYRef = camY) {
+    if (zoom < LOD_GROUP_IN) return contentWorldBounds();
+    const wx = -camXRef;
+    const wy = -camYRef;
+    let bestId = null;
+    let bestD = Infinity;
+    layoutNodes.forEach((n) => {
+      if (n.kind !== 'category') return;
+      const d = (n.x - wx) * (n.x - wx) + (n.y - wy) * (n.y - wy);
+      if (d < bestD) { bestD = d; bestId = n.id; }
+    });
+    return contentWorldBounds(bestId) || contentWorldBounds();
+  }
+
+  /**
+   * Largest empty edge band as a fraction of the usable viewport.
+   * Catches “jammed to the top / bottom half empty” (r16 stills) better than
+   * raw AABB coverage (fans are sparse rectangles).
+   */
+  function viewportEmptyRatio(cam = null) {
+    const cx = cam ? cam.x : camX;
+    const cy = cam ? cam.y : camY;
+    const bb = activeClusterBounds(cx, cy);
+    if (!bb) return 1;
+    const u = usable();
+    const sMinX = u.cx + (bb.minX + cx) * zoom;
+    const sMaxX = u.cx + (bb.maxX + cx) * zoom;
+    const sMinY = u.cy + (bb.minY + cy) * zoom;
+    const sMaxY = u.cy + (bb.maxY + cy) * zoom;
+    const gapTop = Math.max(0, sMinY - u.y) / u.h;
+    const gapBot = Math.max(0, (u.y + u.h) - sMaxY) / u.h;
+    const gapLeft = Math.max(0, sMinX - u.x) / u.w;
+    const gapRight = Math.max(0, (u.x + u.w) - sMaxX) / u.w;
+    return Math.max(gapTop, gapBot, gapLeft, gapRight);
+  }
+
+  function clampPanToContent() {
     if (mapState === 'diving' || mapState === 'rising') return;
-    // Deep sky zoom needs wide pan so a department can fill the frame
-    if (!focusCat && mapState === 'sky') {
-      const M = 60 + Math.max(0, zoom - 1) * 320;
+    if (focusCat || mapState === 'fan') {
+      const M = 420;
+      tCamX = Math.max(-M, Math.min(M, tCamX));
+      tCamY = Math.max(-M, Math.min(M, tCamY));
+      return;
+    }
+    if (mapState !== 'sky' && mapState !== 'aligning') return;
+
+    if (zoom <= 1.15) {
+      const M = 80;
       tCamX = Math.max(-M, Math.min(M, tCamX));
       tCamY = Math.max(-M, Math.min(M, tCamY));
       camX = Math.max(-M, Math.min(M, camX));
       camY = Math.max(-M, Math.min(M, camY));
       return;
     }
-    const M = 420;
+
+    const bb = activeClusterBounds(tCamX, tCamY);
+    if (!bb) return;
+    const u = usable();
+    const viewCX = u.cx;
+    const viewCY = u.y + u.h * 0.45;
+    for (let iter = 0; iter < 6; iter++) {
+      if (viewportEmptyRatio({ x: tCamX, y: tCamY }) <= MAX_VIEW_EMPTY) break;
+      const sMinX = u.cx + (bb.minX + tCamX) * zoom;
+      const sMaxX = u.cx + (bb.maxX + tCamX) * zoom;
+      const sMinY = u.cy + (bb.minY + tCamY) * zoom;
+      const sMaxY = u.cy + (bb.maxY + tCamY) * zoom;
+      const cCX = (sMinX + sMaxX) / 2;
+      const cCY = (sMinY + sMaxY) / 2;
+      tCamX += (viewCX - cCX) / zoom * 0.95;
+      tCamY += (viewCY - cCY) / zoom * 0.95;
+    }
+    const M = 40 + Math.max(0, zoom - 1) * 280;
     tCamX = Math.max(-M, Math.min(M, tCamX));
     tCamY = Math.max(-M, Math.min(M, tCamY));
+    camX = Math.max(-M, Math.min(M, camX));
+    camY = Math.max(-M, Math.min(M, camY));
+  }
+
+  function clampPanSoft() {
+    clampPanToContent();
+  }
+
+  /** After wheel idle: ease pan so the nearest department fan fills the frame. */
+  function settleCameraTowardCluster(sx, sy) {
+    if (mapState !== 'sky' || focusCat || morph) return;
+    if (zoom < LOD_GROUP_IN) return;
+    const u = usable();
+    const wx = (sx - u.cx) / Math.max(zoom, 1e-6) - camX;
+    const wy = (sy - u.cy) / Math.max(zoom, 1e-6) - camY;
+    let bestId = null;
+    let bestD = Infinity;
+    layoutNodes.forEach((n) => {
+      if (n.kind !== 'category') return;
+      const d = (n.x - wx) * (n.x - wx) + (n.y - wy) * (n.y - wy);
+      if (d < bestD) { bestD = d; bestId = n.id; }
+    });
+    if (!bestId) return;
+    const hub = layoutNodes.find((n) => n.id === bestId && n.kind === 'category');
+    if (!hub) return;
+    // Focus along hub → tips so the fan opens across the viewport (not void behind hub)
+    let tipX = 0, tipY = 0, tipN = 0;
+    layoutNodes.forEach((n) => {
+      if (n.catId !== bestId || n.kind !== 'machine') return;
+      tipX += n.x; tipY += n.y; tipN += 1;
+    });
+    // Park the hub on the near side of the viewport so the fan opens across the frame
+    const outLen = Math.hypot(hub.x, hub.y) || 1;
+    const ox = hub.x / outLen;
+    const oy = hub.y / outLen;
+    // world outward → screen: +worldY is +screenY; top hub has oy≈-1 → push hub down
+    const wantHubSX = u.cx - ox * u.w * 0.02;
+    // Push hub toward the near edge (~78–82% along outward-opposite) so the fan fills the frame
+    const wantHubSY = Math.max(u.y + u.h * 0.18, Math.min(u.y + u.h * 0.82, u.cy - oy * u.h * 0.40));
+    tCamX = (wantHubSX - u.cx) / zoom - hub.x;
+    tCamY = (wantHubSY - u.cy) / zoom - hub.y;
+    clampPanToContent();
+    camX = tCamX;
+    camY = tCamY;
+  }
+
+  function scheduleCameraSettle(sx, sy) {
+    lastWheelSX = sx;
+    lastWheelSY = sy;
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleCameraTowardCluster(lastWheelSX, lastWheelSY);
+    }, SETTLE_MS);
+  }
+
+  function syncWchevOpacity() {
+    const elL = document.getElementById('wchev-l');
+    const elR = document.getElementById('wchev-r');
+    if (!elL || !elR) return;
+    let op = 0;
+    if (mapState === 'sky' && !focusCat && !morph) {
+      // 1.0 → full; fade out by ARROW_FADE_ZOOM (~120%)
+      op = zoom <= 1
+        ? 1
+        : Math.max(0, Math.min(1, (ARROW_FADE_ZOOM - zoom) / Math.max(1e-6, ARROW_FADE_ZOOM - 1)));
+    }
+    const hide = op < 0.05;
+    const pe = hide ? 'none' : 'auto';
+    elL.style.opacity = String(op);
+    elR.style.opacity = String(op);
+    elL.style.visibility = hide ? 'hidden' : 'visible';
+    elR.style.visibility = hide ? 'hidden' : 'visible';
+    elL.style.pointerEvents = pe;
+    elR.style.pointerEvents = pe;
+    document.body.classList.toggle('wchev-hidden', hide);
   }
 
   function zoomAtScreen(clientX, clientY, nextZoom) {
@@ -1375,7 +1630,6 @@
     const ox = u.cx;
     const oy = u.cy;
     const zn = clampZoom(nextZoom);
-    const k = zn / Math.max(zoom, 1e-6);
     // Keep world point under cursor stable (zoom-to-cursor)
     const wx = (clientX - ox) / zoom - camX;
     const wy = (clientY - oy) / zoom - camY;
@@ -1385,6 +1639,7 @@
     camY = (clientY - oy) / zn - wy;
     tCamX = camX;
     tCamY = camY;
+    clampPanToContent();
   }
 
   function tick(ts) {
@@ -1484,6 +1739,7 @@
     }
     clampPanSoft();
     syncZoomPct();
+    syncWchevOpacity();
 
     if (viewMode === 'map') {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2036,6 +2292,7 @@
 
     const zn = clampZoom(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
     zoomAtScreen(lx, ly, zn);
+    scheduleCameraSettle(lx, ly);
 
     // Fan: zooming out past floor still rises (Escape/back parity)
     if ((mapState === 'fan' || focusCat) && e.deltaY > 0 && zn <= RISE_SCALE) {
@@ -2204,10 +2461,11 @@
       DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
       Z_FAN_MIN, Z_FAN_MAX, Z_SKY_MIN, Z_SKY_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
       LOD_GROUP_IN, LOD_GROUP_FULL, LOD_NODE_IN, LOD_NODE_FULL,
+      SETTLE_MS, ARROW_FADE_ZOOM, MAX_VIEW_EMPTY,
       plainWheelZooms: true, scrollNeverRotatesDial: true,
       DIVE_ALIGN_MS, DIVE_MORPH_MS, DIVE_SWAP_MS: DIVE_MORPH_MS, RISE_MS, W_STEP, N,
       WHEEL_FRICTION, FLICK_THRESH, fanInertia: false, skyDial: true, morphDive: true,
-      dialCoast: true,
+      dialCoast: true, cameraSettle: true, denseGroupForks: true,
     }),
     getMorphProgress: () => (morph ? morphProgress() : (mapState === 'fan' || mapState === 'sky' ? (mapState === 'fan' ? 1 : 0) : 0)),
     getMapState: () => mapState,
@@ -2274,8 +2532,9 @@
       const inSky = !focusCat && !morph && (mapState === 'sky' || mapState === 'aligning');
       const inFan = !!(focusCat || mapState === 'fan') && !morph;
       const catLod = inSky ? (1 - lodAlpha(zoom, LOD_CAT_FADE_START, LOD_CAT_FADE_END)) : 0;
-      const allowCat = catLod > 0.04;
-      const allowGroup = (inSky && lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL) > 0.02) || inFan;
+      const groupLodNow = inSky ? lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL) : (inFan ? 1 : 0);
+      const allowCat = catLod > 0.04 && groupLodNow < 0.88;
+      const allowGroup = (inSky && groupLodNow > 0.02) || inFan;
       const allowNode = (inSky && lodAlpha(zoom, LOD_NODE_IN, LOD_NODE_FULL) > 0.02) || inFan;
       labelLayer.querySelectorAll('.cat-label').forEach((el) => {
         const st = getComputedStyle(el);
@@ -2329,6 +2588,16 @@
         }
       }
       return hits;
+    },
+    viewportEmptyRatio: () => viewportEmptyRatio(),
+    overviewSpokeCount: (catId) => {
+      const sec = sectorLocal.find((s) => s.cat.id === catId);
+      return sec ? sec.spokeCount : 0;
+    },
+    settleNow: () => settleCameraTowardCluster(lastWheelSX || W / 2, lastWheelSY || H / 2),
+    wchevOpacity: () => {
+      const el = document.getElementById('wchev-l');
+      return el ? Number(getComputedStyle(el).opacity) : 0;
     },
     /** Hub distance / viewport height (target ~0.17–0.20). */
     hubRadiusRatio: () => {

@@ -291,7 +291,8 @@ body.transitioning .map-controls { opacity: 0.55; }
 .wchev svg { width: 15px; height: 25px; display: block; margin: 0 auto; }
 .wchev:hover { color: rgba(242, 239, 232, 0.95); }
 body.fanmode .wchev,
-body.transitioning .wchev { opacity: 0; pointer-events: none; }
+body.transitioning .wchev,
+body.wchev-hidden .wchev { opacity: 0; pointer-events: none; }
 #wchev-l { left: calc(50% - 215px); }
 #wchev-r { right: calc(50% - 215px); }
 body.transitioning #alerts-canvas,
