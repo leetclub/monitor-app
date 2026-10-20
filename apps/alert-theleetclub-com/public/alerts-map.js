@@ -42,7 +42,7 @@
   const nodeLabelEls = new Map();
 
   let catLabelWorld = new Map(); // catId → {x,y}
-  let overviewGeom = { rHub: 140, rTip: 380, rLabel: 430, fill: 0.84 };
+  let overviewGeom = { rHub: 120, rTip: 360, rLabel: 400, rCore: 60 };
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -69,16 +69,17 @@
     };
   }
 
-  /** Responsive overview radii so map+labels fill ~82–85% of the shorter viewport side. */
+  /**
+   * Skilltree radii (world ≈ screen px at zoom 1):
+   * core ~8% min(vw,vh), hubs 22–25% of label R, tips 85–90% of label R.
+   */
   function computeOverviewGeom() {
-    const u = usable();
-    const fill = 0.825;
-    const halfScreen = Math.min(u.w, u.h) * fill * 0.5;
-    // World units ≈ screen px at zoom 1; rLabel sits at the outer fill radius
-    const rLabel = halfScreen;
-    const rTip = rLabel * 0.86;
-    const rHub = rTip * 0.35;
-    overviewGeom = { rHub, rTip, rLabel, fill };
+    const m = Math.min(W, H);
+    const rLabel = m * 0.455;
+    const rTip = rLabel * 0.88;
+    const rHub = rLabel * 0.24;
+    const rCore = m * 0.08;
+    overviewGeom = { rHub, rTip, rLabel, rCore };
     return overviewGeom;
   }
 
@@ -92,132 +93,181 @@
     return node.children.reduce((s, c) => s + leafWeight(c), 0);
   }
 
-  function sizeForKind(kind) {
-    // Screen-ish radii at zoom≈1: category ~22px diameter → r≈11
-    if (kind === 'category') return 11;
-    if (kind === 'subtype') return 7.5;
-    if (kind === 'area') return 2.4;
-    if (kind === 'site') return 2.2;
-    if (kind === 'machine') return 1.85;
-    return 2.5;
-  }
-
-  /**
-   * Long zig-zag constellation: parent-relative edges reaching toward rTip.
-   */
-  function placeConstellation(root, px, py, angle, halfSpan, depth, color, outNodes, outLinks, parent = null, idx = 0) {
+  /** One sector: hub + 8–15 zig-zag crystal branches reaching rTip. */
+  function buildSectorConstellation(cat, angle, halfSpan, outNodes, outLinks) {
     const { rHub, rTip } = overviewGeom;
-    const reach = Math.max(80, rTip - rHub);
-    // Longer outward segments so forks fill the sector to the outer edge
-    const edgeByDepth = [
-      0,
-      reach * 0.34,
-      reach * 0.28,
-      reach * 0.22,
-      reach * 0.16,
-    ];
-    const edge = edgeByDepth[Math.min(depth, edgeByDepth.length - 1)] || reach * 0.12;
-    const side = (idx % 2 === 0 ? 1 : -1);
-    const zig = depth === 0 ? 0
-      : side * (depth === 1 ? reach * 0.04 : depth === 2 ? reach * 0.055 : reach * 0.04)
-        + Math.sin(angle * 5.2 + depth * 2.1) * (depth >= 2 ? reach * 0.03 : reach * 0.015);
-    const nx = -Math.sin(angle);
-    const ny = Math.cos(angle);
-    const x = depth === 0 ? px : px + Math.cos(angle) * edge + nx * zig;
-    const y = depth === 0 ? py : py + Math.sin(angle) * edge + ny * zig;
-    const catId = root.catId || (root.kind === 'category' ? root.id : parent?.catId);
-    const node = {
-      id: root.id,
-      kind: root.kind,
-      label: root.label,
-      color,
-      icon: root.icon,
-      alert: root.alert || null,
-      catId,
-      x,
-      y,
-      r: sizeForKind(root.kind),
-      depth,
-      hot: !!(root.hot || (root.alert && root.alert.hot)),
-      count: root.count || 0,
-    };
-    outNodes.push(node);
-    if (parent) outLinks.push({ s: parent.id, t: node.id, color, depth });
+    const color = cat.color;
+    const ov = cat.overviewTree || {};
+    const tips = ov.tips || [];
+    const subtypes = ov.subtypes || [];
 
-    const kids = root.children || [];
-    if (!kids.length) return;
-    const weights = kids.map(leafWeight);
-    const total = weights.reduce((a, b) => a + b, 0) || 1;
-    const usableSpan = halfSpan * 2 * (depth >= 2 ? 0.98 : 0.9);
-    let cursor = angle - usableSpan / 2;
-    kids.forEach((child, i) => {
-      const span = usableSpan * (weights[i] / total);
-      const mid = cursor + span / 2;
-      // Fork: pull machine tips slightly more outward along parent ray
-      const childHalf = Math.max(0.028, span * (child.kind === 'machine' ? 0.42 : 0.46));
-      placeConstellation(
-        { ...child, catId, icon: child.kind === 'subtype' ? root.icon : child.icon },
-        x, y, mid, childHalf, depth + 1, color, outNodes, outLinks, node, i
-      );
-      cursor += span;
+    const hx = Math.cos(angle) * rHub;
+    const hy = Math.sin(angle) * rHub;
+    outNodes.push({
+      id: cat.id,
+      kind: 'category',
+      label: cat.label,
+      color,
+      icon: cat.icon,
+      alert: null,
+      catId: cat.id,
+      x: hx,
+      y: hy,
+      r: 11,
+      depth: 0,
+      hot: false,
     });
+    outLinks.push({
+      s: '__core__', t: cat.id, color, depth: 0, spine: true, straight: true,
+    });
+
+    // Optional subtype markers just outside the hub along the sector
+    subtypes.forEach((sub, si) => {
+      const t = subtypes.length === 1 ? 0.5 : si / (subtypes.length - 1);
+      const a = angle - halfSpan * 0.55 + t * halfSpan * 1.1;
+      const rr = rHub + (rTip - rHub) * 0.18;
+      outNodes.push({
+        id: sub.id,
+        kind: 'subtype',
+        label: sub.label,
+        color,
+        icon: cat.icon,
+        alert: null,
+        catId: cat.id,
+        x: Math.cos(a) * rr,
+        y: Math.sin(a) * rr,
+        r: 7.2,
+        depth: 1,
+        hot: false,
+      });
+      outLinks.push({
+        s: cat.id, t: sub.id, color, depth: 1, straight: true,
+      });
+    });
+
+    const branchCount = Math.max(8, Math.min(15, Math.max(tips.length, 10)));
+    const spanUse = halfSpan * 1.72;
+
+    for (let b = 0; b < branchCount; b++) {
+      const t = branchCount === 1 ? 0.5 : b / (branchCount - 1);
+      const branchAng = angle - spanUse / 2 + t * spanUse;
+      const segs = 2 + (b % 3); // 2–4 segments
+      const tipR = rTip * (0.97 + (b % 4) * 0.008); // sit on tip ring (~85–90% of label R)
+      let prevId = cat.id;
+      let prevX = hx;
+      let prevY = hy;
+      // Start from a subtype if available (connect visual hub→rule→fork)
+      if (subtypes.length) {
+        prevId = subtypes[b % subtypes.length].id;
+        const sn = outNodes.find((n) => n.id === prevId);
+        if (sn) { prevX = sn.x; prevY = sn.y; }
+      }
+
+      for (let s = 1; s <= segs; s++) {
+        const u = s / segs;
+        const baseR = rHub + (tipR - rHub) * (subtypes.length ? 0.22 + u * 0.78 : u);
+        const zigScale = (rTip - rHub) * (0.045 + u * 0.03);
+        const side = ((b + s) % 2 === 0 ? 1 : -1);
+        const zig = side * zigScale * (0.55 + 0.45 * Math.sin(b * 2.3 + s * 1.7));
+        const nx = -Math.sin(branchAng);
+        const ny = Math.cos(branchAng);
+        // Slight angle drift for crystal look
+        const ang = branchAng + side * 0.04 * (1 - u) * Math.sin(b + s);
+        const x = Math.cos(ang) * baseR + nx * zig;
+        const y = Math.sin(ang) * baseR + ny * zig;
+        const isTip = s === segs;
+        const tip = tips.length ? tips[b % tips.length] : null;
+        const id = isTip && tip ? `${tip.id}:b${b}` : `${cat.id}:br${b}:j${s}`;
+        outNodes.push({
+          id,
+          kind: isTip ? 'machine' : 'site',
+          label: isTip ? (tip?.label || '·') : '·',
+          color,
+          icon: null,
+          alert: isTip ? (tip?.alert || null) : null,
+          catId: cat.id,
+          x,
+          y,
+          r: isTip ? 2.35 : 1.5, // ~4.7px tip / 3px junction at zoom 1
+          depth: s + 1,
+          hot: !!(isTip && tip && tip.hot),
+        });
+        outLinks.push({
+          s: prevId, t: id, color, depth: s + 1, straight: true,
+          x0: prevX, y0: prevY, x1: x, y1: y,
+        });
+        prevId = id;
+        prevX = x;
+        prevY = y;
+      }
+
+      // Fork once or twice on alternating branches
+      if (b % 2 === 0) {
+        const forkFrom = prevId;
+        const midX = prevX;
+        const midY = prevY;
+        const forkAng = branchAng + (b % 4 === 0 ? 0.09 : -0.09);
+        const forkR = tipR * 0.97;
+        const fx = Math.cos(forkAng) * forkR;
+        const fy = Math.sin(forkAng) * forkR;
+        const tip = tips.length ? tips[(b + 3) % tips.length] : null;
+        const fid = tip ? `${tip.id}:fork${b}` : `${cat.id}:fork${b}`;
+        outNodes.push({
+          id: fid,
+          kind: 'machine',
+          label: tip?.label || '·',
+          color,
+          icon: null,
+          alert: tip?.alert || null,
+          catId: cat.id,
+          x: fx,
+          y: fy,
+          r: 2.35,
+          depth: 5,
+          hot: !!(tip && tip.hot),
+        });
+        outLinks.push({
+          s: forkFrom, t: fid, color, depth: 5, straight: true,
+          x0: midX, y0: midY, x1: fx, y1: fy,
+        });
+      }
+    }
   }
 
-  /** Push overlapping overview nodes apart along forks (min gap >= radii). */
+  /** Keep dots from overlapping; preserve radial reach (push sideways). */
   function separateOverviewNodes(nodes) {
-    for (let iter = 0; iter < 70; iter++) {
+    for (let iter = 0; iter < 55; iter++) {
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i];
           const b = nodes[j];
-          if (a.kind === 'category' && b.kind === 'category') continue;
+          if (a.kind === 'category' || b.kind === 'category') {
+            if (a.kind === 'category' && b.kind === 'category') continue;
+          }
           let dx = b.x - a.x;
           let dy = b.y - a.y;
           let dist = Math.hypot(dx, dy) || 0.001;
-          const air = (a.kind === 'machine' || b.kind === 'machine')
-            ? 3.2
-            : (a.kind === 'site' || b.kind === 'site') ? 4.5 : 6.5;
+          const air = (a.kind === 'machine' || b.kind === 'machine') ? 2.8
+            : (a.kind === 'subtype' || b.kind === 'subtype') ? 5 : 3.2;
           const min = a.r + b.r + air;
           if (dist >= min) continue;
           const push = (min - dist) / 2;
           dx /= dist;
           dy /= dist;
-          if (a.kind !== 'category') { a.x -= dx * push; a.y -= dy * push; }
-          if (b.kind !== 'category') { b.x += dx * push; b.y += dy * push; }
+          // Prefer tangential push so tips stay near rTip
+          if (a.kind !== 'category' && a.kind !== 'subtype') {
+            a.x -= dx * push;
+            a.y -= dy * push;
+          }
+          if (b.kind !== 'category' && b.kind !== 'subtype') {
+            b.x += dx * push;
+            b.y += dy * push;
+          }
         }
       }
     }
   }
 
-  /** Fit so map + outer labels fill ~82–85% of the shorter usable side. */
-  function fitOverviewCamera(nodes, labelPts) {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    nodes.forEach((n) => {
-      minX = Math.min(minX, n.x - n.r);
-      maxX = Math.max(maxX, n.x + n.r);
-      minY = Math.min(minY, n.y - n.r);
-      maxY = Math.max(maxY, n.y + n.r);
-    });
-    labelPts.forEach((p) => {
-      minX = Math.min(minX, p.x - 55);
-      maxX = Math.max(maxX, p.x + 55);
-      minY = Math.min(minY, p.y - 32);
-      maxY = Math.max(maxY, p.y + 32);
-    });
-    const bw = Math.max(80, maxX - minX);
-    const bh = Math.max(80, maxY - minY);
-    const u = usable();
-    const fill = overviewGeom.fill || 0.84;
-    const kz = Math.min((u.w * fill) / bw, (u.h * fill) / bh);
-    targetZoom = Math.max(0.55, Math.min(1.35, kz));
-    zoom = targetZoom;
-    tCamX = -((minX + maxX) / 2);
-    tCamY = -((minY + maxY) / 2);
-    camX = tCamX;
-    camY = tCamY;
-  }
-
-  /** Push category labels out until their screen AABB clears every node circle. */
   function resolveCatLabelClearance(nodes) {
     const z = Math.max(0.5, zoom);
     CATS.forEach((cat) => {
@@ -225,9 +275,9 @@
       if (!wp) return;
       const a = wp.a;
       let lr = Math.hypot(wp.x, wp.y);
-      const halfW = 105 / z;
-      const halfH = 24 / z;
-      for (let guard = 0; guard < 50; guard++) {
+      const halfW = 100 / z;
+      const halfH = 22 / z;
+      for (let guard = 0; guard < 40; guard++) {
         const lx = Math.cos(a) * lr;
         const ly = Math.sin(a) * lr;
         let hit = false;
@@ -235,10 +285,10 @@
           const n = nodes[i];
           const cx = Math.max(lx - halfW, Math.min(n.x, lx + halfW));
           const cy = Math.max(ly - halfH, Math.min(n.y, ly + halfH));
-          if (Math.hypot(n.x - cx, n.y - cy) < n.r + 2.5) { hit = true; break; }
+          if (Math.hypot(n.x - cx, n.y - cy) < n.r + 3) { hit = true; break; }
         }
         if (!hit) break;
-        lr += 8;
+        lr += 6;
       }
       catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
     });
@@ -249,75 +299,83 @@
     const nodes = [];
     const links = [];
     catLabelWorld = new Map();
-    CATS.forEach((cat, i) => {
-      const a = (i / CATS.length) * Math.PI * 2 + rot;
-      const hx = Math.cos(a) * g.rHub;
-      const hy = Math.sin(a) * g.rHub;
-      const tree = { ...(cat.overviewTree || cat.tree), icon: cat.icon, catId: cat.id };
-      const wedge = (Math.PI * 2) / CATS.length * 0.4;
-      placeConstellation(tree, hx, hy, a, wedge, 0, cat.color, nodes, links, null, i);
-      links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true });
-    });
-    separateOverviewNodes(nodes);
-
-    // Pull tips outward toward rTip so branches read as long reaching forks
-    nodes.forEach((n) => {
-      if (n.kind !== 'machine' && n.kind !== 'site') return;
-      const dist = Math.hypot(n.x, n.y) || 1;
-      const target = n.kind === 'machine' ? g.rTip * (0.92 + (n.depth % 3) * 0.02) : g.rTip * 0.78;
-      if (dist < target * 0.72) {
-        const s = (target * 0.85) / dist;
-        n.x *= s;
-        n.y *= s;
-      }
-    });
-    separateOverviewNodes(nodes);
+    const halfSpan = (Math.PI * 2) / CATS.length * 0.42;
 
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
-      const catNodes = nodes.filter((n) => n.catId === cat.id);
-      let maxR = g.rHub;
-      catNodes.forEach((n) => { maxR = Math.max(maxR, Math.hypot(n.x, n.y)); });
-      let lr = Math.max(g.rLabel, maxR + 36);
-      for (let guard = 0; guard < 28; guard++) {
-        const lx = Math.cos(a) * lr;
-        const ly = Math.sin(a) * lr;
-        let hit = false;
-        for (let k = 0; k < catNodes.length; k++) {
-          const n = catNodes[k];
-          if (Math.hypot(n.x - lx, n.y - ly) < n.r + 34) { hit = true; break; }
+      buildSectorConstellation(cat, a, halfSpan, nodes, links);
+    });
+    // Keep radial structure: project tips onto tip ring, junctions onto mid band
+    function projectRadial() {
+      nodes.forEach((n, i) => {
+        if (n.kind === 'category' || n.kind === 'subtype') return;
+        const ang = Math.atan2(n.y, n.x);
+        if (n.kind === 'machine') {
+          // rTip is already ~0.88×rLabel; keep tips on that ring
+          const target = g.rTip * (0.98 + (i % 5) * 0.004);
+          n.x = Math.cos(ang) * target;
+          n.y = Math.sin(ang) * target;
+        } else if (n.kind === 'site') {
+          const u = Math.min(0.82, Math.max(0.30, (n.depth || 2) / 5));
+          const target = g.rHub + (g.rTip - g.rHub) * u;
+          n.x = Math.cos(ang) * target;
+          n.y = Math.sin(ang) * target;
         }
-        if (!hit) break;
-        lr += 7;
+      });
+    }
+
+    projectRadial();
+    separateOverviewNodes(nodes);
+    projectRadial();
+    // Light tangential-only pass so tips stay on the ring
+    for (let iter = 0; iter < 30; iter++) {
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i];
+          const b = nodes[j];
+          if (a.kind === 'category' || b.kind === 'category') continue;
+          if (a.kind !== 'machine' && a.kind !== 'site') continue;
+          if (b.kind !== 'machine' && b.kind !== 'site') continue;
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy) || 0.001;
+          const min = a.r + b.r + 2.6;
+          if (dist >= min) continue;
+          const midAng = Math.atan2((a.y + b.y) / 2, (a.x + b.x) / 2);
+          const tx = -Math.sin(midAng);
+          const ty = Math.cos(midAng);
+          const push = (min - dist) / 2;
+          a.x -= tx * push;
+          a.y -= ty * push;
+          b.x += tx * push;
+          b.y += ty * push;
+        }
       }
-      catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
+      projectRadial();
+    }
+
+    CATS.forEach((cat, i) => {
+      const a = (i / CATS.length) * Math.PI * 2 + rot;
+      // Labels just outside the tip ring (fixed design radius)
+      catLabelWorld.set(cat.id, {
+        x: Math.cos(a) * g.rLabel,
+        y: Math.sin(a) * g.rLabel,
+        a,
+      });
     });
 
     layoutNodes = nodes;
     layoutLinks = links;
     if (!focusCat) {
-      fitOverviewCamera(nodes, [...catLabelWorld.values()]);
+      zoom = 1;
+      targetZoom = 1;
+      camX = 0;
+      camY = 0;
+      tCamX = 0;
+      tCamY = 0;
+      // Only nudge labels outward a little if a tip still clips them
       resolveCatLabelClearance(nodes);
-      fitOverviewCamera(nodes, [...catLabelWorld.values()]);
-      resolveCatLabelClearance(nodes);
-      // Final zoom so nodes+labels span ~82–85% of the shorter side
-      enforceOverviewFill(nodes);
     }
-  }
-
-  function enforceOverviewFill(nodes) {
-    let maxR = 0;
-    nodes.forEach((n) => { maxR = Math.max(maxR, Math.hypot(n.x, n.y) + n.r); });
-    catLabelWorld.forEach((p) => { maxR = Math.max(maxR, Math.hypot(p.x, p.y) + 42); });
-    if (maxR < 40) return;
-    // Match mapFillRatio: span vs full viewport shorter side
-    const targetHalf = Math.min(W, H) * 0.445; // → diameter ≈ 84–89% of shorter side
-    targetZoom = Math.max(0.5, Math.min(1.5, targetHalf / maxR));
-    zoom = targetZoom;
-    tCamX = 0;
-    tCamY = 0;
-    camX = 0;
-    camY = 0;
   }
 
   /** Focus: core at top, full category tree growing downward filling the usable canvas. */
@@ -496,23 +554,24 @@
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
-    if (!coreDust.length || coreDust._gen !== 4) {
+    const coreR = focusCat ? 70 : (overviewGeom.rCore || Math.min(W, H) * 0.08);
+    if (!coreDust.length || coreDust._gen !== 5) {
       coreDust.length = 0;
-      coreDust._gen = 4;
-      for (let i = 0; i < 320; i++) {
+      coreDust._gen = 5;
+      for (let i = 0; i < 280; i++) {
         const ring = Math.random();
         coreDust.push({
           a: Math.random() * Math.PI * 2,
-          r: ring < 0.55 ? 10 + Math.random() * 48 : 40 + Math.random() * 78,
+          r: ring < 0.55 ? coreR * (0.15 + Math.random() * 0.45) : coreR * (0.45 + Math.random() * 0.55),
           s: 0.1 + Math.random() * 0.5,
           hue: Math.random(),
-          size: 0.5 + Math.random() * 1.35,
+          size: 0.55 + Math.random() * 1.4,
         });
       }
     }
-    const scale = (focusCat ? 1.35 : 1.2) * Math.min(1.45, 0.95 + zoom * 0.25);
-    const bloomR = 175 * scale;
-    const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, bloomR);
+    const scale = focusCat ? 1.2 : zoom;
+    const bloomR = coreR * scale;
+    const g = ctx.createRadialGradient(p.x, p.y, 3, p.x, p.y, bloomR);
     g.addColorStop(0, 'rgba(255,255,255,0.55)');
     g.addColorStop(0.18, 'rgba(196,181,253,0.36)');
     g.addColorStop(0.42, 'rgba(94,234,212,0.14)');
@@ -528,7 +587,7 @@
       const rad = d.r * scale * (0.9 + 0.1 * Math.sin(t * 0.85 + i * 0.45));
       const x = p.x + Math.cos(ang) * rad;
       const y = p.y + Math.sin(ang * 1.05) * rad * 0.9;
-      if (Math.hypot(x - p.x, y - p.y) < 26 * scale) return;
+      if (Math.hypot(x - p.x, y - p.y) < Math.min(22, bloomR * 0.28)) return;
       const col = d.hue < 0.3
         ? `rgba(255,255,255,${0.3 + d.s * 0.35})`
         : d.hue < 0.55
@@ -604,15 +663,31 @@
       if (focusCat && L.s !== '__core__' && !nodeMap.has(L.s) && L.s !== focusCat) return;
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
+      if (!focusCat && L.straight) {
+        // Accent near hub → soft white/grey toward tips; clearly visible 1–1.5px
+        const grad = ctx.createLinearGradient(a0.x, a0.y, a1.x, a1.y);
+        const near = L.spine || L.depth <= 1;
+        if (near) {
+          grad.addColorStop(0, hexAlpha(L.color || '#fff', L.spine ? 0.85 : 0.72));
+          grad.addColorStop(1, 'rgba(228,228,231,0.62)');
+        } else {
+          grad.addColorStop(0, hexAlpha(L.color || '#fff', 0.55));
+          grad.addColorStop(1, 'rgba(212,212,216,0.58)');
+        }
+        ctx.beginPath();
+        ctx.moveTo(a0.x, a0.y);
+        ctx.lineTo(a1.x, a1.y);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = L.spine ? 1.5 : (L.depth <= 2 ? 1.25 : 1.05);
+        ctx.stroke();
+        return;
+      }
       const c = curvePts(a0.x, a0.y, a1.x, a1.y);
-      const alpha = focusCat
-        ? 0.55
-        : (L.spine ? 0.42 : Math.max(0.14, 0.32 - (L.depth || 0) * 0.06));
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(L.color || '#fff', alpha);
-      ctx.lineWidth = L.spine ? 1.55 : Math.max(0.55, 1.15 - (L.depth || 0) * 0.18);
+      ctx.strokeStyle = hexAlpha(L.color || '#fff', focusCat ? 0.55 : 0.4);
+      ctx.lineWidth = L.spine ? 1.55 : 1.1;
       ctx.stroke();
     });
 
@@ -664,16 +739,15 @@
       const isCat = n.kind === 'category';
       const isHub = isCat || n.kind === 'subtype';
       let r = (n.r + (selected ? 1.5 : 0)) * zScale;
-      if (!focusCat && n.kind === 'machine') r = Math.max(1.5, Math.min(2.1, 1.8 * zScale)); // 3–4px tip
-      if (!focusCat && n.kind === 'site') r = Math.max(1.3, Math.min(1.8, 1.5 * zScale)); // tiny junction
-      if (!focusCat && n.kind === 'area') r = Math.max(1.4, Math.min(2.0, 1.6 * zScale));
-      if (!focusCat && isCat) r = Math.max(10.5, 11 * zScale); // ~22px diameter
+      if (!focusCat && n.kind === 'machine') r = 2.35 * zScale; // ~4.7px tip
+      if (!focusCat && n.kind === 'site') r = 1.5 * zScale; // 3px junction
+      if (!focusCat && isCat) r = 11 * zScale; // ~22px diameter
 
-      if (!focusCat && (n.kind === 'machine' || n.kind === 'site' || n.kind === 'area')) {
+      if (!focusCat && (n.kind === 'machine' || n.kind === 'site')) {
         ctx.beginPath();
         ctx.fillStyle = n.hot
-          ? hexAlpha(n.color, n.kind === 'machine' ? 0.95 : 0.75)
-          : (n.kind === 'machine' ? 'rgba(250,250,252,0.9)' : 'rgba(228,228,231,0.55)');
+          ? hexAlpha(n.color, n.kind === 'machine' ? 0.95 : 0.7)
+          : (n.kind === 'machine' ? 'rgba(250,250,252,0.92)' : 'rgba(228,228,231,0.7)');
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
       } else if (isHub) {
@@ -1104,26 +1178,58 @@
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
     waitForIdle: () => new Promise((r) => setTimeout(r, 480)),
     setIdleSpin: (on) => { idleSpin = !!on; },
-    /** Radial fill: 2× max distance from canvas center of nodes/labels ÷ shorter side. */
+    /**
+     * Drawing fill (excludes labels): bbox height of visible links + leaf dots
+     * divided by viewport height. Target ≥ 0.70.
+     */
     mapFillRatio: () => {
-      const u = usable();
-      const cx = u.cx;
-      const cy = u.cy;
-      let maxD = 0;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let minX = Infinity;
+      let maxX = -Infinity;
+      const mark = (x, y, pad = 2) => {
+        minX = Math.min(minX, x - pad);
+        maxX = Math.max(maxX, x + pad);
+        minY = Math.min(minY, y - pad);
+        maxY = Math.max(maxY, y + pad);
+      };
       hitNodes.forEach((h) => {
-        if (h.kind === 'core') return;
-        maxD = Math.max(maxD, Math.hypot(h.x - cx, h.y - cy) + (h.vr || 0));
+        if (h.kind === 'core' || h.kind === 'category') return;
+        // leaf / junction / subtype dots that form the drawing
+        if (h.kind === 'alert' || h.kind === 'site' || h.kind === 'machine' || h.ref?.kind === 'site'
+          || h.ref?.kind === 'machine' || h.ref?.kind === 'subtype') {
+          mark(h.x, h.y, h.vr || 2);
+        }
       });
-      labelLayer.querySelectorAll('.cat-label').forEach((el) => {
-        if (Number(getComputedStyle(el).opacity) < 0.15) return;
-        const r = el.getBoundingClientRect();
-        const cr = canvas.getBoundingClientRect();
-        const lx = r.left - cr.left + r.width / 2;
-        const ly = r.top - cr.top + r.height / 2;
-        maxD = Math.max(maxD, Math.hypot(lx - cx, ly - cy) + r.height / 2);
-      });
-      if (maxD <= 0) return 0;
-      return (maxD * 2) / Math.min(W, H);
+      // Link endpoints from overview layout (screen space)
+      if (!focusCat) {
+        layoutLinks.forEach((L) => {
+          const s = L.s === '__core__' ? { x: 0, y: 0 } : layoutNodes.find((n) => n.id === L.s);
+          const t = layoutNodes.find((n) => n.id === L.t);
+          if (!s || !t) return;
+          const a0 = worldToScreen(s.x, s.y);
+          const a1 = worldToScreen(t.x, t.y);
+          mark(a0.x, a0.y, 1);
+          mark(a1.x, a1.y, 1);
+        });
+      }
+      if (!Number.isFinite(minY)) return 0;
+      return (maxY - minY) / H;
+    },
+    /** Hub distance as fraction of design label radius (~0.22–0.25). */
+    hubRadiusRatio: () => {
+      const hub = layoutNodes.find((n) => n.kind === 'category');
+      const lr = overviewGeom.rLabel || 1;
+      if (!hub) return 0;
+      return Math.hypot(hub.x, hub.y) / lr;
+    },
+    /** Mean tip distance as fraction of design label radius (~0.85–0.90). */
+    tipRadiusRatio: () => {
+      const tips = layoutNodes.filter((n) => n.kind === 'machine');
+      const lr = overviewGeom.rLabel || 1;
+      if (!tips.length) return 0;
+      const avg = tips.reduce((s, n) => s + Math.hypot(n.x, n.y), 0) / tips.length;
+      return avg / lr;
     },
     visibleNodeCount: () => visibleScreenNodes().length,
     labeledNodeCount: () => [...labelLayer.querySelectorAll('.node-label.is-on')].filter((el) => {

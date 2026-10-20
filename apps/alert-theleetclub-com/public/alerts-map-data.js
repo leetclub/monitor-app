@@ -284,51 +284,34 @@
   }
 
   /**
-   * Overview tree: category → rule → site (junction) → machine tips.
-   * Caps fan-out so long constellation forks stay spaced.
+   * Overview payloads: subtype icons + flat tip list (machines) for constellation forks.
    */
   function toOverviewTree(fullTree) {
-    function mapSite(siteNode) {
-      const machines = siteNode.children || [];
-      const tips = machines.slice(0, 3).map((m) => ({
-        id: `${m.id}:ov`,
-        kind: 'machine',
-        label: m.label,
-        alert: m.alert || null,
-        hot: !!(m.alert && m.alert.hot),
-        children: [],
-      }));
-      const hotAlert = machines.find((m) => m.alert && m.alert.hot)?.alert || null;
-      return {
-        id: `${siteNode.id}:ov`,
-        kind: 'site',
-        label: siteNode.label,
-        count: machines.length,
-        alert: hotAlert || machines[0]?.alert || null,
-        hot: !!hotAlert,
-        children: tips,
-      };
-    }
-
-    function mapSubtype(sub) {
-      const sites = [];
-      (sub.children || []).forEach((area) => {
-        (area.children || []).forEach((site) => {
-          sites.push(mapSite(site));
-        });
-      });
-      const capped = sites.length > 4 ? sites.slice(0, 4) : sites;
-      return {
+    const tips = [];
+    const subtypes = [];
+    (fullTree.children || []).forEach((sub) => {
+      subtypes.push({
         id: sub.id,
         kind: 'subtype',
         label: sub.label,
         subtypeId: sub.subtypeId,
         icon: sub.icon,
-        children: capped,
-      };
-    }
-
-    const subs = (fullTree.children || []).map(mapSubtype).slice(0, 4);
+      });
+      (sub.children || []).forEach((area) => {
+        (area.children || []).forEach((site) => {
+          (site.children || []).forEach((m) => {
+            tips.push({
+              id: `${m.id}:ov`,
+              kind: 'machine',
+              label: m.label,
+              alert: m.alert || null,
+              hot: !!(m.alert && m.alert.hot),
+              site: site.label,
+            });
+          });
+        });
+      });
+    });
     return {
       id: fullTree.id,
       kind: 'category',
@@ -337,7 +320,9 @@
       color: fullTree.color,
       icon: fullTree.icon,
       action: fullTree.action,
-      children: subs,
+      subtypes: subtypes.slice(0, 4),
+      tips,
+      children: [], // geometry built in the map engine
     };
   }
 
