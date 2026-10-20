@@ -41,7 +41,9 @@
   const labelEls = new Map();
   const nodeLabelEls = new Map();
 
-  const R_HUB = 155;
+  const R_HUB = 118;
+  const LABEL_PAD = 72;
+  let catLabelWorld = new Map(); // catId → {x,y}
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -78,12 +80,23 @@
     return node.children.reduce((s, c) => s + leafWeight(c), 0);
   }
 
-  /** Place a tree in a radial wedge outward from (ox,oy) along baseAngle. */
-  function placeRadialTree(root, ox, oy, baseAngle, halfSpan, depth0, color, outNodes, outLinks, parent = null) {
-    const depth = depth0;
-    const rByDepth = [0, 52, 88, 118, 148, 178];
-    const rad = (rByDepth[Math.min(depth, rByDepth.length - 1)] || (178 + (depth - 5) * 22));
-    const sizeByKind = { category: 17, subtype: 12, area: 9, site: 7.5, machine: 6 };
+  const SIZE_OV = { category: 15, subtype: 10.5, area: 4.2, site: 3.6, machine: 3.2 };
+
+  /**
+   * Parent-relative constellation placement (not concentric rings from hub).
+   * Each child grows outward from its parent within an angular sector.
+   */
+  function placeConstellation(root, px, py, angle, halfSpan, depth, color, outNodes, outLinks, parent = null) {
+    const edgeByDepth = [0, 50, 40, 36, 32];
+    const edge = edgeByDepth[Math.min(depth, edgeByDepth.length - 1)] || 30;
+    // Stronger lateral jitter so fans read as zig-zag constellations, not arcs
+    const jitter = depth === 0 ? 0 : Math.sin(depth * 2.7 + angle * 6.1) * (depth >= 2 ? 11 : 5)
+      + Math.cos(angle * 3.1 + depth) * (depth >= 2 ? 4 : 1.5);
+    const nx = -Math.sin(angle);
+    const ny = Math.cos(angle);
+    const x = depth === 0 ? px : px + Math.cos(angle) * edge + nx * jitter;
+    const y = depth === 0 ? py : py + Math.sin(angle) * edge + ny * jitter;
+    const catId = root.catId || (root.kind === 'category' ? root.id : parent?.catId);
     const node = {
       id: root.id,
       kind: root.kind,
@@ -91,14 +104,14 @@
       color,
       icon: root.icon,
       alert: root.alert || null,
-      catId: root.catId || (root.kind === 'category' ? root.id : parent?.catId),
-      x: ox + Math.cos(baseAngle) * rad,
-      y: oy + Math.sin(baseAngle) * rad,
-      r: sizeByKind[root.kind] || 6,
+      catId,
+      x,
+      y,
+      r: SIZE_OV[root.kind] || 3.5,
       depth,
-      hot: !!(root.alert && root.alert.hot),
+      hot: !!(root.hot || (root.alert && root.alert.hot)),
+      count: root.count || 0,
     };
-    if (depth === 0) { node.x = ox; node.y = oy; }
     outNodes.push(node);
     if (parent) outLinks.push({ s: parent.id, t: node.id, color, depth });
 
@@ -106,34 +119,151 @@
     if (!kids.length) return;
     const weights = kids.map(leafWeight);
     const total = weights.reduce((a, b) => a + b, 0) || 1;
-    let cursor = baseAngle - halfSpan;
+    // Leave breathing room between sibling fans
+    const usableSpan = halfSpan * 2 * 0.92;
+    let cursor = angle - usableSpan / 2;
     kids.forEach((child, i) => {
-      const span = halfSpan * 2 * (weights[i] / total);
+      const span = usableSpan * (weights[i] / total);
       const mid = cursor + span / 2;
-      const childHalf = Math.max(0.04, span * 0.48);
-      placeRadialTree(
-        { ...child, catId: node.catId, icon: child.kind === 'subtype' ? root.icon : child.icon },
-        ox, oy, mid, childHalf, depth + 1, color, outNodes, outLinks, node
+      const childHalf = Math.max(0.035, span * 0.46);
+      placeConstellation(
+        { ...child, catId, icon: child.kind === 'subtype' ? root.icon : child.icon },
+        x, y, mid, childHalf, depth + 1, color, outNodes, outLinks, node
       );
       cursor += span;
+    });
+  }
+
+  /** Push overlapping overview nodes apart (min gap >= sum of radii + air). */
+  function separateOverviewNodes(nodes) {
+    for (let iter = 0; iter < 60; iter++) {
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i];
+          const b = nodes[j];
+          if (a.kind === 'category' && b.kind === 'category') continue;
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          let dist = Math.hypot(dx, dy) || 0.001;
+          const air = (a.kind === 'subtype' || b.kind === 'subtype') ? 7 : 9;
+          const min = a.r + b.r + air;
+          if (dist >= min) continue;
+          const push = (min - dist) / 2;
+          dx /= dist;
+          dy /= dist;
+          if (a.kind !== 'category') { a.x -= dx * push; a.y -= dy * push; }
+          if (b.kind !== 'category') { b.x += dx * push; b.y += dy * push; }
+        }
+      }
+    }
+  }
+
+  function fitOverviewCamera(nodes, labelPts) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.forEach((n) => {
+      minX = Math.min(minX, n.x - n.r);
+      maxX = Math.max(maxX, n.x + n.r);
+      minY = Math.min(minY, n.y - n.r);
+      maxY = Math.max(maxY, n.y + n.r);
+    });
+    labelPts.forEach((p) => {
+      minX = Math.min(minX, p.x - 40);
+      maxX = Math.max(maxX, p.x + 40);
+      minY = Math.min(minY, p.y - 28);
+      maxY = Math.max(maxY, p.y + 28);
+    });
+    minX = Math.min(minX, -24);
+    maxX = Math.max(maxX, 24);
+    minY = Math.min(minY, -24);
+    maxY = Math.max(maxY, 24);
+    const bw = maxX - minX;
+    const bh = maxY - minY;
+    const u = usable();
+    const kz = Math.min((u.w * 0.86) / bw, (u.h * 0.84) / bh);
+    targetZoom = Math.max(0.68, Math.min(1.02, kz));
+    zoom = targetZoom;
+    tCamX = -((minX + maxX) / 2);
+    tCamY = -((minY + maxY) / 2);
+    camX = tCamX;
+    camY = tCamY;
+  }
+
+  /** Push category labels out until their screen AABB clears every node circle. */
+  function resolveCatLabelClearance(nodes) {
+    const z = Math.max(0.5, zoom);
+    CATS.forEach((cat) => {
+      const wp = catLabelWorld.get(cat.id);
+      if (!wp) return;
+      const a = wp.a;
+      let lr = Math.hypot(wp.x, wp.y);
+      const halfW = 100 / z;
+      const halfH = 22 / z;
+      for (let guard = 0; guard < 40; guard++) {
+        const lx = Math.cos(a) * lr;
+        const ly = Math.sin(a) * lr;
+        let hit = false;
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          // circle vs label AABB in world space
+          const cx = Math.max(lx - halfW, Math.min(n.x, lx + halfW));
+          const cy = Math.max(ly - halfH, Math.min(n.y, ly + halfH));
+          if (Math.hypot(n.x - cx, n.y - cy) < n.r + 2) { hit = true; break; }
+        }
+        if (!hit) break;
+        lr += 7;
+      }
+      catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
     });
   }
 
   function rebuildOverviewLayout() {
     const nodes = [];
     const links = [];
+    catLabelWorld = new Map();
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
       const hx = Math.cos(a) * R_HUB;
       const hy = Math.sin(a) * R_HUB;
-      const tree = { ...cat.tree, icon: cat.icon, catId: cat.id };
-      const wedge = (Math.PI * 2) / CATS.length * 0.42;
-      placeRadialTree(tree, hx, hy, a, wedge, 0, cat.color, nodes, links, null);
-      // spine from core to category hub
+      const tree = { ...(cat.overviewTree || cat.tree), icon: cat.icon, catId: cat.id };
+      const wedge = (Math.PI * 2) / CATS.length * 0.38;
+      placeConstellation(tree, hx, hy, a, wedge, 0, cat.color, nodes, links, null);
       links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true });
     });
+    separateOverviewNodes(nodes);
+
+    // Category labels at OUTER edge of each sector (beyond farthest node)
+    CATS.forEach((cat, i) => {
+      const a = (i / CATS.length) * Math.PI * 2 + rot;
+      const catNodes = nodes.filter((n) => n.catId === cat.id);
+      let maxR = R_HUB;
+      catNodes.forEach((n) => {
+        maxR = Math.max(maxR, Math.hypot(n.x, n.y));
+      });
+      let lr = maxR + LABEL_PAD;
+      // Keep label clear of every node in this sector (world-space approx)
+      for (let guard = 0; guard < 24; guard++) {
+        const lx = Math.cos(a) * lr;
+        const ly = Math.sin(a) * lr;
+        let hit = false;
+        for (let k = 0; k < catNodes.length; k++) {
+          const n = catNodes[k];
+          if (Math.hypot(n.x - lx, n.y - ly) < n.r + 30) { hit = true; break; }
+        }
+        if (!hit) break;
+        lr += 6;
+      }
+      catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
+    });
+
     layoutNodes = nodes;
     layoutLinks = links;
+    if (!focusCat) {
+      fitOverviewCamera(nodes, [...catLabelWorld.values()]);
+      resolveCatLabelClearance(nodes);
+      // Refit once labels moved outward
+      fitOverviewCamera(nodes, [...catLabelWorld.values()]);
+      resolveCatLabelClearance(nodes);
+    }
   }
 
   /** Focus: core at top, full category tree growing downward filling the usable canvas. */
@@ -234,13 +364,14 @@
       el = document.createElement('div');
       el.className = 'cat-label';
       el.dataset.id = cat.id;
-      el.innerHTML = `<div class="name"></div><div class="sub"></div>`;
+      el.innerHTML = `<div class="name"></div><div class="accent"></div><div class="sub"></div>`;
       labelLayer.appendChild(el);
       labelEls.set(cat.id, el);
     }
     el.querySelector('.name').textContent = cat.label;
     el.querySelector('.sub').textContent = cat.subtitle;
-    el.style.color = cat.color;
+    el.querySelector('.accent').style.background = cat.color;
+    el.style.color = '#f4f4f5';
     return el;
   }
 
@@ -295,54 +426,63 @@
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
     if (!coreDust.length) {
-      for (let i = 0; i < 260; i++) {
+      for (let i = 0; i < 180; i++) {
         const ring = Math.random();
         coreDust.push({
           a: Math.random() * Math.PI * 2,
-          r: ring < 0.55 ? 4 + Math.random() * 28 : 22 + Math.random() * 58,
-          s: 0.15 + Math.random() * 0.95,
+          r: ring < 0.6 ? 6 + Math.random() * 26 : 24 + Math.random() * 42,
+          s: 0.12 + Math.random() * 0.55,
           hue: Math.random(),
-          size: 0.7 + Math.random() * (ring < 0.55 ? 2.4 : 1.6),
+          size: 0.45 + Math.random() * 1.15,
         });
       }
     }
-    const scale = (focusCat ? 1.35 : 1.2) * Math.min(1.55, 0.95 + zoom * 0.28);
-    // soft bloom — large dense "brain"
-    const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 110 * scale);
-    g.addColorStop(0, 'rgba(255,255,255,0.62)');
-    g.addColorStop(0.18, 'rgba(196,181,253,0.42)');
-    g.addColorStop(0.42, 'rgba(94,234,212,0.16)');
-    g.addColorStop(0.7, 'rgba(244,114,182,0.08)');
+    const scale = (focusCat ? 1.25 : 1.05) * Math.min(1.35, 0.92 + zoom * 0.22);
+    const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 88 * scale);
+    g.addColorStop(0, 'rgba(255,255,255,0.48)');
+    g.addColorStop(0.22, 'rgba(196,181,253,0.28)');
+    g.addColorStop(0.5, 'rgba(94,234,212,0.1)');
     g.addColorStop(1, 'rgba(37,36,59,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 112 * scale, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 90 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     coreDust.forEach((d, i) => {
-      const ang = d.a + t * 0.12 * d.s;
-      const rad = d.r * scale * (0.82 + 0.18 * Math.sin(t * 1.35 + i * 0.7));
+      const ang = d.a + t * 0.06 * d.s;
+      const rad = d.r * scale * (0.9 + 0.1 * Math.sin(t * 0.9 + i * 0.5));
       const x = p.x + Math.cos(ang) * rad;
-      const y = p.y + Math.sin(ang * 1.08) * rad * 0.9;
-      const col = d.hue < 0.28
-        ? `rgba(255,255,255,${0.4 + d.s * 0.45})`
-        : d.hue < 0.52
-          ? `rgba(196,181,253,${0.32 + d.s * 0.4})`
-          : d.hue < 0.78
-            ? `rgba(94,234,212,${0.28 + d.s * 0.38})`
-            : `rgba(251,113,133,${0.22 + d.s * 0.3})`;
+      const y = p.y + Math.sin(ang * 1.05) * rad * 0.9;
+      // Keep a clear disc around the wordmark
+      if (Math.hypot(x - p.x, y - p.y) < 22 * scale) return;
+      const col = d.hue < 0.3
+        ? `rgba(255,255,255,${0.28 + d.s * 0.35})`
+        : d.hue < 0.55
+          ? `rgba(196,181,253,${0.22 + d.s * 0.3})`
+          : d.hue < 0.8
+            ? `rgba(94,234,212,${0.18 + d.s * 0.28})`
+            : `rgba(251,113,133,${0.16 + d.s * 0.22})`;
       ctx.beginPath();
       ctx.fillStyle = col;
       ctx.arc(x, y, d.size * scale, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    ctx.fillStyle = 'rgba(244,244,245,0.96)';
-    ctx.font = `600 ${Math.max(13, 15 * scale)}px Inter, sans-serif`;
+    // Crisp wordmark on top with dark halo
+    const fs = Math.max(13, 15 * scale);
+    ctx.font = `600 ${fs}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineWidth = 6 * scale;
+    ctx.strokeStyle = 'rgba(20, 19, 34, 0.95)';
+    ctx.lineJoin = 'round';
+    ctx.strokeText('leet', p.x, p.y);
+    ctx.lineWidth = 2.5 * scale;
+    ctx.strokeStyle = 'rgba(37, 36, 59, 0.9)';
+    ctx.strokeText('leet', p.x, p.y);
+    ctx.fillStyle = 'rgba(252,252,254,0.99)';
     ctx.fillText('leet', p.x, p.y);
-    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 48 * scale });
+    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 36 * scale, vr: 36 * scale });
   }
 
   function curvePts(x0, y0, x1, y1) {
@@ -392,12 +532,14 @@
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
       const c = curvePts(a0.x, a0.y, a1.x, a1.y);
-      const alpha = focusCat ? 0.55 : (L.spine ? 0.45 : 0.28 + (5 - Math.min(L.depth || 0, 5)) * 0.05);
+      const alpha = focusCat
+        ? 0.55
+        : (L.spine ? 0.42 : Math.max(0.14, 0.32 - (L.depth || 0) * 0.06));
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
       ctx.strokeStyle = hexAlpha(L.color || '#fff', alpha);
-      ctx.lineWidth = L.spine ? 1.7 : Math.max(0.7, 1.4 - (L.depth || 0) * 0.15);
+      ctx.lineWidth = L.spine ? 1.55 : Math.max(0.55, 1.15 - (L.depth || 0) * 0.18);
       ctx.stroke();
     });
 
@@ -440,29 +582,49 @@
 
     // nodes
     const showLabels = !!focusCat;
+    const zScale = Math.min(1.25, 0.92 + zoom * 0.18);
     nodes.forEach((n) => {
       if (focusCat && n.catId && n.catId !== focusCat) return;
       const p = worldToScreen(n.x, n.y);
       if (p.x < -60 || p.x > W + 60 || p.y < -60 || p.y > H + 60) return;
       const selected = selectedAlert && n.alert && selectedAlert.id === n.alert.id;
-      const r = (n.r + (selected ? 2.5 : 0)) * Math.min(1.35, 0.9 + zoom * 0.2);
-      const dim = (!focusCat && n.kind === 'machine' && !n.hot) ? 0.55 : 1;
+      const isHub = n.kind === 'category' || n.kind === 'subtype';
+      const isLeaf = n.kind === 'site' || n.kind === 'machine' || n.kind === 'area';
+      let r = (n.r + (selected ? 2 : 0)) * zScale;
+      if (!focusCat && isLeaf) r = Math.max(2.6, Math.min(4.2, n.r * zScale));
 
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(24,24,27,${0.88 * dim})`;
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = n.kind === 'category' || n.kind === 'subtype' ? 2.1 : 1.4;
-      ctx.strokeStyle = hexAlpha(n.color, (n.hot || n.kind !== 'machine' ? 0.95 : 0.55) * dim);
-      ctx.stroke();
-
-      if (n.kind === 'category' || n.kind === 'subtype') {
-        drawIcon(p.x, p.y, n.icon || 'unknown', n.color, dim, n.kind === 'category' ? 1 : 0.85);
-      } else if (n.hot) {
+      if (!focusCat && isLeaf) {
+        // Overview leaves: small solid soft-white / accent dots (Skilltree)
         ctx.beginPath();
-        ctx.fillStyle = hexAlpha(n.color, 0.9);
-        ctx.arc(p.x, p.y, Math.max(1.6, r * 0.35), 0, Math.PI * 2);
+        ctx.fillStyle = n.hot
+          ? hexAlpha(n.color, 0.95)
+          : 'rgba(250, 250, 252, 0.88)';
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
+      } else if (isHub) {
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(24,24,27,0.9)';
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = n.kind === 'category' ? 2.1 : 1.7;
+        ctx.strokeStyle = hexAlpha(n.color, 0.95);
+        ctx.stroke();
+        drawIcon(p.x, p.y, n.icon || 'unknown', n.color, 1, n.kind === 'category' ? 1 : 0.82);
+      } else {
+        // Focus mid/leaf nodes — outlined rings
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(24,24,27,0.88)';
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 1.35;
+        ctx.strokeStyle = hexAlpha(n.color, n.hot ? 0.95 : 0.55);
+        ctx.stroke();
+        if (n.hot) {
+          ctx.beginPath();
+          ctx.fillStyle = hexAlpha(n.color, 0.9);
+          ctx.arc(p.x, p.y, Math.max(1.5, r * 0.35), 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       hitNodes.push({
@@ -470,13 +632,14 @@
         kind: n.kind === 'category' ? 'category' : (n.alert ? 'alert' : n.kind),
         x: p.x,
         y: p.y,
-        r: r + 7,
+        r: r + 6,
+        vr: r,
         ref: n,
       });
 
       const labelOn = showLabels && (n.kind !== 'machine' || n.hot || n.depth <= 4);
       if (n.kind === 'category' && !focusCat) {
-        // overview category titles outside hub
+        // overview category titles placed separately at outer edge
       } else if (labelOn) {
         const el = ensureNodeLabel(n.id, n.label);
         el.style.left = `${p.x}px`;
@@ -495,27 +658,20 @@
 
     drawCore(t);
 
-    // overview category labels
-    CATS.forEach((cat, i) => {
+    // overview category labels — outer edge, white, never on nodes
+    CATS.forEach((cat) => {
       const el = ensureCatLabel(cat);
       if (focusCat) {
         el.style.opacity = '0';
         return;
       }
-      const a = (i / CATS.length) * Math.PI * 2 + rot;
-      const lx = Math.cos(a) * (R_HUB + 78);
-      const ly = Math.sin(a) * (R_HUB + 78);
-      const p = worldToScreen(lx, ly);
+      const wp = catLabelWorld.get(cat.id);
+      if (!wp) { el.style.opacity = '0'; return; }
+      const p = worldToScreen(wp.x, wp.y);
       el.style.left = `${p.x}px`;
       el.style.top = `${p.y}px`;
       el.style.opacity = '1';
-      el.querySelector('.name').style.color = cat.color;
     });
-
-    // keep focused content inside usable area (soft clip only for overflow right of panel)
-    if (panelOpen || coreOpen) {
-      // already framed via usable(); no undrawn grey strip on the right
-    }
   }
 
   function hexAlpha(hex, a) {
@@ -855,6 +1011,7 @@
     closeCore: () => closeCore(),
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
     waitForIdle: () => new Promise((r) => setTimeout(r, 480)),
+    setIdleSpin: (on) => { idleSpin = !!on; },
     visibleNodeCount: () => visibleScreenNodes().length,
     labeledNodeCount: () => [...labelLayer.querySelectorAll('.node-label.is-on')].filter((el) => {
       const st = getComputedStyle(el);
@@ -881,15 +1038,49 @@
       return boxes;
     },
     labelCollisions: () => {
-      const boxes = window.LEET_ALERTS_MAP.labelBoxes();
+      // Backward-compatible alias: label↔label + label↔node + node↔node
+      return window.LEET_ALERTS_MAP.nodeOverlaps() + window.LEET_ALERTS_MAP.labelNodeOverlaps();
+    },
+    /** Screen-space circle overlaps between drawn nodes (uses visual radius). */
+    nodeOverlaps: () => {
+      const ns = hitNodes.filter((h) => h.kind !== 'core' && h.vr > 0);
       let hits = 0;
-      for (let i = 0; i < boxes.length; i++) {
-        for (let j = i + 1; j < boxes.length; j++) {
-          const a = boxes[i], b = boxes[j];
-          const pad = 1;
-          if (a.x < b.x + b.w - pad && a.x + a.w > b.x + pad && a.y < b.y + b.h - pad && a.y + a.h > b.y + pad) hits += 1;
+      for (let i = 0; i < ns.length; i++) {
+        for (let j = i + 1; j < ns.length; j++) {
+          const a = ns[i], b = ns[j];
+          const min = (a.vr || a.r) + (b.vr || b.r) - 0.35;
+          if (Math.hypot(a.x - b.x, a.y - b.y) < min) hits += 1;
         }
       }
+      return hits;
+    },
+    /** Category/node label boxes intersecting node circles in screen space. */
+    labelNodeOverlaps: () => {
+      const labels = [];
+      labelLayer.querySelectorAll('.cat-label, .node-label.is-on').forEach((el) => {
+        const st = getComputedStyle(el);
+        if (st.display === 'none' || Number(st.opacity) < 0.15) return;
+        const r = el.getBoundingClientRect();
+        const cr = canvas.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        labels.push({
+          x: r.left - cr.left,
+          y: r.top - cr.top,
+          w: r.width,
+          h: r.height,
+        });
+      });
+      const ns = hitNodes.filter((h) => h.kind !== 'core' && h.vr > 0);
+      let hits = 0;
+      labels.forEach((box) => {
+        ns.forEach((n) => {
+          const vr = n.vr || n.r;
+          // circle vs AABB
+          const cx = Math.max(box.x, Math.min(n.x, box.x + box.w));
+          const cy = Math.max(box.y, Math.min(n.y, box.y + box.h));
+          if (Math.hypot(n.x - cx, n.y - cy) < vr + 1) hits += 1;
+        });
+      });
       return hits;
     },
     panelClearance: () => {

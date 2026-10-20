@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Leet Alerts map acceptance (round 2): density, focus labels, viewport, panels.
+ * Leet Alerts map acceptance (round 3): constellation overview, real overlaps, focus.
  */
 import { chromium } from 'playwright';
 
@@ -14,27 +14,31 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const notes = [];
 
-await page.goto(`${BASE}/alerts.html?r2=2`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-await page.evaluate(async () => {
-  // Avoid stale module cache during local iteration.
-  if (window.LEET_ALERTS_MAP) return;
-});
+await page.goto(`${BASE}/alerts.html?r3=3`, { waitUntil: 'domcontentloaded', timeout: 20000 });
 await page.waitForFunction(() => window.__LEET_ALERTS_READY__ && window.LEET_ALERTS_MAP, null, { timeout: 15000 });
-await page.waitForTimeout(600);
+await page.evaluate(() => window.LEET_ALERTS_MAP.setIdleSpin(false));
+await page.waitForTimeout(700);
 
 const snap = await page.evaluate(() => window.LEET_ALERTS_MAP.getCounters());
 if (snap.totalNodes < 60) fail(`snapshot nodes ${snap.totalNodes} < 60`);
-notes.push(`snapshot nodes=${snap.totalNodes} open=${snap.open} machines=${snap.machines}`);
+notes.push(`snapshot fullNodes=${snap.totalNodes} open=${snap.open} machines=${snap.machines}`);
+
+// Force a paint so hitNodes / labels are current
+await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+await page.waitForTimeout(200);
 
 const overview = await page.evaluate(() => ({
   visible: window.LEET_ALERTS_MAP.visibleNodeCount(),
+  nodeOverlaps: window.LEET_ALERTS_MAP.nodeOverlaps(),
+  labelNodeOverlaps: window.LEET_ALERTS_MAP.labelNodeOverlaps(),
   collisions: window.LEET_ALERTS_MAP.labelCollisions(),
   overflow: window.LEET_ALERTS_MAP.viewportOverflow(),
 }));
 if (overview.visible < 60) fail(`overview visible nodes ${overview.visible} < 60`);
-if (overview.collisions > 4) fail(`overview label collisions ${overview.collisions}`);
+if (overview.nodeOverlaps > 0) fail(`overview node↔node overlaps ${overview.nodeOverlaps}`);
+if (overview.labelNodeOverlaps > 0) fail(`overview label↔node overlaps ${overview.labelNodeOverlaps}`);
 if (overview.overflow > 0) fail(`viewport overflow elements ${overview.overflow}`);
-notes.push(`overview visible=${overview.visible} collisions=${overview.collisions}`);
+notes.push(`overview visible=${overview.visible} nodeOverlaps=${overview.nodeOverlaps} labelNode=${overview.labelNodeOverlaps}`);
 
 await page.evaluate(async () => {
   window.LEET_ALERTS_MAP.focusCategory('offline');
@@ -69,7 +73,6 @@ const panel = await page.evaluate(() => {
     open: window.LEET_ALERTS_MAP.getFocus().panelOpen,
     ladder: /DETECTED|ACKNOWLEDGED|IN PROGRESS|RESOLVED/i.test(body),
     impact: /KWD/i.test(body),
-    clearance: window.LEET_ALERTS_MAP.panelClearance(),
     overflow: window.LEET_ALERTS_MAP.viewportOverflow(),
   };
 });
@@ -103,13 +106,20 @@ await page.evaluate(async () => {
   await window.LEET_ALERTS_MAP.waitForIdle();
 });
 await page.waitForTimeout(400);
+await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 const restored = await page.evaluate(() => {
   const f = window.LEET_ALERTS_MAP.getFocus();
   const t = window.LEET_ALERTS_MAP.getTransform();
-  return { ...f, zoom: t.zoom, visible: window.LEET_ALERTS_MAP.visibleNodeCount() };
+  return {
+    ...f,
+    zoom: t.zoom,
+    visible: window.LEET_ALERTS_MAP.visibleNodeCount(),
+    nodeOverlaps: window.LEET_ALERTS_MAP.nodeOverlaps(),
+  };
 });
 if (restored.categoryId || restored.panelOpen || restored.coreOpen) fail('focus not restored');
 if (restored.visible < 60) fail(`restored visible ${restored.visible}`);
+if (restored.nodeOverlaps > 0) fail(`restored node overlaps ${restored.nodeOverlaps}`);
 notes.push('restore ok');
 
 console.log('leet-alerts OK');

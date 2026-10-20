@@ -283,6 +283,60 @@
     };
   }
 
+  /**
+   * Overview tree: category → rule → site leaves (machines aggregated with counts).
+   * Keeps ~15–30 nodes per branch so the map can space like Skilltree.
+   */
+  function toOverviewTree(fullTree) {
+    function siteLeaf(siteNode) {
+      const machines = siteNode.children || [];
+      const hotAlert = machines.find((m) => m.alert && m.alert.hot)?.alert || null;
+      const anyAlert = hotAlert || machines[0]?.alert || null;
+      const n = machines.length;
+      return {
+        id: `${siteNode.id}:ov`,
+        kind: 'site',
+        label: n > 1 ? `${siteNode.label} · ${n}` : siteNode.label,
+        count: n,
+        alert: anyAlert,
+        hot: !!hotAlert,
+        children: [],
+      };
+    }
+
+    function mapSubtype(sub) {
+      const sites = [];
+      (sub.children || []).forEach((area) => {
+        (area.children || []).forEach((site) => {
+          sites.push(siteLeaf(site));
+        });
+      });
+      // Cap fan-out per rule so overview stays airy (~Skilltree density)
+      const capped = sites.length > 4 ? sites.slice(0, 4) : sites;
+      return {
+        id: sub.id,
+        kind: 'subtype',
+        label: sub.label,
+        subtypeId: sub.subtypeId,
+        icon: sub.icon,
+        children: capped,
+      };
+    }
+
+    // Prefer hotter / earlier rules; keep 3 fans so overview stays airy
+    const subs = (fullTree.children || []).map(mapSubtype).slice(0, 3);
+    return {
+      id: fullTree.id,
+      kind: 'category',
+      label: fullTree.label,
+      subtitle: fullTree.subtitle,
+      color: fullTree.color,
+      icon: fullTree.icon,
+      action: fullTree.action,
+      children: subs,
+    };
+  }
+
   function walk(node, fn, depth = 0, parent = null) {
     fn(node, depth, parent);
     (node.children || []).forEach((c) => walk(c, fn, depth + 1, node));
@@ -306,6 +360,7 @@
     const machines = leetMachines();
     const categories = CATEGORIES.map((cat) => {
       const tree = buildCategoryTree(cat, machines);
+      const overviewTree = toOverviewTree(tree);
       const alerts = collectAlerts(tree);
       const open = alerts.filter((a) => a.hot).length;
       return {
@@ -316,9 +371,11 @@
         icon: cat.icon,
         action: cat.action,
         tree,
+        overviewTree,
         alerts,
         count: open,
         nodeCount: countNodes(tree),
+        overviewNodeCount: countNodes(overviewTree),
       };
     });
 
