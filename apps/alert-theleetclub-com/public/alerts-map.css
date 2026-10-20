@@ -151,6 +151,10 @@ html, body {
   cursor: grab;
   background: #20242d;
 }
+/* Kill white flash before first paint */
+body:not(.map-ready) #label-layer { opacity: 0; }
+body:not(.map-ready) .wchev { opacity: 0; }
+.label-layer, #alerts-canvas { background-color: #20242d; }
 #alerts-canvas.is-dragging { cursor: grabbing; }
 
 .label-layer {

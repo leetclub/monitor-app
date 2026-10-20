@@ -17,9 +17,10 @@
   const CATS = SNAP.categories;
   const walk = window.LEET_ALERTS_DATA.walk;
 
-  // Interaction constants mirrored from skilltree INTERACTION-NOTES (behavioural parity)
+  // Interaction constants from skilltree INTERACTION-NOTES (ref is source of truth)
   const EASE_CAM = 0.13;
-  const EASE_HOVER = 0.18; // ~350ms toward dim targets
+  const EASE_WHEEL = 0.11;
+  const EASE_HOVER = 0.18;
   const DIM_OTHERS = 0.18;
   const NODE_FADED = 0.25;
   const HOVER_NODE_SCALE = 1.12;
@@ -37,23 +38,25 @@
   const R0_FAN = 248;
   const R_BASE = 410;
   const R_STEP = 214;
-  const DIVE_SWAP_MS = 520;
+  const DIVE_ALIGN_MS = 520; // after wheel seat → morph start (ref dive swap)
+  const DIVE_MORPH_MS = 1250; // branching / morph settle
   const RISE_MS = 380;
-  const INERTIA_FRICTION = 0.88;
+  const N = CATS.length;
+  const W_STEP = 360 / N;
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let W = 0, H = 0, dpr = 1;
-  let rot = -Math.PI / 2; // fixed overview orientation (no auto-spin)
   let zoom = 1, targetZoom = 1;
   let camX = 0, camY = 0, tCamX = 0, tCamY = 0;
-  let velX = 0, velY = 0;
-  let mapState = 'sky'; // sky | diving | fan | rising
+  // Sky wheel dial (degrees). Seat department i at bottom when wheelT = 180 - i*W_STEP
+  let wheelA = 180, wheelT = 180;
+  let wheelIdle = null;
+  let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
   let hoverCat = null;
   let hoverNodeId = null;
-  let pathIds = new Set(); // lit path: node → hub → core
-  let hoverAlpha = {}; // catId → 0..1 display opacity
-  let featuredIdx = 0; // sky prev/next "seated" department
+  let selectedChain = -1; // fan: fade sibling chains on select
+  let hoverAlpha = {}; // catId → 0..1
   let selectedAlert = null;
   let panelOpen = false;
   let coreOpen = false;
@@ -63,25 +66,30 @@
   let dragDist = 0;
   let lastMoveTs = 0;
   let zoomLockUntil = 0;
+  let zoomIntent = 0;
   let searchQ = '';
   let layoutNodes = [];
   let layoutLinks = [];
   let focusLayout = null;
-  let parentOf = new Map(); // childId → parentId for path walks
+  let parentOf = new Map();
+  let sectorLocal = []; // per-cat local geometry for wheel placement
+  let morph = null; // {dir, t0, dur, fromNodes, toNodes, fromLinks, toLinks, focusId, otherIds}
+  let mapReady = false;
   const flowParticles = [];
   const coreDust = [];
+  const spokeMotes = [];
   const hitNodes = [];
   const labelEls = new Map();
   const nodeLabelEls = new Map();
   const ptrs = new Map();
   let pinchD0 = 0, pinchS0 = 1, pinchRatio = 1, pinchAX = 0, pinchAY = 0;
 
-  let catLabelWorld = new Map(); // catId → {x,y}
+  let catLabelWorld = new Map();
   let overviewGeom = { rHub: 160, rTip: 300, rLabel: 420, rCore: 70, segLen: 32 };
 
   function clampZSky(v) { return Math.max(Z_SKY_MIN, Math.min(Z_SKY_MAX, v)); }
   function clampZFan(v) { return Math.max(Z_FAN_MIN, Math.min(Z_FAN_MAX, v)); }
-  function clampZoom(v) { return focusCat || mapState === 'fan' || mapState === 'diving' ? clampZFan(v) : clampZSky(v); }
+  function clampZoom(v) { return (focusCat || mapState === 'fan' || mapState === 'diving') ? clampZFan(v) : clampZSky(v); }
 
   function setTransitioning(on) {
     document.body.classList.toggle('transitioning', !!on);
@@ -89,6 +97,14 @@
   function setFanMode(on) {
     document.body.classList.toggle('fanmode', !!on);
   }
+  function focusedIdx() {
+    return ((Math.round((180 - wheelA) / W_STEP)) % N + N) % N;
+  }
+  function easeOutCubic(u) {
+    const t = Math.max(0, Math.min(1, u));
+    return 1 - Math.pow(1 - t, 3);
+  }
+  function lerp(a, b, t) { return a + (b - a) * t; }
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -173,216 +189,158 @@
   }
 
   /**
-   * Overview branches matching skilltree.altari.ai buildSky():
-   * SPAN ≈ 140° centred on the outward hub ray (wide fan, not a narrow broom).
-   * Dept gaps come from short chains (tips ~34% H, hubs ~20% H), not a thin wedge.
+   * Build one department fan in LOCAL coords (hub at 0,0, outward +Y).
+   * layoutWheel() places these on the sky dial via wheelA.
    */
-  function buildSectorConstellation(cat, angle, _halfSpan, outNodes, outLinks) {
+  function buildSectorLocal(cat, catIndex) {
     const { rHub, rTip } = overviewGeom;
     const color = cat.color;
     const ov = cat.overviewTree || {};
     const tips = ov.tips || [];
     const subtypes = ov.subtypes || [];
     let seq = 0;
+    const nodes = [];
+    const links = [];
 
-    const hx = Math.cos(angle) * rHub;
-    const hy = Math.sin(angle) * rHub;
-    outNodes.push({
-      id: cat.id,
-      kind: 'category',
-      label: cat.label,
-      color,
-      icon: cat.icon,
-      alert: null,
-      catId: cat.id,
-      x: hx,
-      y: hy,
-      r: 8, // thin hub ring
-      depth: 0,
-      hot: false,
+    nodes.push({
+      id: cat.id, kind: 'category', label: cat.label, color, icon: cat.icon,
+      alert: null, catId: cat.id, lx: 0, ly: 0, r: 8, depth: 0, hot: false,
+      chain: -1, morphKey: `${cat.id}:hub`,
     });
 
-    // Inner stub only (leet overview keeps the core→hub gap; no dashed spokes)
-    const stubLen = Math.min(12, rHub * 0.1);
-    const sx = hx - Math.cos(angle) * stubLen;
-    const sy = hy - Math.sin(angle) * stubLen;
-    const stubId = `${cat.id}:stub`;
-    outNodes.push({
-      id: stubId,
-      kind: 'stub',
-      label: '',
-      color,
-      catId: cat.id,
-      x: sx,
-      y: sy,
-      r: 1.2,
-      depth: 0,
-      hot: false,
-      hidden: true,
-    });
-    outLinks.push({
-      s: stubId, t: cat.id, color, depth: 0, straight: true, stub: true, accent: true,
-      x0: sx, y0: sy, x1: hx, y1: hy,
-    });
-
-    // buildSky: SPAN=140°, r0=80, rb=146, rstep=56 → Rmax=314
     const SPAN = (140 * Math.PI) / 180;
-    const RmaxRef = 146 + 3 * 56; // 314
+    const RmaxRef = 146 + 3 * 56;
     const scale = (rTip - rHub) / RmaxRef;
-    // First joint a little past the hub; equal steps out to tip (no bunched first ring)
-    const rStart = 80 * scale; // buildSky r0
+    const rStart = 80 * scale;
     const rEnd = RmaxRef * scale;
     const maxJoints = 5;
     const rstep = (rEnd - rStart) / (maxJoints - 1);
 
-    const ox = Math.cos(angle);
-    const oy = Math.sin(angle);
-    const tx = -Math.sin(angle);
-    const ty = Math.cos(angle);
-    /** Point on the chain axis at distance `r` from the hub (aLocal = axis angle). */
-    function onAxis(r, aAxis) {
-      const out = r * Math.cos(aAxis);
-      const side = r * Math.sin(aAxis);
-      return { x: hx + ox * out + tx * side, y: hy + oy * out + ty * side };
-    }
-    /** Unit tangent (left of outward) at axis angle — for ±lateral zig. */
-    function axisTangent(aAxis) {
-      const outX = ox * Math.cos(aAxis) + tx * Math.sin(aAxis);
-      const outY = oy * Math.cos(aAxis) + ty * Math.sin(aAxis);
-      return { x: -outY, y: outX };
-    }
-
-    // 5–7 spoke chains spread evenly across the 140° fan
-    const nf = 5 + Math.floor(hash01(cat.id.length * 11 + angle) * 3); // 5–7
+    const nf = 5 + Math.floor(hash01(cat.id.length * 11 + catIndex * 3.1) * 3);
     const tipPool = tips.slice();
     const need = nf * 5;
     while (tipPool.length < need) {
-      const src = tips[tipPool.length % Math.max(1, tips.length)] || {
+      const srcTip = tips[tipPool.length % Math.max(1, tips.length)] || {
         id: `${cat.id}:pad`, label: '·', alert: null, hot: false,
       };
-      tipPool.push({
-        ...src,
-        id: `${cat.id}:pad${tipPool.length}`,
-        label: src.label || '·',
-      });
+      tipPool.push({ ...srcTip, id: `${cat.id}:pad${tipPool.length}`, label: srcTip.label || '·' });
     }
     let tipCursor = 0;
     const chains = Array.from({ length: nf }, (_, i) => {
-      const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + i * 3.7 + angle) * 3); // 3–5
+      const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + i * 3.7 + catIndex) * 3);
       const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
       tipCursor += nJobs;
-      return {
-        sub: subtypes[i % Math.max(1, subtypes.length)] || null,
-        jobs,
-      };
+      return { sub: subtypes[i % Math.max(1, subtypes.length)] || null, jobs };
     });
 
-    // Axis spacing for zig amplitude (buildSky uses SPAN/nf); axes themselves
-    // span the full 140° including the edges so the fan reads wide.
     const span = SPAN / nf;
     const zigAng = Math.min(span * 0.22, 0.075);
 
     for (let fi = 0; fi < nf; fi++) {
       const ch = chains[fi];
       const aC = nf === 1 ? 0 : -SPAN / 2 + (SPAN * fi) / (nf - 1);
-      const tan = axisTangent(aC);
-
-      let px = hx;
-      let py = hy;
       let prevId = cat.id;
+      let plx = 0, ply = 0;
       ch.jobs.forEach((job, ji) => {
-        // Equal radial steps from rStart; shorter chains stop earlier (same step)
         const r = rStart + ji * rstep;
         const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
-        const lateral = r * zigAng * sign;
-        const base = onAxis(r, aC);
-        const p = { x: base.x + tan.x * lateral, y: base.y + tan.y * lateral };
+        const zig = zigAng * sign;
+        const a = aC + zig;
+        // local: outward +Y, lateral +X
+        const lx = r * Math.sin(a);
+        const ly = r * Math.cos(a);
         const id = `${cat.id}:n${seq++}`;
         const isRoot = ji === 0;
-        outNodes.push({
-          id,
-          kind: isRoot ? 'site' : 'machine',
+        nodes.push({
+          id, kind: isRoot ? 'site' : 'machine',
           label: isRoot ? (ch.sub?.label || job.label || '·') : (job.label || '·'),
-          color,
-          icon: null,
-          alert: isRoot ? null : (job.alert || null),
-          catId: cat.id,
-          x: p.x,
-          y: p.y,
-          r: isRoot ? 2.6 : 2.0,
-          depth: 1 + ji,
-          hot: !isRoot && !!job.hot,
-          hollow: false,
-          tint: ji <= 1, // first 1–2 joints tinted
+          color, icon: null, alert: isRoot ? null : (job.alert || null),
+          catId: cat.id, lx, ly, r: isRoot ? 2.6 : 2.0, depth: 1 + ji,
+          hot: !isRoot && !!job.hot, tint: ji <= 1,
+          chain: fi, morphKey: `${cat.id}:c${fi}:j${ji}`,
         });
-        outLinks.push({
-          s: prevId, t: id, color, depth: 1 + ji, straight: true, accent: false,
-          x0: px, y0: py, x1: p.x, y1: p.y,
+        links.push({
+          s: prevId, t: id, color, depth: 1 + ji, straight: true,
+          chain: fi, morphKey: `${cat.id}:L:c${fi}:j${ji}`,
         });
-        px = p.x;
-        py = p.y;
-        prevId = id;
+        plx = lx; ply = ly; prevId = id;
       });
     }
+    return { cat, catIndex, nodes, links, rHub };
   }
 
-  function syncOverviewLinks(nodes, links) {
-    const byId = new Map(nodes.map((n) => [n.id, n]));
-    links.forEach((L) => {
-      if (L.stub) return;
-      const s = byId.get(L.s);
-      const t = byId.get(L.t);
-      if (s && t) {
-        L.x0 = s.x; L.y0 = s.y; L.x1 = t.x; L.y1 = t.y;
-      }
-    });
-  }
-
-  function rebuildOverviewLayout() {
-    const g = computeOverviewGeom();
+  /** Place local sectors onto the wheel using current wheelA (ref layoutWheel). */
+  function layoutWheel() {
+    const g = overviewGeom;
     const nodes = [];
     const links = [];
     catLabelWorld = new Map();
-    const halfSpan = (Math.PI * 2) / CATS.length * 0.5; // unused by zig layout; kept for API compat
 
-    CATS.forEach((cat, i) => {
-      const a = (i / CATS.length) * Math.PI * 2 + rot;
-      buildSectorConstellation(cat, a, halfSpan, nodes, links);
-      hoverAlpha[cat.id] = hoverAlpha[cat.id] ?? 1;
-      // Logical core→hub edge for path-to-core hover (drawn only when lit)
+    sectorLocal.forEach((sec) => {
+      const deg = wheelA + sec.catIndex * W_STEP;
+      const a = deg * Math.PI / 180;
+      // Hub on circle (ref P): x = R sin a, y = -R cos a
+      const hx = g.rHub * Math.sin(a);
+      const hy = -g.rHub * Math.cos(a);
+      // Local outward +Y → world along hub ray; local +X → perpendicular
+      const ox = Math.sin(a), oy = -Math.cos(a);
+      const tx = Math.cos(a), ty = Math.sin(a);
+
+      const idMap = new Map();
+      sec.nodes.forEach((n) => {
+        const wx = hx + n.lx * tx + n.ly * ox;
+        const wy = hy + n.lx * ty + n.ly * oy;
+        const copy = { ...n, x: wx, y: wy };
+        delete copy.lx; delete copy.ly;
+        nodes.push(copy);
+        idMap.set(n.id, copy);
+      });
+      sec.links.forEach((L) => {
+        const s = idMap.get(L.s);
+        const t = idMap.get(L.t);
+        if (!s || !t) return;
+        links.push({
+          ...L, x0: s.x, y0: s.y, x1: t.x, y1: t.y,
+        });
+      });
+      // virtual core→hub for parent index (drawn only when needed)
       links.push({
-        s: '__core__', t: cat.id, color: cat.color, depth: 0,
+        s: '__core__', t: sec.cat.id, color: sec.cat.color, depth: 0,
         straight: true, spine: true, virtual: true,
-        x0: 0, y0: 0, x1: Math.cos(a) * g.rHub, y1: Math.sin(a) * g.rHub,
+        x0: 0, y0: 0, x1: hx, y1: hy,
       });
-    });
-    syncOverviewLinks(nodes, links);
-
-    CATS.forEach((cat, i) => {
-      const a = (i / CATS.length) * Math.PI * 2 + rot;
-      catLabelWorld.set(cat.id, {
-        x: Math.cos(a) * g.rLabel,
-        y: Math.sin(a) * g.rLabel,
-        a,
+      const lr = g.rLabel;
+      catLabelWorld.set(sec.cat.id, {
+        x: lr * Math.sin(a), y: -lr * Math.cos(a), a,
       });
-    });
-
-    const byId = new Map(nodes.map((n) => [n.id, n]));
-    links.forEach((L) => {
-      const s = byId.get(L.s);
-      const t = byId.get(L.t);
-      if (s && t) {
-        L.x0 = s.x; L.y0 = s.y; L.x1 = t.x; L.y1 = t.y;
-      }
     });
 
     layoutNodes = nodes;
     layoutLinks = links;
     rebuildParentIndex(links);
     seedFlowParticles();
+  }
+
+  function rebuildOverviewLayout() {
+    computeOverviewGeom();
+    sectorLocal = CATS.map((cat, i) => {
+      hoverAlpha[cat.id] = hoverAlpha[cat.id] ?? 1;
+      return buildSectorLocal(cat, i);
+    });
+    layoutWheel();
     if (!focusCat && mapState === 'sky') {
       targetZoom = clampZSky(1);
     }
+  }
+
+  function snapWheel() {
+    wheelT = 180 + Math.round((wheelT - 180) / W_STEP) * W_STEP;
+  }
+
+  function stepWheel(d) {
+    if (mapState !== 'sky' && mapState !== 'aligning') return;
+    clearTimeout(wheelIdle);
+    wheelT = 180 + Math.round((wheelT - 180) / W_STEP) * W_STEP - d * W_STEP;
   }
 
   function rebuildParentIndex(links) {
@@ -411,14 +369,12 @@
   }
 
   function recenterMap({ immediate = false } = {}) {
-    velX = 0;
-    velY = 0;
     tCamX = 0;
-    tCamY = 0;
+    tCamY = mapState === 'sky' ? -H * 0.04 : 0;
     if (!focusCat) targetZoom = clampZSky(1);
     if (immediate) {
-      camX = 0;
-      camY = 0;
+      camX = tCamX;
+      camY = tCamY;
       zoom = targetZoom;
     }
   }
@@ -443,16 +399,14 @@
    */
   function rebuildFocusLayout(catId, { setCamera = true } = {}) {
     const cat = CATS.find((c) => c.id === catId);
-    if (!cat) { focusLayout = null; return; }
+    if (!cat) { focusLayout = null; return null; }
     const nodes = [];
     const links = [];
     const root = { ...cat.tree, icon: cat.icon, catId: cat.id };
     const subtypes = (root.children || []).filter((c) => c.kind === 'subtype' || c.children?.length);
     const tips = [];
     walk(root, (n) => {
-      if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) {
-        tips.push(n);
-      }
+      if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) tips.push(n);
     });
     const tipPool = tips.slice();
     const chains = subtypes.length
@@ -477,23 +431,12 @@
     const sBase = R_BASE * fit;
     const sStep = R_STEP * fit;
 
-    // Hub (category root) near origin, fan opens upward (negative Y)
     nodes.push({
-      id: cat.id,
-      kind: 'category',
-      label: cat.label,
-      color: cat.color,
-      icon: cat.icon,
-      alert: null,
-      catId: cat.id,
-      x: 0,
-      y: 0,
-      r: 20,
-      depth: 0,
-      hot: false,
-      chain: -1,
+      id: cat.id, kind: 'category', label: cat.label, color: cat.color, icon: cat.icon,
+      alert: null, catId: cat.id, x: 0, y: 0, r: 20, depth: 0, hot: false,
+      chain: -1, morphKey: `${cat.id}:hub`,
     });
-    links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true });
+    links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true, morphKey: `${cat.id}:L:core` });
 
     let cursor = -FAN_SPAN / 2;
     let maxR = sR0;
@@ -503,22 +446,13 @@
       const aC = cursor + span / 2;
       const [ex, ey] = P(sR0, aC);
       const jointId = `${cat.id}:j${fi}`;
+      // joint shares morph with overview first joint (j0)
       nodes.push({
-        id: jointId,
-        kind: 'subtype',
-        label: ch.sub?.label || cat.label,
-        color: cat.color,
-        icon: ch.sub?.icon || null,
-        alert: null,
-        catId: cat.id,
-        x: ex,
-        y: ey,
-        r: 11,
-        depth: 1,
-        hot: false,
-        chain: fi,
+        id: jointId, kind: 'subtype', label: ch.sub?.label || cat.label, color: cat.color,
+        icon: ch.sub?.icon || null, alert: null, catId: cat.id, x: ex, y: ey, r: 11,
+        depth: 1, hot: false, chain: fi, morphKey: `${cat.id}:c${fi}:j0`,
       });
-      links.push({ s: cat.id, t: jointId, color: cat.color, depth: 1, chain: fi });
+      links.push({ s: cat.id, t: jointId, color: cat.color, depth: 1, chain: fi, morphKey: `${cat.id}:L:c${fi}:j0` });
 
       let px = ex, py = ey, prevId = jointId;
       ch.jobs.forEach((job, ji) => {
@@ -528,21 +462,17 @@
         maxR = Math.max(maxR, r);
         const [x, y] = P(r, a);
         const id = job.id || `${cat.id}:f${fi}n${ji}`;
+        const mk = `${cat.id}:c${fi}:j${ji}`;
         nodes.push({
-          id,
-          kind: job.kind || 'machine',
-          label: job.label || '·',
-          color: cat.color,
-          icon: job.icon || null,
-          alert: job.alert || null,
-          catId: cat.id,
-          x, y,
-          r: job.alert ? 7 : 6,
-          depth: 2 + ji,
-          hot: !!(job.alert && job.alert.hot),
-          chain: fi,
+          id, kind: job.kind || 'machine', label: job.label || '·', color: cat.color,
+          icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
+          r: job.alert ? 7 : 6, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
+          chain: fi, morphKey: mk,
         });
-        links.push({ s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi, x0: px, y0: py, x1: x, y1: y });
+        links.push({
+          s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi,
+          morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`, x0: px, y0: py, x1: x, y1: y,
+        });
         px = x; py = y; prevId = id;
       });
       cursor += span;
@@ -561,12 +491,163 @@
     }
 
     focusLayout = { nodes, links, color: cat.color, cat, maxR };
+    return focusLayout;
+  }
+
+  function snapshotLayout(nodes, links) {
+    const nmap = new Map();
+    nodes.forEach((n) => {
+      if (!n.morphKey) return;
+      nmap.set(n.morphKey, { ...n });
+    });
+    const lmap = new Map();
+    links.forEach((L) => {
+      const key = L.morphKey || `${L.s}->${L.t}`;
+      lmap.set(key, { ...L });
+    });
+    return { nmap, lmap };
+  }
+
+  function beginMorph({ dir, focusId, from, to, duration }) {
+    morph = {
+      dir, focusId,
+      t0: performance.now(),
+      dur: reduceMotion ? 1 : duration,
+      from, to,
+    };
+  }
+
+  function morphProgress() {
+    if (!morph) return 1;
+    const u = (performance.now() - morph.t0) / morph.dur;
+    return Math.max(0, Math.min(1, u));
+  }
+
+  /** Interpolated draw lists during dive/rise — no jump cut. */
+  function morphDisplay() {
+    if (!morph) return null;
+    const raw = morphProgress();
+    const e = easeOutCubic(raw);
+    const fromN = morph.from.nmap;
+    const toN = morph.to.nmap;
+    const keys = new Set([...fromN.keys(), ...toN.keys()]);
+    const hubFrom = fromN.get(`${morph.focusId}:hub`) || { x: 0, y: 0, r: 8 };
+    const hubTo = toN.get(`${morph.focusId}:hub`) || { x: 0, y: 0, r: 20 };
+    const nodes = [];
+    keys.forEach((k) => {
+      const A = fromN.get(k);
+      const B = toN.get(k);
+      const a = A || { x: hubFrom.x, y: hubFrom.y, r: 0, color: hubFrom.color, catId: morph.focusId, kind: 'machine', label: '', morphKey: k, chain: -1, hot: false };
+      const b = B || { x: hubTo.x, y: hubTo.y, r: 0, color: hubTo.color, catId: morph.focusId, kind: 'machine', label: '', morphKey: k, chain: -1, hot: false };
+      const opA = A ? 1 : 0;
+      const opB = B ? 1 : 0;
+      nodes.push({
+        ...b, ...a,
+        id: (B || A).id,
+        kind: (B || A).kind,
+        label: (B || A).label,
+        color: (B || A).color,
+        icon: (B || A).icon,
+        alert: (B || A).alert,
+        catId: morph.focusId,
+        chain: (B || A).chain,
+        morphKey: k,
+        hot: !!(B || A).hot,
+        x: lerp(a.x, b.x, e),
+        y: lerp(a.y, b.y, e),
+        r: lerp(a.r || 2, b.r || 2, e),
+        morphOp: lerp(opA, opB, e),
+      });
+    });
+    // other departments: fade / drift toward core
+    const otherNodes = [];
+    if (morph.dir === 1) {
+      layoutNodes.forEach((n) => {
+        if (n.catId === morph.focusId || n.kind === 'stub') return;
+        const pull = e * 0.35;
+        otherNodes.push({
+          ...n,
+          x: lerp(n.x, 0, pull),
+          y: lerp(n.y, 0, pull),
+          morphOp: lerp(1, 0.12, e),
+          otherDim: true,
+        });
+      });
+    } else {
+      layoutNodes.forEach((n) => {
+        if (n.catId === morph.focusId || n.kind === 'stub') return;
+        const pull = (1 - e) * 0.35;
+        otherNodes.push({
+          ...n,
+          x: lerp(n.x, 0, pull),
+          y: lerp(n.y, 0, pull),
+          morphOp: lerp(0.12, 1, e),
+          otherDim: true,
+        });
+      });
+    }
+    const fromL = morph.from.lmap;
+    const toL = morph.to.lmap;
+    const lkeys = new Set([...fromL.keys(), ...toL.keys()]);
+    const byKey = new Map(nodes.map((n) => [n.morphKey, n]));
+    const links = [];
+    lkeys.forEach((k) => {
+      const A = fromL.get(k);
+      const B = toL.get(k);
+      if (!A && !B) return;
+      const sKey = (B || A).s === '__core__' ? null : null;
+      // resolve endpoints via morphKey of endpoints when possible
+      const sId = (B || A).s;
+      const tId = (B || A).t;
+      let sNode = nodes.find((n) => n.id === sId) || (sId === '__core__' ? { x: 0, y: 0 } : null);
+      let tNode = nodes.find((n) => n.id === tId);
+      if (!sNode || !tNode) {
+        // try morph keys on overview/focus originals
+        return;
+      }
+      links.push({
+        s: sId, t: tId, color: (B || A).color, chain: (B || A).chain,
+        straight: true, morphOp: lerp(A ? 1 : 0, B ? 1 : 0, e),
+        x0: sNode.x, y0: sNode.y, x1: tNode.x, y1: tNode.y,
+      });
+    });
+    // also connect morphing nodes by chain order as fallback for missing link keys
+    if (!links.length) {
+      const byChain = new Map();
+      nodes.forEach((n) => {
+        if (n.chain == null || n.chain < 0) return;
+        if (!byChain.has(n.chain)) byChain.set(n.chain, []);
+        byChain.get(n.chain).push(n);
+      });
+      const hub = nodes.find((n) => n.morphKey === `${morph.focusId}:hub`);
+      byChain.forEach((arr) => {
+        arr.sort((a, b) => (a.depth || 0) - (b.depth || 0));
+        let prev = hub;
+        arr.forEach((n) => {
+          if (!prev) return;
+          links.push({
+            s: prev.id, t: n.id, color: n.color, chain: n.chain, straight: true,
+            morphOp: n.morphOp, x0: prev.x, y0: prev.y, x1: n.x, y1: n.y,
+          });
+          prev = n;
+        });
+      });
+    }
+    return { nodes: nodes.concat(otherNodes), links, e: raw, done: raw >= 1 };
   }
 
   function activeNodes() {
+    if (morph && (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning')) {
+      const m = morphDisplay();
+      if (m) return m.nodes;
+    }
     return focusCat && focusLayout ? focusLayout.nodes : layoutNodes;
   }
   function activeLinks() {
+    if (morph && (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning')) {
+      const m = morphDisplay();
+      if (m) return m.links;
+    }
     return focusCat && focusLayout ? focusLayout.links : layoutLinks;
   }
 
@@ -706,13 +787,23 @@
       ctx.fill();
     });
 
-    // Subtle wordmark — fill only, no stroke/pill
+    // Hub drift (ref hdrift ~12s ±2.2/±2.6) + nucleus pulse
+    const driftX = reduceMotion ? 0 : 2.2 * Math.sin(t / 12 * Math.PI * 2);
+    const driftY = reduceMotion ? 0 : -2.6 * Math.cos(t / 12 * Math.PI * 2);
+    const cx = p.x + driftX;
+    const cy = p.y + driftY;
+    const nucR = reduceMotion ? 5 * scale : (5 + 1.5 * (0.5 + 0.5 * Math.sin(t * (Math.PI * 2 / 2.6)))) * scale;
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(233,228,214,0.55)';
+    ctx.arc(cx, cy, nucR * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+
     const fs = Math.max(12, 13.5 * scale);
     ctx.font = `600 ${fs}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(236,233,226,0.78)';
-    ctx.fillText('leet', p.x, p.y);
+    ctx.fillText('leet', cx, cy);
     hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 32 * scale, vr: 32 * scale });
   }
 
@@ -777,43 +868,37 @@
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
     function catOpacity(catId) {
-      if ((focusCat || mapState === 'fan') && !catId) return 1;
-      if (focusCat || mapState === 'fan') return 1;
+      if (mapState === 'fan' || focusCat) return 1;
       const a = hoverAlpha[catId];
       return a == null ? 1 : a;
     }
-
-    function onPath(id) {
-      return pathIds.size > 0 && pathIds.has(id);
-    }
-    function linkOnPath(L) {
-      return pathIds.size > 0 && onPath(L.s) && onPath(L.t);
+    function chainFaded(nOrLink) {
+      if (selectedChain < 0 || mapState !== 'fan') return false;
+      const ch = nOrLink.chain;
+      return ch != null && ch >= 0 && ch !== selectedChain;
     }
 
-    // links — thin low-opacity grey; path hover lights chain → hub → core
+    // links
     links.forEach((L) => {
-      const s = L.s === '__core__' ? { x: 0, y: 0, catId: null } : (nodeMap.get(L.s) || nodeById(L.s));
-      const tN = nodeMap.get(L.t) || nodeById(L.t);
+      if (L.virtual) return; // overview core gap stays empty
+      const s = L.s === '__core__' ? { x: 0, y: 0, catId: null } : (nodeMap.get(L.s) || nodeById(L.s) || (L.x0 != null ? { x: L.x0, y: L.y0 } : null));
+      const tN = nodeMap.get(L.t) || nodeById(L.t) || (L.x1 != null ? { x: L.x1, y: L.y1, catId: L.catId, color: L.color } : null);
       if (!s || !tN) return;
-      if (L.virtual && !linkOnPath(L)) return; // overview gap: only show when path-lit
-      if (focusCat && L.s !== '__core__' && !nodeMap.has(L.s) && L.s !== focusCat) return;
+      if (focusCat && L.s !== '__core__' && !nodeMap.has(L.s) && L.s !== focusCat && L.x0 == null) return;
       const catId = tN.catId || s.catId;
-      let op = catOpacity(catId);
-      const lit = linkOnPath(L);
-      if (pathIds.size && !lit) op *= NODE_FADED;
+      let op = (L.morphOp != null ? L.morphOp : 1) * catOpacity(catId);
+      if (tN.morphOp != null) op *= tN.morphOp;
+      if (tN.otherDim) op *= (tN.morphOp != null ? 1 : 0.12);
+      if (chainFaded(L) || chainFaded(tN)) op *= NODE_FADED;
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
-      if (!focusCat && (L.straight || L.s === '__core__')) {
+      if (!focusCat && mapState !== 'fan' && (L.straight || L.s === '__core__')) {
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
-        let lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
-        if (L.s === '__core__') lineOp = lit ? 0.62 : 0.14;
-        if (lit) lineOp = Math.max(lineOp, 0.55);
-        ctx.strokeStyle = lit
-          ? hexAlpha(tN.color || L.color || '#e9e4d6', lineOp * Math.max(op, 0.85))
-          : `rgba(233,228,214,${lineOp * op})`;
-        ctx.lineWidth = lit ? 2.2 : (L.stub ? 1.1 : 1);
+        const lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
+        ctx.strokeStyle = `rgba(233,228,214,${lineOp * op})`;
+        ctx.lineWidth = L.stub ? 1.1 : 1;
         ctx.stroke();
         return;
       }
@@ -821,14 +906,13 @@
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      const baseOp = focusCat ? (lit ? 0.75 : (pathIds.size ? 0.18 : 0.45)) : 0.22 * op;
-      ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', baseOp);
-      ctx.lineWidth = lit ? 2.4 : 1.1;
+      ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', (focusCat || mapState === 'fan' ? 0.45 : 0.22) * op);
+      ctx.lineWidth = 1.1;
       ctx.stroke();
     });
 
-    // Flow particles along overview segments (hub → tips)
-    if (!focusCat) {
+    // Flow particles along overview segments (hub → tips) + spoke motes
+    if (mapState === 'sky' || morph) {
       flowParticles.forEach((p) => {
         const L = p.link;
         const s = nodeMap.get(L.s) || nodeById(L.s);
@@ -845,46 +929,56 @@
         ctx.arc(scr.x, scr.y, 1.35, 0, Math.PI * 2);
         ctx.fill();
       });
+      if (!spokeMotes.length) {
+        for (let k = 0; k < 30; k++) {
+          spokeMotes.push({
+            a: hash01(k * 2.2) * Math.PI * 2,
+            r: overviewGeom.rHub * (0.7 + hash01(k * 5.1) * 0.9),
+            s: 0.9 + hash01(k * 7.3) * 1.2,
+            op: 0.1 + hash01(k * 9.1) * 0.18,
+          });
+        }
+      }
+      const coreScr = worldToScreen(0, 0);
+      spokeMotes.forEach((m) => {
+        const ang = m.a + wheelA * Math.PI / 180;
+        const scr = worldToScreen(m.r * Math.sin(ang), -m.r * Math.cos(ang));
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(233,228,214,${m.op * (hoverCat ? 0.3 : 1)})`;
+        ctx.arc(scr.x, scr.y, m.s, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
 
     // nodes
-    const showLabels = !!(focusCat || mapState === 'fan');
+    const showLabels = !!(focusCat || mapState === 'fan') && !morph;
     const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
-    const featuredCatId = !focusCat ? CATS[featuredIdx]?.id : null;
+    const featuredCatId = (mapState === 'sky') ? CATS[focusedIdx()]?.id : null;
     nodes.forEach((n) => {
       if (n.kind === 'stub' || n.hidden) return;
-      if (focusCat && n.catId && n.catId !== focusCat) return;
+      if (focusCat && n.catId && n.catId !== focusCat && !n.otherDim) return;
       const p = worldToScreen(n.x, n.y);
       if (p.x < -60 || p.x > W + 60 || p.y < -60 || p.y > H + 60) return;
       const selected = selectedAlert && n.alert && selectedAlert.id === n.alert.id;
       const isCat = n.kind === 'category';
       const isHub = isCat || n.kind === 'subtype';
       let op = catOpacity(n.catId);
-      const lit = onPath(n.id);
-      if (pathIds.size && !lit) op *= NODE_FADED;
-      else if (pathIds.size && lit) op = Math.max(op, 0.95);
-      const hoverBoost = hoverNodeId === n.id ? HOVER_NODE_SCALE : (featuredCatId && n.catId === featuredCatId && isCat ? FEATURED_SCALE : 1);
+      if (n.morphOp != null) op *= n.morphOp;
+      if (chainFaded(n)) op *= NODE_FADED;
+      const hoverBoost = (mapState === 'fan' && hoverNodeId === n.id) ? HOVER_NODE_SCALE
+        : (featuredCatId && n.catId === featuredCatId && isCat ? FEATURED_SCALE : 1);
       let r = (n.r + (selected ? 1.5 : 0)) * zScale * hoverBoost;
-      if (!focusCat && isCat) r = 8 * zScale * hoverBoost;
+      if (mapState === 'sky' && isCat) r = 8 * zScale * hoverBoost;
 
-      // Soft glow on lit path nodes
-      if (lit && hoverNodeId) {
-        ctx.beginPath();
-        ctx.fillStyle = hexAlpha(n.color || '#e9e4d6', 0.22);
-        ctx.arc(p.x, p.y, r + 6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      if (!focusCat && (n.kind === 'machine' || n.kind === 'site')) {
-        // Mostly white/off-white; only first 1–2 joints tinted
-        if (n.tint || lit) {
+      if ((mapState === 'sky' || morph) && (n.kind === 'machine' || n.kind === 'site')) {
+        if (n.tint) {
           ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, (lit ? 0.75 : 0.55) * op);
+          ctx.fillStyle = hexAlpha(n.color, 0.55 * op);
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
           ctx.beginPath();
-          ctx.strokeStyle = hexAlpha(n.color, (lit ? 0.95 : 0.75) * op);
-          ctx.lineWidth = lit ? 1.6 : 1;
+          ctx.strokeStyle = hexAlpha(n.color, 0.75 * op);
+          ctx.lineWidth = 1;
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.stroke();
         } else {
@@ -900,13 +994,13 @@
         ctx.fillStyle = 'rgba(32,36,45,0.92)';
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = isCat && !focusCat ? 1.35 : (isCat ? 2.2 : 1.5);
-        ctx.strokeStyle = hexAlpha(n.color, isCat && !focusCat ? 0.55 : 0.92);
+        ctx.lineWidth = isCat && mapState === 'sky' ? 1.35 : (isCat ? 2.2 : 1.5);
+        ctx.strokeStyle = hexAlpha(n.color, isCat && mapState === 'sky' ? 0.55 : 0.92);
         ctx.stroke();
-        if (focusCat && isCat) {
+        if ((focusCat || mapState === 'fan') && isCat) {
           drawBackChevron(p.x, p.y, n.color, r);
         } else {
-          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, isCat && !focusCat ? 0.75 : 1, isCat ? 0.95 : 0.85);
+          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, isCat && mapState === 'sky' ? 0.75 : 1, isCat ? 0.95 : 0.85);
         }
         ctx.globalAlpha = 1;
       } else {
@@ -954,12 +1048,9 @@
       }
     });
 
-    // Dim core when a department is hovered (ref hub/spokes → 0.3); keep bright if path includes core
+    // Dim core when a department is hovered (ref hub/spokes → 0.3)
     let coreDim = 1;
-    if (!focusCat && mapState === 'sky') {
-      if (pathIds.size && pathIds.has('__core__') && hoverNodeId) coreDim = 1;
-      else if (hoverCat || (pathIds.size && hoverNodeId)) coreDim = 0.3;
-    }
+    if (mapState === 'sky' && hoverCat) coreDim = 0.3;
     if (coreDim < 1) {
       ctx.save();
       ctx.globalAlpha = coreDim;
@@ -973,7 +1064,7 @@
     const sidePad = 40;
     CATS.forEach((cat) => {
       const el = ensureCatLabel(cat);
-      if (focusCat) {
+      if (focusCat || mapState === 'fan' || morph) {
         el.style.opacity = '0';
         return;
       }
@@ -984,7 +1075,7 @@
       el.style.top = `${p.y}px`;
       const op = catOpacity(cat.id);
       el.style.opacity = String(op);
-      const featured = CATS[featuredIdx]?.id === cat.id;
+      const featured = CATS[focusedIdx()]?.id === cat.id;
       el.style.filter = (hoverCat && cat.id === hoverCat) || featured
         ? 'brightness(1.15)'
         : 'none';
@@ -1037,162 +1128,225 @@
     const t = ts / 1000;
     const ease = reduceMotion ? 1 : EASE_CAM;
 
-    // Smooth hover opacity (~350ms → ease ~0.18)
-    if (!focusCat && mapState === 'sky') {
+    // Wheel dial ease (ref 0.11)
+    if (Math.abs(wheelT - wheelA) > 0.01) {
+      wheelA += (wheelT - wheelA) * (reduceMotion ? 1 : EASE_WHEEL);
+      if (mapState === 'sky' || mapState === 'aligning') layoutWheel();
+    } else {
+      wheelA = wheelT;
+    }
+
+    // Hover dim (sky whole-department only — ref CSS :has(.mini:hover))
+    if (mapState === 'sky' || mapState === 'aligning') {
       CATS.forEach((cat) => {
         let target = 1;
         if (hoverCat) target = cat.id === hoverCat ? 1 : DIM_OTHERS;
-        else if (pathIds.size && hoverNodeId) {
-          // path hover: whole other departments fade; path department stays up
-          const pathCat = (layoutNodes.find((n) => n.id === hoverNodeId) || {}).catId;
-          target = cat.id === pathCat ? 1 : DIM_OTHERS;
-        }
         const cur = hoverAlpha[cat.id] ?? 1;
         hoverAlpha[cat.id] = cur + (target - cur) * EASE_HOVER;
         if (Math.abs(hoverAlpha[cat.id] - target) < 0.005) hoverAlpha[cat.id] = target;
       });
     }
 
-    // Inertial pan after release (ours: explicit friction; ref fan has none)
-    if (!dragging && mapState !== 'diving' && mapState !== 'rising') {
-      tCamX += velX;
-      tCamY += velY;
-      velX *= INERTIA_FRICTION;
-      velY *= INERTIA_FRICTION;
-      if (Math.abs(velX) < 0.02) velX = 0;
-      if (Math.abs(velY) < 0.02) velY = 0;
+    // Morph completion
+    if (morph && (mapState === 'diving' || mapState === 'rising')) {
+      const u = morphProgress();
+      if (u >= 1) {
+        if (mapState === 'diving') {
+          focusCat = morph.focusId;
+          mapState = 'fan';
+          setFanMode(true);
+          morph = null;
+          const cat = CATS.find((c) => c.id === focusCat);
+          if (cat) {
+            focusBar.hidden = false;
+            focusTitle.textContent = cat.label;
+            focusSub.textContent = cat.subtitle;
+            focusTitle.style.color = cat.color;
+          }
+          rebuildFocusLayout(focusCat, { setCamera: true });
+          setTimeout(() => setTransitioning(false), 40);
+        } else if (mapState === 'rising') {
+          morph = null;
+          focusCat = null;
+          focusLayout = null;
+          selectedChain = -1;
+          mapState = 'sky';
+          setFanMode(false);
+          focusBar.hidden = true;
+          rebuildOverviewLayout();
+          targetZoom = clampZSky(1);
+          tCamX = 0; tCamY = -H * 0.04;
+          setTimeout(() => setTransitioning(false), 40);
+        }
+      }
     }
+
+    // NO inertial pan (ref fan/sky: no velocity decay on pan)
     zoom += (targetZoom - zoom) * ease;
     camX += (tCamX - camX) * ease;
     camY += (tCamY - camY) * ease;
     clampPanSoft();
 
-    // Idle: core dust + flow already animate via t; subtle star twinkle
     if (viewMode === 'map') {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawScene(t);
-      if (!reduceMotion) {
-        ensureStars();
-        starField.forEach((s, i) => {
-          const tw = 0.45 + 0.35 * Math.sin(t * 1.1 + i * 1.7);
-          if (tw < 0.55) return;
-          ctx.beginPath();
-          ctx.fillStyle = `rgba(233,228,214,${s.a * tw * 0.35})`;
-          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-          ctx.fill();
-        });
+      // Always paint charcoal first — kills white flash
+      ctx.fillStyle = '#20242d';
+      ctx.fillRect(0, 0, W, H);
+      if (mapReady) {
+        drawScene(t);
+        if (!reduceMotion) {
+          ensureStars();
+          starField.forEach((s, i) => {
+            const tw = 0.45 + 0.35 * Math.sin(t * 1.1 + i * 1.7);
+            if (tw < 0.55) return;
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(233,228,214,${s.a * tw * 0.35})`;
+            ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
       }
     }
     requestAnimationFrame(tick);
   }
 
+  function seatWheelTo(di) {
+    let t = 180 - di * W_STEP;
+    while (t - wheelT > 180) t -= 360;
+    while (t - wheelT < -180) t += 360;
+    wheelT = t;
+    return Math.min(800, 180 + Math.abs(t - wheelA) * 5);
+  }
+
   function focusCategory(id) {
     const cat = CATS.find((c) => c.id === id);
-    if (!cat || mapState === 'diving' || mapState === 'rising') return;
+    if (!cat || mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
     if (focusCat === id && mapState === 'fan') return;
 
     const idx = CATS.findIndex((c) => c.id === id);
-    if (idx >= 0) featuredIdx = idx;
-
-    // Animated dive (not a jump cut)
-    mapState = 'diving';
-    setTransitioning(true);
     hoverCat = null;
     hoverNodeId = null;
-    pathIds = new Set();
+    selectedChain = -1;
     closeCore(false);
     if (selectedAlert && selectedAlert.categoryId !== id) closePanel(false);
+    setTransitioning(true);
 
-    // Phase 1: dim others + ease camera toward hub
-    const hub = layoutNodes.find((n) => n.id === id);
+    // Phase A: align wheel (ref aligning)
+    mapState = 'aligning';
+    const wait = seatWheelTo(idx);
+
+    const startMorph = () => {
+      mapState = 'diving';
+      // Capture FROM (overview after layoutWheel) then build TO (focus)
+      layoutWheel();
+      const from = snapshotLayout(
+        layoutNodes.filter((n) => n.catId === id || n.id === id),
+        layoutLinks.filter((L) => {
+          const t = layoutNodes.find((n) => n.id === L.t);
+          return t && t.catId === id;
+        }),
+      );
+      // also include hub
+      layoutNodes.filter((n) => n.catId === id).forEach((n) => {
+        if (n.morphKey) from.nmap.set(n.morphKey, { ...n });
+      });
+
+      rebuildFocusLayout(id, { setCamera: false });
+      const to = snapshotLayout(focusLayout.nodes, focusLayout.links);
+
+      // Camera: rise out of root then fit (ref)
+      zoom = 0.5; camX = 0; camY = 120;
+      rebuildFocusLayout(id, { setCamera: true });
+
+      beginMorph({ dir: 1, focusId: id, from, to, duration: DIVE_MORPH_MS });
+      // Keep focusCat null until morph completes so labels/other fade via morphDisplay
+      focusCat = null;
+    };
+
+    // Dim others immediately
     CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : 0.12; });
+    // Soft camera push toward hub during align
+    const hub = layoutNodes.find((n) => n.id === id);
     if (hub) {
-      targetZoom = clampZSky(Math.min(1.55, zoom * 1.35));
-      tCamX = -hub.x * 0.35;
-      tCamY = -hub.y * 0.35;
+      targetZoom = clampZSky(Math.min(1.45, Math.max(zoom, 1.1)));
+      tCamX = -hub.x * 0.2;
+      tCamY = -hub.y * 0.2;
     }
 
-    setTimeout(() => {
-      focusCat = id;
-      rebuildFocusLayout(id, { setCamera: false });
-      // Rise out of the root then fit (ref: scale=0.5, ty=120 → fitCurrent)
-      zoom = 0.5;
-      camX = 0;
-      camY = 120;
-      tCamX = 0;
-      tCamY = 0;
-      rebuildFocusLayout(id, { setCamera: true });
-      mapState = 'fan';
-      setFanMode(true);
-      focusBar.hidden = false;
-      focusTitle.textContent = cat.label;
-      focusSub.textContent = cat.subtitle;
-      focusTitle.style.color = cat.color;
-      document.body.classList.toggle('panel-open', panelOpen || coreOpen);
-      setTimeout(() => setTransitioning(false), 1250);
-    }, DIVE_SWAP_MS);
+    setTimeout(startMorph, reduceMotion ? 0 : wait);
   }
 
   function clearFocus({ immediate = false } = {}) {
-    if (mapState === 'rising' || mapState === 'diving') return;
-    if (!focusCat && mapState === 'sky') {
+    if (mapState === 'rising' || mapState === 'diving' || mapState === 'aligning') return;
+    if (mapState === 'sky' && !focusCat) {
       recenterMap({ immediate });
       return;
     }
-    const rise = () => {
-      mapState = 'rising';
-      setTransitioning(true);
-      closePanel(false);
-      closeCore(false);
+    const id = focusCat || (focusLayout && focusLayout.cat && focusLayout.cat.id);
+    if (!id) return;
+
+    setTransitioning(true);
+    closePanel(false);
+    closeCore(false);
+    selectedChain = -1;
+    hoverNodeId = null;
+
+    if (immediate || reduceMotion) {
+      morph = null;
+      focusCat = null;
+      focusLayout = null;
+      mapState = 'sky';
+      setFanMode(false);
       focusBar.hidden = true;
-      targetZoom = 0.5;
-      tCamX = 0;
-      tCamY = -80;
-      const finish = () => {
-        focusCat = null;
-        focusLayout = null;
-        hoverNodeId = null;
-        pathIds = new Set();
-        mapState = 'sky';
-        setFanMode(false);
-        rebuildOverviewLayout();
-        targetZoom = clampZSky(1);
-        recenterMap({ immediate: !!immediate || reduceMotion });
-        setTimeout(() => setTransitioning(false), 450);
-      };
-      if (immediate || reduceMotion) finish();
-      else setTimeout(finish, RISE_MS);
-    };
-    rise();
+      rebuildOverviewLayout();
+      targetZoom = clampZSky(1);
+      recenterMap({ immediate: true });
+      setTransitioning(false);
+      return;
+    }
+
+    // Capture focus layout as FROM before clearing
+    if (!focusLayout) rebuildFocusLayout(id, { setCamera: false });
+    const from = snapshotLayout(focusLayout.nodes, focusLayout.links);
+    mapState = 'rising';
+    focusCat = null;
+    setFanMode(false);
+    focusBar.hidden = true;
+    rebuildOverviewLayout();
+    const toNodes = layoutNodes.filter((n) => n.catId === id);
+    const toLinks = layoutLinks.filter((L) => {
+      const tn = layoutNodes.find((n) => n.id === L.t);
+      return tn && tn.catId === id;
+    });
+    const to = snapshotLayout(toNodes, toLinks);
+    beginMorph({ dir: -1, focusId: id, from, to, duration: RISE_MS });
+    targetZoom = clampZSky(1);
+    tCamX = 0;
+    tCamY = -H * 0.04;
   }
 
   function stepCategory(dir) {
-    if (mapState === 'diving' || mapState === 'rising') return;
+    if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
     if (focusCat || mapState === 'fan') {
       const i = CATS.findIndex((c) => c.id === focusCat);
       const next = CATS[(i + dir + CATS.length) % CATS.length];
-      // Swap fan with short transition
+      // Ref: buildFan(prev/next) — morph between focus layouts
       setTransitioning(true);
-      focusCat = next.id;
-      featuredIdx = (i + dir + CATS.length) % CATS.length;
+      const from = snapshotLayout(focusLayout.nodes, focusLayout.links);
       rebuildFocusLayout(next.id, { setCamera: true });
+      const to = snapshotLayout(focusLayout.nodes, focusLayout.links);
+      focusCat = next.id;
+      selectedChain = -1;
+      closePanel(false);
+      beginMorph({ dir: 1, focusId: next.id, from, to, duration: 600 });
+      mapState = 'diving'; // reuse morph completion → fan
       focusTitle.textContent = next.label;
       focusSub.textContent = next.subtitle;
       focusTitle.style.color = next.color;
-      closePanel(false);
-      setTimeout(() => setTransitioning(false), 600);
       return;
     }
-    // Sky: seat neighbouring department (wchev)
-    featuredIdx = (featuredIdx + dir + CATS.length) % CATS.length;
-    const cat = CATS[featuredIdx];
-    const hub = layoutNodes.find((n) => n.id === cat.id);
-    if (hub) {
-      tCamX = Math.max(-40, Math.min(40, -hub.x * 0.08));
-      tCamY = Math.max(-50, Math.min(50, -hub.y * 0.08));
-    }
-    hoverCat = cat.id;
-    setTimeout(() => { if (hoverCat === cat.id && !hoverNodeId) hoverCat = null; }, 900);
+    // Sky: rotate dial (ref stepWheel)
+    stepWheel(dir);
   }
 
   function badgeClass(state) {
@@ -1365,37 +1519,36 @@
   }
 
   function setHoverFromPointer(lx, ly) {
-    if (mapState === 'diving' || mapState === 'rising') return;
+    if (mapState !== 'sky' && mapState !== 'fan') return;
     const hit = pick(lx, ly);
     if (!hit || hit.kind === 'core') {
       hoverNodeId = null;
-      pathIds = new Set();
-      if (!focusCat) hoverCat = null;
+      if (mapState === 'sky') hoverCat = null;
       canvas.style.cursor = dragging ? 'grabbing' : 'grab';
       return;
     }
-    const catId = hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
-    hoverCat = focusCat ? null : catId;
-    hoverNodeId = hit.ref?.id || hit.id;
-    // Per-branch path: node → hub → core
-    pathIds = pathToCore(hoverNodeId);
-    if (hit.kind === 'category' && !focusCat) {
-      // Hub hover: light hub+core spoke, dim other departments
-      pathIds = new Set([hoverNodeId, '__core__']);
+    if (mapState === 'sky') {
+      // Ref: whole department hover only (no per-node path)
+      hoverCat = hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
+      hoverNodeId = null;
+      canvas.style.cursor = hoverCat ? 'pointer' : 'grab';
+      return;
     }
+    // Fan: hover scales node only (ref CSS); no chain fade on hover
+    hoverCat = null;
+    hoverNodeId = hit.ref?.id || hit.id;
     canvas.style.cursor = 'pointer';
   }
 
   function setHoverCat(id) {
-    if (focusCat) {
+    if (mapState !== 'sky') {
       hoverCat = null;
-      canvas.style.cursor = dragging ? 'grabbing' : 'grab';
       return;
     }
     hoverCat = id || null;
     hoverNodeId = null;
-    pathIds = id ? new Set([id, '__core__']) : new Set();
-    canvas.style.cursor = hoverCat ? 'pointer' : (dragging ? 'grabbing' : 'grab');
+    CATS.forEach((c) => { hoverAlpha[c.id] = !id ? 1 : (c.id === id ? 1 : DIM_OTHERS); });
+    canvas.style.cursor = hoverCat ? 'pointer' : 'grab';
   }
 
   canvas.addEventListener('pointerdown', (e) => {
@@ -1406,8 +1559,7 @@
       dragging = false;
       const vals = [...ptrs.values()];
       pinchD0 = Math.hypot(vals[0][0] - vals[1][0], vals[0][1] - vals[1][1]);
-      pinchS0 = zoom;
-      pinchRatio = 1;
+      pinchS0 = zoom; pinchRatio = 1;
       const mx = (vals[0][0] + vals[1][0]) / 2;
       const my = (vals[0][1] + vals[1][1]) / 2;
       const u = usable();
@@ -1418,15 +1570,13 @@
       return;
     }
     dragging = true;
-    velX = 0;
-    velY = 0;
-    lastX = e.clientX;
-    lastY = e.clientY;
+    lastX = e.clientX; lastY = e.clientY;
     lastMoveTs = performance.now();
     dragDist = 0;
     canvas.classList.add('is-dragging');
     canvas.style.cursor = 'grabbing';
   });
+
   window.addEventListener('pointermove', (e) => {
     if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.clientX, e.clientY]);
     const rect = canvas.getBoundingClientRect();
@@ -1437,54 +1587,67 @@
       const vals = [...ptrs.values()];
       const dist = Math.hypot(vals[0][0] - vals[1][0], vals[0][1] - vals[1][1]);
       pinchRatio = dist / pinchD0;
-      const zn = clampZoom(pinchS0 * pinchRatio);
-      const mx = (vals[0][0] + vals[1][0]) / 2 - rect.left;
-      const my = (vals[0][1] + vals[1][1]) / 2 - rect.top;
-      const u = usable();
-      zoom = targetZoom = zn;
-      camX = tCamX = (mx - u.cx) / zn - pinchAX;
-      camY = tCamY = (my - u.cy) / zn - pinchAY;
+      if (mapState === 'fan' || focusCat) {
+        const zn = clampZFan(pinchS0 * pinchRatio);
+        const mx = (vals[0][0] + vals[1][0]) / 2 - rect.left;
+        const my = (vals[0][1] + vals[1][1]) / 2 - rect.top;
+        const u = usable();
+        zoom = targetZoom = zn;
+        camX = tCamX = (mx - u.cx) / zn - pinchAX;
+        camY = tCamY = (my - u.cy) / zn - pinchAY;
+      }
       return;
     }
 
-    if (!dragging && viewMode === 'map') {
-      setHoverFromPointer(lx, ly);
-    }
-
+    if (!dragging && viewMode === 'map') setHoverFromPointer(lx, ly);
     if (!dragging) return;
-    const now = performance.now();
-    const dt = Math.max(8, now - lastMoveTs);
+
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    lastMoveTs = now;
+    lastX = e.clientX; lastY = e.clientY;
     dragDist += Math.hypot(dx, dy);
 
-    // Pan in screen space → camera
-    const k = 1 / Math.max(zoom, 0.5);
-    tCamX += dx * k;
-    tCamY += dy * k;
-    camX += dx * k;
-    camY += dy * k;
-    velX = (dx * k) * (16 / dt);
-    velY = (dy * k) * (16 / dt);
+    if (mapState === 'sky' || mapState === 'aligning') {
+      // Angular dial (ref): point under cursor stays; dead zone uses dx*0.12
+      const u = usable();
+      const cx = u.cx + camX;
+      const cy = u.cy + camY;
+      const r0x = lastX - dx - cx, r0y = lastY - dy - cy;
+      const r1x = e.clientX - cx, r1y = e.clientY - cy;
+      if (Math.hypot(r0x, r0y) > 48 && Math.hypot(r1x, r1y) > 48) {
+        let dA = (Math.atan2(r1y, r1x) - Math.atan2(r0y, r0x)) * 180 / Math.PI;
+        if (dA > 180) dA -= 360; if (dA < -180) dA += 360;
+        wheelA += dA;
+      } else {
+        wheelA -= dx * 0.12;
+      }
+      wheelT = wheelA;
+      layoutWheel();
+      clearTimeout(wheelIdle);
+      wheelIdle = setTimeout(snapWheel, 260);
+    } else if (mapState === 'fan' || focusCat) {
+      // Direct pan, no inertia (ref)
+      camX += dx; tCamX = camX;
+      camY += dy; tCamY = camY;
+    }
   });
+
   const endPtr = (e) => {
     if (ptrs.has(e.pointerId)) {
       ptrs.delete(e.pointerId);
       if (ptrs.size < 2 && pinchD0 > 0) {
-        if (mapState === 'sky' && pinchRatio > 1.35 && CATS[featuredIdx]) {
-          focusCategory(CATS[featuredIdx].id);
-        } else if ((mapState === 'fan' || focusCat) && pinchRatio < 0.62 && targetZoom <= RISE_SCALE + 0.02) {
-          clearFocus();
-        }
+        if (mapState === 'sky' && pinchRatio > 1.35) focusCategory(CATS[focusedIdx()].id);
+        else if ((mapState === 'fan' || focusCat) && pinchRatio < 0.62 && targetZoom <= RISE_SCALE + 0.02) clearFocus();
         pinchD0 = 0;
       }
     }
     if (!dragging) return;
     dragging = false;
     canvas.classList.remove('is-dragging');
+    if (mapState === 'sky') {
+      clearTimeout(wheelIdle);
+      wheelIdle = setTimeout(snapWheel, 260);
+    }
     canvas.style.cursor = (hoverCat || hoverNodeId) ? 'pointer' : 'grab';
   };
   window.addEventListener('pointerup', endPtr);
@@ -1495,74 +1658,80 @@
     if (e.target.closest?.('.side-panel, .core-panel')) return;
     e.preventDefault();
     const now = performance.now();
-    // Zoom (trackpads often send ctrlKey; also treat plain vertical as zoom for map UX)
-    const zooming = e.ctrlKey || e.metaKey || Math.abs(e.deltaY) >= Math.abs(e.deltaX);
-    if (zooming) {
+
+    if (e.ctrlKey || e.metaKey) {
       if (now < zoomLockUntil) return;
-      const zn = zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP);
-      if ((focusCat || mapState === 'fan') && zn <= RISE_SCALE && e.deltaY > 0) {
-        zoomLockUntil = now + 900;
-        clearFocus();
+      if (mapState === 'sky') {
+        zoomIntent += -e.deltaY;
+        if (zoomIntent > 110) {
+          focusCategory(CATS[focusedIdx()].id);
+          zoomIntent = 0; zoomLockUntil = now + 900;
+        } else if (zoomIntent < -110) zoomIntent = 0;
         return;
       }
-      if (!focusCat && mapState === 'sky' && zn > 1.55 && e.deltaY < 0) {
-        // intentional zoom-in past sky → dive featured
-        zoomLockUntil = now + 900;
-        focusCategory(CATS[featuredIdx].id);
-        return;
+      if (mapState === 'fan' || focusCat) {
+        const zn = clampZFan(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
+        if (zn <= RISE_SCALE && e.deltaY > 0) {
+          zoomIntent += -e.deltaY;
+          if (zoomIntent < -110) { clearFocus(); zoomIntent = 0; zoomLockUntil = now + 900; }
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        zoomAtScreen(e.clientX - rect.left, e.clientY - rect.top, zn);
       }
-      const rect = canvas.getBoundingClientRect();
-      zoomAtScreen(e.clientX - rect.left, e.clientY - rect.top, zn);
       return;
     }
-    // horizontal-dominant: pan
-    tCamX -= e.deltaX / Math.max(zoom, 0.5);
-    tCamY -= e.deltaY / Math.max(zoom, 0.5);
-    camX = tCamX;
-    camY = tCamY;
+
+    // Plain scroll: sky rotates wheel; fan pans (ref)
+    if (mapState === 'fan' || focusCat) {
+      camX -= e.deltaX; tCamX = camX;
+      camY -= e.deltaY; tCamY = camY;
+    } else if (mapState === 'sky') {
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      wheelT += d * 0.1;
+      clearTimeout(wheelIdle);
+      wheelIdle = setTimeout(snapWheel, 300);
+    }
   }, { passive: false });
 
   canvas.addEventListener('click', (e) => {
     if (viewMode !== 'map' || dragDist >= DRAG_CLICK_CANCEL) return;
-    if (mapState === 'diving' || mapState === 'rising') return;
+    if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
     const rect = canvas.getBoundingClientRect();
     const hit = pick(e.clientX - rect.left, e.clientY - rect.top);
     if (!hit) {
-      if (focusCat) {
-        // empty click: dismiss panel or fit (ref desktop fitCurrent)
-        if (panelOpen) closePanel();
+      if (mapState === 'fan') {
+        if (panelOpen) { closePanel(); selectedChain = -1; }
         else if (coreOpen) closeCore();
+        else {
+          // fitCurrent
+          if (focusCat) rebuildFocusLayout(focusCat, { setCamera: true });
+          selectedChain = -1;
+        }
       } else if (coreOpen) closeCore();
       return;
     }
     if (hit.kind === 'core') { openCore(); return; }
     if (hit.kind === 'category') {
-      if (focusCat) { clearFocus(); return; }
+      if (mapState === 'fan' || focusCat) { clearFocus(); return; }
       focusCategory(hit.ref?.catId || hit.ref?.id || hit.id);
       return;
     }
-    // Overview: click any department node → focus that category
-    if (!focusCat && hit.ref?.catId) {
+    if (mapState === 'sky' && hit.ref?.catId) {
       focusCategory(hit.ref.catId);
       return;
     }
-    if (hit.ref?.alert) {
-      const open = () => openPanel({
+    if (hit.ref?.alert && (mapState === 'fan' || focusCat)) {
+      selectedChain = hit.ref.chain != null ? hit.ref.chain : -1;
+      targetZoom = clampZFan(Math.min(Z_FAN_MAX, Math.max(targetZoom, 1.35)));
+      tCamX = -hit.ref.x;
+      tCamY = -hit.ref.y + 30 / Math.max(targetZoom, 0.5);
+      openPanel({
         ...hit.ref.alert,
         ladderSteps: hit.ref.alert.ladderSteps || window.LEET_ALERTS_DATA.ladder(hit.ref.alert.ladder),
       });
-      if (focusCat !== hit.ref.catId) {
-        focusCategory(hit.ref.catId);
-        setTimeout(open, DIVE_SWAP_MS + 80);
-      } else {
-        // Camera ease toward node (focusPoint ~1.35)
-        targetZoom = clampZFan(Math.min(Z_FAN_MAX, Math.max(targetZoom, 1.35)));
-        tCamX = -hit.ref.x;
-        tCamY = -hit.ref.y + 30 / Math.max(targetZoom, 0.5);
-        open();
-      }
-    } else if (hit.ref && focusCat) {
-      // non-alert node: still ease camera
+    } else if (hit.ref && (mapState === 'fan' || focusCat)) {
+      selectedChain = hit.ref.chain != null ? hit.ref.chain : -1;
       targetZoom = clampZFan(0.92);
       tCamX = -hit.ref.x;
       tCamY = -hit.ref.y;
@@ -1570,31 +1739,34 @@
   });
 
   canvas.addEventListener('dblclick', (e) => {
-    if (viewMode !== 'map' || focusCat) return;
+    if (viewMode !== 'map' || mapState !== 'sky') return;
     e.preventDefault();
     recenterMap({ immediate: false });
   });
 
   document.getElementById('cat-prev').addEventListener('click', () => stepCategory(-1));
   document.getElementById('cat-next').addEventListener('click', () => stepCategory(1));
-  document.getElementById('wchev-l').addEventListener('click', () => stepCategory(-1));
-  document.getElementById('wchev-r').addEventListener('click', () => stepCategory(1));
-  document.getElementById('panel-close').addEventListener('click', () => closePanel());
+  document.getElementById('wchev-l').addEventListener('click', () => stepWheel(-1));
+  document.getElementById('wchev-r').addEventListener('click', () => stepWheel(1));
+  document.getElementById('panel-close').addEventListener('click', () => { closePanel(); selectedChain = -1; });
   document.getElementById('core-close').addEventListener('click', () => closeCore());
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (panelOpen) closePanel();
+      if (panelOpen) { closePanel(); selectedChain = -1; }
       else if (coreOpen) closeCore();
-      else if (focusCat || mapState === 'fan') clearFocus();
+      else if (mapState === 'fan' || focusCat) clearFocus();
       else recenterMap({ immediate: false });
     }
-    if (e.key === '0') recenterMap({ immediate: false });
-    if (focusCat || mapState === 'fan') {
+    if (e.key === '0') {
+      if (mapState === 'fan' && focusCat) rebuildFocusLayout(focusCat, { setCamera: true });
+      else recenterMap({ immediate: false });
+    }
+    if (mapState === 'fan' || focusCat) {
       if (e.key === 'ArrowRight') stepCategory(1);
       if (e.key === 'ArrowLeft') stepCategory(-1);
     } else if (mapState === 'sky') {
-      if (e.key === 'ArrowRight') stepCategory(1);
-      if (e.key === 'ArrowLeft') stepCategory(-1);
+      if (e.key === 'ArrowRight') stepWheel(1);
+      if (e.key === 'ArrowLeft') stepWheel(-1);
     }
   });
 
@@ -1654,68 +1826,61 @@
     getCounters: () => ({ ...SNAP.counters }),
     getFocus: () => ({
       categoryId: focusCat, alertId: selectedAlert?.id || null,
-      coreOpen, panelOpen, view: viewMode, mapState, featuredIdx,
+      coreOpen, panelOpen, view: viewMode, mapState, focusedIdx: focusedIdx(),
+      selectedChain, wheelA, wheelT,
     }),
-    getTransform: () => ({ zoom, rot, camX, camY, tCamX, tCamY, velX, velY, targetZoom }),
+    getTransform: () => ({ zoom, camX, camY, tCamX, tCamY, targetZoom, wheelA, wheelT }),
     interactionConstants: () => ({
-      EASE_CAM, EASE_HOVER, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
+      EASE_CAM, EASE_WHEEL, EASE_HOVER, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
       DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
       Z_FAN_MIN, Z_FAN_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
-      DIVE_SWAP_MS, RISE_MS, INERTIA_FRICTION,
+      DIVE_ALIGN_MS, DIVE_MORPH_MS, RISE_MS, W_STEP, N,
+      fanInertia: false, skyDial: true, morphDive: true,
     }),
     focusCategory: (id) => focusCategory(id),
     clearFocus: (opts) => clearFocus(opts || {}),
     stepCategory: (d) => stepCategory(d),
+    stepWheel: (d) => stepWheel(d),
+    snapWheel: () => snapWheel(),
     openAlert: (id) => {
       const a = SNAP.categories.flatMap((c) => c.alerts).find((x) => x.id === id) || SNAP.alerts.find((x) => x.id === id);
       if (!a) return false;
       focusCategory(a.categoryId);
-      setTimeout(() => {
-        openPanel({ ...a, ladderSteps: a.ladderSteps || window.LEET_ALERTS_DATA.ladder(a.ladder) });
-      }, DIVE_SWAP_MS + 100);
+      const tryOpen = () => {
+        if (mapState === 'fan' && focusCat === a.categoryId) {
+          const n = (focusLayout?.nodes || []).find((x) => x.alert && x.alert.id === a.id);
+          if (n) selectedChain = n.chain != null ? n.chain : -1;
+          openPanel({ ...a, ladderSteps: a.ladderSteps || window.LEET_ALERTS_DATA.ladder(a.ladder) });
+          return true;
+        }
+        return false;
+      };
+      const iv = setInterval(() => { if (tryOpen()) clearInterval(iv); }, 80);
+      setTimeout(() => clearInterval(iv), 4000);
       return true;
     },
     openCore: () => openCore(),
-    closePanel: () => closePanel(),
+    closePanel: () => { closePanel(); selectedChain = -1; },
     closeCore: () => closeCore(),
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
     waitForIdle: (ms = 480) => new Promise((r) => setTimeout(r, ms)),
-    setIdleSpin: () => { /* removed: overview no longer auto-rotates */ },
-    setHover: (id) => {
-      setHoverCat(id || null);
-      if (!id) {
-        CATS.forEach((c) => { hoverAlpha[c.id] = 1; });
-      } else {
-        CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : DIM_OTHERS; });
-      }
-    },
+    setIdleSpin: () => {},
+    setHover: (id) => setHoverCat(id || null),
     setHoverNode: (nodeId) => {
-      if (!nodeId) {
-        hoverNodeId = null;
-        pathIds = new Set();
-        hoverCat = null;
-        return;
-      }
-      hoverNodeId = nodeId;
-      pathIds = pathToCore(nodeId);
-      const n = layoutNodes.find((x) => x.id === nodeId) || focusLayout?.nodes?.find((x) => x.id === nodeId);
-      hoverCat = focusCat ? null : (n?.catId || null);
-      if (n?.catId) {
-        CATS.forEach((c) => { hoverAlpha[c.id] = c.id === n.catId ? 1 : DIM_OTHERS; });
-      }
+      // Fan-only hover scale target (no path lighting — matches ref)
+      hoverNodeId = nodeId || null;
     },
     getHover: () => ({
-      hoverCat, hoverNodeId,
-      pathIds: [...pathIds],
-      hoverAlpha: { ...hoverAlpha },
+      hoverCat, hoverNodeId, selectedChain,
+      hoverAlpha: { ...hoverAlpha }, focusedIdx: focusedIdx(),
     }),
     panBy: (dx, dy) => {
-      tCamX += dx;
-      tCamY += dy;
-      camX += dx * 0.5;
-      camY += dy * 0.5;
-      velX = dx * 0.4;
-      velY = dy * 0.4;
+      if (mapState === 'sky') {
+        wheelT -= dx * 0.12;
+      } else {
+        tCamX += dx; tCamY += dy;
+        camX += dx; camY += dy;
+      }
     },
     zoomAt: (sx, sy, factor) => zoomAtScreen(sx, sy, zoom * factor),
     recenter: () => recenterMap({ immediate: true }),
@@ -1946,8 +2111,23 @@
   };
 
   window.addEventListener('resize', resize);
+  // Paint charcoal immediately to avoid white flash
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = mapView.clientWidth || window.innerWidth;
+  H = mapView.clientHeight || window.innerHeight;
+  canvas.width = Math.max(1, Math.floor(W * dpr));
+  canvas.height = Math.max(1, Math.floor(H * dpr));
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#20242d';
+  ctx.fillRect(0, 0, W, H);
+
   resize();
   rebuildOverviewLayout();
+  tCamY = -H * 0.04; camY = tCamY;
+  mapReady = true;
+  document.body.classList.add('map-ready');
   window.__LEET_ALERTS_READY__ = true;
   requestAnimationFrame(tick);
 })();
