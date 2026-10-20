@@ -82,7 +82,7 @@
     const rTip = H * 0.30;
     const u = usable();
     // Title centres must stay inside the canvas (toolbar + bottom margin)
-    const topClear = 56 + 34;
+    const topClear = 56 + 44; // extra air under MAP/DASHBOARDS toggle
     const botClear = 36;
     const rLabelMax = Math.min(u.cy - topClear, (H - botClear) - u.cy);
     // Tip→label gap for wide Marcellus titles
@@ -179,7 +179,7 @@
 
     // Slot = 360°/N; fan uses ~72% so empty gaps between departments stay obvious
     const slot = (Math.PI * 2) / CATS.length;
-    const SPAN = slot * 0.72; // ~72% of department slot → visible gaps between fans
+    const SPAN = slot * 0.68; // ~68–70% of slot → obvious dark gaps between departments
     const RmaxRef = 146 + 3 * 56; // 314 (buildSky max reach)
     const scale = (rTip - rHub) / RmaxRef;
     const rb = 146 * scale;
@@ -576,12 +576,11 @@
         });
       }
     }
-    const scale = focusCat ? 1.15 : zoom;
-    const bloomR = coreR * scale * 1.02;
+    const scale = focusCat ? 1.1 : zoom;
+    const bloomR = coreR * scale * 0.92;
     const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, bloomR);
-    g.addColorStop(0, 'rgba(255,255,255,0.22)');
-    g.addColorStop(0.28, 'rgba(233,228,214,0.10)');
-    g.addColorStop(0.55, 'rgba(196,181,253,0.05)');
+    g.addColorStop(0, 'rgba(255,255,255,0.12)');
+    g.addColorStop(0.35, 'rgba(233,228,214,0.05)');
     g.addColorStop(1, 'rgba(32,36,45,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -589,36 +588,32 @@
     ctx.fill();
 
     coreDust.forEach((d, i) => {
-      const ang = d.a + t * 0.03 * d.s;
-      const rad = d.r * scale * (0.96 + 0.04 * Math.sin(t * 0.7 + i * 0.4));
+      const ang = d.a + t * 0.028 * d.s;
+      const rad = d.r * scale * (0.97 + 0.03 * Math.sin(t * 0.7 + i * 0.4));
       const x = p.x + Math.cos(ang) * rad;
       const y = p.y + Math.sin(ang * 1.02) * rad * 0.94;
-      if (Math.hypot(x - p.x, y - p.y) < Math.min(10, bloomR * 0.18)) return;
+      if (Math.hypot(x - p.x, y - p.y) < Math.min(8, bloomR * 0.16)) return;
       const col = d.hue < 0.35
-        ? `rgba(255,255,255,${0.35 + d.s * 0.45})`
+        ? `rgba(255,255,255,${0.4 + d.s * 0.4})`
         : d.hue < 0.55
-          ? `rgba(233,228,214,${0.28 + d.s * 0.3})`
+          ? `rgba(233,228,214,${0.32 + d.s * 0.28})`
           : d.hue < 0.75
-            ? `rgba(196,181,253,${0.22 + d.s * 0.25})`
-            : `rgba(251,113,133,${0.2 + d.s * 0.22})`;
+            ? `rgba(196,181,253,${0.24 + d.s * 0.22})`
+            : `rgba(251,113,133,${0.22 + d.s * 0.2})`;
       ctx.beginPath();
       ctx.fillStyle = col;
       ctx.arc(x, y, d.size * scale, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    // Subtle wordmark — no dark pill / heavy stroke
-    const fs = Math.max(13, 14.5 * scale);
+    // Subtle wordmark — fill only, no stroke/pill
+    const fs = Math.max(12, 13.5 * scale);
     ctx.font = `600 ${fs}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 1.2 * scale;
-    ctx.strokeStyle = 'rgba(32, 36, 45, 0.35)';
-    ctx.lineJoin = 'round';
-    ctx.strokeText('leet', p.x, p.y);
-    ctx.fillStyle = 'rgba(242,239,232,0.88)';
+    ctx.fillStyle = 'rgba(236,233,226,0.78)';
     ctx.fillText('leet', p.x, p.y);
-    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 36 * scale, vr: 36 * scale });
+    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 32 * scale, vr: 32 * scale });
   }
 
   function curvePts(x0, y0, x1, y1) {

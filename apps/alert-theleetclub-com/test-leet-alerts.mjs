@@ -74,7 +74,7 @@ for (const vp of [
   { w: 1920, h: 1080 },
 ]) {
   const page = await browser.newPage({ viewport: { width: vp.w, height: vp.h } });
-  await page.goto(`${BASE}/alerts.html?r9=1`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await page.goto(`${BASE}/alerts.html?r9=2`, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => window.__LEET_ALERTS_READY__ && window.LEET_ALERTS_MAP, null, { timeout: 15000 });
   await page.evaluate(() => window.LEET_ALERTS_MAP.waitForIdle());
   await page.evaluate(async () => {

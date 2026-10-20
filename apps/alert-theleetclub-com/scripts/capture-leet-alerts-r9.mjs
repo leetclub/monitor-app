@@ -17,7 +17,7 @@ fs.mkdirSync(ART, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-await page.goto(`${BASE}/alerts.html?r9=1`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+await page.goto(`${BASE}/alerts.html?r9=2`, { waitUntil: 'domcontentloaded', timeout: 20000 });
 await page.waitForFunction(() => window.__LEET_ALERTS_READY__ && window.LEET_ALERTS_MAP, null, { timeout: 15000 });
 await page.evaluate(() => {
   window.LEET_ALERTS_MAP.setIdleSpin(false);
