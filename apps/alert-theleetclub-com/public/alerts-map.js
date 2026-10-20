@@ -38,8 +38,8 @@
   const R0_FAN = 248;
   const R_BASE = 410;
   const R_STEP = 214;
-  const DIVE_ALIGN_MS = 520; // after wheel seat → morph start (ref dive swap)
-  const DIVE_MORPH_MS = 1250; // branching / morph settle
+  const DIVE_ALIGN_MS = 220; // wheel seat → morph start
+  const DIVE_MORPH_MS = 520; // branching morph (frame-step 0…520ms)
   const RISE_MS = 380;
   const N = CATS.length;
   const W_STEP = 360 / N;
@@ -48,8 +48,9 @@
   let W = 0, H = 0, dpr = 1;
   let zoom = 1, targetZoom = 1;
   let camX = 0, camY = 0, tCamX = 0, tCamY = 0;
-  // Sky wheel dial (degrees). Seat department i at bottom when wheelT = 180 - i*W_STEP
-  let wheelA = 180, wheelT = 180;
+  // Sky wheel dial (degrees). Rest = 0 → cat0 (OFFLINE) at top (r10 overview).
+  // Seat department i at bottom when wheelT = 180 - i*W_STEP (dive / dial snap).
+  let wheelA = 0, wheelT = 0;
   let wheelIdle = null;
   let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
@@ -335,6 +336,11 @@
 
   function snapWheel() {
     wheelT = 180 + Math.round((wheelT - 180) / W_STEP) * W_STEP;
+    // Nudge ease so a department seats at the bottom (ref dial snap)
+    if (Math.abs(wheelT - wheelA) < 0.01) {
+      wheelA = wheelT;
+      layoutWheel();
+    }
   }
 
   function stepWheel(d) {
@@ -1608,12 +1614,14 @@
     dragDist += Math.hypot(dx, dy);
 
     if (mapState === 'sky' || mapState === 'aligning') {
-      // Angular dial (ref): point under cursor stays; dead zone uses dx*0.12
+      // Angular dial (ref): rotate about screen-space core; dead zone uses dx*0.12
       const u = usable();
-      const cx = u.cx + camX;
-      const cy = u.cy + camY;
-      const r0x = lastX - dx - cx, r0y = lastY - dy - cy;
-      const r1x = e.clientX - cx, r1y = e.clientY - cy;
+      const ox = u.cx + camX * zoom;
+      const oy = u.cy + camY * zoom;
+      const x0 = lastX - dx - rect.left, y0 = lastY - dy - rect.top;
+      const x1 = e.clientX - rect.left, y1 = e.clientY - rect.top;
+      const r0x = x0 - ox, r0y = y0 - oy;
+      const r1x = x1 - ox, r1y = y1 - oy;
       if (Math.hypot(r0x, r0y) > 48 && Math.hypot(r1x, r1y) > 48) {
         let dA = (Math.atan2(r1y, r1x) - Math.atan2(r0y, r0x)) * 180 / Math.PI;
         if (dA > 180) dA -= 360; if (dA < -180) dA += 360;
@@ -1834,7 +1842,7 @@
       EASE_CAM, EASE_WHEEL, EASE_HOVER, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
       DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
       Z_FAN_MIN, Z_FAN_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
-      DIVE_ALIGN_MS, DIVE_MORPH_MS, RISE_MS, W_STEP, N,
+      DIVE_ALIGN_MS, DIVE_MORPH_MS, DIVE_SWAP_MS: DIVE_MORPH_MS, RISE_MS, W_STEP, N,
       fanInertia: false, skyDial: true, morphDive: true,
     }),
     focusCategory: (id) => focusCategory(id),
@@ -2107,6 +2115,80 @@
         }
       });
       return { clear, hits, barBottom };
+    },
+    /**
+     * Rest-state gate: fail if fewer than ~40 node dots are on-screen, or any
+     * category label sits more than 15% of the viewport away from its hub.
+     * Also samples the canvas so an opaque overlay cannot fake a pass.
+     */
+    assertRestOverview: () => {
+      const errors = [];
+      if (mapState !== 'sky' || morph || focusCat) {
+        errors.push(`not at rest (mapState=${mapState}, focus=${focusCat}, morph=${!!morph})`);
+      }
+      const dots = hitNodes.filter((h) => h.kind !== 'core' && (h.vr || 0) > 0);
+      const nodeDots = dots.filter((h) => h.kind !== 'category');
+      if (nodeDots.length < 40) {
+        errors.push(`nodeDots=${nodeDots.length} (need ≥40)`);
+      }
+      // 15% of the longer viewport side (~label ring gap on 1440×900 is ~0.15·W)
+      const thr = 0.15 * Math.max(W, H);
+      const labelDrift = [];
+      const cr = canvas.getBoundingClientRect();
+      CATS.forEach((cat) => {
+        const hub = hitNodes.find((h) => h.id === cat.id);
+        const el = labelEls.get(cat.id);
+        if (!hub || !el) {
+          labelDrift.push({ id: cat.id, missing: true });
+          errors.push(`missing hub/label for ${cat.id}`);
+          return;
+        }
+        const r = el.getBoundingClientRect();
+        const lx = r.left + r.width / 2 - cr.left;
+        const ly = r.top + r.height / 2 - cr.top;
+        const dist = Math.hypot(lx - hub.x, ly - hub.y);
+        labelDrift.push({ id: cat.id, dist: Math.round(dist), thr: Math.round(thr) });
+        if (dist > thr) errors.push(`label ${cat.id} ${Math.round(dist)}px from hub (max ${Math.round(thr)})`);
+      });
+      // Canvas must show non-background ink near core (catches opaque label-layer regressions)
+      const dprNow = Math.min(window.devicePixelRatio || 1, 2);
+      const u = usable();
+      const sx = Math.floor((u.cx + camX * zoom) * dprNow);
+      const sy = Math.floor((u.cy + camY * zoom) * dprNow);
+      let coreInk = 0;
+      try {
+        const sample = ctx.getImageData(
+          Math.max(0, sx - 24), Math.max(0, sy - 24), 48, 48,
+        );
+        for (let i = 0; i < sample.data.length; i += 4) {
+          const r = sample.data[i], g = sample.data[i + 1], b = sample.data[i + 2];
+          if (r + g + b > 140) coreInk += 1;
+        }
+      } catch (e) {
+        errors.push(`canvas sample failed: ${e.message || e}`);
+      }
+      if (coreInk < 40) errors.push(`coreInk=${coreInk} (canvas looks empty near core)`);
+
+      // Composited visibility: label-layer must not paint an opaque fill over the canvas
+      const labelBg = getComputedStyle(labelLayer).backgroundColor;
+      const opaqueLabel = (() => {
+        const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(labelBg || '');
+        if (!m) return false;
+        const a = m[4] == null ? 1 : Number(m[4]);
+        return a > 0.05;
+      })();
+      if (opaqueLabel) errors.push(`label-layer background is opaque (${labelBg})`);
+
+      return {
+        ok: errors.length === 0,
+        errors,
+        nodeDots: nodeDots.length,
+        hubs: dots.filter((h) => h.kind === 'category').length,
+        labelDrift,
+        coreInk,
+        wheelA,
+        mapState,
+      };
     },
   };
 

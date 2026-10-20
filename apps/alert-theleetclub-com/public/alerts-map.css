@@ -151,10 +151,10 @@ html, body {
   cursor: grab;
   background: #20242d;
 }
-/* Kill white flash before first paint */
+/* Kill white flash before first paint — canvas keeps the fill; label layer must stay transparent */
 body:not(.map-ready) #label-layer { opacity: 0; }
 body:not(.map-ready) .wchev { opacity: 0; }
-.label-layer, #alerts-canvas { background-color: #20242d; }
+#alerts-canvas { background-color: #20242d; }
 #alerts-canvas.is-dragging { cursor: grabbing; }
 
 .label-layer {
@@ -162,6 +162,7 @@ body:not(.map-ready) .wchev { opacity: 0; }
   inset: 0;
   pointer-events: none;
   overflow: hidden;
+  background: transparent;
 }
 .cat-label {
   position: absolute;
