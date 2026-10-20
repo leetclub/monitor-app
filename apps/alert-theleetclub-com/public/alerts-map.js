@@ -717,6 +717,66 @@
     return el;
   }
 
+  /** Snap a DOM label off — no fade linger that can orphan after leave/morph/dial. */
+  function hideDomLabel(el) {
+    if (!el) return;
+    el.classList.remove('is-on');
+    el.style.opacity = '0';
+    el.style.visibility = 'hidden';
+  }
+
+  function clearPointerHover() {
+    hoverCat = null;
+    hoverNodeId = null;
+    if (!dragging) canvas.style.cursor = mapState === 'sky' || mapState === 'fan' ? 'grab' : 'default';
+  }
+
+  /** Force every floating label off (used on blur / leave / layout swap). */
+  function clearFloatingLabels() {
+    nodeLabelEls.forEach((el) => hideDomLabel(el));
+    labelEls.forEach((el) => hideDomLabel(el));
+  }
+
+  function syncZoomPct() {
+    const el = document.getElementById('zoom-pct');
+    if (el) el.textContent = `${Math.round(zoom * 100)}%`;
+  }
+
+  function fitCurrent() {
+    if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
+    if ((mapState === 'fan' || focusCat) && focusCat) {
+      rebuildFocusLayout(focusCat, { setCamera: true });
+    } else {
+      recenterMap({ immediate: false });
+    }
+  }
+
+  /** Ref zoomStep: + dives from sky / zooms fan; − zooms out (rise past RISE_SCALE). */
+  function zoomStep(dir) {
+    if (viewMode !== 'map') return;
+    if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
+    const u = usable();
+    const sx = u.cx;
+    const sy = u.cy;
+    if (mapState === 'sky') {
+      if (dir > 0) {
+        focusCategory(CATS[focusedIdx()].id);
+        return;
+      }
+      // Overview zoom-out to min (ref minus is sky-noop; we honour user zoom-out)
+      zoomAtScreen(sx, sy, zoom * ZOOM_STEP_OUT);
+      zoomIntent = 0;
+      return;
+    }
+    if (mapState === 'fan' || focusCat) {
+      const next = clampZFan(zoom * (dir > 0 ? ZOOM_STEP_IN : ZOOM_STEP_OUT));
+      zoomAtScreen(sx, sy, next);
+      if (dir < 0 && next <= RISE_SCALE) {
+        clearFocus();
+      }
+    }
+  }
+
   function drawIcon(x, y, type, color, alpha, scale = 1) {
     ctx.save();
     ctx.translate(x, y);
@@ -1013,6 +1073,7 @@
 
     // nodes
     const showLabels = !!(focusCat || mapState === 'fan') && !morph;
+    const wantedNodeLabels = new Map();
     const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
     const featuredCatId = (mapState === 'sky') ? CATS[focusedIdx()]?.id : null;
     nodes.forEach((n) => {
@@ -1096,23 +1157,42 @@
         ref: n,
       });
 
-      const labelOn = showLabels && (n.kind !== 'machine' || n.hot || n.depth <= 4);
-      if (n.kind === 'category' && !focusCat) {
-        // overview category titles placed separately at outer edge
-      } else if (labelOn) {
-        const el = ensureNodeLabel(n.id, n.label);
-        el.style.left = `${p.x}px`;
-        el.style.top = `${p.y + r + 2}px`;
-        el.classList.add('is-on');
-        el.style.opacity = n.kind === 'machine' && !n.hot ? '0.65' : '1';
+      // Node labels collected below — never leave is-on without a live position
+      if (showLabels && !(n.kind === 'category' && !focusCat)) {
+        const labelOn = n.kind !== 'machine' || n.hot || n.depth <= 4;
+        if (labelOn) {
+          wantedNodeLabels.set(n.id, {
+            text: n.label,
+            x: p.x,
+            y: p.y + r + 2,
+            opacity: n.kind === 'machine' && !n.hot ? 0.65 : 1,
+          });
+        }
       }
     });
 
-    // hide node labels not in focus set
+    // Sync node labels from current frame only (derive-or-clear; follow nodes)
     nodeLabelEls.forEach((el, id) => {
-      if (!showLabels || !nodes.some((n) => n.id === id)) {
-        el.classList.remove('is-on');
+      const want = wantedNodeLabels.get(id);
+      if (!want) {
+        hideDomLabel(el);
+        return;
       }
+      el.textContent = want.text;
+      el.style.left = `${want.x}px`;
+      el.style.top = `${want.y}px`;
+      el.style.opacity = String(want.opacity);
+      el.style.visibility = 'visible';
+      el.classList.add('is-on');
+      wantedNodeLabels.delete(id);
+    });
+    wantedNodeLabels.forEach((want, id) => {
+      const el = ensureNodeLabel(id, want.text);
+      el.style.left = `${want.x}px`;
+      el.style.top = `${want.y}px`;
+      el.style.opacity = String(want.opacity);
+      el.style.visibility = 'visible';
+      el.classList.add('is-on');
     });
 
     // Dim core when a department is hovered (ref hub/spokes → 0.3)
@@ -1127,21 +1207,26 @@
       drawCore(t);
     }
 
-    // overview category labels — outer edge (geom already clears toolbar / bottom)
+    // overview category labels — outer edge; follow wheel every frame
     const sidePad = 40;
+    const showCatLabels = !focusCat && mapState !== 'fan' && !morph
+      && (mapState === 'sky' || mapState === 'aligning');
     CATS.forEach((cat) => {
       const el = ensureCatLabel(cat);
-      if (focusCat || mapState === 'fan' || morph) {
-        el.style.opacity = '0';
+      if (!showCatLabels) {
+        hideDomLabel(el);
         return;
       }
       const wp = catLabelWorld.get(cat.id);
-      if (!wp) { el.style.opacity = '0'; return; }
+      if (!wp) { hideDomLabel(el); return; }
       const p = worldToScreen(wp.x, wp.y);
       el.style.left = `${Math.max(sidePad, Math.min(W - sidePad, p.x))}px`;
       el.style.top = `${p.y}px`;
       const op = catOpacity(cat.id);
       el.style.opacity = String(op);
+      el.style.visibility = op > 0.02 ? 'visible' : 'hidden';
+      if (op > 0.02) el.classList.add('is-on');
+      else el.classList.remove('is-on');
       const featured = CATS[focusedIdx()]?.id === cat.id;
       el.style.filter = (hoverCat && cat.id === hoverCat) || featured
         ? 'brightness(1.15)'
@@ -1252,6 +1337,9 @@
           camX = tCamX = ct.camX;
           camY = tCamY = ct.camY;
           morph = null;
+          clearPointerHover();
+          // Drop overview cat titles; node labels re-derive next frame
+          labelEls.forEach((el) => hideDomLabel(el));
           const cat = CATS.find((c) => c.id === focusCat);
           if (cat) {
             focusBar.hidden = false;
@@ -1272,6 +1360,8 @@
           mapState = 'sky';
           setFanMode(false);
           focusBar.hidden = true;
+          clearPointerHover();
+          nodeLabelEls.forEach((el) => hideDomLabel(el));
           setTimeout(() => setTransitioning(false), 40);
         }
       }
@@ -1282,6 +1372,7 @@
       camY += (tCamY - camY) * ease;
     }
     clampPanSoft();
+    syncZoomPct();
 
     if (viewMode === 'map') {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1320,8 +1411,8 @@
     if (focusCat === id && mapState === 'fan') return;
 
     const idx = CATS.findIndex((c) => c.id === id);
-    hoverCat = null;
-    hoverNodeId = null;
+    clearPointerHover();
+    clearFloatingLabels();
     selectedChain = -1;
     closeCore(false);
     if (selectedAlert && selectedAlert.categoryId !== id) closePanel(false);
@@ -1385,7 +1476,8 @@
     closePanel(false);
     closeCore(false);
     selectedChain = -1;
-    hoverNodeId = null;
+    clearPointerHover();
+    clearFloatingLabels();
 
     if (immediate || reduceMotion) {
       morph = null;
@@ -1783,33 +1875,67 @@
     canvas.style.cursor = (hoverCat || hoverNodeId) ? 'pointer' : 'grab';
   };
   window.addEventListener('pointerup', endPtr);
-  window.addEventListener('pointercancel', endPtr);
+  window.addEventListener('pointercancel', (e) => {
+    endPtr(e);
+    clearPointerHover();
+  });
+
+  // Fast leave / blur / tab hide must not leave hover dim or orphan DOM labels
+  canvas.addEventListener('pointerleave', () => {
+    if (!dragging) clearPointerHover();
+  });
+  window.addEventListener('blur', () => {
+    clearPointerHover();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') clearPointerHover();
+  });
 
   canvas.addEventListener('wheel', (e) => {
     if (viewMode !== 'map') return;
-    if (e.target.closest?.('.side-panel, .core-panel')) return;
+    if (e.target.closest?.('.side-panel, .core-panel, .map-controls')) return;
     e.preventDefault();
     const now = performance.now();
+    const rect = canvas.getBoundingClientRect();
+    const lx = e.clientX - rect.left;
+    const ly = e.clientY - rect.top;
 
+    // Trackpad pinch / ctrl-wheel: zoom-to-cursor (both directions). Dive/rise via intent.
     if (e.ctrlKey || e.metaKey) {
       if (now < zoomLockUntil) return;
+      if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
+
       if (mapState === 'sky') {
-        zoomIntent += -e.deltaY;
-        if (zoomIntent > 110) {
-          focusCategory(CATS[focusedIdx()].id);
-          zoomIntent = 0; zoomLockUntil = now + 900;
-        } else if (zoomIntent < -110) zoomIntent = 0;
+        // Overview: real zoom-to-cursor both ways (r15). Dive only after hitting max + more pinch-in.
+        const zn = clampZSky(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
+        zoomAtScreen(lx, ly, zn);
+        if (e.deltaY < 0 && zn >= Z_SKY_MAX - 0.02) {
+          zoomIntent += -e.deltaY;
+          if (zoomIntent > 110) {
+            focusCategory(CATS[focusedIdx()].id);
+            zoomIntent = 0;
+            zoomLockUntil = now + 900;
+          }
+        } else {
+          zoomIntent = 0;
+        }
         return;
       }
+
       if (mapState === 'fan' || focusCat) {
+        // Always apply clamped zoom (do not swallow negative deltas at the floor)
         const zn = clampZFan(zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP));
-        if (zn <= RISE_SCALE && e.deltaY > 0) {
+        zoomAtScreen(lx, ly, zn);
+        if (e.deltaY > 0 && zn <= RISE_SCALE) {
           zoomIntent += -e.deltaY;
-          if (zoomIntent < -110) { clearFocus(); zoomIntent = 0; zoomLockUntil = now + 900; }
-          return;
+          if (zoomIntent < -110) {
+            clearFocus();
+            zoomIntent = 0;
+            zoomLockUntil = now + 900;
+          }
+        } else if (e.deltaY < 0) {
+          zoomIntent = 0;
         }
-        const rect = canvas.getBoundingClientRect();
-        zoomAtScreen(e.clientX - rect.left, e.clientY - rect.top, zn);
       }
       return;
     }
@@ -1871,24 +1997,36 @@
   });
 
   canvas.addEventListener('dblclick', (e) => {
-    if (viewMode !== 'map' || mapState !== 'sky') return;
+    if (viewMode !== 'map') return;
     e.preventDefault();
-    recenterMap({ immediate: false });
+    if (mapState === 'fan' || focusCat) {
+      // Double-click in focus: step zoom out / rise at floor (ref Fit-adjacent)
+      zoomStep(-1);
+      return;
+    }
+    if (mapState === 'sky') recenterMap({ immediate: false });
   });
 
   document.getElementById('cat-prev').addEventListener('click', () => stepCategory(-1));
   document.getElementById('cat-next').addEventListener('click', () => stepCategory(1));
   document.getElementById('wchev-l').addEventListener('click', () => stepWheel(-1));
   document.getElementById('wchev-r').addEventListener('click', () => stepWheel(1));
+  document.getElementById('zoom-out')?.addEventListener('click', () => zoomStep(-1));
+  document.getElementById('zoom-in')?.addEventListener('click', () => zoomStep(1));
+  document.getElementById('zoom-fit')?.addEventListener('click', () => fitCurrent());
   document.getElementById('panel-close').addEventListener('click', () => { closePanel(); selectedChain = -1; });
   document.getElementById('core-close').addEventListener('click', () => closeCore());
   window.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
     if (e.key === 'Escape') {
       if (panelOpen) { closePanel(); selectedChain = -1; }
       else if (coreOpen) closeCore();
       else if (mapState === 'fan' || focusCat) clearFocus();
       else recenterMap({ immediate: false });
     }
+    if (e.key === '-' || e.key === '_') { zoomStep(-1); }
+    if (e.key === '=' || e.key === '+') { zoomStep(1); }
     if (e.key === '0') {
       if (mapState === 'fan' && focusCat) rebuildFocusLayout(focusCat, { setCamera: true });
       else recenterMap({ immediate: false });
@@ -2006,6 +2144,7 @@
       // Fan-only hover scale target (no path lighting — matches ref)
       hoverNodeId = nodeId || null;
     },
+    clearHover: () => clearPointerHover(),
     getHover: () => ({
       hoverCat, hoverNodeId, selectedChain,
       hoverAlpha: { ...hoverAlpha }, focusedIdx: focusedIdx(),
@@ -2019,7 +2158,35 @@
       }
     },
     zoomAt: (sx, sy, factor) => zoomAtScreen(sx, sy, zoom * factor),
+    zoomStep: (dir) => zoomStep(dir),
+    fitCurrent: () => fitCurrent(),
     recenter: () => recenterMap({ immediate: true }),
+    /** Labels that are lit but must not be (orphans after leave/morph/dial). */
+    orphanLabels: () => {
+      const out = [];
+      const showCat = !focusCat && !morph && (mapState === 'sky' || mapState === 'aligning');
+      const showNode = !!(focusCat || mapState === 'fan') && !morph;
+      labelLayer.querySelectorAll('.cat-label').forEach((el) => {
+        const st = getComputedStyle(el);
+        const lit = Number(st.opacity) > 0.05 && st.visibility !== 'hidden';
+        if (lit && !showCat) out.push({ kind: 'cat', id: el.dataset.id || '' });
+      });
+      labelLayer.querySelectorAll('.node-label').forEach((el) => {
+        const st = getComputedStyle(el);
+        const lit = el.classList.contains('is-on')
+          || (Number(st.opacity) > 0.05 && st.visibility !== 'hidden');
+        if (lit && !showNode) out.push({ kind: 'node', id: el.dataset.id || '' });
+      });
+      return out;
+    },
+    litLabelCount: () => {
+      let n = 0;
+      labelLayer.querySelectorAll('.cat-label, .node-label').forEach((el) => {
+        const st = getComputedStyle(el);
+        if (Number(st.opacity) > 0.05 && st.visibility !== 'hidden') n += 1;
+      });
+      return n;
+    },
     /** Hub distance / viewport height (target ~0.17–0.20). */
     hubRadiusRatio: () => {
       const hub = layoutNodes.find((n) => n.kind === 'category');

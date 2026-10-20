@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="alerts-map.css?r14=1" />
+  <link rel="stylesheet" href="alerts-map.css?r15=1" />
 </head>
 <body>
   <div id="app" class="alerts-app">
@@ -51,6 +51,12 @@
         </div>
         <button type="button" id="cat-next" aria-label="Next category">›</button>
       </div>
+      <div id="map-controls" class="map-controls" aria-label="Map zoom">
+        <button type="button" id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+        <div id="zoom-pct">100%</div>
+        <button type="button" id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-fit" class="fit" title="Fit" aria-label="Fit view">Fit</button>
+      </div>
     </main>
 
     <section id="dash-view" class="dash-view" hidden>
@@ -69,7 +75,7 @@
   </div>
 
   <script src="apos-space-map-data.js"></script>
-  <script src="alerts-map-data.js?r14=1"></script>
-  <script src="alerts-map.js?r14=1"></script>
+  <script src="alerts-map-data.js?r15=1"></script>
+  <script src="alerts-map.js?r15=1"></script>
 </body>
 </html>

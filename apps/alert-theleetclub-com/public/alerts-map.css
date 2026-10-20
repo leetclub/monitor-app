@@ -169,8 +169,14 @@ body:not(.map-ready) .wchev { opacity: 0; }
   transform: translate(-50%, -50%);
   text-align: center;
   white-space: nowrap;
-  transition: opacity 0.2s ease, filter 0.2s ease;
+  /* No opacity transition — avoids “stuck” labels after leave/morph/dial */
+  transition: filter 0.2s ease;
   pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+.cat-label.is-on {
+  visibility: visible;
 }
 .cat-label .name {
   font: 400 0.84rem/1.15 var(--font-display);
@@ -199,9 +205,58 @@ body:not(.map-ready) .wchev { opacity: 0; }
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  visibility: hidden;
+  /* Snap off immediately so labels never linger at stale positions */
+  transition: none;
 }
-.node-label.is-on { opacity: 1; }
+.node-label.is-on {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Zoom chrome (skilltree #controls parity) */
+.map-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(233, 228, 214, 0.14);
+  background: rgba(24, 27, 34, 0.72);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+.map-controls button {
+  font-family: inherit;
+  font-size: 14px;
+  color: rgba(242, 239, 232, 0.92);
+  background: none;
+  border: none;
+  border-radius: 7px;
+  width: 30px;
+  height: 28px;
+  cursor: pointer;
+  line-height: 1;
+}
+.map-controls button:hover { background: rgba(233, 228, 214, 0.1); }
+.map-controls #zoom-pct {
+  font-size: 11px;
+  color: rgba(168, 172, 180, 0.9);
+  width: 44px;
+  text-align: center;
+  user-select: none;
+}
+.map-controls .fit {
+  font-size: 11px;
+  width: auto;
+  padding: 0 10px;
+  font-weight: 600;
+}
+body.transitioning .map-controls { opacity: 0.55; }
 
 /* Overview prev/next (skilltree wchev parity) */
 .wchev {
