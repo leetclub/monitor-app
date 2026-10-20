@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Leet Alerts map acceptance (round 7): forking skill-tree overview (not broom
- * rays), no core-hub lines, no crossings, hover dim, pan (not rotate).
+ * Leet Alerts map acceptance (round 8): Skilltree zig-zag fans, white nodes /
+ * grey lines, compact hubs, denser chains, no core-hub lines, hover dim, pan.
  */
 import { chromium } from 'playwright';
 
@@ -39,7 +39,7 @@ async function checkOverview(page, tag) {
   if (overview.crossings > 0) fail(`${tag} line crossings ${overview.crossings}`);
   if (overview.coreHub) fail(`${tag} has core→hub links`);
   Object.entries(overview.deptCounts).forEach(([id, n]) => {
-    if (n < 22 || n > 40) fail(`${tag} ${id} nodes ${n} outside ~25–35 (±5)`);
+    if (n < 30 || n > 48) fail(`${tag} ${id} nodes ${n} outside ~33–41 (7–8×4 joints)`);
   });
   if (overview.overflow > 0) fail(`${tag} viewport overflow ${overview.overflow}`);
   return overview;
@@ -50,7 +50,7 @@ const notes = [];
 
 for (const vp of [{ w: 1440, h: 900 }, { w: 1920, h: 1080 }]) {
   const page = await browser.newPage({ viewport: { width: vp.w, height: vp.h } });
-  await page.goto(`${BASE}/alerts.html?r7=5`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await page.goto(`${BASE}/alerts.html?r8=4`, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => window.__LEET_ALERTS_READY__ && window.LEET_ALERTS_MAP, null, { timeout: 15000 });
   await page.evaluate(() => window.LEET_ALERTS_MAP.waitForIdle());
   const ov = await checkOverview(page, `${vp.w}x${vp.h}`);

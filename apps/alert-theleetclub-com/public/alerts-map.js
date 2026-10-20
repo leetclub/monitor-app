@@ -72,16 +72,15 @@
   }
 
   /**
-   * Short stubby Skilltree overview (vs viewport height):
-   * hub ~20% H, tips ~32–36% H, labels closer to tips, core diameter ~15% min(W,H).
+   * Compact Skilltree-style overview (vs viewport height):
+   * hub ~16.5% H, tips ~36% H (longer denser fans), core diameter ~18% min(W,H).
    */
   function computeOverviewGeom() {
     const m = Math.min(W, H);
-    const rHub = H * 0.20;
-    const rTip = H * 0.335;
-    // Empty band tip→label reduced ~25% vs r6 (was ~0.115H → ~0.09H)
-    const rLabel = rTip + H * 0.09;
-    const rCore = m * 0.075; // radius → diameter ~15%
+    const rHub = H * 0.165;
+    const rTip = H * 0.355;
+    const rLabel = rTip + H * 0.12; // clear tip nodes (wide letter-spaced titles)
+    const rCore = m * 0.09; // diameter ~18%
     const segLen = H * 0.035;
     overviewGeom = { rHub, rTip, rLabel, rCore, segLen };
     return overviewGeom;
@@ -119,9 +118,9 @@
   }
 
   /**
-   * Overview branches matching skilltree.altari.ai/map.html buildSky():
-   * 140° SPAN, equal function wedges, zig-zag job chains (not parallel rays).
-   * Geometry scaled so hubs sit ~20% H and tips ~34.5% H from center.
+   * Overview branches matching skilltree.altari.ai buildSky():
+   * equal spoke axes across SPAN, each chain stays on its axis with a small
+   * alternating ±lateral offset (buildSky zig proportion) — not random wander.
    */
   function buildSectorConstellation(cat, angle, _halfSpan, outNodes, outLinks) {
     const { rHub, rTip } = overviewGeom;
@@ -129,7 +128,6 @@
     const ov = cat.overviewTree || {};
     const tips = ov.tips || [];
     const subtypes = ov.subtypes || [];
-    let tipIdx = 0;
     let seq = 0;
 
     const hx = Math.cos(angle) * rHub;
@@ -144,7 +142,7 @@
       catId: cat.id,
       x: hx,
       y: hy,
-      r: 13,
+      r: 9, // ~18px thin hub ring
       depth: 0,
       hot: false,
     });
@@ -172,36 +170,37 @@
       x0: sx, y0: sy, x1: hx, y1: hy,
     });
 
-    // Reference constants from buildSky (map.html): SPAN=140°, r0=80, rb=146, rstep=56
+    // buildSky: SPAN=140°, r0=80, rb=146, rstep=56 → Rmax=314 (4 joints / chain)
     const SPAN = (140 * Math.PI) / 180;
     const RmaxRef = 146 + 3 * 56; // 314
     const scale = (rTip - rHub) / RmaxRef;
     const r0 = 80 * scale;
     const rb = 146 * scale;
     const Rmax = RmaxRef * scale;
-    const rNear = 36 * scale;
 
-    // Local polar → world: aLocal=0 is outward along `angle`
     const ox = Math.cos(angle);
     const oy = Math.sin(angle);
     const tx = -Math.sin(angle);
     const ty = Math.cos(angle);
-    function LP(r, aLocal) {
-      const out = r * Math.cos(aLocal);
-      const side = r * Math.sin(aLocal);
+    /** Point on the chain axis at distance `r` from the hub (aLocal = axis angle). */
+    function onAxis(r, aAxis) {
+      const out = r * Math.cos(aAxis);
+      const side = r * Math.sin(aAxis);
       return { x: hx + ox * out + tx * side, y: hy + oy * out + ty * side };
     }
+    /** Unit tangent (left of outward) at axis angle — for ±lateral zig. */
+    function axisTangent(aAxis) {
+      const outX = ox * Math.cos(aAxis) + tx * Math.sin(aAxis);
+      const outY = oy * Math.cos(aAxis) + ty * Math.sin(aAxis);
+      return { x: -outY, y: outX };
+    }
 
-    // 4–5 function wedges (Skilltree uses ~3–6 functions); tips → zig-zag chains
-    const nf = Math.max(4, Math.min(5, subtypes.length || 4));
-    const chains = Array.from({ length: nf }, (_, i) => ({
-      sub: subtypes[i] || null,
-      jobs: [],
-    }));
+    // Denser fan = more spokes (7–8, like ref), not more joints (~4 = rb..Rmax / rstep)
+    const nf = 7 + Math.floor(hash01(cat.id.length * 11 + angle) * 2); // 7–8
+    const jobsPerChain = 4; // matches Rmax = rb + 3*rstep
     const tipPool = tips.slice();
-    // Pad so each department lands ~25–35 nodes (hub + nf roots + jobs)
-    const targetJobs = 22 + Math.floor(hash01(cat.id.length * 9 + angle) * 6); // 22–27 jobs
-    while (tipPool.length < targetJobs) {
+    const need = nf * jobsPerChain;
+    while (tipPool.length < need) {
       const src = tips[tipPool.length % Math.max(1, tips.length)] || {
         id: `${cat.id}:pad`, label: '·', alert: null, hot: false,
       };
@@ -211,19 +210,20 @@
         label: src.label || '·',
       });
     }
-    tipPool.forEach((t, i) => { chains[i % nf].jobs.push(t); });
-    const maxJobs = Math.max(4, Math.ceil(targetJobs / nf));
-    chains.forEach((ch) => { if (ch.jobs.length > maxJobs) ch.jobs.length = maxJobs; });
+    const chains = Array.from({ length: nf }, (_, i) => ({
+      sub: subtypes[i % Math.max(1, subtypes.length)] || null,
+      jobs: tipPool.slice(i * jobsPerChain, (i + 1) * jobsPerChain),
+    }));
 
-    let cursor = -SPAN / 2;
-    chains.forEach((ch, fi) => {
-      const jobs = ch.jobs;
-      const span = SPAN / nf;
-      const aC = cursor + span / 2;
+    const span = SPAN / nf;
+    // buildSky zig amplitude (radians); lateral = r * zigAng so offset grows with r
+    const zigAng = Math.min(span * 0.22, 0.075);
 
-      // Function root (colored) at r0 — first fork point out of the hub
-      const near = LP(rNear, aC);
-      const root = LP(r0, aC);
+    for (let fi = 0; fi < nf; fi++) {
+      const ch = chains[fi];
+      const aC = -SPAN / 2 + span * (fi + 0.5); // evenly spaced spoke axes
+
+      const root = onAxis(r0, aC);
       const rootId = `${cat.id}:fn${fi}`;
       outNodes.push({
         id: rootId,
@@ -235,44 +235,45 @@
         catId: cat.id,
         x: root.x,
         y: root.y,
-        r: 3.6,
+        r: 2.8,
         depth: 1,
         hot: false,
-        hollow: true,
+        hollow: false,
+        tint: true,
       });
       outLinks.push({
-        s: cat.id, t: rootId, color, depth: 1, straight: true, accent: true,
-        x0: near.x, y0: near.y, x1: root.x, y1: root.y,
+        s: cat.id, t: rootId, color, depth: 1, straight: true, accent: false,
+        x0: hx, y0: hy, x1: root.x, y1: root.y,
       });
-      // Also draw near→ visually from hub: store hub as start for hit/particles
-      outLinks[outLinks.length - 1].x0 = hx;
-      outLinks[outLinks.length - 1].y0 = hy;
 
       let px = root.x;
       let py = root.y;
       let prevId = rootId;
-      jobs.forEach((job, ji) => {
-        // Alternating zig — the Skilltree signature (not parallel rays)
-        const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
-        const r = rb + (jobs.length > 1 ? (ji * (Rmax - rb)) / (jobs.length - 1) : 0);
-        const p = LP(r, aC + zig);
+      const tan = axisTangent(aC);
+      const nJobs = ch.jobs.length;
+      ch.jobs.forEach((job, ji) => {
+        // Equal radial steps; ±lateral of axis (first joint 0.45×) — buildSky proportion
+        const r = rb + (nJobs > 1 ? (ji * (Rmax - rb)) / (nJobs - 1) : 0);
+        const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
+        const lateral = r * zigAng * sign;
+        const base = onAxis(r, aC);
+        const p = { x: base.x + tan.x * lateral, y: base.y + tan.y * lateral };
         const id = `${cat.id}:n${seq++}`;
-        const tip = job;
-        tipIdx += 1;
         outNodes.push({
           id,
           kind: 'machine',
-          label: tip.label || '·',
+          label: job.label || '·',
           color,
           icon: null,
-          alert: tip.alert || null,
+          alert: job.alert || null,
           catId: cat.id,
           x: p.x,
           y: p.y,
-          r: 2.5,
+          r: 2.2,
           depth: 2 + ji,
-          hot: !!tip.hot,
+          hot: !!job.hot,
           hollow: false,
+          tint: ji === 0,
         });
         outLinks.push({
           s: prevId, t: id, color, depth: 2 + ji, straight: true, accent: false,
@@ -282,9 +283,7 @@
         py = p.y;
         prevId = id;
       });
-
-      cursor += span;
-    });
+    }
   }
 
   function syncOverviewLinks(nodes, links) {
@@ -465,14 +464,12 @@
       el = document.createElement('div');
       el.className = 'cat-label';
       el.dataset.id = cat.id;
-      el.innerHTML = `<div class="name"></div><div class="accent"></div><div class="sub"></div>`;
+      el.innerHTML = `<div class="name"></div><div class="sub"></div>`;
       labelLayer.appendChild(el);
       labelEls.set(cat.id, el);
     }
     el.querySelector('.name').textContent = cat.label;
     el.querySelector('.sub').textContent = cat.subtitle;
-    el.querySelector('.accent').style.background = cat.color;
-    el.style.color = '#f4f4f5';
     return el;
   }
 
@@ -543,50 +540,52 @@
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
-    const coreR = focusCat ? 70 : (overviewGeom.rCore || Math.min(W, H) * 0.075);
-    if (!coreDust.length || coreDust._gen !== 6) {
+    const coreR = focusCat ? 78 : (overviewGeom.rCore || Math.min(W, H) * 0.09);
+    if (!coreDust.length || coreDust._gen !== 8) {
       coreDust.length = 0;
-      coreDust._gen = 6;
-      for (let i = 0; i < 280; i++) {
+      coreDust._gen = 8;
+      for (let i = 0; i < 520; i++) {
         const ring = Math.random();
         coreDust.push({
           a: Math.random() * Math.PI * 2,
-          r: ring < 0.55 ? coreR * (0.15 + Math.random() * 0.45) : coreR * (0.45 + Math.random() * 0.55),
-          s: 0.1 + Math.random() * 0.5,
+          r: ring < 0.5
+            ? coreR * (0.08 + Math.random() * 0.5)
+            : coreR * (0.4 + Math.random() * 0.62),
+          s: 0.08 + Math.random() * 0.45,
           hue: Math.random(),
-          size: 0.55 + Math.random() * 1.4,
+          size: 0.45 + Math.random() * 1.55,
         });
       }
     }
     const scale = focusCat ? 1.2 : zoom;
-    const bloomR = coreR * scale;
-    const g = ctx.createRadialGradient(p.x, p.y, 3, p.x, p.y, bloomR);
-    g.addColorStop(0, 'rgba(255,255,255,0.55)');
-    g.addColorStop(0.18, 'rgba(196,181,253,0.36)');
-    g.addColorStop(0.42, 'rgba(94,234,212,0.14)');
-    g.addColorStop(0.7, 'rgba(251,113,133,0.07)');
-    g.addColorStop(1, 'rgba(37,36,59,0)');
+    const bloomR = coreR * scale * 1.08;
+    const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, bloomR);
+    g.addColorStop(0, 'rgba(255,255,255,0.42)');
+    g.addColorStop(0.2, 'rgba(233,228,214,0.22)');
+    g.addColorStop(0.45, 'rgba(196,181,253,0.12)');
+    g.addColorStop(0.72, 'rgba(251,113,133,0.06)');
+    g.addColorStop(1, 'rgba(32,36,45,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(p.x, p.y, bloomR, 0, Math.PI * 2);
     ctx.fill();
 
     coreDust.forEach((d, i) => {
-      const ang = d.a + t * 0.05 * d.s;
-      const rad = d.r * scale * (0.9 + 0.1 * Math.sin(t * 0.85 + i * 0.45));
+      const ang = d.a + t * 0.035 * d.s;
+      const rad = d.r * scale * (0.92 + 0.08 * Math.sin(t * 0.7 + i * 0.4));
       const x = p.x + Math.cos(ang) * rad;
-      const y = p.y + Math.sin(ang * 1.05) * rad * 0.9;
-      if (Math.hypot(x - p.x, y - p.y) < Math.min(22, bloomR * 0.28)) return;
-      const col = d.hue < 0.3
-        ? `rgba(255,255,255,${0.3 + d.s * 0.35})`
+      const y = p.y + Math.sin(ang * 1.04) * rad * 0.92;
+      if (Math.hypot(x - p.x, y - p.y) < Math.min(18, bloomR * 0.22)) return;
+      const col = d.hue < 0.35
+        ? `rgba(255,255,255,${0.22 + d.s * 0.4})`
         : d.hue < 0.55
-          ? `rgba(196,181,253,${0.24 + d.s * 0.3})`
-          : d.hue < 0.8
-            ? `rgba(94,234,212,${0.2 + d.s * 0.28})`
-            : `rgba(251,113,133,${0.18 + d.s * 0.24})`;
+          ? `rgba(233,228,214,${0.18 + d.s * 0.28})`
+          : d.hue < 0.75
+            ? `rgba(196,181,253,${0.14 + d.s * 0.22})`
+            : `rgba(251,113,133,${0.12 + d.s * 0.2})`;
       ctx.beginPath();
       ctx.fillStyle = col;
-      ctx.arc(x, y, d.size * scale, 0, Math.PI * 2);
+      ctx.arc(x, y, d.size * scale * 0.95, 0, Math.PI * 2);
       ctx.fill();
     });
 
@@ -599,11 +598,11 @@
     ctx.lineJoin = 'round';
     ctx.strokeText('leet', p.x, p.y);
     ctx.lineWidth = 2.8 * scale;
-    ctx.strokeStyle = 'rgba(37, 36, 59, 0.92)';
+    ctx.strokeStyle = 'rgba(32, 36, 45, 0.92)';
     ctx.strokeText('leet', p.x, p.y);
     ctx.fillStyle = 'rgba(252,252,254,0.99)';
     ctx.fillText('leet', p.x, p.y);
-    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 52 * scale, vr: 52 * scale });
+    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 58 * scale, vr: 58 * scale });
   }
 
   function curvePts(x0, y0, x1, y1) {
@@ -623,26 +622,48 @@
     return activeNodes().find((n) => n.id === id);
   }
 
+  const starField = [];
+  function ensureStars() {
+    if (starField._w === W && starField._h === H && starField.length) return;
+    starField.length = 0;
+    starField._w = W;
+    starField._h = H;
+    const n = Math.floor((W * H) / 18000);
+    for (let i = 0; i < n; i++) {
+      starField.push({
+        x: hash01(i * 3.1 + 2) * W,
+        y: hash01(i * 7.7 + 5) * H,
+        r: 0.4 + hash01(i * 11.3) * 0.9,
+        a: 0.08 + hash01(i * 13.9) * 0.18,
+      });
+    }
+  }
+
   function drawScene(t) {
     hitNodes.length = 0;
-    // Full-bleed background — no grey strip
-    ctx.fillStyle = '#25243b';
+    // Skilltree-like charcoal + faint grid + sparse stars
+    ctx.fillStyle = '#20242d';
     ctx.fillRect(0, 0, W, H);
 
-    // Dot grid across entire viewport
-    ctx.fillStyle = 'rgba(255,255,255,0.045)';
-    for (let x = 10; x < W; x += 26) {
-      for (let y = 10; y < H; y += 26) {
+    ctx.fillStyle = 'rgba(232,235,242,0.05)';
+    for (let x = 7; x < W; x += 14) {
+      for (let y = 7; y < H; y += 14) {
         ctx.beginPath();
-        ctx.arc(x, y, 0.8, 0, Math.PI * 2);
+        ctx.arc(x, y, 0.7, 0, Math.PI * 2);
         ctx.fill();
       }
     }
+    ensureStars();
+    starField.forEach((s) => {
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(233,228,214,${s.a})`;
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
 
     const nodes = activeNodes().filter((n) => matchSearch(n.label, n.alert));
     const links = activeLinks();
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-    const u = usable();
 
     function catOpacity(catId) {
       if (focusCat || !catId) return 1;
@@ -650,9 +671,9 @@
       return a == null ? 1 : a;
     }
 
-    // links
+    // links — thin low-opacity grey (not category-colored)
     links.forEach((L) => {
-      if (L.s === '__core__') return; // no core→hub lines
+      if (L.s === '__core__') return;
       const s = nodeMap.get(L.s) || nodeById(L.s);
       const tN = nodeMap.get(L.t) || nodeById(L.t);
       if (!s || !tN) return;
@@ -665,13 +686,9 @@
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
-        if (L.stub || L.accent || L.depth === 1) {
-          ctx.strokeStyle = hexAlpha(L.color || '#fff', 0.75 * op);
-          ctx.lineWidth = L.stub ? 1.35 : 1.2;
-        } else {
-          ctx.strokeStyle = `rgba(228,228,231,${0.6 * op})`;
-          ctx.lineWidth = 1;
-        }
+        const lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
+        ctx.strokeStyle = `rgba(233,228,214,${lineOp * op})`;
+        ctx.lineWidth = L.stub ? 1.1 : 1;
         ctx.stroke();
         return;
       }
@@ -679,7 +696,7 @@
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(L.color || '#fff', focusCat ? 0.55 : 0.4 * op);
+      ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', focusCat ? 0.45 : 0.22 * op);
       ctx.lineWidth = 1.1;
       ctx.stroke();
     });
@@ -698,8 +715,8 @@
         const y = s.y + (tN.y - s.y) * p.u;
         const scr = worldToScreen(x, y);
         ctx.beginPath();
-        ctx.fillStyle = `rgba(255,255,255,${0.85 * op})`;
-        ctx.arc(scr.x, scr.y, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(233,228,214,${0.55 * op})`;
+        ctx.arc(scr.x, scr.y, 1.35, 0, Math.PI * 2);
         ctx.fill();
       });
     }
@@ -707,7 +724,6 @@
     // nodes
     const showLabels = !!focusCat;
     const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
-    const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
     nodes.forEach((n) => {
       if (n.kind === 'stub' || n.hidden) return;
       if (focusCat && n.catId && n.catId !== focusCat) return;
@@ -718,46 +734,40 @@
       const isHub = isCat || n.kind === 'subtype';
       const op = catOpacity(n.catId);
       let r = (n.r + (selected ? 1.5 : 0)) * zScale;
-      if (!focusCat && isCat) r = 13 * zScale; // ~26px
+      if (!focusCat && isCat) r = 9 * zScale; // small thin hub
 
       if (!focusCat && (n.kind === 'machine' || n.kind === 'site')) {
-        if (n.hollow) {
+        // Mostly white/off-white; only first 1–2 joints tinted
+        if (n.tint) {
           ctx.beginPath();
-          ctx.strokeStyle = hexAlpha(n.color, 0.9 * op);
-          ctx.lineWidth = 1.4;
+          ctx.fillStyle = hexAlpha(n.color, 0.55 * op);
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.strokeStyle = hexAlpha(n.color, 0.75 * op);
+          ctx.lineWidth = 1;
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.stroke();
         } else {
           ctx.beginPath();
-          ctx.fillStyle = n.hot
-            ? hexAlpha(n.color, 0.95 * op)
-            : `rgba(250,250,252,${0.9 * op})`;
+          ctx.fillStyle = `rgba(245,243,238,${0.88 * op})`;
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
         }
       } else if (isHub) {
-        if (isCat && !focusCat) {
-          const glowR = r * (2.2 + pulse * 0.35);
-          const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, glowR);
-          glow.addColorStop(0, hexAlpha(n.color, 0.4 * op));
-          glow.addColorStop(1, hexAlpha(n.color, 0));
-          ctx.beginPath();
-          ctx.fillStyle = glow;
-          ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        // Thin outlined ring, faint tint, no glow halo
         ctx.globalAlpha = op;
         ctx.beginPath();
-        ctx.fillStyle = 'rgba(24,24,27,0.92)';
+        ctx.fillStyle = 'rgba(32,36,45,0.92)';
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = isCat ? 2.5 : 1.7;
-        ctx.strokeStyle = hexAlpha(n.color, 0.98);
+        ctx.lineWidth = isCat && !focusCat ? 1.35 : (isCat ? 2.2 : 1.5);
+        ctx.strokeStyle = hexAlpha(n.color, isCat && !focusCat ? 0.55 : 0.92);
         ctx.stroke();
         if (focusCat && isCat) {
           drawBackChevron(p.x, p.y, n.color, r);
         } else {
-          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, 1, isCat ? 1.25 : 0.85);
+          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, isCat && !focusCat ? 0.75 : 1, isCat ? 0.95 : 0.85);
         }
         ctx.globalAlpha = 1;
       } else {
@@ -1285,7 +1295,11 @@
     },
     /** True if any overview link connects __core__ to a hub. */
     hasCoreHubLinks: () => layoutLinks.some((L) => L.s === '__core__' || L.t === '__core__'),
-    /** Count proper segment crossings among overview branches (stubs excluded). */
+    /**
+     * Count same-department segment crossings (stubs excluded).
+     * Neighbouring categories may interleave at the tips (Skilltree does too);
+     * within a fan, chains must not wander into each other.
+     */
     lineCrossings: () => {
       const segs = layoutLinks.filter((L) => !L.stub && L.s !== '__core__' && L.t !== '__core__');
       const byId = new Map(layoutNodes.map((n) => [n.id, n]));
@@ -1299,6 +1313,7 @@
       for (let i = 0; i < pts.length; i++) {
         for (let j = i + 1; j < pts.length; j++) {
           const A = pts[i], B = pts[j];
+          if (A.cat !== B.cat) continue;
           if (segmentsIntersect(A.ax, A.ay, A.bx, A.by, B.ax, B.ay, B.bx, B.by)) hits += 1;
         }
       }
