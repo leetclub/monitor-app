@@ -41,9 +41,8 @@
   const labelEls = new Map();
   const nodeLabelEls = new Map();
 
-  const R_HUB = 118;
-  const LABEL_PAD = 72;
   let catLabelWorld = new Map(); // catId → {x,y}
+  let overviewGeom = { rHub: 140, rTip: 380, rLabel: 430, fill: 0.84 };
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -70,6 +69,19 @@
     };
   }
 
+  /** Responsive overview radii so map+labels fill ~82–85% of the shorter viewport side. */
+  function computeOverviewGeom() {
+    const u = usable();
+    const fill = 0.825;
+    const halfScreen = Math.min(u.w, u.h) * fill * 0.5;
+    // World units ≈ screen px at zoom 1; rLabel sits at the outer fill radius
+    const rLabel = halfScreen;
+    const rTip = rLabel * 0.86;
+    const rHub = rTip * 0.35;
+    overviewGeom = { rHub, rTip, rLabel, fill };
+    return overviewGeom;
+  }
+
   function worldToScreen(x, y) {
     const u = usable();
     return { x: u.cx + (x + camX) * zoom, y: u.cy + (y + camY) * zoom };
@@ -80,22 +92,39 @@
     return node.children.reduce((s, c) => s + leafWeight(c), 0);
   }
 
-  const SIZE_OV = { category: 15, subtype: 10.5, area: 4.2, site: 3.6, machine: 3.2 };
+  function sizeForKind(kind) {
+    // Screen-ish radii at zoom≈1: category ~22px diameter → r≈11
+    if (kind === 'category') return 11;
+    if (kind === 'subtype') return 7.5;
+    if (kind === 'area') return 2.4;
+    if (kind === 'site') return 2.2;
+    if (kind === 'machine') return 1.85;
+    return 2.5;
+  }
 
   /**
-   * Parent-relative constellation placement (not concentric rings from hub).
-   * Each child grows outward from its parent within an angular sector.
+   * Long zig-zag constellation: parent-relative edges reaching toward rTip.
    */
-  function placeConstellation(root, px, py, angle, halfSpan, depth, color, outNodes, outLinks, parent = null) {
-    const edgeByDepth = [0, 50, 40, 36, 32];
-    const edge = edgeByDepth[Math.min(depth, edgeByDepth.length - 1)] || 30;
-    // Stronger lateral jitter so fans read as zig-zag constellations, not arcs
-    const jitter = depth === 0 ? 0 : Math.sin(depth * 2.7 + angle * 6.1) * (depth >= 2 ? 11 : 5)
-      + Math.cos(angle * 3.1 + depth) * (depth >= 2 ? 4 : 1.5);
+  function placeConstellation(root, px, py, angle, halfSpan, depth, color, outNodes, outLinks, parent = null, idx = 0) {
+    const { rHub, rTip } = overviewGeom;
+    const reach = Math.max(80, rTip - rHub);
+    // Longer outward segments so forks fill the sector to the outer edge
+    const edgeByDepth = [
+      0,
+      reach * 0.34,
+      reach * 0.28,
+      reach * 0.22,
+      reach * 0.16,
+    ];
+    const edge = edgeByDepth[Math.min(depth, edgeByDepth.length - 1)] || reach * 0.12;
+    const side = (idx % 2 === 0 ? 1 : -1);
+    const zig = depth === 0 ? 0
+      : side * (depth === 1 ? reach * 0.04 : depth === 2 ? reach * 0.055 : reach * 0.04)
+        + Math.sin(angle * 5.2 + depth * 2.1) * (depth >= 2 ? reach * 0.03 : reach * 0.015);
     const nx = -Math.sin(angle);
     const ny = Math.cos(angle);
-    const x = depth === 0 ? px : px + Math.cos(angle) * edge + nx * jitter;
-    const y = depth === 0 ? py : py + Math.sin(angle) * edge + ny * jitter;
+    const x = depth === 0 ? px : px + Math.cos(angle) * edge + nx * zig;
+    const y = depth === 0 ? py : py + Math.sin(angle) * edge + ny * zig;
     const catId = root.catId || (root.kind === 'category' ? root.id : parent?.catId);
     const node = {
       id: root.id,
@@ -107,7 +136,7 @@
       catId,
       x,
       y,
-      r: SIZE_OV[root.kind] || 3.5,
+      r: sizeForKind(root.kind),
       depth,
       hot: !!(root.hot || (root.alert && root.alert.hot)),
       count: root.count || 0,
@@ -119,24 +148,24 @@
     if (!kids.length) return;
     const weights = kids.map(leafWeight);
     const total = weights.reduce((a, b) => a + b, 0) || 1;
-    // Leave breathing room between sibling fans
-    const usableSpan = halfSpan * 2 * 0.92;
+    const usableSpan = halfSpan * 2 * (depth >= 2 ? 0.98 : 0.9);
     let cursor = angle - usableSpan / 2;
     kids.forEach((child, i) => {
       const span = usableSpan * (weights[i] / total);
       const mid = cursor + span / 2;
-      const childHalf = Math.max(0.035, span * 0.46);
+      // Fork: pull machine tips slightly more outward along parent ray
+      const childHalf = Math.max(0.028, span * (child.kind === 'machine' ? 0.42 : 0.46));
       placeConstellation(
         { ...child, catId, icon: child.kind === 'subtype' ? root.icon : child.icon },
-        x, y, mid, childHalf, depth + 1, color, outNodes, outLinks, node
+        x, y, mid, childHalf, depth + 1, color, outNodes, outLinks, node, i
       );
       cursor += span;
     });
   }
 
-  /** Push overlapping overview nodes apart (min gap >= sum of radii + air). */
+  /** Push overlapping overview nodes apart along forks (min gap >= radii). */
   function separateOverviewNodes(nodes) {
-    for (let iter = 0; iter < 60; iter++) {
+    for (let iter = 0; iter < 70; iter++) {
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i];
@@ -145,7 +174,9 @@
           let dx = b.x - a.x;
           let dy = b.y - a.y;
           let dist = Math.hypot(dx, dy) || 0.001;
-          const air = (a.kind === 'subtype' || b.kind === 'subtype') ? 7 : 9;
+          const air = (a.kind === 'machine' || b.kind === 'machine')
+            ? 3.2
+            : (a.kind === 'site' || b.kind === 'site') ? 4.5 : 6.5;
           const min = a.r + b.r + air;
           if (dist >= min) continue;
           const push = (min - dist) / 2;
@@ -158,6 +189,7 @@
     }
   }
 
+  /** Fit so map + outer labels fill ~82–85% of the shorter usable side. */
   function fitOverviewCamera(nodes, labelPts) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     nodes.forEach((n) => {
@@ -167,20 +199,17 @@
       maxY = Math.max(maxY, n.y + n.r);
     });
     labelPts.forEach((p) => {
-      minX = Math.min(minX, p.x - 40);
-      maxX = Math.max(maxX, p.x + 40);
-      minY = Math.min(minY, p.y - 28);
-      maxY = Math.max(maxY, p.y + 28);
+      minX = Math.min(minX, p.x - 55);
+      maxX = Math.max(maxX, p.x + 55);
+      minY = Math.min(minY, p.y - 32);
+      maxY = Math.max(maxY, p.y + 32);
     });
-    minX = Math.min(minX, -24);
-    maxX = Math.max(maxX, 24);
-    minY = Math.min(minY, -24);
-    maxY = Math.max(maxY, 24);
-    const bw = maxX - minX;
-    const bh = maxY - minY;
+    const bw = Math.max(80, maxX - minX);
+    const bh = Math.max(80, maxY - minY);
     const u = usable();
-    const kz = Math.min((u.w * 0.86) / bw, (u.h * 0.84) / bh);
-    targetZoom = Math.max(0.68, Math.min(1.02, kz));
+    const fill = overviewGeom.fill || 0.84;
+    const kz = Math.min((u.w * fill) / bw, (u.h * fill) / bh);
+    targetZoom = Math.max(0.55, Math.min(1.35, kz));
     zoom = targetZoom;
     tCamX = -((minX + maxX) / 2);
     tCamY = -((minY + maxY) / 2);
@@ -196,61 +225,70 @@
       if (!wp) return;
       const a = wp.a;
       let lr = Math.hypot(wp.x, wp.y);
-      const halfW = 100 / z;
-      const halfH = 22 / z;
-      for (let guard = 0; guard < 40; guard++) {
+      const halfW = 105 / z;
+      const halfH = 24 / z;
+      for (let guard = 0; guard < 50; guard++) {
         const lx = Math.cos(a) * lr;
         const ly = Math.sin(a) * lr;
         let hit = false;
         for (let i = 0; i < nodes.length; i++) {
           const n = nodes[i];
-          // circle vs label AABB in world space
           const cx = Math.max(lx - halfW, Math.min(n.x, lx + halfW));
           const cy = Math.max(ly - halfH, Math.min(n.y, ly + halfH));
-          if (Math.hypot(n.x - cx, n.y - cy) < n.r + 2) { hit = true; break; }
+          if (Math.hypot(n.x - cx, n.y - cy) < n.r + 2.5) { hit = true; break; }
         }
         if (!hit) break;
-        lr += 7;
+        lr += 8;
       }
       catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
     });
   }
 
   function rebuildOverviewLayout() {
+    const g = computeOverviewGeom();
     const nodes = [];
     const links = [];
     catLabelWorld = new Map();
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
-      const hx = Math.cos(a) * R_HUB;
-      const hy = Math.sin(a) * R_HUB;
+      const hx = Math.cos(a) * g.rHub;
+      const hy = Math.sin(a) * g.rHub;
       const tree = { ...(cat.overviewTree || cat.tree), icon: cat.icon, catId: cat.id };
-      const wedge = (Math.PI * 2) / CATS.length * 0.38;
-      placeConstellation(tree, hx, hy, a, wedge, 0, cat.color, nodes, links, null);
+      const wedge = (Math.PI * 2) / CATS.length * 0.4;
+      placeConstellation(tree, hx, hy, a, wedge, 0, cat.color, nodes, links, null, i);
       links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true });
     });
     separateOverviewNodes(nodes);
 
-    // Category labels at OUTER edge of each sector (beyond farthest node)
+    // Pull tips outward toward rTip so branches read as long reaching forks
+    nodes.forEach((n) => {
+      if (n.kind !== 'machine' && n.kind !== 'site') return;
+      const dist = Math.hypot(n.x, n.y) || 1;
+      const target = n.kind === 'machine' ? g.rTip * (0.92 + (n.depth % 3) * 0.02) : g.rTip * 0.78;
+      if (dist < target * 0.72) {
+        const s = (target * 0.85) / dist;
+        n.x *= s;
+        n.y *= s;
+      }
+    });
+    separateOverviewNodes(nodes);
+
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
       const catNodes = nodes.filter((n) => n.catId === cat.id);
-      let maxR = R_HUB;
-      catNodes.forEach((n) => {
-        maxR = Math.max(maxR, Math.hypot(n.x, n.y));
-      });
-      let lr = maxR + LABEL_PAD;
-      // Keep label clear of every node in this sector (world-space approx)
-      for (let guard = 0; guard < 24; guard++) {
+      let maxR = g.rHub;
+      catNodes.forEach((n) => { maxR = Math.max(maxR, Math.hypot(n.x, n.y)); });
+      let lr = Math.max(g.rLabel, maxR + 36);
+      for (let guard = 0; guard < 28; guard++) {
         const lx = Math.cos(a) * lr;
         const ly = Math.sin(a) * lr;
         let hit = false;
         for (let k = 0; k < catNodes.length; k++) {
           const n = catNodes[k];
-          if (Math.hypot(n.x - lx, n.y - ly) < n.r + 30) { hit = true; break; }
+          if (Math.hypot(n.x - lx, n.y - ly) < n.r + 34) { hit = true; break; }
         }
         if (!hit) break;
-        lr += 6;
+        lr += 7;
       }
       catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
     });
@@ -260,10 +298,26 @@
     if (!focusCat) {
       fitOverviewCamera(nodes, [...catLabelWorld.values()]);
       resolveCatLabelClearance(nodes);
-      // Refit once labels moved outward
       fitOverviewCamera(nodes, [...catLabelWorld.values()]);
       resolveCatLabelClearance(nodes);
+      // Final zoom so nodes+labels span ~82–85% of the shorter side
+      enforceOverviewFill(nodes);
     }
+  }
+
+  function enforceOverviewFill(nodes) {
+    let maxR = 0;
+    nodes.forEach((n) => { maxR = Math.max(maxR, Math.hypot(n.x, n.y) + n.r); });
+    catLabelWorld.forEach((p) => { maxR = Math.max(maxR, Math.hypot(p.x, p.y) + 42); });
+    if (maxR < 40) return;
+    // Match mapFillRatio: span vs full viewport shorter side
+    const targetHalf = Math.min(W, H) * 0.445; // → diameter ≈ 84–89% of shorter side
+    targetZoom = Math.max(0.5, Math.min(1.5, targetHalf / maxR));
+    zoom = targetZoom;
+    tCamX = 0;
+    tCamY = 0;
+    camX = 0;
+    camY = 0;
   }
 
   /** Focus: core at top, full category tree growing downward filling the usable canvas. */
@@ -305,7 +359,7 @@
           catId: cat.id,
           x: x + jx,
           y: y + jy,
-          r: node.kind === 'category' ? 16 : node.kind === 'subtype' ? 11 : node.kind === 'area' ? 8.5 : node.kind === 'site' ? 7 : 6,
+          r: node.kind === 'category' ? 18 : node.kind === 'subtype' ? 11 : node.kind === 'area' ? 8.5 : node.kind === 'site' ? 7 : 6,
           depth,
           hot: !!(node.alert && node.alert.hot),
         });
@@ -421,68 +475,87 @@
     ctx.restore();
   }
 
+  function drawBackChevron(x, y, color, r) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const s = Math.max(5, r * 0.38);
+    ctx.beginPath();
+    ctx.moveTo(s * 0.35, -s);
+    ctx.lineTo(-s * 0.55, 0);
+    ctx.lineTo(s * 0.35, s);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawCore(t) {
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
-    if (!coreDust.length) {
-      for (let i = 0; i < 180; i++) {
+    if (!coreDust.length || coreDust._gen !== 4) {
+      coreDust.length = 0;
+      coreDust._gen = 4;
+      for (let i = 0; i < 320; i++) {
         const ring = Math.random();
         coreDust.push({
           a: Math.random() * Math.PI * 2,
-          r: ring < 0.6 ? 6 + Math.random() * 26 : 24 + Math.random() * 42,
-          s: 0.12 + Math.random() * 0.55,
+          r: ring < 0.55 ? 10 + Math.random() * 48 : 40 + Math.random() * 78,
+          s: 0.1 + Math.random() * 0.5,
           hue: Math.random(),
-          size: 0.45 + Math.random() * 1.15,
+          size: 0.5 + Math.random() * 1.35,
         });
       }
     }
-    const scale = (focusCat ? 1.25 : 1.05) * Math.min(1.35, 0.92 + zoom * 0.22);
-    const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 88 * scale);
-    g.addColorStop(0, 'rgba(255,255,255,0.48)');
-    g.addColorStop(0.22, 'rgba(196,181,253,0.28)');
-    g.addColorStop(0.5, 'rgba(94,234,212,0.1)');
+    const scale = (focusCat ? 1.35 : 1.2) * Math.min(1.45, 0.95 + zoom * 0.25);
+    const bloomR = 175 * scale;
+    const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, bloomR);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.18, 'rgba(196,181,253,0.36)');
+    g.addColorStop(0.42, 'rgba(94,234,212,0.14)');
+    g.addColorStop(0.7, 'rgba(251,113,133,0.07)');
     g.addColorStop(1, 'rgba(37,36,59,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 90 * scale, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, bloomR, 0, Math.PI * 2);
     ctx.fill();
 
     coreDust.forEach((d, i) => {
-      const ang = d.a + t * 0.06 * d.s;
-      const rad = d.r * scale * (0.9 + 0.1 * Math.sin(t * 0.9 + i * 0.5));
+      const ang = d.a + t * 0.05 * d.s;
+      const rad = d.r * scale * (0.9 + 0.1 * Math.sin(t * 0.85 + i * 0.45));
       const x = p.x + Math.cos(ang) * rad;
       const y = p.y + Math.sin(ang * 1.05) * rad * 0.9;
-      // Keep a clear disc around the wordmark
-      if (Math.hypot(x - p.x, y - p.y) < 22 * scale) return;
+      if (Math.hypot(x - p.x, y - p.y) < 26 * scale) return;
       const col = d.hue < 0.3
-        ? `rgba(255,255,255,${0.28 + d.s * 0.35})`
+        ? `rgba(255,255,255,${0.3 + d.s * 0.35})`
         : d.hue < 0.55
-          ? `rgba(196,181,253,${0.22 + d.s * 0.3})`
+          ? `rgba(196,181,253,${0.24 + d.s * 0.3})`
           : d.hue < 0.8
-            ? `rgba(94,234,212,${0.18 + d.s * 0.28})`
-            : `rgba(251,113,133,${0.16 + d.s * 0.22})`;
+            ? `rgba(94,234,212,${0.2 + d.s * 0.28})`
+            : `rgba(251,113,133,${0.18 + d.s * 0.24})`;
       ctx.beginPath();
       ctx.fillStyle = col;
       ctx.arc(x, y, d.size * scale, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    // Crisp wordmark on top with dark halo
-    const fs = Math.max(13, 15 * scale);
+    const fs = Math.max(15, 17 * scale);
     ctx.font = `600 ${fs}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 6 * scale;
-    ctx.strokeStyle = 'rgba(20, 19, 34, 0.95)';
+    ctx.lineWidth = 7 * scale;
+    ctx.strokeStyle = 'rgba(20, 19, 34, 0.96)';
     ctx.lineJoin = 'round';
     ctx.strokeText('leet', p.x, p.y);
-    ctx.lineWidth = 2.5 * scale;
-    ctx.strokeStyle = 'rgba(37, 36, 59, 0.9)';
+    ctx.lineWidth = 2.8 * scale;
+    ctx.strokeStyle = 'rgba(37, 36, 59, 0.92)';
     ctx.strokeText('leet', p.x, p.y);
     ctx.fillStyle = 'rgba(252,252,254,0.99)';
     ctx.fillText('leet', p.x, p.y);
-    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 36 * scale, vr: 36 * scale });
+    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 52 * scale, vr: 52 * scale });
   }
 
   function curvePts(x0, y0, x1, y1) {
@@ -566,8 +639,8 @@
         const i = CATS.indexOf(cat);
         const a = (i / CATS.length) * Math.PI * 2 + rot;
         x0 = 0; y0 = 0;
-        x1 = Math.cos(a) * R_HUB;
-        y1 = Math.sin(a) * R_HUB;
+        x1 = Math.cos(a) * overviewGeom.rHub;
+        y1 = Math.sin(a) * overviewGeom.rHub;
       }
       const x = x0 + (x1 - x0) * p.u;
       const y = y0 + (y1 - y0) * p.u;
@@ -582,36 +655,50 @@
 
     // nodes
     const showLabels = !!focusCat;
-    const zScale = Math.min(1.25, 0.92 + zoom * 0.18);
+    const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
     nodes.forEach((n) => {
       if (focusCat && n.catId && n.catId !== focusCat) return;
       const p = worldToScreen(n.x, n.y);
       if (p.x < -60 || p.x > W + 60 || p.y < -60 || p.y > H + 60) return;
       const selected = selectedAlert && n.alert && selectedAlert.id === n.alert.id;
-      const isHub = n.kind === 'category' || n.kind === 'subtype';
-      const isLeaf = n.kind === 'site' || n.kind === 'machine' || n.kind === 'area';
-      let r = (n.r + (selected ? 2 : 0)) * zScale;
-      if (!focusCat && isLeaf) r = Math.max(2.6, Math.min(4.2, n.r * zScale));
+      const isCat = n.kind === 'category';
+      const isHub = isCat || n.kind === 'subtype';
+      let r = (n.r + (selected ? 1.5 : 0)) * zScale;
+      if (!focusCat && n.kind === 'machine') r = Math.max(1.5, Math.min(2.1, 1.8 * zScale)); // 3–4px tip
+      if (!focusCat && n.kind === 'site') r = Math.max(1.3, Math.min(1.8, 1.5 * zScale)); // tiny junction
+      if (!focusCat && n.kind === 'area') r = Math.max(1.4, Math.min(2.0, 1.6 * zScale));
+      if (!focusCat && isCat) r = Math.max(10.5, 11 * zScale); // ~22px diameter
 
-      if (!focusCat && isLeaf) {
-        // Overview leaves: small solid soft-white / accent dots (Skilltree)
+      if (!focusCat && (n.kind === 'machine' || n.kind === 'site' || n.kind === 'area')) {
         ctx.beginPath();
         ctx.fillStyle = n.hot
-          ? hexAlpha(n.color, 0.95)
-          : 'rgba(250, 250, 252, 0.88)';
+          ? hexAlpha(n.color, n.kind === 'machine' ? 0.95 : 0.75)
+          : (n.kind === 'machine' ? 'rgba(250,250,252,0.9)' : 'rgba(228,228,231,0.55)');
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
       } else if (isHub) {
+        if (isCat) {
+          const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r * 2.1);
+          glow.addColorStop(0, hexAlpha(n.color, 0.35));
+          glow.addColorStop(1, hexAlpha(n.color, 0));
+          ctx.beginPath();
+          ctx.fillStyle = glow;
+          ctx.arc(p.x, p.y, r * 2.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.beginPath();
-        ctx.fillStyle = 'rgba(24,24,27,0.9)';
+        ctx.fillStyle = 'rgba(24,24,27,0.92)';
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = n.kind === 'category' ? 2.1 : 1.7;
-        ctx.strokeStyle = hexAlpha(n.color, 0.95);
+        ctx.lineWidth = isCat ? 2.4 : 1.7;
+        ctx.strokeStyle = hexAlpha(n.color, 0.98);
         ctx.stroke();
-        drawIcon(p.x, p.y, n.icon || 'unknown', n.color, 1, n.kind === 'category' ? 1 : 0.82);
+        if (focusCat && isCat) {
+          drawBackChevron(p.x, p.y, n.color, r);
+        } else {
+          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, 1, isCat ? 1.15 : 0.85);
+        }
       } else {
-        // Focus mid/leaf nodes — outlined rings
         ctx.beginPath();
         ctx.fillStyle = 'rgba(24,24,27,0.88)';
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
@@ -931,7 +1018,12 @@
     const hit = pick(e.clientX - rect.left, e.clientY - rect.top);
     if (!hit) return;
     if (hit.kind === 'core') { openCore(); return; }
-    if (hit.kind === 'category') { focusCategory(hit.ref.catId || hit.ref.id); return; }
+    if (hit.kind === 'category') {
+      // In focus, category hub is a back control (chevron)
+      if (focusCat) { clearFocus(); return; }
+      focusCategory(hit.ref.catId || hit.ref.id);
+      return;
+    }
     if (hit.ref?.alert) {
       if (focusCat !== hit.ref.catId) focusCategory(hit.ref.catId);
       openPanel({ ...hit.ref.alert, ladderSteps: hit.ref.alert.ladderSteps || window.LEET_ALERTS_DATA.ladder(hit.ref.alert.ladder) });
@@ -1012,6 +1104,27 @@
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
     waitForIdle: () => new Promise((r) => setTimeout(r, 480)),
     setIdleSpin: (on) => { idleSpin = !!on; },
+    /** Radial fill: 2× max distance from canvas center of nodes/labels ÷ shorter side. */
+    mapFillRatio: () => {
+      const u = usable();
+      const cx = u.cx;
+      const cy = u.cy;
+      let maxD = 0;
+      hitNodes.forEach((h) => {
+        if (h.kind === 'core') return;
+        maxD = Math.max(maxD, Math.hypot(h.x - cx, h.y - cy) + (h.vr || 0));
+      });
+      labelLayer.querySelectorAll('.cat-label').forEach((el) => {
+        if (Number(getComputedStyle(el).opacity) < 0.15) return;
+        const r = el.getBoundingClientRect();
+        const cr = canvas.getBoundingClientRect();
+        const lx = r.left - cr.left + r.width / 2;
+        const ly = r.top - cr.top + r.height / 2;
+        maxD = Math.max(maxD, Math.hypot(lx - cx, ly - cy) + r.height / 2);
+      });
+      if (maxD <= 0) return 0;
+      return (maxD * 2) / Math.min(W, H);
+    },
     visibleNodeCount: () => visibleScreenNodes().length,
     labeledNodeCount: () => [...labelLayer.querySelectorAll('.node-label.is-on')].filter((el) => {
       const st = getComputedStyle(el);

@@ -284,23 +284,29 @@
   }
 
   /**
-   * Overview tree: category → rule → site leaves (machines aggregated with counts).
-   * Keeps ~15–30 nodes per branch so the map can space like Skilltree.
+   * Overview tree: category → rule → site (junction) → machine tips.
+   * Caps fan-out so long constellation forks stay spaced.
    */
   function toOverviewTree(fullTree) {
-    function siteLeaf(siteNode) {
+    function mapSite(siteNode) {
       const machines = siteNode.children || [];
+      const tips = machines.slice(0, 3).map((m) => ({
+        id: `${m.id}:ov`,
+        kind: 'machine',
+        label: m.label,
+        alert: m.alert || null,
+        hot: !!(m.alert && m.alert.hot),
+        children: [],
+      }));
       const hotAlert = machines.find((m) => m.alert && m.alert.hot)?.alert || null;
-      const anyAlert = hotAlert || machines[0]?.alert || null;
-      const n = machines.length;
       return {
         id: `${siteNode.id}:ov`,
         kind: 'site',
-        label: n > 1 ? `${siteNode.label} · ${n}` : siteNode.label,
-        count: n,
-        alert: anyAlert,
+        label: siteNode.label,
+        count: machines.length,
+        alert: hotAlert || machines[0]?.alert || null,
         hot: !!hotAlert,
-        children: [],
+        children: tips,
       };
     }
 
@@ -308,10 +314,9 @@
       const sites = [];
       (sub.children || []).forEach((area) => {
         (area.children || []).forEach((site) => {
-          sites.push(siteLeaf(site));
+          sites.push(mapSite(site));
         });
       });
-      // Cap fan-out per rule so overview stays airy (~Skilltree density)
       const capped = sites.length > 4 ? sites.slice(0, 4) : sites;
       return {
         id: sub.id,
@@ -323,8 +328,7 @@
       };
     }
 
-    // Prefer hotter / earlier rules; keep 3 fans so overview stays airy
-    const subs = (fullTree.children || []).map(mapSubtype).slice(0, 3);
+    const subs = (fullTree.children || []).map(mapSubtype).slice(0, 4);
     return {
       id: fullTree.id,
       kind: 'category',
