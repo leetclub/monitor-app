@@ -67,20 +67,27 @@
       w: Math.max(280, W - left),
       h: Math.max(240, H - 56),
       get cx() { return this.x + this.w / 2; },
-      get cy() { return this.y + this.h * (focusCat ? 0.42 : 0.5); },
+      // Slightly above geometric centre: clears toolbar AND leaves tip→label gap
+      get cy() { return this.y + this.h * (focusCat ? 0.42 : 0.52); },
     };
   }
 
   /**
    * Compact Skilltree-style overview (vs viewport height):
-   * hub ~16.5% H, tips ~36% H (longer denser fans), core diameter ~18% min(W,H).
+   * hub ~16.5% H, tips ~34% H, core ~60% of r8 size, labels clear of top bar.
    */
   function computeOverviewGeom() {
     const m = Math.min(W, H);
-    const rHub = H * 0.165;
-    const rTip = H * 0.355;
-    const rLabel = rTip + H * 0.12; // clear tip nodes (wide letter-spaced titles)
-    const rCore = m * 0.09; // diameter ~18%
+    const rHub = H * 0.155;
+    const rTip = H * 0.30;
+    const u = usable();
+    // Title centres must stay inside the canvas (toolbar + bottom margin)
+    const topClear = 56 + 34;
+    const botClear = 36;
+    const rLabelMax = Math.min(u.cy - topClear, (H - botClear) - u.cy);
+    // Tip→label gap for wide Marcellus titles
+    const rLabel = Math.min(rTip + H * 0.09, rLabelMax);
+    const rCore = m * 0.054; // ~60% of r8 (was 0.09)
     const segLen = H * 0.035;
     overviewGeom = { rHub, rTip, rLabel, rCore, segLen };
     return overviewGeom;
@@ -142,13 +149,13 @@
       catId: cat.id,
       x: hx,
       y: hy,
-      r: 9, // ~18px thin hub ring
+      r: 8, // thin hub ring
       depth: 0,
       hot: false,
     });
 
     // Inner stub only (leet overview keeps the core→hub gap; no dashed spokes)
-    const stubLen = Math.min(14, rHub * 0.1);
+    const stubLen = Math.min(12, rHub * 0.1);
     const sx = hx - Math.cos(angle) * stubLen;
     const sy = hy - Math.sin(angle) * stubLen;
     const stubId = `${cat.id}:stub`;
@@ -170,13 +177,14 @@
       x0: sx, y0: sy, x1: hx, y1: hy,
     });
 
-    // buildSky: SPAN=140°, r0=80, rb=146, rstep=56 → Rmax=314 (4 joints / chain)
-    const SPAN = (140 * Math.PI) / 180;
-    const RmaxRef = 146 + 3 * 56; // 314
+    // Slot = 360°/N; fan uses ~72% so empty gaps between departments stay obvious
+    const slot = (Math.PI * 2) / CATS.length;
+    const SPAN = slot * 0.72; // ~72% of department slot → visible gaps between fans
+    const RmaxRef = 146 + 3 * 56; // 314 (buildSky max reach)
     const scale = (rTip - rHub) / RmaxRef;
-    const r0 = 80 * scale;
     const rb = 146 * scale;
     const Rmax = RmaxRef * scale;
+    const rstep = (Rmax - rb) / 4; // 5 joints max → 4 equal steps
 
     const ox = Math.cos(angle);
     const oy = Math.sin(angle);
@@ -195,11 +203,15 @@
       return { x: -outY, y: outX };
     }
 
-    // Denser fan = more spokes (7–8, like ref), not more joints (~4 = rb..Rmax / rstep)
-    const nf = 7 + Math.floor(hash01(cat.id.length * 11 + angle) * 2); // 7–8
-    const jobsPerChain = 4; // matches Rmax = rb + 3*rstep
+    // 5–6 spoke chains; vary length 3–5 joints (ref), keep straight axes
+    // Cap at 5 when the narrow wedge can't space 6 roots before rb
+    let nf = 5 + Math.floor(hash01(cat.id.length * 11 + angle) * 2); // 5–6
+    const rootSep = 6;
+    const r0For = (n) => Math.max(80 * scale, rootSep / (2 * Math.sin(SPAN / (2 * n))));
+    if (r0For(nf) > rb * 0.92) nf = 5;
+    const r0 = Math.min(r0For(nf), rb * 0.92);
     const tipPool = tips.slice();
-    const need = nf * jobsPerChain;
+    const need = nf * 5;
     while (tipPool.length < need) {
       const src = tips[tipPool.length % Math.max(1, tips.length)] || {
         id: `${cat.id}:pad`, label: '·', alert: null, hot: false,
@@ -210,10 +222,16 @@
         label: src.label || '·',
       });
     }
-    const chains = Array.from({ length: nf }, (_, i) => ({
-      sub: subtypes[i % Math.max(1, subtypes.length)] || null,
-      jobs: tipPool.slice(i * jobsPerChain, (i + 1) * jobsPerChain),
-    }));
+    let tipCursor = 0;
+    const chains = Array.from({ length: nf }, (_, i) => {
+      const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + i * 3.7 + angle) * 3); // 3–5
+      const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
+      tipCursor += nJobs;
+      return {
+        sub: subtypes[i % Math.max(1, subtypes.length)] || null,
+        jobs,
+      };
+    });
 
     const span = SPAN / nf;
     // buildSky zig amplitude (radians); lateral = r * zigAng so offset grows with r
@@ -235,7 +253,7 @@
         catId: cat.id,
         x: root.x,
         y: root.y,
-        r: 2.8,
+        r: 2.15,
         depth: 1,
         hot: false,
         hollow: false,
@@ -250,10 +268,10 @@
       let py = root.y;
       let prevId = rootId;
       const tan = axisTangent(aC);
-      const nJobs = ch.jobs.length;
+      // First job starts past the function root; equal steps; shorter chains stop earlier
+      const rFirst = Math.max(rb, r0 + rstep * 0.75);
       ch.jobs.forEach((job, ji) => {
-        // Equal radial steps; ±lateral of axis (first joint 0.45×) — buildSky proportion
-        const r = rb + (nJobs > 1 ? (ji * (Rmax - rb)) / (nJobs - 1) : 0);
+        const r = Math.min(Rmax, rFirst + ji * rstep);
         const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
         const lateral = r * zigAng * sign;
         const base = onAxis(r, aC);
@@ -269,7 +287,7 @@
           catId: cat.id,
           x: p.x,
           y: p.y,
-          r: 2.2,
+          r: 1.9,
           depth: 2 + ji,
           hot: !!job.hot,
           hollow: false,
@@ -540,30 +558,30 @@
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
-    const coreR = focusCat ? 78 : (overviewGeom.rCore || Math.min(W, H) * 0.09);
-    if (!coreDust.length || coreDust._gen !== 8) {
+    const coreR = focusCat ? 48 : (overviewGeom.rCore || Math.min(W, H) * 0.054);
+    if (!coreDust.length || coreDust._gen !== 9) {
       coreDust.length = 0;
-      coreDust._gen = 8;
-      for (let i = 0; i < 520; i++) {
+      coreDust._gen = 9;
+      // Crisp small particles (ref-like); fewer, tighter than r8 bloom
+      for (let i = 0; i < 280; i++) {
         const ring = Math.random();
         coreDust.push({
           a: Math.random() * Math.PI * 2,
-          r: ring < 0.5
-            ? coreR * (0.08 + Math.random() * 0.5)
-            : coreR * (0.4 + Math.random() * 0.62),
-          s: 0.08 + Math.random() * 0.45,
+          r: ring < 0.55
+            ? coreR * (0.12 + Math.random() * 0.55)
+            : coreR * (0.55 + Math.random() * 0.42),
+          s: 0.1 + Math.random() * 0.4,
           hue: Math.random(),
-          size: 0.45 + Math.random() * 1.55,
+          size: 0.35 + Math.random() * 0.85,
         });
       }
     }
-    const scale = focusCat ? 1.2 : zoom;
-    const bloomR = coreR * scale * 1.08;
-    const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, bloomR);
-    g.addColorStop(0, 'rgba(255,255,255,0.42)');
-    g.addColorStop(0.2, 'rgba(233,228,214,0.22)');
-    g.addColorStop(0.45, 'rgba(196,181,253,0.12)');
-    g.addColorStop(0.72, 'rgba(251,113,133,0.06)');
+    const scale = focusCat ? 1.15 : zoom;
+    const bloomR = coreR * scale * 1.02;
+    const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, bloomR);
+    g.addColorStop(0, 'rgba(255,255,255,0.22)');
+    g.addColorStop(0.28, 'rgba(233,228,214,0.10)');
+    g.addColorStop(0.55, 'rgba(196,181,253,0.05)');
     g.addColorStop(1, 'rgba(32,36,45,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -571,38 +589,36 @@
     ctx.fill();
 
     coreDust.forEach((d, i) => {
-      const ang = d.a + t * 0.035 * d.s;
-      const rad = d.r * scale * (0.92 + 0.08 * Math.sin(t * 0.7 + i * 0.4));
+      const ang = d.a + t * 0.03 * d.s;
+      const rad = d.r * scale * (0.96 + 0.04 * Math.sin(t * 0.7 + i * 0.4));
       const x = p.x + Math.cos(ang) * rad;
-      const y = p.y + Math.sin(ang * 1.04) * rad * 0.92;
-      if (Math.hypot(x - p.x, y - p.y) < Math.min(18, bloomR * 0.22)) return;
+      const y = p.y + Math.sin(ang * 1.02) * rad * 0.94;
+      if (Math.hypot(x - p.x, y - p.y) < Math.min(10, bloomR * 0.18)) return;
       const col = d.hue < 0.35
-        ? `rgba(255,255,255,${0.22 + d.s * 0.4})`
+        ? `rgba(255,255,255,${0.35 + d.s * 0.45})`
         : d.hue < 0.55
-          ? `rgba(233,228,214,${0.18 + d.s * 0.28})`
+          ? `rgba(233,228,214,${0.28 + d.s * 0.3})`
           : d.hue < 0.75
-            ? `rgba(196,181,253,${0.14 + d.s * 0.22})`
-            : `rgba(251,113,133,${0.12 + d.s * 0.2})`;
+            ? `rgba(196,181,253,${0.22 + d.s * 0.25})`
+            : `rgba(251,113,133,${0.2 + d.s * 0.22})`;
       ctx.beginPath();
       ctx.fillStyle = col;
-      ctx.arc(x, y, d.size * scale * 0.95, 0, Math.PI * 2);
+      ctx.arc(x, y, d.size * scale, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    const fs = Math.max(15, 17 * scale);
+    // Subtle wordmark — no dark pill / heavy stroke
+    const fs = Math.max(13, 14.5 * scale);
     ctx.font = `600 ${fs}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 7 * scale;
-    ctx.strokeStyle = 'rgba(20, 19, 34, 0.96)';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.strokeStyle = 'rgba(32, 36, 45, 0.35)';
     ctx.lineJoin = 'round';
     ctx.strokeText('leet', p.x, p.y);
-    ctx.lineWidth = 2.8 * scale;
-    ctx.strokeStyle = 'rgba(32, 36, 45, 0.92)';
-    ctx.strokeText('leet', p.x, p.y);
-    ctx.fillStyle = 'rgba(252,252,254,0.99)';
+    ctx.fillStyle = 'rgba(242,239,232,0.88)';
     ctx.fillText('leet', p.x, p.y);
-    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 58 * scale, vr: 58 * scale });
+    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 36 * scale, vr: 36 * scale });
   }
 
   function curvePts(x0, y0, x1, y1) {
@@ -734,7 +750,7 @@
       const isHub = isCat || n.kind === 'subtype';
       const op = catOpacity(n.catId);
       let r = (n.r + (selected ? 1.5 : 0)) * zScale;
-      if (!focusCat && isCat) r = 9 * zScale; // small thin hub
+      if (!focusCat && isCat) r = 8 * zScale; // small thin hub
 
       if (!focusCat && (n.kind === 'machine' || n.kind === 'site')) {
         // Mostly white/off-white; only first 1–2 joints tinted
@@ -825,7 +841,8 @@
       drawCore(t);
     }
 
-    // overview category labels — outer edge, white, never on nodes
+    // overview category labels — outer edge (geom already clears toolbar / bottom)
+    const sidePad = 40;
     CATS.forEach((cat) => {
       const el = ensureCatLabel(cat);
       if (focusCat) {
@@ -835,7 +852,7 @@
       const wp = catLabelWorld.get(cat.id);
       if (!wp) { el.style.opacity = '0'; return; }
       const p = worldToScreen(wp.x, wp.y);
-      el.style.left = `${p.x}px`;
+      el.style.left = `${Math.max(sidePad, Math.min(W - sidePad, p.x))}px`;
       el.style.top = `${p.y}px`;
       const op = catOpacity(cat.id);
       el.style.opacity = String(op);
@@ -1401,11 +1418,14 @@
         const r = el.getBoundingClientRect();
         const cr = canvas.getBoundingClientRect();
         if (r.width < 2 || r.height < 2) return;
+        // Letter-spacing inflates the trailing edge of the box — inset slightly
+        const insetX = el.classList.contains('cat-label') ? Math.min(28, r.width * 0.12) : 0;
+        const insetY = el.classList.contains('cat-label') ? 3 : 0;
         labels.push({
-          x: r.left - cr.left,
-          y: r.top - cr.top,
-          w: r.width,
-          h: r.height,
+          x: r.left - cr.left + insetX,
+          y: r.top - cr.top + insetY,
+          w: Math.max(4, r.width - insetX * 2),
+          h: Math.max(4, r.height - insetY * 2),
         });
       });
       const ns = hitNodes.filter((h) => h.kind !== 'core' && h.vr > 0);
@@ -1426,6 +1446,26 @@
       const panel = panelOpen ? nodePanel : corePanel;
       const pr = panel.getBoundingClientRect();
       return visibleScreenNodes().every((h) => h.x > pr.right + 6 || h.kind === 'core');
+    },
+    /** True when every visible cat title sits fully below the top toolbar. */
+    titlesClearOfToolbar: (toolbarBottom = 56) => {
+      const toggle = document.querySelector('.view-toggle');
+      const barBottom = toggle
+        ? toggle.getBoundingClientRect().bottom
+        : toolbarBottom;
+      let clear = true;
+      const hits = [];
+      labelLayer.querySelectorAll('.cat-label').forEach((el) => {
+        const st = getComputedStyle(el);
+        if (st.display === 'none' || Number(st.opacity) < 0.15) return;
+        const r = el.getBoundingClientRect();
+        if (r.height < 2) return;
+        if (r.top < barBottom + 4) {
+          clear = false;
+          hits.push({ id: el.dataset.id, top: r.top, bar: barBottom });
+        }
+      });
+      return { clear, hits, barBottom };
     },
   };
 
