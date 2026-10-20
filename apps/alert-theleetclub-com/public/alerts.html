@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="alerts-map.css?r10=4" />
+  <link rel="stylesheet" href="alerts-map.css?r11=1" />
 </head>
 <body>
   <div id="app" class="alerts-app">
@@ -37,6 +37,12 @@
     <main id="map-view" class="map-view">
       <canvas id="alerts-canvas"></canvas>
       <div id="label-layer" class="label-layer"></div>
+      <button type="button" class="wchev" id="wchev-l" title="Previous category" aria-label="Previous category">
+        <svg viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 11 3 L 4 11 L 11 19"/><circle cx="4" cy="11" r="1.8" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button type="button" class="wchev" id="wchev-r" title="Next category" aria-label="Next category">
+        <svg viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 3 3 L 10 11 L 3 19"/><circle cx="10" cy="11" r="1.8" fill="currentColor" stroke="none"/></svg>
+      </button>
       <div id="focus-bar" class="focus-bar" hidden>
         <button type="button" id="cat-prev" aria-label="Previous category">‹</button>
         <div class="focus-copy">
@@ -63,7 +69,7 @@
   </div>
 
   <script src="apos-space-map-data.js"></script>
-  <script src="alerts-map-data.js?r10=4"></script>
-  <script src="alerts-map.js?r10=4"></script>
+  <script src="alerts-map-data.js?r11=1"></script>
+  <script src="alerts-map.js?r11=1"></script>
 </body>
 </html>

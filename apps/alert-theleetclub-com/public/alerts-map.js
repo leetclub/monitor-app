@@ -17,14 +17,43 @@
   const CATS = SNAP.categories;
   const walk = window.LEET_ALERTS_DATA.walk;
 
+  // Interaction constants mirrored from skilltree INTERACTION-NOTES (behavioural parity)
+  const EASE_CAM = 0.13;
+  const EASE_HOVER = 0.18; // ~350ms toward dim targets
+  const DIM_OTHERS = 0.18;
+  const NODE_FADED = 0.25;
+  const HOVER_NODE_SCALE = 1.12;
+  const FEATURED_SCALE = 1.05;
+  const DRAG_CLICK_CANCEL = 8;
+  const WHEEL_ZOOM_EXP = 0.01;
+  const ZOOM_STEP_IN = 1.25;
+  const ZOOM_STEP_OUT = 0.8;
+  const Z_FAN_MIN = 0.42;
+  const Z_FAN_MAX = 1.9;
+  const Z_SKY_MIN = 0.55;
+  const Z_SKY_MAX = 1.85;
+  const RISE_SCALE = 0.43;
+  const FAN_SPAN = 182 * Math.PI / 180;
+  const R0_FAN = 248;
+  const R_BASE = 410;
+  const R_STEP = 214;
+  const DIVE_SWAP_MS = 520;
+  const RISE_MS = 380;
+  const INERTIA_FRICTION = 0.88;
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   let W = 0, H = 0, dpr = 1;
   let rot = -Math.PI / 2; // fixed overview orientation (no auto-spin)
   let zoom = 1, targetZoom = 1;
   let camX = 0, camY = 0, tCamX = 0, tCamY = 0;
   let velX = 0, velY = 0;
+  let mapState = 'sky'; // sky | diving | fan | rising
   let focusCat = null;
   let hoverCat = null;
-  let hoverAlpha = {}; // catId → 0..1 display opacity (1 = full, 0.25 = dimmed)
+  let hoverNodeId = null;
+  let pathIds = new Set(); // lit path: node → hub → core
+  let hoverAlpha = {}; // catId → 0..1 display opacity
+  let featuredIdx = 0; // sky prev/next "seated" department
   let selectedAlert = null;
   let panelOpen = false;
   let coreOpen = false;
@@ -33,18 +62,33 @@
   let lastX = 0, lastY = 0;
   let dragDist = 0;
   let lastMoveTs = 0;
+  let zoomLockUntil = 0;
   let searchQ = '';
   let layoutNodes = [];
   let layoutLinks = [];
   let focusLayout = null;
+  let parentOf = new Map(); // childId → parentId for path walks
   const flowParticles = [];
   const coreDust = [];
   const hitNodes = [];
   const labelEls = new Map();
   const nodeLabelEls = new Map();
+  const ptrs = new Map();
+  let pinchD0 = 0, pinchS0 = 1, pinchRatio = 1, pinchAX = 0, pinchAY = 0;
 
   let catLabelWorld = new Map(); // catId → {x,y}
   let overviewGeom = { rHub: 160, rTip: 300, rLabel: 420, rCore: 70, segLen: 32 };
+
+  function clampZSky(v) { return Math.max(Z_SKY_MIN, Math.min(Z_SKY_MAX, v)); }
+  function clampZFan(v) { return Math.max(Z_FAN_MIN, Math.min(Z_FAN_MAX, v)); }
+  function clampZoom(v) { return focusCat || mapState === 'fan' || mapState === 'diving' ? clampZFan(v) : clampZSky(v); }
+
+  function setTransitioning(on) {
+    document.body.classList.toggle('transitioning', !!on);
+  }
+  function setFanMode(on) {
+    document.body.classList.toggle('fanmode', !!on);
+  }
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -305,6 +349,12 @@
       const a = (i / CATS.length) * Math.PI * 2 + rot;
       buildSectorConstellation(cat, a, halfSpan, nodes, links);
       hoverAlpha[cat.id] = hoverAlpha[cat.id] ?? 1;
+      // Logical core→hub edge for path-to-core hover (drawn only when lit)
+      links.push({
+        s: '__core__', t: cat.id, color: cat.color, depth: 0,
+        straight: true, spine: true, virtual: true,
+        x0: 0, y0: 0, x1: Math.cos(a) * g.rHub, y1: Math.sin(a) * g.rHub,
+      });
     });
     syncOverviewLinks(nodes, links);
 
@@ -328,11 +378,36 @@
 
     layoutNodes = nodes;
     layoutLinks = links;
+    rebuildParentIndex(links);
     seedFlowParticles();
-    if (!focusCat) {
-      zoom = 1;
-      targetZoom = 1;
+    if (!focusCat && mapState === 'sky') {
+      targetZoom = clampZSky(1);
     }
+  }
+
+  function rebuildParentIndex(links) {
+    parentOf = new Map();
+    links.forEach((L) => {
+      if (L.t) parentOf.set(L.t, L.s);
+    });
+  }
+
+  function pathToCore(nodeId) {
+    const ids = new Set();
+    let cur = nodeId;
+    let guard = 0;
+    while (cur && guard++ < 64) {
+      ids.add(cur);
+      if (cur === '__core__') break;
+      const p = parentOf.get(cur);
+      if (!p) {
+        if (CATS.some((c) => c.id === cur)) ids.add('__core__');
+        break;
+      }
+      cur = p;
+    }
+    ids.add('__core__');
+    return ids;
   }
 
   function recenterMap({ immediate = false } = {}) {
@@ -340,11 +415,11 @@
     velY = 0;
     tCamX = 0;
     tCamY = 0;
-    targetZoom = focusCat ? targetZoom : 1;
+    if (!focusCat) targetZoom = clampZSky(1);
     if (immediate) {
       camX = 0;
       camY = 0;
-      if (!focusCat) zoom = 1;
+      zoom = targetZoom;
     }
   }
 
@@ -362,83 +437,130 @@
     });
   }
 
-  /** Focus: core at top, full category tree growing downward filling the usable canvas. */
-  function rebuildFocusLayout(catId) {
+  /**
+   * Focus fan: FAN_SPAN 182° / R0 248 / R_BASE 410 / R_STEP 214 (skilltree buildFan),
+   * scaled to fit the usable viewport.
+   */
+  function rebuildFocusLayout(catId, { setCamera = true } = {}) {
     const cat = CATS.find((c) => c.id === catId);
     if (!cat) { focusLayout = null; return; }
     const nodes = [];
     const links = [];
     const root = { ...cat.tree, icon: cat.icon, catId: cat.id };
-
-    // Top-down layered layout (core → category → subtypes → …)
-    const levels = [];
-    walk(root, (n, depth) => {
-      if (!levels[depth]) levels[depth] = [];
-      levels[depth].push(n);
-    });
-
-    const positioned = new Map();
-    const layerGap = 58;
-    const y0 = -40; // category near top under core
-
-    levels.forEach((layer, depth) => {
-      const y = y0 + depth * layerGap;
-      const n = layer.length;
-      const width = Math.max(220, Math.min(520, n * 42));
-      layer.forEach((node, i) => {
-        const t = n === 1 ? 0.5 : i / (n - 1);
-        const x = -width / 2 + t * width;
-        // slight crystalline jitter
-        const jx = Math.sin(i * 2.3 + depth) * 6;
-        const jy = (i % 2) * 8;
-        positioned.set(node.id, {
-          id: node.id,
-          kind: node.kind,
-          label: node.label,
-          color: cat.color,
-          icon: node.kind === 'category' ? cat.icon : node.icon,
-          alert: node.alert || null,
-          catId: cat.id,
-          x: x + jx,
-          y: y + jy,
-          r: node.kind === 'category' ? 18 : node.kind === 'subtype' ? 11 : node.kind === 'area' ? 8.5 : node.kind === 'site' ? 7 : 6,
-          depth,
-          hot: !!(node.alert && node.alert.hot),
-        });
-      });
-    });
-
-    walk(root, (n, depth, parent) => {
-      const pn = positioned.get(n.id);
-      if (pn) nodes.push(pn);
-      if (parent) {
-        links.push({ s: parent.id, t: n.id, color: cat.color, depth });
+    const subtypes = (root.children || []).filter((c) => c.kind === 'subtype' || c.children?.length);
+    const tips = [];
+    walk(root, (n) => {
+      if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) {
+        tips.push(n);
       }
+    });
+    const tipPool = tips.slice();
+    const chains = subtypes.length
+      ? subtypes.map((sub, i) => {
+          const leafs = [];
+          walk(sub, (n) => {
+            if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) leafs.push(n);
+          });
+          if (!leafs.length) {
+            const pad = tipPool[i % Math.max(1, tipPool.length)];
+            if (pad) leafs.push(pad);
+          }
+          return { sub, jobs: leafs.slice(0, 6) };
+        })
+      : [{ sub: null, jobs: tipPool.slice(0, 8) }];
+
+    const totalJobs = Math.max(1, chains.reduce((s, c) => s + Math.max(1, c.jobs.length), 0));
+    const P = (r, a) => [r * Math.sin(a), -r * Math.cos(a)];
+    const u = usable();
+    const fit = Math.min(u.w / 1700, u.h / 1500);
+    const sR0 = R0_FAN * fit;
+    const sBase = R_BASE * fit;
+    const sStep = R_STEP * fit;
+
+    // Hub (category root) near origin, fan opens upward (negative Y)
+    nodes.push({
+      id: cat.id,
+      kind: 'category',
+      label: cat.label,
+      color: cat.color,
+      icon: cat.icon,
+      alert: null,
+      catId: cat.id,
+      x: 0,
+      y: 0,
+      r: 20,
+      depth: 0,
+      hot: false,
+      chain: -1,
     });
     links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true });
 
-    // Fit tree into usable frame: compute bbox and set camera targets
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    nodes.forEach((n) => {
-      minX = Math.min(minX, n.x - n.r);
-      maxX = Math.max(maxX, n.x + n.r);
-      minY = Math.min(minY, n.y - n.r);
-      maxY = Math.max(maxY, n.y + n.r);
-    });
-    // include core anchor above
-    minY = Math.min(minY, -120);
-    const bw = Math.max(80, maxX - minX);
-    const bh = Math.max(80, maxY - minY);
-    const u = usable();
-    const pad = 0.86;
-    const kz = Math.min((u.w * pad) / bw, (u.h * pad) / (bh + 40));
-    targetZoom = Math.max(0.95, Math.min(1.85, kz));
-    const midX = (minX + maxX) / 2;
-    const midY = (minY + maxY) / 2 - 10;
-    tCamX = -midX;
-    tCamY = -midY;
+    let cursor = -FAN_SPAN / 2;
+    let maxR = sR0;
+    chains.forEach((ch, fi) => {
+      const nJobs = Math.max(1, ch.jobs.length);
+      const span = FAN_SPAN * nJobs / totalJobs;
+      const aC = cursor + span / 2;
+      const [ex, ey] = P(sR0, aC);
+      const jointId = `${cat.id}:j${fi}`;
+      nodes.push({
+        id: jointId,
+        kind: 'subtype',
+        label: ch.sub?.label || cat.label,
+        color: cat.color,
+        icon: ch.sub?.icon || null,
+        alert: null,
+        catId: cat.id,
+        x: ex,
+        y: ey,
+        r: 11,
+        depth: 1,
+        hot: false,
+        chain: fi,
+      });
+      links.push({ s: cat.id, t: jointId, color: cat.color, depth: 1, chain: fi });
 
-    focusLayout = { nodes, links, color: cat.color, cat };
+      let px = ex, py = ey, prevId = jointId;
+      ch.jobs.forEach((job, ji) => {
+        const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
+        const a = aC + zig;
+        const r = sBase + ji * sStep;
+        maxR = Math.max(maxR, r);
+        const [x, y] = P(r, a);
+        const id = job.id || `${cat.id}:f${fi}n${ji}`;
+        nodes.push({
+          id,
+          kind: job.kind || 'machine',
+          label: job.label || '·',
+          color: cat.color,
+          icon: job.icon || null,
+          alert: job.alert || null,
+          catId: cat.id,
+          x, y,
+          r: job.alert ? 7 : 6,
+          depth: 2 + ji,
+          hot: !!(job.alert && job.alert.hot),
+          chain: fi,
+        });
+        links.push({ s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi, x0: px, y0: py, x1: x, y1: y });
+        px = x; py = y; prevId = id;
+      });
+      cursor += span;
+    });
+
+    rebuildParentIndex(links);
+
+    if (setCamera) {
+      const bw = (maxR + 280) * 2;
+      const bh = maxR + 260 + 180;
+      const pad = 0.9;
+      const kz = Math.min((u.w * pad) / bw, (u.h * pad) / bh);
+      targetZoom = clampZFan(Math.max(0.55, Math.min(1.35, kz)));
+      tCamX = 0;
+      tCamY = maxR * 0.18;
+    }
+
+    focusLayout = { nodes, links, color: cat.color, cat, maxR };
   }
 
   function activeNodes() {
@@ -655,29 +777,43 @@
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
     function catOpacity(catId) {
-      if (focusCat || !catId) return 1;
+      if ((focusCat || mapState === 'fan') && !catId) return 1;
+      if (focusCat || mapState === 'fan') return 1;
       const a = hoverAlpha[catId];
       return a == null ? 1 : a;
     }
 
-    // links — thin low-opacity grey (not category-colored)
+    function onPath(id) {
+      return pathIds.size > 0 && pathIds.has(id);
+    }
+    function linkOnPath(L) {
+      return pathIds.size > 0 && onPath(L.s) && onPath(L.t);
+    }
+
+    // links — thin low-opacity grey; path hover lights chain → hub → core
     links.forEach((L) => {
-      if (L.s === '__core__') return;
-      const s = nodeMap.get(L.s) || nodeById(L.s);
+      const s = L.s === '__core__' ? { x: 0, y: 0, catId: null } : (nodeMap.get(L.s) || nodeById(L.s));
       const tN = nodeMap.get(L.t) || nodeById(L.t);
       if (!s || !tN) return;
+      if (L.virtual && !linkOnPath(L)) return; // overview gap: only show when path-lit
       if (focusCat && L.s !== '__core__' && !nodeMap.has(L.s) && L.s !== focusCat) return;
       const catId = tN.catId || s.catId;
-      const op = catOpacity(catId);
+      let op = catOpacity(catId);
+      const lit = linkOnPath(L);
+      if (pathIds.size && !lit) op *= NODE_FADED;
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
-      if (!focusCat && L.straight) {
+      if (!focusCat && (L.straight || L.s === '__core__')) {
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
-        const lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
-        ctx.strokeStyle = `rgba(233,228,214,${lineOp * op})`;
-        ctx.lineWidth = L.stub ? 1.1 : 1;
+        let lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
+        if (L.s === '__core__') lineOp = lit ? 0.62 : 0.14;
+        if (lit) lineOp = Math.max(lineOp, 0.55);
+        ctx.strokeStyle = lit
+          ? hexAlpha(tN.color || L.color || '#e9e4d6', lineOp * Math.max(op, 0.85))
+          : `rgba(233,228,214,${lineOp * op})`;
+        ctx.lineWidth = lit ? 2.2 : (L.stub ? 1.1 : 1);
         ctx.stroke();
         return;
       }
@@ -685,8 +821,9 @@
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', focusCat ? 0.45 : 0.22 * op);
-      ctx.lineWidth = 1.1;
+      const baseOp = focusCat ? (lit ? 0.75 : (pathIds.size ? 0.18 : 0.45)) : 0.22 * op;
+      ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', baseOp);
+      ctx.lineWidth = lit ? 2.4 : 1.1;
       ctx.stroke();
     });
 
@@ -711,8 +848,9 @@
     }
 
     // nodes
-    const showLabels = !!focusCat;
+    const showLabels = !!(focusCat || mapState === 'fan');
     const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
+    const featuredCatId = !focusCat ? CATS[featuredIdx]?.id : null;
     nodes.forEach((n) => {
       if (n.kind === 'stub' || n.hidden) return;
       if (focusCat && n.catId && n.catId !== focusCat) return;
@@ -721,20 +859,32 @@
       const selected = selectedAlert && n.alert && selectedAlert.id === n.alert.id;
       const isCat = n.kind === 'category';
       const isHub = isCat || n.kind === 'subtype';
-      const op = catOpacity(n.catId);
-      let r = (n.r + (selected ? 1.5 : 0)) * zScale;
-      if (!focusCat && isCat) r = 8 * zScale; // small thin hub
+      let op = catOpacity(n.catId);
+      const lit = onPath(n.id);
+      if (pathIds.size && !lit) op *= NODE_FADED;
+      else if (pathIds.size && lit) op = Math.max(op, 0.95);
+      const hoverBoost = hoverNodeId === n.id ? HOVER_NODE_SCALE : (featuredCatId && n.catId === featuredCatId && isCat ? FEATURED_SCALE : 1);
+      let r = (n.r + (selected ? 1.5 : 0)) * zScale * hoverBoost;
+      if (!focusCat && isCat) r = 8 * zScale * hoverBoost;
+
+      // Soft glow on lit path nodes
+      if (lit && hoverNodeId) {
+        ctx.beginPath();
+        ctx.fillStyle = hexAlpha(n.color || '#e9e4d6', 0.22);
+        ctx.arc(p.x, p.y, r + 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       if (!focusCat && (n.kind === 'machine' || n.kind === 'site')) {
         // Mostly white/off-white; only first 1–2 joints tinted
-        if (n.tint) {
+        if (n.tint || lit) {
           ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, 0.55 * op);
+          ctx.fillStyle = hexAlpha(n.color, (lit ? 0.75 : 0.55) * op);
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
           ctx.beginPath();
-          ctx.strokeStyle = hexAlpha(n.color, 0.75 * op);
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = hexAlpha(n.color, (lit ? 0.95 : 0.75) * op);
+          ctx.lineWidth = lit ? 1.6 : 1;
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.stroke();
         } else {
@@ -804,10 +954,15 @@
       }
     });
 
-    // Dim core when a department is hovered
-    if (!focusCat && hoverCat) {
+    // Dim core when a department is hovered (ref hub/spokes → 0.3); keep bright if path includes core
+    let coreDim = 1;
+    if (!focusCat && mapState === 'sky') {
+      if (pathIds.size && pathIds.has('__core__') && hoverNodeId) coreDim = 1;
+      else if (hoverCat || (pathIds.size && hoverNodeId)) coreDim = 0.3;
+    }
+    if (coreDim < 1) {
       ctx.save();
-      ctx.globalAlpha = 0.28;
+      ctx.globalAlpha = coreDim;
       drawCore(t);
       ctx.restore();
     } else {
@@ -829,9 +984,12 @@
       el.style.top = `${p.y}px`;
       const op = catOpacity(cat.id);
       el.style.opacity = String(op);
-      el.style.filter = (hoverCat && cat.id === hoverCat)
+      const featured = CATS[featuredIdx]?.id === cat.id;
+      el.style.filter = (hoverCat && cat.id === hoverCat) || featured
         ? 'brightness(1.15)'
         : 'none';
+      if (featured && !hoverCat) el.style.transform = 'translate(-50%, -50%) scale(1.05)';
+      else el.style.transform = 'translate(-50%, -50%)';
     });
   }
 
@@ -843,69 +1001,198 @@
     return `rgba(${r},${g},${b},${a})`;
   }
 
+  function clampPanSoft() {
+    // Sky: small drift bounds like ref ±40 / ±50; fan: keep content near frame
+    if (mapState === 'diving' || mapState === 'rising') return;
+    if (!focusCat && mapState === 'sky') {
+      tCamX = Math.max(-40, Math.min(40, tCamX));
+      tCamY = Math.max(-50, Math.min(50, tCamY));
+      camX = Math.max(-40, Math.min(40, camX));
+      camY = Math.max(-50, Math.min(50, camY));
+      return;
+    }
+    const M = 420;
+    tCamX = Math.max(-M, Math.min(M, tCamX));
+    tCamY = Math.max(-M, Math.min(M, tCamY));
+  }
+
+  function zoomAtScreen(clientX, clientY, nextZoom) {
+    const u = usable();
+    const ox = u.cx;
+    const oy = u.cy;
+    const zn = clampZoom(nextZoom);
+    const k = zn / Math.max(zoom, 1e-6);
+    // Keep world point under cursor stable (zoom-to-cursor)
+    const wx = (clientX - ox) / zoom - camX;
+    const wy = (clientY - oy) / zoom - camY;
+    zoom = zn;
+    targetZoom = zn;
+    camX = (clientX - ox) / zn - wx;
+    camY = (clientY - oy) / zn - wy;
+    tCamX = camX;
+    tCamY = camY;
+  }
+
   function tick(ts) {
     const t = ts / 1000;
+    const ease = reduceMotion ? 1 : EASE_CAM;
 
-    // Smooth hover opacity (~200ms)
-    if (!focusCat) {
+    // Smooth hover opacity (~350ms → ease ~0.18)
+    if (!focusCat && mapState === 'sky') {
       CATS.forEach((cat) => {
-        const target = !hoverCat ? 1 : (cat.id === hoverCat ? 1 : 0.25);
+        let target = 1;
+        if (hoverCat) target = cat.id === hoverCat ? 1 : DIM_OTHERS;
+        else if (pathIds.size && hoverNodeId) {
+          // path hover: whole other departments fade; path department stays up
+          const pathCat = (layoutNodes.find((n) => n.id === hoverNodeId) || {}).catId;
+          target = cat.id === pathCat ? 1 : DIM_OTHERS;
+        }
         const cur = hoverAlpha[cat.id] ?? 1;
-        hoverAlpha[cat.id] = cur + (target - cur) * 0.18;
+        hoverAlpha[cat.id] = cur + (target - cur) * EASE_HOVER;
         if (Math.abs(hoverAlpha[cat.id] - target) < 0.005) hoverAlpha[cat.id] = target;
       });
     }
 
-    // Pan easing + inertia (no rotation)
-    if (!dragging) {
+    // Inertial pan after release (ours: explicit friction; ref fan has none)
+    if (!dragging && mapState !== 'diving' && mapState !== 'rising') {
       tCamX += velX;
       tCamY += velY;
-      velX *= 0.88;
-      velY *= 0.88;
+      velX *= INERTIA_FRICTION;
+      velY *= INERTIA_FRICTION;
       if (Math.abs(velX) < 0.02) velX = 0;
       if (Math.abs(velY) < 0.02) velY = 0;
     }
-    zoom += (targetZoom - zoom) * 0.1;
-    camX += (tCamX - camX) * 0.18;
-    camY += (tCamY - camY) * 0.18;
+    zoom += (targetZoom - zoom) * ease;
+    camX += (tCamX - camX) * ease;
+    camY += (tCamY - camY) * ease;
+    clampPanSoft();
 
+    // Idle: core dust + flow already animate via t; subtle star twinkle
     if (viewMode === 'map') {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawScene(t);
+      if (!reduceMotion) {
+        ensureStars();
+        starField.forEach((s, i) => {
+          const tw = 0.45 + 0.35 * Math.sin(t * 1.1 + i * 1.7);
+          if (tw < 0.55) return;
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(233,228,214,${s.a * tw * 0.35})`;
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
     }
     requestAnimationFrame(tick);
   }
 
   function focusCategory(id) {
     const cat = CATS.find((c) => c.id === id);
-    if (!cat) return;
-    focusCat = id;
+    if (!cat || mapState === 'diving' || mapState === 'rising') return;
+    if (focusCat === id && mapState === 'fan') return;
+
+    const idx = CATS.findIndex((c) => c.id === id);
+    if (idx >= 0) featuredIdx = idx;
+
+    // Animated dive (not a jump cut)
+    mapState = 'diving';
+    setTransitioning(true);
     hoverCat = null;
-    rebuildFocusLayout(id);
-    focusBar.hidden = false;
-    focusTitle.textContent = cat.label;
-    focusSub.textContent = cat.subtitle;
-    focusTitle.style.color = cat.color;
+    hoverNodeId = null;
+    pathIds = new Set();
     closeCore(false);
     if (selectedAlert && selectedAlert.categoryId !== id) closePanel(false);
-    document.body.classList.toggle('panel-open', panelOpen || coreOpen);
+
+    // Phase 1: dim others + ease camera toward hub
+    const hub = layoutNodes.find((n) => n.id === id);
+    CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : 0.12; });
+    if (hub) {
+      targetZoom = clampZSky(Math.min(1.55, zoom * 1.35));
+      tCamX = -hub.x * 0.35;
+      tCamY = -hub.y * 0.35;
+    }
+
+    setTimeout(() => {
+      focusCat = id;
+      rebuildFocusLayout(id, { setCamera: false });
+      // Rise out of the root then fit (ref: scale=0.5, ty=120 → fitCurrent)
+      zoom = 0.5;
+      camX = 0;
+      camY = 120;
+      tCamX = 0;
+      tCamY = 0;
+      rebuildFocusLayout(id, { setCamera: true });
+      mapState = 'fan';
+      setFanMode(true);
+      focusBar.hidden = false;
+      focusTitle.textContent = cat.label;
+      focusSub.textContent = cat.subtitle;
+      focusTitle.style.color = cat.color;
+      document.body.classList.toggle('panel-open', panelOpen || coreOpen);
+      setTimeout(() => setTransitioning(false), 1250);
+    }, DIVE_SWAP_MS);
   }
 
   function clearFocus({ immediate = false } = {}) {
-    focusCat = null;
-    focusLayout = null;
-    targetZoom = 1;
-    recenterMap({ immediate });
-    focusBar.hidden = true;
-    closePanel(false);
-    closeCore(false);
-    rebuildOverviewLayout();
+    if (mapState === 'rising' || mapState === 'diving') return;
+    if (!focusCat && mapState === 'sky') {
+      recenterMap({ immediate });
+      return;
+    }
+    const rise = () => {
+      mapState = 'rising';
+      setTransitioning(true);
+      closePanel(false);
+      closeCore(false);
+      focusBar.hidden = true;
+      targetZoom = 0.5;
+      tCamX = 0;
+      tCamY = -80;
+      const finish = () => {
+        focusCat = null;
+        focusLayout = null;
+        hoverNodeId = null;
+        pathIds = new Set();
+        mapState = 'sky';
+        setFanMode(false);
+        rebuildOverviewLayout();
+        targetZoom = clampZSky(1);
+        recenterMap({ immediate: !!immediate || reduceMotion });
+        setTimeout(() => setTransitioning(false), 450);
+      };
+      if (immediate || reduceMotion) finish();
+      else setTimeout(finish, RISE_MS);
+    };
+    rise();
   }
 
   function stepCategory(dir) {
-    if (!focusCat) { focusCategory(CATS[0].id); return; }
-    const i = CATS.findIndex((c) => c.id === focusCat);
-    focusCategory(CATS[(i + dir + CATS.length) % CATS.length].id);
+    if (mapState === 'diving' || mapState === 'rising') return;
+    if (focusCat || mapState === 'fan') {
+      const i = CATS.findIndex((c) => c.id === focusCat);
+      const next = CATS[(i + dir + CATS.length) % CATS.length];
+      // Swap fan with short transition
+      setTransitioning(true);
+      focusCat = next.id;
+      featuredIdx = (i + dir + CATS.length) % CATS.length;
+      rebuildFocusLayout(next.id, { setCamera: true });
+      focusTitle.textContent = next.label;
+      focusSub.textContent = next.subtitle;
+      focusTitle.style.color = next.color;
+      closePanel(false);
+      setTimeout(() => setTransitioning(false), 600);
+      return;
+    }
+    // Sky: seat neighbouring department (wchev)
+    featuredIdx = (featuredIdx + dir + CATS.length) % CATS.length;
+    const cat = CATS[featuredIdx];
+    const hub = layoutNodes.find((n) => n.id === cat.id);
+    if (hub) {
+      tCamX = Math.max(-40, Math.min(40, -hub.x * 0.08));
+      tCamY = Math.max(-50, Math.min(50, -hub.y * 0.08));
+    }
+    hoverCat = cat.id;
+    setTimeout(() => { if (hoverCat === cat.id && !hoverNodeId) hoverCat = null; }, 900);
   }
 
   function badgeClass(state) {
@@ -1077,6 +1364,28 @@
     return hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
   }
 
+  function setHoverFromPointer(lx, ly) {
+    if (mapState === 'diving' || mapState === 'rising') return;
+    const hit = pick(lx, ly);
+    if (!hit || hit.kind === 'core') {
+      hoverNodeId = null;
+      pathIds = new Set();
+      if (!focusCat) hoverCat = null;
+      canvas.style.cursor = dragging ? 'grabbing' : 'grab';
+      return;
+    }
+    const catId = hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
+    hoverCat = focusCat ? null : catId;
+    hoverNodeId = hit.ref?.id || hit.id;
+    // Per-branch path: node → hub → core
+    pathIds = pathToCore(hoverNodeId);
+    if (hit.kind === 'category' && !focusCat) {
+      // Hub hover: light hub+core spoke, dim other departments
+      pathIds = new Set([hoverNodeId, '__core__']);
+    }
+    canvas.style.cursor = 'pointer';
+  }
+
   function setHoverCat(id) {
     if (focusCat) {
       hoverCat = null;
@@ -1084,11 +1393,30 @@
       return;
     }
     hoverCat = id || null;
+    hoverNodeId = null;
+    pathIds = id ? new Set([id, '__core__']) : new Set();
     canvas.style.cursor = hoverCat ? 'pointer' : (dragging ? 'grabbing' : 'grab');
   }
 
   canvas.addEventListener('pointerdown', (e) => {
     if (viewMode !== 'map') return;
+    if (e.target.closest?.('.wchev, .focus-bar, .side-panel, .core-panel, .topbar')) return;
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 2) {
+      dragging = false;
+      const vals = [...ptrs.values()];
+      pinchD0 = Math.hypot(vals[0][0] - vals[1][0], vals[0][1] - vals[1][1]);
+      pinchS0 = zoom;
+      pinchRatio = 1;
+      const mx = (vals[0][0] + vals[1][0]) / 2;
+      const my = (vals[0][1] + vals[1][1]) / 2;
+      const u = usable();
+      const rect = canvas.getBoundingClientRect();
+      pinchAX = (mx - rect.left - u.cx) / zoom - camX;
+      pinchAY = (my - rect.top - u.cy) / zoom - camY;
+      dragDist = 99;
+      return;
+    }
     dragging = true;
     velX = 0;
     velY = 0;
@@ -1100,12 +1428,27 @@
     canvas.style.cursor = 'grabbing';
   });
   window.addEventListener('pointermove', (e) => {
+    if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [e.clientX, e.clientY]);
     const rect = canvas.getBoundingClientRect();
     const lx = e.clientX - rect.left;
     const ly = e.clientY - rect.top;
 
-    if (!dragging && viewMode === 'map' && !focusCat) {
-      setHoverCat(pickDepartment(lx, ly));
+    if (ptrs.size >= 2 && pinchD0 > 0) {
+      const vals = [...ptrs.values()];
+      const dist = Math.hypot(vals[0][0] - vals[1][0], vals[0][1] - vals[1][1]);
+      pinchRatio = dist / pinchD0;
+      const zn = clampZoom(pinchS0 * pinchRatio);
+      const mx = (vals[0][0] + vals[1][0]) / 2 - rect.left;
+      const my = (vals[0][1] + vals[1][1]) / 2 - rect.top;
+      const u = usable();
+      zoom = targetZoom = zn;
+      camX = tCamX = (mx - u.cx) / zn - pinchAX;
+      camY = tCamY = (my - u.cy) / zn - pinchAY;
+      return;
+    }
+
+    if (!dragging && viewMode === 'map') {
+      setHoverFromPointer(lx, ly);
     }
 
     if (!dragging) return;
@@ -1118,7 +1461,7 @@
     lastMoveTs = now;
     dragDist += Math.hypot(dx, dy);
 
-    // Pan in screen space → camera (no rotation)
+    // Pan in screen space → camera
     const k = 1 / Math.max(zoom, 0.5);
     tCamX += dx * k;
     tCamY += dy * k;
@@ -1127,22 +1470,75 @@
     velX = (dx * k) * (16 / dt);
     velY = (dy * k) * (16 / dt);
   });
-  window.addEventListener('pointerup', () => {
+  const endPtr = (e) => {
+    if (ptrs.has(e.pointerId)) {
+      ptrs.delete(e.pointerId);
+      if (ptrs.size < 2 && pinchD0 > 0) {
+        if (mapState === 'sky' && pinchRatio > 1.35 && CATS[featuredIdx]) {
+          focusCategory(CATS[featuredIdx].id);
+        } else if ((mapState === 'fan' || focusCat) && pinchRatio < 0.62 && targetZoom <= RISE_SCALE + 0.02) {
+          clearFocus();
+        }
+        pinchD0 = 0;
+      }
+    }
     if (!dragging) return;
     dragging = false;
     canvas.classList.remove('is-dragging');
-    canvas.style.cursor = hoverCat && !focusCat ? 'pointer' : 'grab';
-  });
+    canvas.style.cursor = (hoverCat || hoverNodeId) ? 'pointer' : 'grab';
+  };
+  window.addEventListener('pointerup', endPtr);
+  window.addEventListener('pointercancel', endPtr);
+
+  canvas.addEventListener('wheel', (e) => {
+    if (viewMode !== 'map') return;
+    if (e.target.closest?.('.side-panel, .core-panel')) return;
+    e.preventDefault();
+    const now = performance.now();
+    // Zoom (trackpads often send ctrlKey; also treat plain vertical as zoom for map UX)
+    const zooming = e.ctrlKey || e.metaKey || Math.abs(e.deltaY) >= Math.abs(e.deltaX);
+    if (zooming) {
+      if (now < zoomLockUntil) return;
+      const zn = zoom * Math.exp(-e.deltaY * WHEEL_ZOOM_EXP);
+      if ((focusCat || mapState === 'fan') && zn <= RISE_SCALE && e.deltaY > 0) {
+        zoomLockUntil = now + 900;
+        clearFocus();
+        return;
+      }
+      if (!focusCat && mapState === 'sky' && zn > 1.55 && e.deltaY < 0) {
+        // intentional zoom-in past sky → dive featured
+        zoomLockUntil = now + 900;
+        focusCategory(CATS[featuredIdx].id);
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      zoomAtScreen(e.clientX - rect.left, e.clientY - rect.top, zn);
+      return;
+    }
+    // horizontal-dominant: pan
+    tCamX -= e.deltaX / Math.max(zoom, 0.5);
+    tCamY -= e.deltaY / Math.max(zoom, 0.5);
+    camX = tCamX;
+    camY = tCamY;
+  }, { passive: false });
 
   canvas.addEventListener('click', (e) => {
-    if (viewMode !== 'map' || dragDist > 6) return;
+    if (viewMode !== 'map' || dragDist >= DRAG_CLICK_CANCEL) return;
+    if (mapState === 'diving' || mapState === 'rising') return;
     const rect = canvas.getBoundingClientRect();
     const hit = pick(e.clientX - rect.left, e.clientY - rect.top);
-    if (!hit) return;
+    if (!hit) {
+      if (focusCat) {
+        // empty click: dismiss panel or fit (ref desktop fitCurrent)
+        if (panelOpen) closePanel();
+        else if (coreOpen) closeCore();
+      } else if (coreOpen) closeCore();
+      return;
+    }
     if (hit.kind === 'core') { openCore(); return; }
     if (hit.kind === 'category') {
       if (focusCat) { clearFocus(); return; }
-      focusCategory(hit.ref.catId || hit.ref.id);
+      focusCategory(hit.ref?.catId || hit.ref?.id || hit.id);
       return;
     }
     // Overview: click any department node → focus that category
@@ -1151,8 +1547,25 @@
       return;
     }
     if (hit.ref?.alert) {
-      if (focusCat !== hit.ref.catId) focusCategory(hit.ref.catId);
-      openPanel({ ...hit.ref.alert, ladderSteps: hit.ref.alert.ladderSteps || window.LEET_ALERTS_DATA.ladder(hit.ref.alert.ladder) });
+      const open = () => openPanel({
+        ...hit.ref.alert,
+        ladderSteps: hit.ref.alert.ladderSteps || window.LEET_ALERTS_DATA.ladder(hit.ref.alert.ladder),
+      });
+      if (focusCat !== hit.ref.catId) {
+        focusCategory(hit.ref.catId);
+        setTimeout(open, DIVE_SWAP_MS + 80);
+      } else {
+        // Camera ease toward node (focusPoint ~1.35)
+        targetZoom = clampZFan(Math.min(Z_FAN_MAX, Math.max(targetZoom, 1.35)));
+        tCamX = -hit.ref.x;
+        tCamY = -hit.ref.y + 30 / Math.max(targetZoom, 0.5);
+        open();
+      }
+    } else if (hit.ref && focusCat) {
+      // non-alert node: still ease camera
+      targetZoom = clampZFan(0.92);
+      tCamX = -hit.ref.x;
+      tCamY = -hit.ref.y;
     }
   });
 
@@ -1164,14 +1577,24 @@
 
   document.getElementById('cat-prev').addEventListener('click', () => stepCategory(-1));
   document.getElementById('cat-next').addEventListener('click', () => stepCategory(1));
+  document.getElementById('wchev-l').addEventListener('click', () => stepCategory(-1));
+  document.getElementById('wchev-r').addEventListener('click', () => stepCategory(1));
   document.getElementById('panel-close').addEventListener('click', () => closePanel());
   document.getElementById('core-close').addEventListener('click', () => closeCore());
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (panelOpen) closePanel();
       else if (coreOpen) closeCore();
-      else if (focusCat) clearFocus();
+      else if (focusCat || mapState === 'fan') clearFocus();
       else recenterMap({ immediate: false });
+    }
+    if (e.key === '0') recenterMap({ immediate: false });
+    if (focusCat || mapState === 'fan') {
+      if (e.key === 'ArrowRight') stepCategory(1);
+      if (e.key === 'ArrowLeft') stepCategory(-1);
+    } else if (mapState === 'sky') {
+      if (e.key === 'ArrowRight') stepCategory(1);
+      if (e.key === 'ArrowLeft') stepCategory(-1);
     }
   });
 
@@ -1229,38 +1652,72 @@
   window.LEET_ALERTS_MAP = {
     snapshot: () => JSON.parse(JSON.stringify(SNAP)),
     getCounters: () => ({ ...SNAP.counters }),
-    getFocus: () => ({ categoryId: focusCat, alertId: selectedAlert?.id || null, coreOpen, panelOpen, view: viewMode }),
-    getTransform: () => ({ zoom, rot, camX, camY, tCamX, tCamY, velX, velY }),
+    getFocus: () => ({
+      categoryId: focusCat, alertId: selectedAlert?.id || null,
+      coreOpen, panelOpen, view: viewMode, mapState, featuredIdx,
+    }),
+    getTransform: () => ({ zoom, rot, camX, camY, tCamX, tCamY, velX, velY, targetZoom }),
+    interactionConstants: () => ({
+      EASE_CAM, EASE_HOVER, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
+      DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
+      Z_FAN_MIN, Z_FAN_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
+      DIVE_SWAP_MS, RISE_MS, INERTIA_FRICTION,
+    }),
     focusCategory: (id) => focusCategory(id),
-    clearFocus: () => clearFocus(),
+    clearFocus: (opts) => clearFocus(opts || {}),
+    stepCategory: (d) => stepCategory(d),
     openAlert: (id) => {
       const a = SNAP.categories.flatMap((c) => c.alerts).find((x) => x.id === id) || SNAP.alerts.find((x) => x.id === id);
       if (!a) return false;
       focusCategory(a.categoryId);
-      openPanel({ ...a, ladderSteps: a.ladderSteps || window.LEET_ALERTS_DATA.ladder(a.ladder) });
+      setTimeout(() => {
+        openPanel({ ...a, ladderSteps: a.ladderSteps || window.LEET_ALERTS_DATA.ladder(a.ladder) });
+      }, DIVE_SWAP_MS + 100);
       return true;
     },
     openCore: () => openCore(),
     closePanel: () => closePanel(),
     closeCore: () => closeCore(),
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
-    waitForIdle: () => new Promise((r) => setTimeout(r, 480)),
+    waitForIdle: (ms = 480) => new Promise((r) => setTimeout(r, ms)),
     setIdleSpin: () => { /* removed: overview no longer auto-rotates */ },
     setHover: (id) => {
       setHoverCat(id || null);
       if (!id) {
         CATS.forEach((c) => { hoverAlpha[c.id] = 1; });
       } else {
-        CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : 0.25; });
+        CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : DIM_OTHERS; });
       }
     },
-    getHover: () => ({ hoverCat, hoverAlpha: { ...hoverAlpha } }),
+    setHoverNode: (nodeId) => {
+      if (!nodeId) {
+        hoverNodeId = null;
+        pathIds = new Set();
+        hoverCat = null;
+        return;
+      }
+      hoverNodeId = nodeId;
+      pathIds = pathToCore(nodeId);
+      const n = layoutNodes.find((x) => x.id === nodeId) || focusLayout?.nodes?.find((x) => x.id === nodeId);
+      hoverCat = focusCat ? null : (n?.catId || null);
+      if (n?.catId) {
+        CATS.forEach((c) => { hoverAlpha[c.id] = c.id === n.catId ? 1 : DIM_OTHERS; });
+      }
+    },
+    getHover: () => ({
+      hoverCat, hoverNodeId,
+      pathIds: [...pathIds],
+      hoverAlpha: { ...hoverAlpha },
+    }),
     panBy: (dx, dy) => {
       tCamX += dx;
       tCamY += dy;
       camX += dx * 0.5;
       camY += dy * 0.5;
+      velX = dx * 0.4;
+      velY = dy * 0.4;
     },
+    zoomAt: (sx, sy, factor) => zoomAtScreen(sx, sy, zoom * factor),
     recenter: () => recenterMap({ immediate: true }),
     /** Hub distance / viewport height (target ~0.17–0.20). */
     hubRadiusRatio: () => {

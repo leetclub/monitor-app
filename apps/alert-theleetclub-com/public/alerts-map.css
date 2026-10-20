@@ -198,6 +198,30 @@ html, body {
 }
 .node-label.is-on { opacity: 1; }
 
+/* Overview prev/next (skilltree wchev parity) */
+.wchev {
+  position: absolute;
+  bottom: 22%;
+  z-index: 22;
+  width: 36px;
+  height: 48px;
+  border: 0;
+  background: transparent;
+  color: rgba(233, 228, 214, 0.55);
+  cursor: pointer;
+  opacity: 1;
+  pointer-events: auto;
+  transition: color 0.25s ease, opacity 0.3s ease;
+}
+.wchev svg { width: 15px; height: 25px; display: block; margin: 0 auto; }
+.wchev:hover { color: rgba(242, 239, 232, 0.95); }
+body.fanmode .wchev,
+body.transitioning .wchev { opacity: 0; pointer-events: none; }
+#wchev-l { left: calc(50% - 215px); }
+#wchev-r { right: calc(50% - 215px); }
+body.transitioning #alerts-canvas,
+body.transitioning .focus-bar { pointer-events: none; }
+
 .focus-bar {
   position: absolute;
   left: 50%;
