@@ -748,7 +748,9 @@
       labelEls.set(cat.id, el);
     }
     el.querySelector('.name').textContent = cat.label;
-    el.querySelector('.sub').textContent = cat.subtitle;
+    // r16: group names live on branches (LOD); keep dept title only at full-out
+    const sub = el.querySelector('.sub');
+    if (sub) sub.textContent = '';
     return el;
   }
 

@@ -171,12 +171,15 @@ async function runSuite(browserType, name, viewport) {
       orphans: window.LEET_ALERTS_MAP.orphanLabels(),
       overlaps: window.LEET_ALERTS_MAP.labelOverlapCount(),
     }));
+    const catSubs = await page.evaluate(() => [...document.querySelectorAll('.cat-label.is-on .sub')]
+      .map((el) => ({ text: (el.textContent || '').trim(), display: getComputedStyle(el).display })));
     results.push({
       name: `${tag}/lod-rest-dept-only`,
       ok: atRest.lod.group < 0.05 && atRest.lod.node < 0.05
         && atRest.groups === 0 && atRest.nodes === 0
-        && atRest.orphans.length === 0 && atRest.overlaps === 0,
-      atRest,
+        && atRest.orphans.length === 0 && atRest.overlaps === 0
+        && catSubs.every((s) => !s.text || s.display === 'none'),
+      atRest, catSubs,
     });
 
     // Fast leave after deep zoom

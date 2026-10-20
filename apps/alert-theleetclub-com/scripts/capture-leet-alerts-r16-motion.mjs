@@ -125,10 +125,15 @@ async function zoomIntoDept(page, catIndex) {
       .slice(0, 10)
       .map((e) => e.textContent),
   }));
-  // Zoom back out (cursor at viewport center)
-  const mid = await page.evaluate(() => ({ cx: innerWidth / 2, cy: innerHeight / 2 }));
-  await plainWheelAt(page, mid.cx, mid.cy, 100, 24, 35);
-  await page.waitForTimeout(350);
+  // Zoom back out toward the full map (stop near 100%, then Fit — don't dump to Z_SKY_MIN)
+  for (let i = 0; i < 40; i++) {
+    const z = await page.evaluate(() => window.LEET_ALERTS_MAP.getTransform().zoom);
+    if (z <= 1.05) break;
+    const mid = await page.evaluate(() => ({ cx: innerWidth / 2, cy: innerHeight / 2 }));
+    await plainWheelAt(page, mid.cx, mid.cy, 100, 2, 30);
+  }
+  await page.evaluate(() => window.LEET_ALERTS_MAP.recenter());
+  await page.waitForTimeout(400);
   return { aim, deep };
 }
 

@@ -188,12 +188,9 @@ body:not(.map-ready) .wchev { opacity: 0; }
 .cat-label .accent {
   display: none;
 }
+/* r16: group names are LOD branch labels; full-out shows dept titles only */
 .cat-label .sub {
-  margin-top: 0.28rem;
-  font: 500 0.54rem/1.25 var(--font);
-  letter-spacing: 0.12em;
-  text-transform: lowercase;
-  color: rgba(168, 172, 180, 0.88);
+  display: none;
 }
 .node-label {
   position: absolute;
