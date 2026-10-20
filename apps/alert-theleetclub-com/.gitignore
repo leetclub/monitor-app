@@ -2,3 +2,6 @@
 docs/product-prototype/**/*.for-pdf.png
 docs/product-prototype/.visual-for-pdf.png
 .venv-docs/
+
+# Local review captures (Desktop copies are the handoff)
+artifacts/

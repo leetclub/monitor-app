@@ -18,31 +18,33 @@
   const walk = window.LEET_ALERTS_DATA.walk;
 
   let W = 0, H = 0, dpr = 1;
-  let rot = -Math.PI / 2;
-  let targetRot = rot;
+  let rot = -Math.PI / 2; // fixed overview orientation (no auto-spin)
   let zoom = 1, targetZoom = 1;
   let camX = 0, camY = 0, tCamX = 0, tCamY = 0;
+  let velX = 0, velY = 0;
   let focusCat = null;
+  let hoverCat = null;
+  let hoverAlpha = {}; // catId → 0..1 display opacity (1 = full, 0.25 = dimmed)
   let selectedAlert = null;
   let panelOpen = false;
   let coreOpen = false;
   let viewMode = 'map';
   let dragging = false;
-  let lastX = 0;
+  let lastX = 0, lastY = 0;
   let dragDist = 0;
-  let idleSpin = true;
+  let lastMoveTs = 0;
   let searchQ = '';
   let layoutNodes = [];
   let layoutLinks = [];
   let focusLayout = null;
-  const particles = [];
+  const flowParticles = [];
   const coreDust = [];
   const hitNodes = [];
   const labelEls = new Map();
   const nodeLabelEls = new Map();
 
   let catLabelWorld = new Map(); // catId → {x,y}
-  let overviewGeom = { rHub: 120, rTip: 360, rLabel: 400, rCore: 60 };
+  let overviewGeom = { rHub: 160, rTip: 300, rLabel: 420, rCore: 70, segLen: 32 };
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -70,16 +72,17 @@
   }
 
   /**
-   * Skilltree radii (world ≈ screen px at zoom 1):
-   * core ~8% min(vw,vh), hubs 22–25% of label R, tips 85–90% of label R.
+   * Short stubby Skilltree overview (vs viewport height):
+   * hub ~17–20% H, tips ~32–36% H, labels far out, core diameter ~15% min(W,H).
    */
   function computeOverviewGeom() {
     const m = Math.min(W, H);
-    const rLabel = m * 0.455;
-    const rTip = rLabel * 0.88;
-    const rHub = rLabel * 0.24;
-    const rCore = m * 0.08;
-    overviewGeom = { rHub, rTip, rLabel, rCore };
+    const rHub = H * 0.185;
+    const rTip = H * 0.345;
+    const rLabel = H * 0.46;
+    const rCore = m * 0.075; // radius → diameter ~15%
+    const segLen = H * 0.038;
+    overviewGeom = { rHub, rTip, rLabel, rCore, segLen };
     return overviewGeom;
   }
 
@@ -93,13 +96,23 @@
     return node.children.reduce((s, c) => s + leafWeight(c), 0);
   }
 
-  /** One sector: hub + 8–15 zig-zag crystal branches reaching rTip. */
+  function hash01(n) {
+    const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  /**
+   * Short skill-tree sector: hub + stub toward core (no core line) + 5–9 stubby chains.
+   * Wedge-partitioned growth guarantees non-crossing straight segments.
+   */
   function buildSectorConstellation(cat, angle, halfSpan, outNodes, outLinks) {
-    const { rHub, rTip } = overviewGeom;
+    const { rHub, rTip, segLen } = overviewGeom;
     const color = cat.color;
     const ov = cat.overviewTree || {};
     const tips = ov.tips || [];
-    const subtypes = ov.subtypes || [];
+    let tipIdx = 0;
+    let nodeCount = 0;
+    let seq = 0;
 
     const hx = Math.cos(angle) * rHub;
     const hy = Math.sin(angle) * rHub;
@@ -113,185 +126,167 @@
       catId: cat.id,
       x: hx,
       y: hy,
-      r: 11,
+      r: 13, // ~26px
       depth: 0,
       hot: false,
     });
+    nodeCount += 1;
+
+    // Tiny stub on the inner side of the hub pointing at the core (does NOT reach core)
+    const stubLen = Math.min(14, rHub * 0.12);
+    const sx = hx - Math.cos(angle) * stubLen;
+    const sy = hy - Math.sin(angle) * stubLen;
+    const stubId = `${cat.id}:stub`;
+    outNodes.push({
+      id: stubId,
+      kind: 'stub',
+      label: '',
+      color,
+      catId: cat.id,
+      x: sx,
+      y: sy,
+      r: 1.2,
+      depth: 0,
+      hot: false,
+      hidden: true,
+    });
     outLinks.push({
-      s: '__core__', t: cat.id, color, depth: 0, spine: true, straight: true,
+      s: stubId, t: cat.id, color, depth: 0, straight: true, stub: true, accent: true,
+      x0: sx, y0: sy, x1: hx, y1: hy,
     });
 
-    // Optional subtype markers just outside the hub along the sector
-    subtypes.forEach((sub, si) => {
-      const t = subtypes.length === 1 ? 0.5 : si / (subtypes.length - 1);
-      const a = angle - halfSpan * 0.55 + t * halfSpan * 1.1;
-      const rr = rHub + (rTip - rHub) * 0.18;
+    const branchCount = 5 + Math.floor(hash01(cat.id.length * 17 + angle) * 4); // 5–8
+    // Keep clear empty angular gaps between departments
+    const spanUse = halfSpan * 1.45;
+    const a0 = angle - spanUse / 2;
+
+    function addNode(id, kind, x, y, depth, tip, hollow) {
+      const tipData = tip || null;
       outNodes.push({
-        id: sub.id,
-        kind: 'subtype',
-        label: sub.label,
+        id,
+        kind,
+        label: tipData?.label || '·',
         color,
-        icon: cat.icon,
-        alert: null,
+        icon: null,
+        alert: tipData?.alert || null,
         catId: cat.id,
-        x: Math.cos(a) * rr,
-        y: Math.sin(a) * rr,
-        r: 7.2,
-        depth: 1,
-        hot: false,
+        x,
+        y,
+        r: hollow ? 3.0 : (kind === 'machine' ? 2.5 : 2.3),
+        depth,
+        hot: !!(tipData && tipData.hot),
+        hollow: !!hollow,
       });
+      nodeCount += 1;
+      return id;
+    }
+
+    /**
+     * Grow inside [lo, hi] angular wedge. Children get disjoint sub-wedges → no crossings.
+     * Place each node on a ray inside the wedge at increasing radius (no tip yank).
+     */
+    function grow(prevId, px, py, lo, hi, segsLeft, depth, seed) {
+      if (segsLeft <= 0 || nodeCount > 36) return;
+      const mid = (lo + hi) / 2;
+      const zig = (hash01(seed * 3.7 + depth) - 0.5) * (hi - lo) * 0.28;
+      let ang = mid + zig;
+      if (ang < lo) ang = lo;
+      if (ang > hi) ang = hi;
+
+      const parentR = Math.hypot(px, py);
+      const len = segLen * (0.96 + hash01(seed * 9 + depth) * 0.1);
+      let rad = parentR + len;
+      const isTip = segsLeft === 1 || rad >= rTip * 0.985 || nodeCount >= 35;
+      if (isTip) {
+        const jitter = (hash01(seed * 1.9 + depth) - 0.5) * segLen * 0.4;
+        rad = Math.min(rTip, Math.max(rad, rHub + segLen * 3.25 + jitter, rTip * 0.94));
+      } else if (rad > rTip - segLen * 0.5) {
+        rad = rTip - segLen * 0.5;
+      }
+
+      const nx = Math.cos(ang) * rad;
+      const ny = Math.sin(ang) * rad;
+
+      const tip = tips.length ? tips[tipIdx++ % tips.length] : null;
+      const id = `${cat.id}:n${seq++}`;
+      const hollow = !isTip && (depth === 2 || hash01(seed + depth) > 0.8);
+      addNode(id, isTip ? 'machine' : 'site', nx, ny, depth, isTip ? tip : null, hollow);
       outLinks.push({
-        s: cat.id, t: sub.id, color, depth: 1, straight: true,
+        s: prevId, t: id, color, depth, straight: true,
+        accent: depth === 1,
+        x0: px, y0: py, x1: nx, y1: ny,
       });
-    });
 
-    const branchCount = Math.max(8, Math.min(15, Math.max(tips.length, 10)));
-    const spanUse = halfSpan * 1.72;
+      if (isTip) return;
 
+      const forkRoll = hash01(seed * 13 + depth * 7);
+      const width = hi - lo;
+      let childN = 1;
+      // Only fork when the wedge is wide enough to keep tips separated
+      if (forkRoll > 0.48 && segsLeft >= 2 && width > 0.055) childN = 2;
+      if (forkRoll > 0.9 && segsLeft >= 2 && width > 0.11) childN = 3;
+
+      const pad = width * 0.06;
+      const usableW = Math.max(0.02, width - pad * 2);
+      const slice = usableW / childN;
+      for (let c = 0; c < childN; c++) {
+        const clo = lo + pad + c * slice;
+        const chi = clo + slice;
+        grow(id, nx, ny, clo, chi, segsLeft - 1, depth + 1, seed * 10 + c + 1);
+      }
+    }
+
+    // Partition hub sector into branch wedges
+    const edgePad = spanUse * 0.05;
+    const usable = spanUse - edgePad * 2;
+    const slice = usable / branchCount;
     for (let b = 0; b < branchCount; b++) {
-      const t = branchCount === 1 ? 0.5 : b / (branchCount - 1);
-      const branchAng = angle - spanUse / 2 + t * spanUse;
-      const segs = 2 + (b % 3); // 2–4 segments
-      const tipR = rTip * (0.97 + (b % 4) * 0.008); // sit on tip ring (~85–90% of label R)
-      let prevId = cat.id;
-      let prevX = hx;
-      let prevY = hy;
-      // Start from a subtype if available (connect visual hub→rule→fork)
-      if (subtypes.length) {
-        prevId = subtypes[b % subtypes.length].id;
-        const sn = outNodes.find((n) => n.id === prevId);
-        if (sn) { prevX = sn.x; prevY = sn.y; }
-      }
-
-      for (let s = 1; s <= segs; s++) {
-        const u = s / segs;
-        const baseR = rHub + (tipR - rHub) * (subtypes.length ? 0.22 + u * 0.78 : u);
-        const zigScale = (rTip - rHub) * (0.045 + u * 0.03);
-        const side = ((b + s) % 2 === 0 ? 1 : -1);
-        const zig = side * zigScale * (0.55 + 0.45 * Math.sin(b * 2.3 + s * 1.7));
-        const nx = -Math.sin(branchAng);
-        const ny = Math.cos(branchAng);
-        // Slight angle drift for crystal look
-        const ang = branchAng + side * 0.04 * (1 - u) * Math.sin(b + s);
-        const x = Math.cos(ang) * baseR + nx * zig;
-        const y = Math.sin(ang) * baseR + ny * zig;
-        const isTip = s === segs;
-        const tip = tips.length ? tips[b % tips.length] : null;
-        const id = isTip && tip ? `${tip.id}:b${b}` : `${cat.id}:br${b}:j${s}`;
-        outNodes.push({
-          id,
-          kind: isTip ? 'machine' : 'site',
-          label: isTip ? (tip?.label || '·') : '·',
-          color,
-          icon: null,
-          alert: isTip ? (tip?.alert || null) : null,
-          catId: cat.id,
-          x,
-          y,
-          r: isTip ? 2.35 : 1.5, // ~4.7px tip / 3px junction at zoom 1
-          depth: s + 1,
-          hot: !!(isTip && tip && tip.hot),
-        });
-        outLinks.push({
-          s: prevId, t: id, color, depth: s + 1, straight: true,
-          x0: prevX, y0: prevY, x1: x, y1: y,
-        });
-        prevId = id;
-        prevX = x;
-        prevY = y;
-      }
-
-      // Fork once or twice on alternating branches
-      if (b % 2 === 0) {
-        const forkFrom = prevId;
-        const midX = prevX;
-        const midY = prevY;
-        const forkAng = branchAng + (b % 4 === 0 ? 0.09 : -0.09);
-        const forkR = tipR * 0.97;
-        const fx = Math.cos(forkAng) * forkR;
-        const fy = Math.sin(forkAng) * forkR;
-        const tip = tips.length ? tips[(b + 3) % tips.length] : null;
-        const fid = tip ? `${tip.id}:fork${b}` : `${cat.id}:fork${b}`;
-        outNodes.push({
-          id: fid,
-          kind: 'machine',
-          label: tip?.label || '·',
-          color,
-          icon: null,
-          alert: tip?.alert || null,
-          catId: cat.id,
-          x: fx,
-          y: fy,
-          r: 2.35,
-          depth: 5,
-          hot: !!(tip && tip.hot),
-        });
-        outLinks.push({
-          s: forkFrom, t: fid, color, depth: 5, straight: true,
-          x0: midX, y0: midY, x1: fx, y1: fy,
-        });
-      }
+      const lo = a0 + edgePad + b * slice;
+      const hi = lo + slice;
+      const segs = 2 + Math.floor(hash01(b * 5 + angle) * 3); // 2–4
+      grow(cat.id, hx, hy, lo, hi, segs, 1, b + 1);
     }
   }
 
-  /** Keep dots from overlapping; preserve radial reach (push sideways). */
+  /** Soft radial/angular nudge — angular first to avoid introducing crossings. */
   function separateOverviewNodes(nodes) {
-    for (let iter = 0; iter < 55; iter++) {
+    const { rHub, rTip } = overviewGeom;
+    for (let iter = 0; iter < 36; iter++) {
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i];
           const b = nodes[j];
-          if (a.kind === 'category' || b.kind === 'category') {
-            if (a.kind === 'category' && b.kind === 'category') continue;
-          }
+          if (a.kind === 'category' || b.kind === 'category' || a.kind === 'stub' || b.kind === 'stub') continue;
+          if (a.catId !== b.catId) continue;
           let dx = b.x - a.x;
           let dy = b.y - a.y;
           let dist = Math.hypot(dx, dy) || 0.001;
-          const air = (a.kind === 'machine' || b.kind === 'machine') ? 2.8
-            : (a.kind === 'subtype' || b.kind === 'subtype') ? 5 : 3.2;
-          const min = a.r + b.r + air;
+          const min = a.r + b.r + 3.4;
           if (dist >= min) continue;
-          const push = (min - dist) / 2;
-          dx /= dist;
-          dy /= dist;
-          // Prefer tangential push so tips stay near rTip
-          if (a.kind !== 'category' && a.kind !== 'subtype') {
-            a.x -= dx * push;
-            a.y -= dy * push;
+          const ra = Math.hypot(a.x, a.y) || 1;
+          const rb = Math.hypot(b.x, b.y) || 1;
+          let aa = Math.atan2(a.y, a.x);
+          let ab = Math.atan2(b.y, b.x);
+          let dAng = ((ab - aa + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          if (Math.abs(dAng) < 1e-4) dAng = (i % 2 ? 1 : -1) * 0.02;
+          const pushAng = 0.018 * (1 - dist / min);
+          aa -= Math.sign(dAng) * pushAng;
+          ab += Math.sign(dAng) * pushAng;
+          // Slight radial offset when nearly same angle
+          let ra2 = ra;
+          let rb2 = rb;
+          if (Math.abs(dAng) < 0.04) {
+            const dr = (min - dist) * 0.35;
+            if (ra <= rb) { ra2 = Math.max(rHub + 8, ra - dr); rb2 = Math.min(rTip, rb + dr); }
+            else { rb2 = Math.max(rHub + 8, rb - dr); ra2 = Math.min(rTip, ra + dr); }
           }
-          if (b.kind !== 'category' && b.kind !== 'subtype') {
-            b.x += dx * push;
-            b.y += dy * push;
-          }
+          a.x = Math.cos(aa) * ra2;
+          a.y = Math.sin(aa) * ra2;
+          b.x = Math.cos(ab) * rb2;
+          b.y = Math.sin(ab) * rb2;
         }
       }
     }
-  }
-
-  function resolveCatLabelClearance(nodes) {
-    const z = Math.max(0.5, zoom);
-    CATS.forEach((cat) => {
-      const wp = catLabelWorld.get(cat.id);
-      if (!wp) return;
-      const a = wp.a;
-      let lr = Math.hypot(wp.x, wp.y);
-      const halfW = 100 / z;
-      const halfH = 22 / z;
-      for (let guard = 0; guard < 40; guard++) {
-        const lx = Math.cos(a) * lr;
-        const ly = Math.sin(a) * lr;
-        let hit = false;
-        for (let i = 0; i < nodes.length; i++) {
-          const n = nodes[i];
-          const cx = Math.max(lx - halfW, Math.min(n.x, lx + halfW));
-          const cy = Math.max(ly - halfH, Math.min(n.y, ly + halfH));
-          if (Math.hypot(n.x - cx, n.y - cy) < n.r + 3) { hit = true; break; }
-        }
-        if (!hit) break;
-        lr += 6;
-      }
-      catLabelWorld.set(cat.id, { x: Math.cos(a) * lr, y: Math.sin(a) * lr, a });
-    });
   }
 
   function rebuildOverviewLayout() {
@@ -299,64 +294,18 @@
     const nodes = [];
     const links = [];
     catLabelWorld = new Map();
-    const halfSpan = (Math.PI * 2) / CATS.length * 0.42;
+    // Narrow sectors → clear empty angular gaps between departments
+    const halfSpan = (Math.PI * 2) / CATS.length * 0.28;
 
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
       buildSectorConstellation(cat, a, halfSpan, nodes, links);
+      hoverAlpha[cat.id] = hoverAlpha[cat.id] ?? 1;
     });
-    // Keep radial structure: project tips onto tip ring, junctions onto mid band
-    function projectRadial() {
-      nodes.forEach((n, i) => {
-        if (n.kind === 'category' || n.kind === 'subtype') return;
-        const ang = Math.atan2(n.y, n.x);
-        if (n.kind === 'machine') {
-          // rTip is already ~0.88×rLabel; keep tips on that ring
-          const target = g.rTip * (0.98 + (i % 5) * 0.004);
-          n.x = Math.cos(ang) * target;
-          n.y = Math.sin(ang) * target;
-        } else if (n.kind === 'site') {
-          const u = Math.min(0.82, Math.max(0.30, (n.depth || 2) / 5));
-          const target = g.rHub + (g.rTip - g.rHub) * u;
-          n.x = Math.cos(ang) * target;
-          n.y = Math.sin(ang) * target;
-        }
-      });
-    }
-
-    projectRadial();
-    separateOverviewNodes(nodes);
-    projectRadial();
-    // Light tangential-only pass so tips stay on the ring
-    for (let iter = 0; iter < 30; iter++) {
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i];
-          const b = nodes[j];
-          if (a.kind === 'category' || b.kind === 'category') continue;
-          if (a.kind !== 'machine' && a.kind !== 'site') continue;
-          if (b.kind !== 'machine' && b.kind !== 'site') continue;
-          let dx = b.x - a.x;
-          let dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy) || 0.001;
-          const min = a.r + b.r + 2.6;
-          if (dist >= min) continue;
-          const midAng = Math.atan2((a.y + b.y) / 2, (a.x + b.x) / 2);
-          const tx = -Math.sin(midAng);
-          const ty = Math.cos(midAng);
-          const push = (min - dist) / 2;
-          a.x -= tx * push;
-          a.y -= ty * push;
-          b.x += tx * push;
-          b.y += ty * push;
-        }
-      }
-      projectRadial();
-    }
+    // No force-separation: wedge growth is already non-crossing; nudging introduces crossings.
 
     CATS.forEach((cat, i) => {
       const a = (i / CATS.length) * Math.PI * 2 + rot;
-      // Labels just outside the tip ring (fixed design radius)
       catLabelWorld.set(cat.id, {
         x: Math.cos(a) * g.rLabel,
         y: Math.sin(a) * g.rLabel,
@@ -364,18 +313,50 @@
       });
     });
 
+    // Keep link endpoints in sync after separation (draw/hits use node positions)
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    links.forEach((L) => {
+      const s = byId.get(L.s);
+      const t = byId.get(L.t);
+      if (s && t) {
+        L.x0 = s.x; L.y0 = s.y; L.x1 = t.x; L.y1 = t.y;
+      }
+    });
+
     layoutNodes = nodes;
     layoutLinks = links;
+    seedFlowParticles();
     if (!focusCat) {
       zoom = 1;
       targetZoom = 1;
+    }
+  }
+
+  function recenterMap({ immediate = false } = {}) {
+    velX = 0;
+    velY = 0;
+    tCamX = 0;
+    tCamY = 0;
+    targetZoom = focusCat ? targetZoom : 1;
+    if (immediate) {
       camX = 0;
       camY = 0;
-      tCamX = 0;
-      tCamY = 0;
-      // Only nudge labels outward a little if a tip still clips them
-      resolveCatLabelClearance(nodes);
+      if (!focusCat) zoom = 1;
     }
+  }
+
+  function seedFlowParticles() {
+    flowParticles.length = 0;
+    const segs = layoutLinks.filter((L) => !L.stub && L.s !== '__core__');
+    segs.forEach((L, i) => {
+      if (i % 2 !== 0) return;
+      flowParticles.push({
+        link: L,
+        u: hash01(i * 3.1),
+        speed: 0.18 + hash01(i * 7.7) * 0.22,
+        catId: (layoutNodes.find((n) => n.id === L.t) || {}).catId,
+      });
+    });
   }
 
   /** Focus: core at top, full category tree growing downward filling the usable canvas. */
@@ -554,10 +535,10 @@
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
-    const coreR = focusCat ? 70 : (overviewGeom.rCore || Math.min(W, H) * 0.08);
-    if (!coreDust.length || coreDust._gen !== 5) {
+    const coreR = focusCat ? 70 : (overviewGeom.rCore || Math.min(W, H) * 0.075);
+    if (!coreDust.length || coreDust._gen !== 6) {
       coreDust.length = 0;
-      coreDust._gen = 5;
+      coreDust._gen = 6;
       for (let i = 0; i < 280; i++) {
         const ring = Math.random();
         coreDust.push({
@@ -655,30 +636,34 @@
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
     const u = usable();
 
+    function catOpacity(catId) {
+      if (focusCat || !catId) return 1;
+      const a = hoverAlpha[catId];
+      return a == null ? 1 : a;
+    }
+
     // links
     links.forEach((L) => {
-      const s = L.s === '__core__' ? nodeById('__core__') : nodeMap.get(L.s) || nodeById(L.s);
+      if (L.s === '__core__') return; // no core→hub lines
+      const s = nodeMap.get(L.s) || nodeById(L.s);
       const tN = nodeMap.get(L.t) || nodeById(L.t);
       if (!s || !tN) return;
       if (focusCat && L.s !== '__core__' && !nodeMap.has(L.s) && L.s !== focusCat) return;
+      const catId = tN.catId || s.catId;
+      const op = catOpacity(catId);
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
       if (!focusCat && L.straight) {
-        // Accent near hub → soft white/grey toward tips; clearly visible 1–1.5px
-        const grad = ctx.createLinearGradient(a0.x, a0.y, a1.x, a1.y);
-        const near = L.spine || L.depth <= 1;
-        if (near) {
-          grad.addColorStop(0, hexAlpha(L.color || '#fff', L.spine ? 0.85 : 0.72));
-          grad.addColorStop(1, 'rgba(228,228,231,0.62)');
-        } else {
-          grad.addColorStop(0, hexAlpha(L.color || '#fff', 0.55));
-          grad.addColorStop(1, 'rgba(212,212,216,0.58)');
-        }
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = L.spine ? 1.5 : (L.depth <= 2 ? 1.25 : 1.05);
+        if (L.stub || L.accent || L.depth === 1) {
+          ctx.strokeStyle = hexAlpha(L.color || '#fff', 0.75 * op);
+          ctx.lineWidth = L.stub ? 1.35 : 1.2;
+        } else {
+          ctx.strokeStyle = `rgba(228,228,231,${0.6 * op})`;
+          ctx.lineWidth = 1;
+        }
         ctx.stroke();
         return;
       }
@@ -686,92 +671,87 @@
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(L.color || '#fff', focusCat ? 0.55 : 0.4);
-      ctx.lineWidth = L.spine ? 1.55 : 1.1;
+      ctx.strokeStyle = hexAlpha(L.color || '#fff', focusCat ? 0.55 : 0.4 * op);
+      ctx.lineWidth = 1.1;
       ctx.stroke();
     });
 
-    // flow particles on spines / hot links
-    if (particles.length < 55) {
-      for (let i = particles.length; i < 55; i++) {
-        particles.push({
-          cat: CATS[i % CATS.length].id,
-          u: Math.random(),
-          speed: 0.06 + Math.random() * 0.1,
-        });
-      }
+    // Flow particles along overview segments (hub → tips)
+    if (!focusCat) {
+      flowParticles.forEach((p) => {
+        const L = p.link;
+        const s = nodeMap.get(L.s) || nodeById(L.s);
+        const tN = nodeMap.get(L.t) || nodeById(L.t);
+        if (!s || !tN) return;
+        const op = catOpacity(p.catId);
+        if (op < 0.2) return;
+        p.u = (p.u + p.speed * 0.016) % 1;
+        const x = s.x + (tN.x - s.x) * p.u;
+        const y = s.y + (tN.y - s.y) * p.u;
+        const scr = worldToScreen(x, y);
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,255,255,${0.85 * op})`;
+        ctx.arc(scr.x, scr.y, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
-    particles.forEach((p) => {
-      if (focusCat && p.cat !== focusCat) return;
-      const cat = CATS.find((c) => c.id === p.cat);
-      if (!cat) return;
-      p.u = (p.u + p.speed * 0.016) % 1;
-      let x0, y0, x1, y1;
-      if (focusCat) {
-        x0 = 0; y0 = -110;
-        x1 = 0; y1 = -40;
-      } else {
-        const i = CATS.indexOf(cat);
-        const a = (i / CATS.length) * Math.PI * 2 + rot;
-        x0 = 0; y0 = 0;
-        x1 = Math.cos(a) * overviewGeom.rHub;
-        y1 = Math.sin(a) * overviewGeom.rHub;
-      }
-      const x = x0 + (x1 - x0) * p.u;
-      const y = y0 + (y1 - y0) * p.u;
-      const s = worldToScreen(x, y);
-      ctx.beginPath();
-      ctx.fillStyle = cat.color;
-      ctx.globalAlpha = 0.85;
-      ctx.arc(s.x, s.y, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    });
 
     // nodes
     const showLabels = !!focusCat;
     const zScale = Math.min(1.2, 0.95 + zoom * 0.12);
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
     nodes.forEach((n) => {
+      if (n.kind === 'stub' || n.hidden) return;
       if (focusCat && n.catId && n.catId !== focusCat) return;
       const p = worldToScreen(n.x, n.y);
       if (p.x < -60 || p.x > W + 60 || p.y < -60 || p.y > H + 60) return;
       const selected = selectedAlert && n.alert && selectedAlert.id === n.alert.id;
       const isCat = n.kind === 'category';
       const isHub = isCat || n.kind === 'subtype';
+      const op = catOpacity(n.catId);
       let r = (n.r + (selected ? 1.5 : 0)) * zScale;
-      if (!focusCat && n.kind === 'machine') r = 2.35 * zScale; // ~4.7px tip
-      if (!focusCat && n.kind === 'site') r = 1.5 * zScale; // 3px junction
-      if (!focusCat && isCat) r = 11 * zScale; // ~22px diameter
+      if (!focusCat && isCat) r = 13 * zScale; // ~26px
 
       if (!focusCat && (n.kind === 'machine' || n.kind === 'site')) {
-        ctx.beginPath();
-        ctx.fillStyle = n.hot
-          ? hexAlpha(n.color, n.kind === 'machine' ? 0.95 : 0.7)
-          : (n.kind === 'machine' ? 'rgba(250,250,252,0.92)' : 'rgba(228,228,231,0.7)');
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        if (n.hollow) {
+          ctx.beginPath();
+          ctx.strokeStyle = hexAlpha(n.color, 0.9 * op);
+          ctx.lineWidth = 1.4;
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.fillStyle = n.hot
+            ? hexAlpha(n.color, 0.95 * op)
+            : `rgba(250,250,252,${0.9 * op})`;
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else if (isHub) {
-        if (isCat) {
-          const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r * 2.1);
-          glow.addColorStop(0, hexAlpha(n.color, 0.35));
+        if (isCat && !focusCat) {
+          const glowR = r * (2.2 + pulse * 0.35);
+          const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, glowR);
+          glow.addColorStop(0, hexAlpha(n.color, 0.4 * op));
           glow.addColorStop(1, hexAlpha(n.color, 0));
           ctx.beginPath();
           ctx.fillStyle = glow;
-          ctx.arc(p.x, p.y, r * 2.1, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
           ctx.fill();
         }
+        ctx.globalAlpha = op;
         ctx.beginPath();
         ctx.fillStyle = 'rgba(24,24,27,0.92)';
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = isCat ? 2.4 : 1.7;
+        ctx.lineWidth = isCat ? 2.5 : 1.7;
         ctx.strokeStyle = hexAlpha(n.color, 0.98);
         ctx.stroke();
         if (focusCat && isCat) {
           drawBackChevron(p.x, p.y, n.color, r);
         } else {
-          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, 1, isCat ? 1.15 : 0.85);
+          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, 1, isCat ? 1.25 : 0.85);
         }
+        ctx.globalAlpha = 1;
       } else {
         ctx.beginPath();
         ctx.fillStyle = 'rgba(24,24,27,0.88)';
@@ -817,7 +797,15 @@
       }
     });
 
-    drawCore(t);
+    // Dim core when a department is hovered
+    if (!focusCat && hoverCat) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      drawCore(t);
+      ctx.restore();
+    } else {
+      drawCore(t);
+    }
 
     // overview category labels — outer edge, white, never on nodes
     CATS.forEach((cat) => {
@@ -831,7 +819,11 @@
       const p = worldToScreen(wp.x, wp.y);
       el.style.left = `${p.x}px`;
       el.style.top = `${p.y}px`;
-      el.style.opacity = '1';
+      const op = catOpacity(cat.id);
+      el.style.opacity = String(op);
+      el.style.filter = (hoverCat && cat.id === hoverCat)
+        ? 'brightness(1.15)'
+        : 'none';
     });
   }
 
@@ -845,16 +837,30 @@
 
   function tick(ts) {
     const t = ts / 1000;
-    if (idleSpin && !dragging && !focusCat) {
-      targetRot += 0.0015;
-      rebuildOverviewLayout();
-    } else if (!focusCat && Math.abs(targetRot - rot) > 0.0001) {
-      rebuildOverviewLayout();
+
+    // Smooth hover opacity (~200ms)
+    if (!focusCat) {
+      CATS.forEach((cat) => {
+        const target = !hoverCat ? 1 : (cat.id === hoverCat ? 1 : 0.25);
+        const cur = hoverAlpha[cat.id] ?? 1;
+        hoverAlpha[cat.id] = cur + (target - cur) * 0.18;
+        if (Math.abs(hoverAlpha[cat.id] - target) < 0.005) hoverAlpha[cat.id] = target;
+      });
     }
-    rot += (targetRot - rot) * (focusCat ? 0.12 : 0.07);
+
+    // Pan easing + inertia (no rotation)
+    if (!dragging) {
+      tCamX += velX;
+      tCamY += velY;
+      velX *= 0.88;
+      velY *= 0.88;
+      if (Math.abs(velX) < 0.02) velX = 0;
+      if (Math.abs(velY) < 0.02) velY = 0;
+    }
     zoom += (targetZoom - zoom) * 0.1;
-    camX += (tCamX - camX) * 0.1;
-    camY += (tCamY - camY) * 0.1;
+    camX += (tCamX - camX) * 0.18;
+    camY += (tCamY - camY) * 0.18;
+
     if (viewMode === 'map') {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawScene(t);
@@ -866,7 +872,7 @@
     const cat = CATS.find((c) => c.id === id);
     if (!cat) return;
     focusCat = id;
-    idleSpin = false;
+    hoverCat = null;
     rebuildFocusLayout(id);
     focusBar.hidden = false;
     focusTitle.textContent = cat.label;
@@ -880,11 +886,8 @@
   function clearFocus({ immediate = false } = {}) {
     focusCat = null;
     focusLayout = null;
-    idleSpin = true;
     targetZoom = 1;
-    tCamX = 0;
-    tCamY = 0;
-    if (immediate) { zoom = 1; camX = 0; camY = 0; }
+    recenterMap({ immediate });
     focusBar.hidden = true;
     closePanel(false);
     closeCore(false);
@@ -1059,31 +1062,68 @@
     return best;
   }
 
+  /** Hit-test department under pointer (hub or any branch node). */
+  function pickDepartment(x, y) {
+    const hit = pick(x, y);
+    if (!hit || hit.kind === 'core') return null;
+    return hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
+  }
+
+  function setHoverCat(id) {
+    if (focusCat) {
+      hoverCat = null;
+      canvas.style.cursor = dragging ? 'grabbing' : 'grab';
+      return;
+    }
+    hoverCat = id || null;
+    canvas.style.cursor = hoverCat ? 'pointer' : (dragging ? 'grabbing' : 'grab');
+  }
+
   canvas.addEventListener('pointerdown', (e) => {
     if (viewMode !== 'map') return;
     dragging = true;
-    idleSpin = false;
+    velX = 0;
+    velY = 0;
     lastX = e.clientX;
+    lastY = e.clientY;
+    lastMoveTs = performance.now();
     dragDist = 0;
     canvas.classList.add('is-dragging');
+    canvas.style.cursor = 'grabbing';
   });
   window.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const dx = e.clientX - lastX;
-    lastX = e.clientX;
-    dragDist += Math.abs(dx);
-    if (!focusCat) {
-      targetRot += dx * 0.005;
-      rebuildOverviewLayout();
-    } else {
-      tCamX += dx * 0.4 / Math.max(zoom, 0.5);
+    const rect = canvas.getBoundingClientRect();
+    const lx = e.clientX - rect.left;
+    const ly = e.clientY - rect.top;
+
+    if (!dragging && viewMode === 'map' && !focusCat) {
+      setHoverCat(pickDepartment(lx, ly));
     }
+
+    if (!dragging) return;
+    const now = performance.now();
+    const dt = Math.max(8, now - lastMoveTs);
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    lastMoveTs = now;
+    dragDist += Math.hypot(dx, dy);
+
+    // Pan in screen space → camera (no rotation)
+    const k = 1 / Math.max(zoom, 0.5);
+    tCamX += dx * k;
+    tCamY += dy * k;
+    camX += dx * k;
+    camY += dy * k;
+    velX = (dx * k) * (16 / dt);
+    velY = (dy * k) * (16 / dt);
   });
   window.addEventListener('pointerup', () => {
     if (!dragging) return;
     dragging = false;
     canvas.classList.remove('is-dragging');
-    if (!focusCat) idleSpin = true;
+    canvas.style.cursor = hoverCat && !focusCat ? 'pointer' : 'grab';
   });
 
   canvas.addEventListener('click', (e) => {
@@ -1093,15 +1133,25 @@
     if (!hit) return;
     if (hit.kind === 'core') { openCore(); return; }
     if (hit.kind === 'category') {
-      // In focus, category hub is a back control (chevron)
       if (focusCat) { clearFocus(); return; }
       focusCategory(hit.ref.catId || hit.ref.id);
+      return;
+    }
+    // Overview: click any department node → focus that category
+    if (!focusCat && hit.ref?.catId) {
+      focusCategory(hit.ref.catId);
       return;
     }
     if (hit.ref?.alert) {
       if (focusCat !== hit.ref.catId) focusCategory(hit.ref.catId);
       openPanel({ ...hit.ref.alert, ladderSteps: hit.ref.alert.ladderSteps || window.LEET_ALERTS_DATA.ladder(hit.ref.alert.ladder) });
     }
+  });
+
+  canvas.addEventListener('dblclick', (e) => {
+    if (viewMode !== 'map' || focusCat) return;
+    e.preventDefault();
+    recenterMap({ immediate: false });
   });
 
   document.getElementById('cat-prev').addEventListener('click', () => stepCategory(-1));
@@ -1113,6 +1163,7 @@
       if (panelOpen) closePanel();
       else if (coreOpen) closeCore();
       else if (focusCat) clearFocus();
+      else recenterMap({ immediate: false });
     }
   });
 
@@ -1158,11 +1209,20 @@
     return hitNodes.filter((h) => h.kind !== 'core' && h.x >= u.x - 8 && h.x <= u.x + u.w + 8 && h.y >= 40 && h.y <= H - 8);
   }
 
+  function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+    const denom = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx);
+    if (Math.abs(denom) < 1e-9) return false; // parallel
+    const ua = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / denom;
+    const ub = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / denom;
+    // Proper crossing (exclude shared endpoints)
+    return ua > 0.02 && ua < 0.98 && ub > 0.02 && ub < 0.98;
+  }
+
   window.LEET_ALERTS_MAP = {
     snapshot: () => JSON.parse(JSON.stringify(SNAP)),
     getCounters: () => ({ ...SNAP.counters }),
     getFocus: () => ({ categoryId: focusCat, alertId: selectedAlert?.id || null, coreOpen, panelOpen, view: viewMode }),
-    getTransform: () => ({ zoom, rot, camX, camY }),
+    getTransform: () => ({ zoom, rot, camX, camY, tCamX, tCamY, velX, velY }),
     focusCategory: (id) => focusCategory(id),
     clearFocus: () => clearFocus(),
     openAlert: (id) => {
@@ -1177,60 +1237,96 @@
     closeCore: () => closeCore(),
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
     waitForIdle: () => new Promise((r) => setTimeout(r, 480)),
-    setIdleSpin: (on) => { idleSpin = !!on; },
-    /**
-     * Drawing fill (excludes labels): bbox height of visible links + leaf dots
-     * divided by viewport height. Target ≥ 0.70.
-     */
-    mapFillRatio: () => {
-      let minY = Infinity;
-      let maxY = -Infinity;
-      let minX = Infinity;
-      let maxX = -Infinity;
-      const mark = (x, y, pad = 2) => {
-        minX = Math.min(minX, x - pad);
-        maxX = Math.max(maxX, x + pad);
-        minY = Math.min(minY, y - pad);
-        maxY = Math.max(maxY, y + pad);
-      };
-      hitNodes.forEach((h) => {
-        if (h.kind === 'core' || h.kind === 'category') return;
-        // leaf / junction / subtype dots that form the drawing
-        if (h.kind === 'alert' || h.kind === 'site' || h.kind === 'machine' || h.ref?.kind === 'site'
-          || h.ref?.kind === 'machine' || h.ref?.kind === 'subtype') {
-          mark(h.x, h.y, h.vr || 2);
-        }
-      });
-      // Link endpoints from overview layout (screen space)
-      if (!focusCat) {
-        layoutLinks.forEach((L) => {
-          const s = L.s === '__core__' ? { x: 0, y: 0 } : layoutNodes.find((n) => n.id === L.s);
-          const t = layoutNodes.find((n) => n.id === L.t);
-          if (!s || !t) return;
-          const a0 = worldToScreen(s.x, s.y);
-          const a1 = worldToScreen(t.x, t.y);
-          mark(a0.x, a0.y, 1);
-          mark(a1.x, a1.y, 1);
-        });
+    setIdleSpin: () => { /* removed: overview no longer auto-rotates */ },
+    setHover: (id) => {
+      setHoverCat(id || null);
+      if (!id) {
+        CATS.forEach((c) => { hoverAlpha[c.id] = 1; });
+      } else {
+        CATS.forEach((c) => { hoverAlpha[c.id] = c.id === id ? 1 : 0.25; });
       }
-      if (!Number.isFinite(minY)) return 0;
-      return (maxY - minY) / H;
     },
-    /** Hub distance as fraction of design label radius (~0.22–0.25). */
+    getHover: () => ({ hoverCat, hoverAlpha: { ...hoverAlpha } }),
+    panBy: (dx, dy) => {
+      tCamX += dx;
+      tCamY += dy;
+      camX += dx * 0.5;
+      camY += dy * 0.5;
+    },
+    recenter: () => recenterMap({ immediate: true }),
+    /** Hub distance / viewport height (target ~0.17–0.20). */
     hubRadiusRatio: () => {
       const hub = layoutNodes.find((n) => n.kind === 'category');
-      const lr = overviewGeom.rLabel || 1;
-      if (!hub) return 0;
-      return Math.hypot(hub.x, hub.y) / lr;
+      if (!hub || !H) return 0;
+      return Math.hypot(hub.x, hub.y) / H;
     },
-    /** Mean tip distance as fraction of design label radius (~0.85–0.90). */
+    /** Outer tip distance / viewport height (mean of per-department max tip). */
     tipRadiusRatio: () => {
-      const tips = layoutNodes.filter((n) => n.kind === 'machine');
-      const lr = overviewGeom.rLabel || 1;
-      if (!tips.length) return 0;
-      const avg = tips.reduce((s, n) => s + Math.hypot(n.x, n.y), 0) / tips.length;
-      return avg / lr;
+      if (!H) return 0;
+      const byCat = new Map();
+      layoutNodes.forEach((n) => {
+        if (n.kind !== 'machine') return;
+        const r = Math.hypot(n.x, n.y);
+        const prev = byCat.get(n.catId) || 0;
+        if (r > prev) byCat.set(n.catId, r);
+      });
+      if (!byCat.size) return 0;
+      let sum = 0;
+      byCat.forEach((r) => { sum += r; });
+      return (sum / byCat.size) / H;
     },
+    /** True if any overview link connects __core__ to a hub. */
+    hasCoreHubLinks: () => layoutLinks.some((L) => L.s === '__core__' || L.t === '__core__'),
+    /** Count proper segment crossings among overview branches (stubs excluded). */
+    lineCrossings: () => {
+      const segs = layoutLinks.filter((L) => !L.stub && L.s !== '__core__' && L.t !== '__core__');
+      const byId = new Map(layoutNodes.map((n) => [n.id, n]));
+      const pts = segs.map((L) => {
+        const s = byId.get(L.s);
+        const t = byId.get(L.t);
+        if (!s || !t) return null;
+        return { ax: s.x, ay: s.y, bx: t.x, by: t.y, cat: s.catId || t.catId };
+      }).filter(Boolean);
+      let hits = 0;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const A = pts[i], B = pts[j];
+          if (segmentsIntersect(A.ax, A.ay, A.bx, A.by, B.ax, B.ay, B.bx, B.by)) hits += 1;
+        }
+      }
+      return hits;
+    },
+    crossingPairs: () => {
+      const segs = layoutLinks.filter((L) => !L.stub && L.s !== '__core__' && L.t !== '__core__');
+      const byId = new Map(layoutNodes.map((n) => [n.id, n]));
+      const pts = segs.map((L) => {
+        const s = byId.get(L.s);
+        const t = byId.get(L.t);
+        if (!s || !t) return null;
+        return { id: L.s + '->' + L.t, ax: s.x, ay: s.y, bx: t.x, by: t.y, cat: s.catId || t.catId, s: L.s, t: L.t };
+      }).filter(Boolean);
+      const out = [];
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const A = pts[i], B = pts[j];
+          if (segmentsIntersect(A.ax, A.ay, A.bx, A.by, B.ax, B.ay, B.bx, B.by)) {
+            out.push({ a: A.id, b: B.id, catA: A.cat, catB: B.cat, same: A.cat === B.cat });
+          }
+        }
+      }
+      return out.slice(0, 20);
+    },
+    /** Per-department drawn node counts (excludes stubs). */
+    departmentNodeCounts: () => {
+      const out = {};
+      CATS.forEach((c) => { out[c.id] = 0; });
+      layoutNodes.forEach((n) => {
+        if (n.kind === 'stub' || n.hidden) return;
+        if (n.catId && out[n.catId] != null) out[n.catId] += 1;
+      });
+      return out;
+    },
+    overviewGeom: () => ({ ...overviewGeom, H, W }),
     visibleNodeCount: () => visibleScreenNodes().length,
     labeledNodeCount: () => [...labelLayer.querySelectorAll('.node-label.is-on')].filter((el) => {
       const st = getComputedStyle(el);

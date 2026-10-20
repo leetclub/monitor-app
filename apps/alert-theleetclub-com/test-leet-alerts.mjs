@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Leet Alerts map acceptance (round 5): drawing fill, hub/tip geometry, overlaps.
+ * Leet Alerts map acceptance (round 6): short stubby overview, no core-hub
+ * lines, no crossings, hover dim, pan (not rotate), zero overlaps.
  */
 import { chromium } from 'playwright';
 
@@ -18,21 +19,28 @@ async function checkOverview(page, tag) {
     visible: window.LEET_ALERTS_MAP.visibleNodeCount(),
     nodeOverlaps: window.LEET_ALERTS_MAP.nodeOverlaps(),
     labelNodeOverlaps: window.LEET_ALERTS_MAP.labelNodeOverlaps(),
-    fill: window.LEET_ALERTS_MAP.mapFillRatio(),
     hub: window.LEET_ALERTS_MAP.hubRadiusRatio(),
     tip: window.LEET_ALERTS_MAP.tipRadiusRatio(),
+    crossings: window.LEET_ALERTS_MAP.lineCrossings(),
+    coreHub: window.LEET_ALERTS_MAP.hasCoreHubLinks(),
+    deptCounts: window.LEET_ALERTS_MAP.departmentNodeCounts(),
     overflow: window.LEET_ALERTS_MAP.viewportOverflow(),
+    rot: window.LEET_ALERTS_MAP.getTransform().rot,
   }));
   if (overview.visible < 60) fail(`${tag} visible ${overview.visible} < 60`);
   if (overview.nodeOverlaps > 0) fail(`${tag} node overlaps ${overview.nodeOverlaps}`);
   if (overview.labelNodeOverlaps > 0) fail(`${tag} label↔node ${overview.labelNodeOverlaps}`);
-  if (overview.fill < 0.70) fail(`${tag} drawing fill ${overview.fill.toFixed(3)} < 0.70 (links+leaves, not labels)`);
-  if (overview.hub < 0.20 || overview.hub > 0.30) {
-    fail(`${tag} hub/label radius ${overview.hub.toFixed(3)} outside 0.20–0.30 (want ~0.22–0.25)`);
+  if (overview.hub < 0.15 || overview.hub > 0.22) {
+    fail(`${tag} hub/H ${overview.hub.toFixed(3)} outside 0.15–0.22`);
   }
-  if (overview.tip < 0.82 || overview.tip > 0.96) {
-    fail(`${tag} tip/label radius ${overview.tip.toFixed(3)} outside 0.82–0.96 (want ~0.85–0.90)`);
+  if (overview.tip < 0.30 || overview.tip > 0.38) {
+    fail(`${tag} tip/H ${overview.tip.toFixed(3)} outside 0.30–0.38`);
   }
+  if (overview.crossings > 0) fail(`${tag} line crossings ${overview.crossings}`);
+  if (overview.coreHub) fail(`${tag} has core→hub links`);
+  Object.entries(overview.deptCounts).forEach(([id, n]) => {
+    if (n < 20 || n > 45) fail(`${tag} ${id} nodes ${n} outside ~25–40 (±5)`);
+  });
   if (overview.overflow > 0) fail(`${tag} viewport overflow ${overview.overflow}`);
   return overview;
 }
@@ -42,14 +50,38 @@ const notes = [];
 
 for (const vp of [{ w: 1440, h: 900 }, { w: 1920, h: 1080 }]) {
   const page = await browser.newPage({ viewport: { width: vp.w, height: vp.h } });
-  await page.goto(`${BASE}/alerts.html?r5=3`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await page.goto(`${BASE}/alerts.html?r6=9`, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => window.__LEET_ALERTS_READY__ && window.LEET_ALERTS_MAP, null, { timeout: 15000 });
+  await page.evaluate(() => window.LEET_ALERTS_MAP.waitForIdle());
   const ov = await checkOverview(page, `${vp.w}x${vp.h}`);
   notes.push(
-    `${vp.w}x${vp.h} visible=${ov.visible} drawFill=${ov.fill.toFixed(3)} hub=${ov.hub.toFixed(3)} tip=${ov.tip.toFixed(3)}`
+    `${vp.w}x${vp.h} visible=${ov.visible} hub=${ov.hub.toFixed(3)} tip=${ov.tip.toFixed(3)} cross=${ov.crossings}`
   );
 
   if (vp.w === 1440) {
+    // Hover dims others to ~25%
+    await page.evaluate(() => window.LEET_ALERTS_MAP.setHover('revenue'));
+    await page.waitForTimeout(250);
+    const hover = await page.evaluate(() => window.LEET_ALERTS_MAP.getHover());
+    if (hover.hoverCat !== 'revenue') fail('hover cat not set');
+    const dimmed = Object.entries(hover.hoverAlpha).filter(([id, a]) => id !== 'revenue' && a > 0.28);
+    if (dimmed.length) fail(`hover did not dim others: ${JSON.stringify(dimmed)}`);
+    if (Math.abs((hover.hoverAlpha.revenue || 0) - 1) > 0.05) fail('hover target not full opacity');
+    notes.push('hover dim ok');
+    await page.evaluate(() => window.LEET_ALERTS_MAP.setHover(null));
+
+    // Drag pans (x/y), does not rotate
+    const before = await page.evaluate(() => window.LEET_ALERTS_MAP.getTransform());
+    await page.evaluate(() => window.LEET_ALERTS_MAP.panBy(40, -25));
+    await page.waitForTimeout(100);
+    const after = await page.evaluate(() => window.LEET_ALERTS_MAP.getTransform());
+    if (Math.abs(after.rot - before.rot) > 1e-6) fail('pan rotated the map');
+    if (Math.abs(after.tCamX - before.tCamX) < 1 || Math.abs(after.tCamY - before.tCamY) < 1) {
+      fail('pan did not move camera');
+    }
+    notes.push(`pan dx=${(after.tCamX - before.tCamX).toFixed(1)} dy=${(after.tCamY - before.tCamY).toFixed(1)}`);
+    await page.evaluate(() => window.LEET_ALERTS_MAP.recenter());
+
     await page.evaluate(async () => {
       window.LEET_ALERTS_MAP.focusCategory('offline');
       await window.LEET_ALERTS_MAP.waitForIdle();
@@ -67,7 +99,7 @@ for (const vp of [{ w: 1440, h: 900 }, { w: 1920, h: 1080 }]) {
     });
     await page.waitForTimeout(400);
     const restored = await checkOverview(page, 'restored');
-    notes.push(`restored drawFill=${restored.fill.toFixed(3)}`);
+    notes.push(`restored tip=${restored.tip.toFixed(3)}`);
   }
   await page.close();
 }
