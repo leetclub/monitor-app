@@ -7,7 +7,7 @@
 }
 
 :root {
-  --bg: #20242d;
+  --bg: #20242D;
   --bg-deep: #181b22;
   --panel: rgba(24, 24, 27, 0.92);
   --panel-solid: #18181b;
@@ -23,7 +23,9 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  background: #20242D;
+  background-image: radial-gradient(circle, rgba(232, 235, 242, 0.05) 1px, transparent 1px);
+  background-size: 14px 14px;
   color: var(--text);
   font-family: var(--font);
   overflow: hidden;
@@ -149,12 +151,12 @@ html, body {
   height: 100%;
   display: block;
   cursor: grab;
-  background: #20242d;
+  background: #20242D;
 }
 /* Kill white flash before first paint — canvas keeps the fill; label layer must stay transparent */
 body:not(.map-ready) #label-layer { opacity: 0; }
 body:not(.map-ready) .wchev { opacity: 0; }
-#alerts-canvas { background-color: #20242d; }
+#alerts-canvas { background-color: #20242D; }
 #alerts-canvas.is-dragging { cursor: grabbing; }
 
 .label-layer {
@@ -169,8 +171,8 @@ body:not(.map-ready) .wchev { opacity: 0; }
   transform: translate(-50%, -50%);
   text-align: center;
   white-space: nowrap;
-  /* No opacity transition — avoids “stuck” labels after leave/morph/dial */
-  transition: filter 0.2s ease;
+  /* r18: skilltree-like ~0.5s opacity fade driven by scale LOD */
+  transition: opacity 0.5s ease, filter 0.2s ease;
   pointer-events: none;
   visibility: hidden;
   opacity: 0;
@@ -179,18 +181,25 @@ body:not(.map-ready) .wchev { opacity: 0; }
   visibility: visible;
 }
 .cat-label .name {
-  font: 400 0.84rem/1.15 var(--font-display);
-  letter-spacing: 0.38em;
+  /* skilltree .wname .nm: 126px @ scale .333 ≈ 42px, tracking .24em — fit overview */
+  font: 600 1.05rem/1.15 'Inter', system-ui, sans-serif;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: #f2efe8;
+  color: #e9e4d6;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.65);
 }
 .cat-label .accent {
   display: none;
 }
-/* r16: group names are LOD branch labels; full-out shows dept titles only */
+/* skilltree .wname .sb — lowercase descriptive subline */
 .cat-label .sub {
-  display: none;
+  display: block;
+  font: 500 0.7rem/1.25 'Inter', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: rgba(168, 172, 180, 0.78);
+  margin-top: 0.28rem;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
 }
 .node-label {
   position: absolute;
@@ -203,11 +212,9 @@ body:not(.map-ready) .wchev { opacity: 0; }
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  /* Snap off immediately so labels never linger at stale positions */
-  transition: none;
+  transition: opacity 0.5s ease;
 }
 .node-label.is-on {
-  opacity: 1;
   visibility: visible;
 }
 .group-label {
@@ -222,11 +229,38 @@ body:not(.map-ready) .wchev { opacity: 0; }
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: none;
+  transition: opacity 0.5s ease;
 }
 .group-label.is-on {
-  opacity: 1;
   visibility: visible;
+}
+
+/* Small hover info card (skilltree #card mini) */
+.hover-tip {
+  position: absolute;
+  z-index: 28;
+  min-width: 120px;
+  max-width: 220px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(233, 228, 214, 0.16);
+  background: rgba(24, 27, 34, 0.92);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+.hover-tip[hidden] { display: none !important; }
+.hover-tip .ht-name {
+  font: 600 0.78rem/1.2 'Inter', system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: #e9e4d6;
+}
+.hover-tip .ht-sub {
+  margin-top: 4px;
+  font: 500 0.62rem/1.3 'Inter', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: rgba(168, 172, 180, 0.85);
+  text-transform: lowercase;
 }
 
 /* Zoom chrome (skilltree #controls parity) */

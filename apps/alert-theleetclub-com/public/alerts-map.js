@@ -22,14 +22,15 @@
   const EASE_WHEEL = 0.11;
   const DIM_OTHERS = 0.18;
   const NODE_FADED = 0.25;
-  const HOVER_NODE_SCALE = 1.12;
+  const HOVER_NODE_SCALE = 1.12; // skilltree .node:hover scale(1.12)
+  const HOVER_CAT_SCALE = 1.1; // category icon brighten/scale on hover (~1.1×)
   const FEATURED_SCALE = 1.05;
   const DRAG_CLICK_CANCEL = 8;
   const WHEEL_ZOOM_EXP = 0.0018; // plain-scroll feel (marketing video: smooth continuous)
   const ZOOM_STEP_IN = 1.25;
   const ZOOM_STEP_OUT = 0.8;
   const Z_FAN_MIN = 0.42;
-  const Z_FAN_MAX = 1.9;
+  const Z_FAN_MAX = 5.8; // allow dive ~4–6× (skilltree fan deep + video)
   // Continuous canvas: full map (~1) → deep branch (3–5 nodes fill frame)
   const Z_SKY_MIN = 0.42;
   const Z_SKY_MAX = 5.8;
@@ -41,6 +42,7 @@
   const LOD_NODE_FULL = 3.2;
   const LOD_CAT_FADE_START = 1.45;
   const LOD_CAT_FADE_END = 2.4;
+  const LABEL_FADE_MS = 500; // skilltree opacity .5s on chevrons / label tiers
   const SETTLE_MS = 250; // post-wheel camera settle (ref)
   const ARROW_FADE_ZOOM = 1.2; // hide ‹ › once zoomed past ~120%
   const MAX_VIEW_EMPTY = 0.25; // while zoomed in, ≤25% of viewport empty
@@ -48,11 +50,25 @@
   const R0_FAN = 248;
   const R_BASE = 410;
   const R_STEP = 214;
-  // Align short; morph long enough for ≥12 distinct frames @30fps (~400ms min)
+  // Skilltree dive: seat → focusPoint → swapAfter 520 → transitioning 1250
   const DIVE_ALIGN_MS = 280;
-  const DIVE_MORPH_MS = 900; // node/camera lerp (ref swap~520 + branch settle)
+  const DIVE_SWAP_MS = 520;
+  const DIVE_MORPH_MS = 1200; // ~1.2s ease-in-out (video + user r18)
+  const DIVE_ZOOM_TARGET = 4.8; // ~4–6× overview
+  const TRANSITIONING_MS = 1250;
   const RISE_MS = 700;
   const HOVER_FADE_MS = 350; // ref CSS transitionMs
+  // Stroke / node constants from skilltree map.html
+  const STROKE_SPOKE = 1.5;
+  const STROKE_SPOKE_OP = 0.14;
+  const STROKE_BRANCH = 2;
+  const STROKE_BRANCH_OP = 0.4;
+  const JDOT_R = 7.5; // 15×15px hollow jdot
+  const ROOTB_R = 22; // category ring (sky); fan hub larger
+  const COPPER = '#C4A574';
+  const GRID_STEP = 14;
+  const GRID_ALPHA = 0.035; // softer than stark .05 canvas dots (CSS uses .05; we under-paint)
+  const GRID_DOT_R = 0.45;
   const WHEEL_FRICTION = 0.92; // dial coast per frame @60fps-ish
   const WHEEL_COAST_MIN = 0.08; // deg/ms → snap when below
   const FLICK_EMA = 0.75;
@@ -74,6 +90,7 @@
   let settleTimer = null;
   let lastWheelSX = 0;
   let lastWheelSY = 0;
+  let zoomPivot = null; // {sx,sy,wx,wy} while wheel-zoom eases
   let wheelCoasting = false;
   let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
@@ -122,6 +139,27 @@
     if (z >= zFull) return 1;
     return (z - zIn) / Math.max(1e-6, zFull - zIn);
   }
+
+  /** Short leaf label — avoids overlap at deep zoom (site first token · short id). */
+  function shortNodeLabel(site, leaf) {
+    const s = String(site || '').trim().split(/\s+/)[0] || '';
+    let m = String(leaf || '').trim();
+    m = m.replace(/^LT-KW-/i, '');
+    if (m.length > 8) m = m.slice(-5);
+    if (s && m) return s + ' · ' + m;
+    return (m || s || '·').slice(0, 14);
+  }
+
+  /** Category subline: lowercase descriptive (skilltree .wname .sb). */
+  function catSubline(cat) {
+    return String(cat.subtitle || '')
+      .replace(/[|•]/g, '·')
+      .replace(/\s*·\s*/g, ' · ')
+      .replace(/,/g, ' · ')
+      .toLowerCase()
+      .trim();
+  }
+
 
   /** Department groups from subtitle line (video LOD: ENRICHMENT-style primary branches). */
   function groupsFromSubtitle(cat) {
@@ -270,8 +308,8 @@
     const RmaxRef = 146 + 3 * 56;
     const scale = (rTip - rHub) / RmaxRef;
     const rTrunk = 78 * scale; // short shared trunk from hub → group fork (visible cluster)
-    const rStart = 110 * scale;
-    const rEnd = RmaxRef * scale;
+    const rStart = 118 * scale; // r18: slightly wider rings (ref spacing)
+    const rEnd = RmaxRef * scale * 1.08;
     const maxJoints = 5;
     const rstep = (rEnd - rStart) / (maxJoints - 1);
 
@@ -358,20 +396,20 @@
           const id = `${cat.id}:n${seq++}`;
           const site = job.site || '';
           const leaf = job.label || '·';
-          let nodeLabel = site ? `${site} · ${leaf}` : leaf;
+          let nodeLabel = shortNodeLabel(site, leaf);
           if (usedNodeLabels.has(nodeLabel)) {
             const SITE_PAD = [
               'Salmiya', 'Hawally', 'Sharq', 'Jabriya', 'Salwa', 'Rumaithiya',
               'Bayan', 'Mishref', 'Fahaheel', 'Mahboula', 'Egaila', 'Surra',
             ];
-            nodeLabel = `${SITE_PAD[seq % SITE_PAD.length]} · LT-KW-${String(1100 + seq * 19).padStart(4, '0')}`;
+            nodeLabel = shortNodeLabel(SITE_PAD[seq % SITE_PAD.length], `LT-KW-${String(1100 + seq * 19).padStart(4, '0')}`);
           }
           usedNodeLabels.add(nodeLabel);
           nodes.push({
             id, kind: 'machine',
             label: nodeLabel,
             color, icon: null, alert: job.alert || null,
-            catId: cat.id, lx, ly, r: 2.0, depth: 2 + ji,
+            catId: cat.id, lx, ly, r: 2.4, depth: 2 + ji,
             hot: !!job.hot, tint: ji === 0,
             chain: fi, morphKey: `${cat.id}:c${fi}:j${ji + 1}`,
             groupId,
@@ -513,14 +551,19 @@
 
   function seedFlowParticles() {
     flowParticles.length = 0;
-    const segs = layoutLinks.filter((L) => !L.stub && L.s !== '__core__');
+    // Skilltree buildSky: copper outward + ivory return on every spoke (desktop)
+    const segs = layoutLinks.filter((L) => !L.stub && !L.virtual);
     segs.forEach((L, i) => {
-      if (i % 2 !== 0) return;
+      const catId = (layoutNodes.find((n) => n.id === L.t) || {}).catId;
+      const durOut = 2.6 + (i % 3) * 0.7; // animateMotion dur
+      const durBack = 3.5 + (i % 2) * 0.9;
       flowParticles.push({
-        link: L,
-        u: hash01(i * 3.1),
-        speed: 0.18 + hash01(i * 7.7) * 0.22,
-        catId: (layoutNodes.find((n) => n.id === L.t) || {}).catId,
+        link: L, u: hash01(i * 3.1), speed: 1 / durOut, dir: 1,
+        catId, color: COPPER, r: 2.4, op: 0.9,
+      });
+      flowParticles.push({
+        link: L, u: hash01(i * 5.7 + 1.3), speed: 1 / durBack, dir: -1,
+        catId, color: '#e9e4d6', r: 1.7, op: 0.5,
       });
     });
   }
@@ -529,7 +572,7 @@
    * Focus fan: FAN_SPAN 182° / R0 248 / R_BASE 410 / R_STEP 214 (skilltree buildFan),
    * scaled to fit the usable viewport.
    */
-  function rebuildFocusLayout(catId, { setCamera = true } = {}) {
+  function rebuildFocusLayout(catId, { setCamera = true, diveZoom = false } = {}) {
     const cat = CATS.find((c) => c.id === catId);
     if (!cat) { focusLayout = null; return null; }
     const nodes = [];
@@ -566,10 +609,12 @@
     const totalJobs = Math.max(1, chainSpecs.reduce((s, c) => s + Math.max(1, c.jobs.length), 0));
     const P = (r, a) => [r * Math.sin(a), -r * Math.cos(a)];
     const u = usable();
-    const fit = Math.min(u.w / 1700, u.h / 1500);
+    // Compact world so DIVE_ZOOM_TARGET (~4.8×) frames the fan (video + skilltree feel)
+    const fitBase = Math.min(u.w / 1700, u.h / 1500);
+    const fit = (fitBase / DIVE_ZOOM_TARGET) * 1.08;
     const sR0 = R0_FAN * fit;
-    const sBase = R_BASE * fit;
-    const sStep = R_STEP * fit;
+    const sBase = R_BASE * fit * 1.06;
+    const sStep = R_STEP * fit * 1.12; // r18: wider rings → less label overlap
     const sTrunk = sR0 * 0.42;
 
     nodes.push({
@@ -624,10 +669,10 @@
           const leaf = job.label || '·';
           nodes.push({
             id, kind: job.kind || 'machine',
-            label: site ? `${site} · ${leaf}` : leaf,
+            label: shortNodeLabel(site, leaf),
             color: cat.color,
             icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
-            r: job.alert ? 7 : 6, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
+            r: job.alert ? JDOT_R : JDOT_R * 0.85, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
             chain: fi, morphKey: mk, groupId,
           });
           links.push({
@@ -644,17 +689,32 @@
     rebuildParentIndex(links);
 
     if (setCamera) {
-      const bw = (maxR + 280) * 2;
-      const bh = maxR + 260 + 180;
-      const pad = 0.9;
-      const kz = Math.min((u.w * pad) / bw, (u.h * pad) / bh);
-      targetZoom = clampZFan(Math.max(0.55, Math.min(1.35, kz)));
+      // Fan world is pre-scaled for ~DIVE_ZOOM_TARGET framing
+      targetZoom = clampZFan(DIVE_ZOOM_TARGET);
       tCamX = 0;
-      tCamY = maxR * 0.18;
+      tCamY = maxR * 0.14;
     }
 
     focusLayout = { nodes, links, color: cat.color, cat, maxR };
     return focusLayout;
+  }
+
+  /** After dive morph: fit fan so first rings fill the frame (skilltree fitCurrent). */
+  function fitFanCamera() {
+    if (!focusLayout) return;
+    const u = usable();
+    const maxR = focusLayout.maxR || 400;
+    const bw = (maxR + 280) * 2;
+    const bh = maxR + 260 + 180;
+    const pad = 0.9;
+    const kz = Math.min((u.w * pad) / bw, (u.h * pad) / bh);
+    targetZoom = clampZFan(Math.max(0.7, Math.min(1.45, kz)));
+    tCamX = 0;
+    tCamY = maxR * 0.18;
+    zoom = targetZoom;
+    camX = tCamX;
+    camY = tCamY;
+    zoomPivot = null;
   }
 
   function snapshotLayout(nodes, links) {
@@ -841,9 +901,8 @@
       labelEls.set(cat.id, el);
     }
     el.querySelector('.name').textContent = cat.label;
-    // r16: group names live on branches (LOD); keep dept title only at full-out
     const sub = el.querySelector('.sub');
-    if (sub) sub.textContent = '';
+    if (sub) sub.textContent = catSubline(cat);
     return el;
   }
 
@@ -873,25 +932,33 @@
     return el;
   }
 
-  /** Snap a DOM label off — no fade linger that can orphan after leave/morph/dial. */
-  function hideDomLabel(el) {
+  /** Fade a DOM label off (~LABEL_FADE_MS); instant only when requested (morph swap). */
+  function hideDomLabel(el, instant) {
     if (!el) return;
     el.classList.remove('is-on');
     el.style.opacity = '0';
-    el.style.visibility = 'hidden';
+    if (instant || reduceMotion) {
+      el.style.visibility = 'hidden';
+      return;
+    }
+    clearTimeout(el._hideT);
+    el._hideT = setTimeout(() => {
+      if (parseFloat(el.style.opacity || '0') < 0.04) el.style.visibility = 'hidden';
+    }, LABEL_FADE_MS + 40);
   }
 
   function clearPointerHover() {
     hoverCat = null;
     hoverNodeId = null;
+    hideHoverTip();
     if (!dragging) canvas.style.cursor = mapState === 'sky' || mapState === 'fan' ? 'grab' : 'default';
   }
 
   /** Force every floating label off (used on blur / leave / layout swap). */
   function clearFloatingLabels() {
-    nodeLabelEls.forEach((el) => hideDomLabel(el));
-    groupLabelEls.forEach((el) => hideDomLabel(el));
-    labelEls.forEach((el) => hideDomLabel(el));
+    nodeLabelEls.forEach((el) => hideDomLabel(el, true));
+    groupLabelEls.forEach((el) => hideDomLabel(el, true));
+    labelEls.forEach((el) => hideDomLabel(el, true));
   }
 
   /** Simple AABB overlap — skip later labels that collide (r15/r16 no-overlap). */
@@ -909,6 +976,7 @@
     if (mapState === 'diving' || mapState === 'rising' || mapState === 'aligning') return;
     if ((mapState === 'fan' || focusCat) && focusCat) {
       rebuildFocusLayout(focusCat, { setCamera: true });
+      zoom = targetZoom; camX = tCamX; camY = tCamY; zoomPivot = null;
     } else {
       recenterMap({ immediate: false });
     }
@@ -985,70 +1053,123 @@
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
     const coreR = focusCat ? 48 : (overviewGeom.rCore || Math.min(W, H) * 0.054);
-    if (!coreDust.length || coreDust._gen !== 9) {
+    const scale = focusCat ? 1.1 : Math.max(0.85, Math.min(1.35, zoom));
+    const colors = CATS.map((c) => c.color);
+
+    // Build organic hub graph once (skilltree buildSky hub)
+    if (!coreDust.length || coreDust._gen !== 18) {
       coreDust.length = 0;
-      coreDust._gen = 9;
-      // Crisp small particles (ref-like); fewer, tighter than r8 bloom
-      for (let i = 0; i < 280; i++) {
-        const ring = Math.random();
-        coreDust.push({
-          a: Math.random() * Math.PI * 2,
-          r: ring < 0.55
-            ? coreR * (0.12 + Math.random() * 0.55)
-            : coreR * (0.55 + Math.random() * 0.42),
-          s: 0.1 + Math.random() * 0.4,
-          hue: Math.random(),
-          size: 0.35 + Math.random() * 0.85,
-        });
+      coreDust._gen = 18;
+      coreDust.edges = [];
+      const HUBF = Math.min(1, N / 7);
+      const pickC = (i) => (hash01(i) < 0.32 ? '#e9e4d6' : colors[Math.floor(hash01(i + 3) * colors.length)]);
+      const pushDot = (x, y, r, fill, op, pulse) => {
+        coreDust.push({ x, y, r, fill, op, pulse: !!pulse });
+      };
+      // free-floating memories denser toward centre
+      for (let k = 0; k < Math.round(130 * HUBF); k++) {
+        const a = hash01(k * 1.7) * Math.PI * 2;
+        const r = 112 * Math.sqrt(hash01(k * 2.3));
+        pushDot(r * Math.cos(a), r * Math.sin(a), 0.8 + hash01(k) * 1.2, pickC(k), 0.25 + hash01(k + 1) * 0.5, hash01(k + 2) < 0.25);
+      }
+      // denser rim band
+      for (let k = 0; k < Math.round(55 * HUBF); k++) {
+        const a = hash01(k * 4.1 + 9) * Math.PI * 2;
+        const r = 96 + hash01(k * 3.2) * 17;
+        pushDot(r * Math.cos(a), r * Math.sin(a), 0.7 + hash01(k + 5) * 1, pickC(k + 40), 0.3 + hash01(k + 6) * 0.45, hash01(k + 7) < 0.2);
+      }
+      const burst = (cx, cy, n, spread, seed) => {
+        for (let i = 0; i < n; i++) {
+          const a = hash01(seed + i * 1.1) * Math.PI * 2;
+          const r = spread * (0.35 + hash01(seed + i * 2.2) * 0.65);
+          const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+          coreDust.edges.push({ x0: cx, y0: cy, x1: x, y1: y, op: 0.16 + hash01(seed + i) * 0.1 });
+          pushDot(x, y, 1.1 + hash01(seed + i * 3) * 1.3, pickC(seed + i), 0.55 + hash01(seed + i * 4) * 0.4, hash01(seed + i * 5) < 0.4);
+        }
+      };
+      burst(-20, -15, Math.round(28 * HUBF), 52, 100);
+      burst(17, 19, Math.round(35 * HUBF), 58, 200);
+      coreDust.edges.push({ x0: -20, y0: -15, x1: 17, y1: 19, op: 0.16 });
+      coreDust.nucleus = [{ x: -20, y: -15, r: 4.5, fill: COPPER }, { x: 17, y: 19, r: 3.4, fill: '#e9e4d6' }];
+      // satellite clusters
+      const NCL = Math.max(4, Math.round(11 * HUBF));
+      for (let k = 0; k < NCL; k++) {
+        const a = (k / NCL) * Math.PI * 2 + hash01(k * 8) * 0.5;
+        const R = 54 + hash01(k * 9) * 42;
+        const cx = R * Math.cos(a), cy = R * Math.sin(a);
+        pushDot(cx, cy, 1.7 + hash01(k) , pickC(k + 300), 0.85, false);
+        const m = 5 + Math.floor(hash01(k * 11) * 7);
+        const base = hash01(k * 12) * Math.PI * 2;
+        const span = Math.PI * (0.7 + hash01(k * 13) * 1.3);
+        for (let i = 0; i < m; i++) {
+          const aa = base + span * (i / m);
+          const rr = 6.5 + hash01(k * 14 + i) * 9;
+          const x = cx + rr * Math.cos(aa), y = cy + rr * Math.sin(aa);
+          coreDust.edges.push({ x0: cx, y0: cy, x1: x, y1: y, op: 0.18 });
+          pushDot(x, y, 0.9 + hash01(k + i) * 1, pickC(k + i + 400), 0.45 + hash01(k + i + 1) * 0.4, hash01(k + i + 2) < 0.3);
+        }
       }
     }
-    const scale = focusCat ? 1.1 : zoom;
-    const bloomR = coreR * scale * 0.92;
+
+    const bloomR = coreR * scale * 1.15;
     const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, bloomR);
-    g.addColorStop(0, 'rgba(255,255,255,0.12)');
-    g.addColorStop(0.35, 'rgba(233,228,214,0.05)');
+    g.addColorStop(0, 'rgba(26,29,38,0.16)');
+    g.addColorStop(0.44, 'rgba(26,29,38,0.08)');
     g.addColorStop(1, 'rgba(32,36,45,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(p.x, p.y, bloomR, 0, Math.PI * 2);
     ctx.fill();
 
-    coreDust.forEach((d, i) => {
-      const ang = d.a + t * 0.028 * d.s;
-      const rad = d.r * scale * (0.97 + 0.03 * Math.sin(t * 0.7 + i * 0.4));
-      const x = p.x + Math.cos(ang) * rad;
-      const y = p.y + Math.sin(ang * 1.02) * rad * 0.94;
-      if (Math.hypot(x - p.x, y - p.y) < Math.min(8, bloomR * 0.16)) return;
-      const col = d.hue < 0.35
-        ? `rgba(255,255,255,${0.4 + d.s * 0.4})`
-        : d.hue < 0.55
-          ? `rgba(233,228,214,${0.32 + d.s * 0.28})`
-          : d.hue < 0.75
-            ? `rgba(196,181,253,${0.24 + d.s * 0.22})`
-            : `rgba(251,113,133,${0.22 + d.s * 0.2})`;
-      ctx.beginPath();
-      ctx.fillStyle = col;
-      ctx.arc(x, y, d.size * scale, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // Hub drift (ref hdrift ~12s ±2.2/±2.6) + nucleus pulse
+    // Slow spin (skilltree hspin 170s) + hdrift
+    const spin = reduceMotion ? 0 : (t / 170) * Math.PI * 2;
     const driftX = reduceMotion ? 0 : 2.2 * Math.sin(t / 12 * Math.PI * 2);
     const driftY = reduceMotion ? 0 : -2.6 * Math.cos(t / 12 * Math.PI * 2);
-    const cx = p.x + driftX;
-    const cy = p.y + driftY;
-    const nucR = reduceMotion ? 5 * scale : (5 + 1.5 * (0.5 + 0.5 * Math.sin(t * (Math.PI * 2 / 2.6)))) * scale;
-    ctx.beginPath();
-    ctx.fillStyle = 'rgba(233,228,214,0.55)';
-    ctx.arc(cx, cy, nucR * 0.35, 0, Math.PI * 2);
-    ctx.fill();
+    const hubScale = (coreR / 115) * scale;
+    ctx.save();
+    ctx.translate(p.x + driftX, p.y + driftY);
+    ctx.rotate(spin);
+    ctx.scale(hubScale, hubScale);
 
-    const fs = Math.max(12, 13.5 * scale);
-    ctx.font = `600 ${fs}px Inter, sans-serif`;
+    (coreDust.edges || []).forEach((e) => {
+      ctx.beginPath();
+      ctx.moveTo(e.x0, e.y0);
+      ctx.lineTo(e.x1, e.y1);
+      ctx.strokeStyle = `rgba(233,228,214,${e.op})`;
+      ctx.lineWidth = 0.85;
+      ctx.stroke();
+    });
+    coreDust.forEach((d, i) => {
+      const pulse = d.pulse && !reduceMotion ? (0.85 + 0.15 * Math.sin(t * (Math.PI * 2 / 3.2) + i)) : 1;
+      ctx.beginPath();
+      ctx.fillStyle = d.fill.startsWith('#')
+        ? hexAlpha(d.fill, d.op * pulse)
+        : d.fill;
+      if (!d.fill.startsWith('#')) ctx.globalAlpha = d.op * pulse;
+      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    (coreDust.nucleus || []).forEach((n, i) => {
+      const pr = reduceMotion ? n.r : n.r * (0.92 + 0.08 * Math.sin(t * (Math.PI * 2 / 2.6) + i));
+      ctx.beginPath();
+      ctx.fillStyle = n.fill;
+      ctx.globalAlpha = 0.95;
+      ctx.arc(n.x, n.y, pr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    ctx.restore();
+
+    // leet wordmark under / over hub (skilltree .hname)
+    const fs = Math.max(11, 11 * scale);
+    ctx.font = `700 ${fs}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(236,233,226,0.78)';
-    ctx.fillText('leet', cx, cy);
+    ctx.fillStyle = 'rgba(233,228,214,0.78)';
+    ctx.letterSpacing = '0.3em';
+    ctx.fillText('leet', p.x + driftX, p.y + driftY + coreR * 0.72 * scale);
+    ctx.letterSpacing = '0px';
     hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 32 * scale, vr: 32 * scale });
   }
 
@@ -1089,22 +1210,23 @@
   function drawScene(t) {
     hitNodes.length = 0;
     // Skilltree-like charcoal + faint grid + sparse stars
-    ctx.fillStyle = '#20242d';
+    ctx.fillStyle = '#20242D';
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = 'rgba(232,235,242,0.05)';
-    for (let x = 7; x < W; x += 14) {
-      for (let y = 7; y < H; y += 14) {
+    // Skilltree body: radial-gradient dots rgba(232,235,242,.05) @ 14px — paint softer
+    ctx.fillStyle = `rgba(232,235,242,${GRID_ALPHA})`;
+    for (let x = GRID_STEP / 2; x < W; x += GRID_STEP) {
+      for (let y = GRID_STEP / 2; y < H; y += GRID_STEP) {
         ctx.beginPath();
-        ctx.arc(x, y, 0.7, 0, Math.PI * 2);
+        ctx.arc(x, y, GRID_DOT_R, 0, Math.PI * 2);
         ctx.fill();
       }
     }
     ensureStars();
     starField.forEach((s) => {
       ctx.beginPath();
-      ctx.fillStyle = `rgba(233,228,214,${s.a})`;
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(233,228,214,${s.a * 0.55})`;
+      ctx.arc(s.x, s.y, s.r * 0.85, 0, Math.PI * 2);
       ctx.fill();
     });
 
@@ -1115,7 +1237,13 @@
     function catOpacity(catId) {
       if (mapState === 'fan' || focusCat) return 1;
       const a = hoverAlpha[catId];
-      return a == null ? 1 : a;
+      let op = a == null ? 1 : a;
+      // Deep zoom without hover: keep nearest dept full, gently dim others (ref density)
+      if (!focusCat && (mapState === 'sky' || mapState === 'aligning') && zoom >= LOD_GROUP_FULL && !hoverCat && catId) {
+        const feat = CATS[focusedIdx()]?.id;
+        if (feat && catId !== feat) op *= 0.35;
+      }
+      return op;
     }
     function chainFaded(nOrLink) {
       if (selectedChain < 0 || mapState !== 'fan') return false;
@@ -1133,74 +1261,99 @@
       const catId = tN.catId || s.catId;
       let op = (L.morphOp != null ? L.morphOp : 1) * catOpacity(catId);
       if (tN.morphOp != null) op *= tN.morphOp;
-      if (tN.otherDim) op *= (tN.morphOp != null ? 1 : 0.12);
+      if (tN.otherDim) op *= (tN.morphOp != null ? 1 : 0); // dive: other branches fade to 0
       if (chainFaded(L) || chainFaded(tN)) op *= NODE_FADED;
       const a0 = worldToScreen(s.x, s.y);
       const a1 = worldToScreen(tN.x, tN.y);
       if (!focusCat && mapState !== 'fan' && mapState !== 'diving' && (L.straight || L.s === '__core__' || L.morphing)) {
         const hovered = !!(hoverCat && catId === hoverCat && !L.otherDim);
+        const col = L.color || tN.color || '#e9e4d6';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        // Soft colour glow underlay (branch colour)
+        if (!L.stub && op > 0.05) {
+          ctx.beginPath();
+          ctx.moveTo(a0.x, a0.y);
+          ctx.lineTo(a1.x, a1.y);
+          ctx.strokeStyle = hexAlpha(col, (hovered ? 0.35 : 0.12) * op);
+          ctx.lineWidth = hovered ? 5 : 3.2;
+          ctx.shadowColor = hexAlpha(col, hovered ? 0.45 : 0.22);
+          ctx.shadowBlur = hovered ? 12 : 6;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
         if (hovered) {
-          // Ref: hovered department paths read as bright solid glow (not dashed)
-          ctx.strokeStyle = hexAlpha(L.color || tN.color || '#e9e4d6', 0.92 * op);
-          ctx.lineWidth = 2.4;
-          ctx.lineCap = 'round';
-          ctx.shadowColor = hexAlpha(L.color || tN.color || '#e9e4d6', 0.55);
-          ctx.shadowBlur = 10;
+          ctx.strokeStyle = hexAlpha(col, 0.92 * op);
+          ctx.lineWidth = STROKE_BRANCH;
           ctx.stroke();
-          ctx.shadowBlur = 0;
         } else if (L.morphing) {
-          ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', 0.55 * op);
-          ctx.lineWidth = 1.6;
-          ctx.lineCap = 'round';
+          ctx.strokeStyle = hexAlpha(col, 0.55 * op);
+          ctx.lineWidth = STROKE_SPOKE;
           ctx.stroke();
         } else {
-          const lineOp = L.stub ? 0.2 : (L.depth <= 1 ? 0.22 : 0.16);
+          // Skilltree spokes: stroke-width 1.5, stroke-opacity .14 ivory
+          const lineOp = L.stub ? 0.1 : STROKE_SPOKE_OP;
           ctx.strokeStyle = `rgba(233,228,214,${lineOp * op})`;
-          ctx.lineWidth = L.stub ? 1.1 : 1;
-          ctx.setLineDash([]);
+          ctx.lineWidth = L.stub ? 1 : STROKE_SPOKE;
+          ctx.setLineDash(L.depth <= 1 ? [] : [2, 6]);
           ctx.stroke();
+          ctx.setLineDash([]);
         }
         return;
       }
       // During morph dive, keep straight solid strokes (no bezier flash)
       if (morph && (mapState === 'diving' || mapState === 'rising')) {
+        const col = L.color || '#e9e4d6';
+        const dim = !!(L.otherDim || tN.otherDim);
         ctx.beginPath();
         ctx.moveTo(a0.x, a0.y);
         ctx.lineTo(a1.x, a1.y);
-        ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', (L.otherDim ? 0.2 : 0.55) * op);
-        ctx.lineWidth = L.otherDim ? 1 : 1.7;
+        ctx.strokeStyle = hexAlpha(col, (dim ? 0.05 : 0.55) * op);
+        ctx.lineWidth = dim ? 1 : STROKE_BRANCH;
         ctx.lineCap = 'round';
         ctx.stroke();
         return;
       }
       const c = curvePts(a0.x, a0.y, a1.x, a1.y);
+      const col = L.color || '#e9e4d6';
+      // Soft glow
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
       ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(L.color || '#e9e4d6', (focusCat || mapState === 'fan' ? 0.45 : 0.22) * op);
-      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = hexAlpha(col, 0.14 * op);
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(a0.x, a0.y);
+      ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
+      ctx.strokeStyle = hexAlpha(col, (focusCat || mapState === 'fan' ? STROKE_BRANCH_OP : 0.22) * op);
+      ctx.lineWidth = STROKE_BRANCH;
       ctx.stroke();
     });
 
-    // Flow particles along overview segments (hub → tips) + spoke motes
-    if (mapState === 'sky' || morph) {
+    // Flow particles along every branch (skilltree animateMotion copper↔ivory)
+    if ((mapState === 'sky' || morph || mapState === 'aligning') && !reduceMotion) {
       flowParticles.forEach((p) => {
         const L = p.link;
-        const s = nodeMap.get(L.s) || nodeById(L.s);
-        const tN = nodeMap.get(L.t) || nodeById(L.t);
+        const s = nodeMap.get(L.s) || nodeById(L.s) || (L.x0 != null ? { x: L.x0, y: L.y0 } : null);
+        const tN = nodeMap.get(L.t) || nodeById(L.t) || (L.x1 != null ? { x: L.x1, y: L.y1 } : null);
         if (!s || !tN) return;
         const op = catOpacity(p.catId);
-        if (op < 0.2) return;
-        p.u = (p.u + p.speed * 0.016) % 1;
-        const x = s.x + (tN.x - s.x) * p.u;
-        const y = s.y + (tN.y - s.y) * p.u;
+        if (op < 0.15) return;
+        const du = p.speed * 0.016 * (p.dir || 1);
+        p.u = (p.u + du) % 1;
+        if (p.u < 0) p.u += 1;
+        const u = p.dir < 0 ? (1 - p.u) : p.u;
+        const x = s.x + (tN.x - s.x) * u;
+        const y = s.y + (tN.y - s.y) * u;
         const scr = worldToScreen(x, y);
         ctx.beginPath();
-        ctx.fillStyle = `rgba(233,228,214,${0.55 * op})`;
-        ctx.arc(scr.x, scr.y, 1.35, 0, Math.PI * 2);
+        ctx.fillStyle = hexAlpha(p.color || COPPER, (p.op != null ? p.op : 0.7) * op);
+        ctx.arc(scr.x, scr.y, (p.r || 2) * Math.min(1.2, 0.7 + zoom * 0.2), 0, Math.PI * 2);
         ctx.fill();
       });
       if (!spokeMotes.length) {
@@ -1251,63 +1404,92 @@
       let op = catOpacity(n.catId);
       if (n.morphOp != null) op *= n.morphOp;
       if (chainFaded(n)) op *= NODE_FADED;
+      const catHover = mapState === 'sky' && hoverCat && n.catId === hoverCat;
       const hoverBoost = (mapState === 'fan' && hoverNodeId === n.id) ? HOVER_NODE_SCALE
-        : (featuredCatId && n.catId === featuredCatId && isCat ? FEATURED_SCALE : 1);
+        : (isCat && catHover ? HOVER_CAT_SCALE
+          : (featuredCatId && n.catId === featuredCatId && isCat ? FEATURED_SCALE : 1));
+      // Subtle pulse glow on nodes
+      const pulse = reduceMotion ? 1 : (0.92 + 0.08 * Math.sin(t * 1.4 + (n.x + n.y) * 0.01));
       let r = (n.r + (selected ? 1.5 : 0)) * zScale * hoverBoost;
-      if (mapState === 'sky' && isCat) r = 8 * zScale * hoverBoost;
+      if (mapState === 'sky' && isCat) r = ROOTB_R * zScale * hoverBoost;
+      else if ((mapState === 'sky' || morph) && (n.kind === 'machine' || n.kind === 'site' || n.kind === 'group')) {
+        r = (n.kind === 'group' ? 5.5 : JDOT_R * (n.hot ? 1 : 0.75)) * zScale * hoverBoost;
+      }
 
       if ((mapState === 'sky' || morph) && (n.kind === 'machine' || n.kind === 'site')) {
-        const lit = mapState === 'sky' && hoverCat && n.catId === hoverCat;
-        if (lit) {
-          ctx.shadowColor = hexAlpha(n.color, 0.55);
-          ctx.shadowBlur = 10;
-        }
-        if (n.tint || lit) {
+        const lit = catHover;
+        // Hollow jdot (skilltree .jdot.dev): fill ~10% ivory, border 1.5px
+        const rr = r * pulse;
+        ctx.beginPath();
+        ctx.fillStyle = hexAlpha('#e9e4d6', (lit ? 0.18 : 0.08) * op);
+        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.strokeStyle = hexAlpha(lit ? n.color : '#e9e4d6', (lit ? 0.85 : 0.55) * op);
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = hexAlpha(n.color, (lit ? 0.55 : 0.22) * op);
+        ctx.shadowBlur = lit ? 10 : 4;
+        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        if (n.hot) {
           ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, (lit ? 0.85 : 0.55) * op);
-          ctx.arc(p.x, p.y, r * (lit ? 1.08 : 1), 0, Math.PI * 2);
+          ctx.fillStyle = hexAlpha(n.color, 0.85 * op);
+          ctx.arc(p.x, p.y, Math.max(1.2, rr * 0.28), 0, Math.PI * 2);
           ctx.fill();
-          ctx.beginPath();
-          ctx.strokeStyle = hexAlpha(n.color, 0.85 * op);
-          ctx.lineWidth = lit ? 1.4 : 1;
-          ctx.arc(p.x, p.y, r * (lit ? 1.08 : 1), 0, Math.PI * 2);
-          ctx.stroke();
-        } else {
-          ctx.beginPath();
-          ctx.fillStyle = `rgba(245,243,238,${0.88 * op})`;
-          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-          ctx.fill();
         }
-        if (lit) ctx.shadowBlur = 0;
       } else if (isHub) {
-        // Thin outlined ring, faint tint, no glow halo
+        // Category rootb / group ring — hollow with glowing outline
         ctx.globalAlpha = op;
         ctx.beginPath();
-        ctx.fillStyle = 'rgba(32,36,45,0.92)';
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(233,228,214,0.05)';
+        ctx.arc(p.x, p.y, r * pulse, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = isCat && mapState === 'sky' ? 1.35 : (isCat ? 2.2 : 1.5);
-        ctx.strokeStyle = hexAlpha(n.color, isCat && mapState === 'sky' ? 0.55 : 0.92);
+        ctx.lineWidth = isCat ? 1.5 : 1.35;
+        ctx.strokeStyle = hexAlpha(n.color, (isCat && catHover ? 0.95 : (isCat && mapState === 'sky' ? 0.65 : 0.85)));
+        ctx.shadowColor = hexAlpha(n.color, catHover || isCat ? 0.45 : 0.2);
+        ctx.shadowBlur = catHover ? 16 : (isCat ? 8 : 4);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * pulse, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.shadowBlur = 0;
+        // Outer soft ring (rootb box-shadow 0 0 0 6px)
+        if (isCat) {
+          ctx.beginPath();
+          ctx.strokeStyle = hexAlpha(n.color, 0.07 * op);
+          ctx.lineWidth = 6;
+          ctx.arc(p.x, p.y, r * pulse + 3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         if ((focusCat || mapState === 'fan') && isCat) {
           drawBackChevron(p.x, p.y, n.color, r);
-        } else {
-          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, isCat && mapState === 'sky' ? 0.75 : 1, isCat ? 0.95 : 0.85);
+        } else if (isCat) {
+          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, catHover ? 1.05 : 0.9, isCat ? 0.95 : 0.85);
         }
         ctx.globalAlpha = 1;
       } else {
+        // Fan leaves — hollow glowing outline (jdot)
+        const rr = Math.max(JDOT_R * 0.7, r) * pulse;
         ctx.beginPath();
-        ctx.fillStyle = 'rgba(24,24,27,0.88)';
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = hexAlpha('#e9e4d6', (n.hot ? 0.14 : 0.06) * op);
+        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = 1.35;
-        ctx.strokeStyle = hexAlpha(n.color, n.hot ? 0.95 : 0.55);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = hexAlpha(n.color, (n.hot || hoverNodeId === n.id ? 0.9 : 0.55) * op);
+        ctx.shadowColor = hexAlpha(n.color, 0.35 * op);
+        ctx.shadowBlur = hoverNodeId === n.id ? 12 : 5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.shadowBlur = 0;
         if (n.hot) {
           ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, 0.9);
-          ctx.arc(p.x, p.y, Math.max(1.5, r * 0.35), 0, Math.PI * 2);
+          ctx.fillStyle = hexAlpha(n.color, 0.9 * op);
+          ctx.arc(p.x, p.y, Math.max(1.5, rr * 0.32), 0, Math.PI * 2);
           ctx.fill();
+        }
+        if (n.icon && (focusCat || mapState === 'fan')) {
+          drawIcon(p.x, p.y, n.icon, n.color, 0.55, 0.7);
         }
       }
 
@@ -1340,15 +1522,17 @@
           mustShow: true,
         });
       }
-      // Node / leaf labels — LOD deep tier (fan always when inFan)
+      // Node / leaf labels — LOD deep tier; sparse enough that text never stacks
       if (n.kind !== 'category' && n.kind !== 'group' && nodeLod > 0.02) {
-        const labelOn = n.kind !== 'machine' || n.hot || n.depth <= 4 || inSky;
+        const labelOn = inFan
+          ? (n.hot || n.depth <= 3 || hoverNodeId === n.id)
+          : (n.hot || n.depth <= 3 || (n.kind === 'machine' && n.depth <= 4));
         if (labelOn) {
           wantedNodeLabels.set(n.id, {
             text: n.label,
             x: p.x,
-            y: p.y + r + 2,
-            opacity: nodeLod * (n.kind === 'machine' && !n.hot ? 0.7 : 1) * catOpacity(n.catId),
+            y: p.y + r + 10,
+            opacity: nodeLod * (n.kind === 'machine' && !n.hot ? 0.75 : 1) * catOpacity(n.catId),
           });
         }
       }
@@ -1363,8 +1547,8 @@
       const priority = opts.priority || 0;
       const tryOffset = !!opts.tryOffset;
       const mustShow = !!(opts.mustShow || want.mustShow);
-      const charW = priority >= 2 ? 8.2 : 6.4; // group labels are letter-spaced
-      const pad = priority >= 2 ? 10 : 8;
+      const charW = priority >= 2 ? 8.2 : 5.6; // short labels; group letter-spaced
+      const pad = priority >= 2 ? 12 : 14; // r18: wider cull so text never stacks
       const w = Math.max(28, (want.text || '').length * charW);
       const h = priority >= 2 ? 16 : 14;
       const minY = toolbarBottomPx() + 8;
@@ -1390,11 +1574,13 @@
         if (clash) continue;
         placedBoxes.push(box);
         const el = makeEl();
+        clearTimeout(el._hideT);
         el.style.left = `${x}px`;
         el.style.top = `${y}px`;
-        el.style.opacity = String(want.opacity);
         el.style.visibility = 'visible';
         el.classList.add('is-on');
+        // Opacity from LOD scale — CSS 0.5s transition smooths (no 0→1 pop)
+        el.style.opacity = String(want.opacity);
         return el;
       }
       // Last resort for required group labels: keep searching wider offsets (no overlap)
@@ -1707,20 +1893,28 @@
     document.body.classList.toggle('wchev-hidden', hide);
   }
 
-  function zoomAtScreen(clientX, clientY, nextZoom) {
+  function zoomAtScreen(clientX, clientY, nextZoom, opts) {
+    const immediate = !!(opts && opts.immediate) || reduceMotion;
     const u = usable();
     const ox = u.cx;
     const oy = u.cy;
     const zn = clampZoom(nextZoom);
-    // Keep world point under cursor stable (zoom-to-cursor)
-    const wx = (clientX - ox) / zoom - camX;
-    const wy = (clientY - oy) / zoom - camY;
-    zoom = zn;
+    // Pivot from current rendered zoom (skilltree scaleT ease 0.13 / wheel 0.11)
+    const zBase = Math.max(zoom, 1e-6);
+    const wx = (clientX - ox) / zBase - camX;
+    const wy = (clientY - oy) / zBase - camY;
     targetZoom = zn;
-    camX = (clientX - ox) / zn - wx;
-    camY = (clientY - oy) / zn - wy;
-    tCamX = camX;
-    tCamY = camY;
+    tCamX = (clientX - ox) / zn - wx;
+    tCamY = (clientY - oy) / zn - wy;
+    lastWheelSX = clientX;
+    lastWheelSY = clientY;
+    zoomPivot = { sx: clientX, sy: clientY, wx, wy };
+    if (immediate) {
+      zoom = zn;
+      camX = tCamX;
+      camY = tCamY;
+      zoomPivot = null;
+    }
     clampPanToContent();
   }
 
@@ -1755,12 +1949,17 @@
       wheelA = wheelT;
     }
 
-    // Hover dim — time-based ease over HOVER_FADE_MS (ref 350ms)
-    if (mapState === 'sky' || mapState === 'aligning') {
+    // Hover / dive dim — time-based ease (ref 350ms; dive fades others to 0)
+    if (mapState === 'sky' || mapState === 'aligning' || mapState === 'diving') {
       const k = reduceMotion ? 1 : (1 - Math.pow(0.05, dt / HOVER_FADE_MS));
       CATS.forEach((cat) => {
         let target = 1;
-        if (hoverCat) target = cat.id === hoverCat ? 1 : DIM_OTHERS;
+        if (mapState === 'diving' || mapState === 'aligning') {
+          const fid = (morph && morph.focusId) || hoverCat;
+          if (fid) target = cat.id === fid ? 1 : 0;
+        } else if (hoverCat) {
+          target = cat.id === hoverCat ? 1 : DIM_OTHERS;
+        }
         const cur = hoverAlpha[cat.id] ?? 1;
         hoverAlpha[cat.id] = cur + (target - cur) * k;
         if (Math.abs(hoverAlpha[cat.id] - target) < 0.004) hoverAlpha[cat.id] = target;
@@ -1787,16 +1986,15 @@
           morph = null;
           clearPointerHover();
           // Drop overview cat titles; node labels re-derive next frame
-          labelEls.forEach((el) => hideDomLabel(el));
+          labelEls.forEach((el) => hideDomLabel(el, true));
           const cat = CATS.find((c) => c.id === focusCat);
           if (cat) {
             focusBar.hidden = false;
             focusTitle.textContent = cat.label;
-            focusSub.textContent = cat.subtitle;
+            focusSub.textContent = catSubline(cat);
             focusTitle.style.color = cat.color;
           }
-          // focusLayout already built at morph start — do not rebuild (avoids flash)
-          setTimeout(() => setTransitioning(false), 40);
+          setTimeout(() => setTransitioning(false), Math.max(40, TRANSITIONING_MS - DIVE_MORPH_MS));
         } else if (mapState === 'rising') {
           zoom = targetZoom = ct.zoom;
           camX = tCamX = ct.camX;
@@ -1814,10 +2012,20 @@
         }
       }
     } else {
-      // Normal camera ease (not during morph)
+      // Normal camera ease (skilltree EASE_CAM 0.13) — continuous, no steppy jumps
       zoom += (targetZoom - zoom) * ease;
-      camX += (tCamX - camX) * ease;
-      camY += (tCamY - camY) * ease;
+      if (zoomPivot && Math.abs(targetZoom - zoom) > 0.0008) {
+        const u = usable();
+        const { sx, sy, wx, wy } = zoomPivot;
+        camX = (sx - u.cx) / Math.max(zoom, 1e-6) - wx;
+        camY = (sy - u.cy) / Math.max(zoom, 1e-6) - wy;
+        tCamX = (sx - u.cx) / Math.max(targetZoom, 1e-6) - wx;
+        tCamY = (sy - u.cy) / Math.max(targetZoom, 1e-6) - wy;
+      } else {
+        zoomPivot = null;
+        camX += (tCamX - camX) * ease;
+        camY += (tCamY - camY) * ease;
+      }
     }
     clampPanSoft();
     syncZoomPct();
@@ -1884,7 +2092,7 @@
         .map((n) => ({ ...n }));
 
       // Build TO (fan) + camera targets WITHOUT snapping current camera
-      rebuildFocusLayout(id, { setCamera: true });
+      rebuildFocusLayout(id, { setCamera: true, diveZoom: true });
       const to = snapshotLayout(focusLayout.nodes, focusLayout.links);
       const camFrom = { zoom, camX, camY };
       const camTo = { zoom: targetZoom, camX: tCamX, camY: tCamY };
@@ -1897,10 +2105,10 @@
       });
     };
 
-    // Soft dim toward focus during align (eased by hover tick)
+    // Soft dim toward focus during align — others fade out (skilltree .dim)
     hoverCat = id;
     CATS.forEach((c) => {
-      if (c.id !== id) hoverAlpha[c.id] = Math.min(hoverAlpha[c.id] ?? 1, 0.55);
+      if (c.id !== id) hoverAlpha[c.id] = Math.min(hoverAlpha[c.id] ?? 1, 0.12);
     });
     const hub = layoutNodes.find((n) => n.id === id);
     if (hub) {
@@ -1985,7 +2193,7 @@
       beginMorph({ dir: 1, focusId: next.id, from, to, duration: 600 });
       mapState = 'diving'; // reuse morph completion → fan
       focusTitle.textContent = next.label;
-      focusSub.textContent = next.subtitle;
+      focusSub.textContent = catSubline(next);
       focusTitle.style.color = next.color;
       return;
     }
@@ -2162,12 +2370,40 @@
     return hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
   }
 
+
+  function ensureHoverTip() {
+    let el = document.getElementById('hover-tip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'hover-tip';
+      el.className = 'hover-tip';
+      el.hidden = true;
+      mapView.appendChild(el);
+    }
+    return el;
+  }
+  function showHoverTip(n, sx, sy) {
+    const el = ensureHoverTip();
+    if (!n || (!n.alert && n.kind === 'category')) { el.hidden = true; return; }
+    const title = n.label || n.alert?.title || '';
+    const sub = n.alert ? `${n.alert.state || ''} · ${n.alert.subtype || ''}`.replace(/^ · | · $/g, '') : (n.kind || '');
+    el.innerHTML = `<div class="ht-name">${escapeHtml(title)}</div><div class="ht-sub">${escapeHtml(sub)}</div>`;
+    el.style.left = `${Math.min(W - 180, Math.max(12, sx + 14))}px`;
+    el.style.top = `${Math.min(H - 70, Math.max(60, sy - 10))}px`;
+    el.hidden = false;
+  }
+  function hideHoverTip() {
+    const el = document.getElementById('hover-tip');
+    if (el) el.hidden = true;
+  }
+
   function setHoverFromPointer(lx, ly) {
-    if (mapState !== 'sky' && mapState !== 'fan') return;
+    if (mapState !== 'sky' && mapState !== 'fan') { hideHoverTip(); return; }
     const hit = pick(lx, ly);
     if (!hit || hit.kind === 'core') {
       hoverNodeId = null;
       if (mapState === 'sky') hoverCat = null;
+      hideHoverTip();
       canvas.style.cursor = dragging ? 'grabbing' : 'grab';
       return;
     }
@@ -2175,13 +2411,16 @@
       // Ref: whole department hover only (no per-node path)
       hoverCat = hit.ref?.catId || (hit.kind === 'category' ? (hit.ref?.id || hit.id) : null);
       hoverNodeId = null;
+      hideHoverTip();
       canvas.style.cursor = hoverCat ? 'pointer' : 'grab';
       return;
     }
-    // Fan: hover scales node only (ref CSS); no chain fade on hover
+    // Fan: hover scales node + small info card (ref 0:16 / 0:23)
     hoverCat = null;
     hoverNodeId = hit.ref?.id || hit.id;
     canvas.style.cursor = 'pointer';
+    if (hit.ref && hit.kind !== 'category') showHoverTip(hit.ref, lx, ly);
+    else hideHoverTip();
   }
 
   function setHoverCat(id) {
@@ -2539,15 +2778,18 @@
     getTransform: () => ({ zoom, camX, camY, tCamX, tCamY, targetZoom, wheelA, wheelT }),
     interactionConstants: () => ({
       EASE_CAM, EASE_WHEEL, EASE_HOVER: 1 - Math.pow(0.05, 16.67 / HOVER_FADE_MS),
-      HOVER_FADE_MS, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE,
+      HOVER_FADE_MS, LABEL_FADE_MS, DIM_OTHERS, NODE_FADED, HOVER_NODE_SCALE, HOVER_CAT_SCALE,
       DRAG_CLICK_CANCEL, WHEEL_ZOOM_EXP, ZOOM_STEP_IN, ZOOM_STEP_OUT,
       Z_FAN_MIN, Z_FAN_MAX, Z_SKY_MIN, Z_SKY_MAX, RISE_SCALE, FAN_SPAN_DEG: 182, R0_FAN, R_BASE, R_STEP,
       LOD_GROUP_IN, LOD_GROUP_FULL, LOD_NODE_IN, LOD_NODE_FULL,
       SETTLE_MS, ARROW_FADE_ZOOM, MAX_VIEW_EMPTY,
       plainWheelZooms: true, scrollNeverRotatesDial: true,
-      DIVE_ALIGN_MS, DIVE_MORPH_MS, DIVE_SWAP_MS: DIVE_MORPH_MS, RISE_MS, W_STEP, N,
+      DIVE_ALIGN_MS, DIVE_MORPH_MS, DIVE_SWAP_MS, DIVE_ZOOM_TARGET, TRANSITIONING_MS, RISE_MS, W_STEP, N,
+      STROKE_SPOKE, STROKE_SPOKE_OP, STROKE_BRANCH, JDOT_R, ROOTB_R, GRID_STEP, GRID_ALPHA,
       WHEEL_FRICTION, FLICK_THRESH, fanInertia: false, skyDial: true, morphDive: true,
       dialCoast: true, cameraSettle: true, denseGroupForks: true,
+      aliveMotion: true, pathParticles: true, organicCore: true, labelFade: true,
+      particleCount: () => flowParticles.length,
     }),
     getMorphProgress: () => (morph ? morphProgress() : (mapState === 'fan' || mapState === 'sky' ? (mapState === 'fan' ? 1 : 0) : 0)),
     getMapState: () => mapState,
@@ -2618,21 +2860,21 @@
       const allowCat = catLod > 0.04 && groupLodNow < 0.88;
       const allowGroup = (inSky && groupLodNow > 0.02) || inFan;
       const allowNode = (inSky && lodAlpha(zoom, LOD_NODE_IN, LOD_NODE_FULL) > 0.02) || inFan;
+      // Intentional lit = is-on + style.opacity (ignore CSS fade lag for orphan detection)
+      const intentionallyLit = (el) => {
+        if (!el.classList.contains('is-on')) return false;
+        const intended = parseFloat(el.style.opacity);
+        if (!Number.isNaN(intended)) return intended > 0.05;
+        return Number(getComputedStyle(el).opacity) > 0.05;
+      };
       labelLayer.querySelectorAll('.cat-label').forEach((el) => {
-        const st = getComputedStyle(el);
-        const lit = Number(st.opacity) > 0.05 && st.visibility !== 'hidden';
-        if (lit && !allowCat) out.push({ kind: 'cat', id: el.dataset.id || '' });
+        if (intentionallyLit(el) && !allowCat) out.push({ kind: 'cat', id: el.dataset.id || '' });
       });
       labelLayer.querySelectorAll('.group-label').forEach((el) => {
-        const st = getComputedStyle(el);
-        const lit = Number(st.opacity) > 0.05 && st.visibility !== 'hidden';
-        if (lit && !allowGroup) out.push({ kind: 'group', id: el.dataset.id || '' });
+        if (intentionallyLit(el) && !allowGroup) out.push({ kind: 'group', id: el.dataset.id || '' });
       });
       labelLayer.querySelectorAll('.node-label').forEach((el) => {
-        const st = getComputedStyle(el);
-        const lit = el.classList.contains('is-on')
-          || (Number(st.opacity) > 0.05 && st.visibility !== 'hidden');
-        if (lit && !allowNode) out.push({ kind: 'node', id: el.dataset.id || '' });
+        if (intentionallyLit(el) && !allowNode) out.push({ kind: 'node', id: el.dataset.id || '' });
       });
       return out;
     },
@@ -2691,7 +2933,23 @@
       });
       return out;
     },
-    settleNow: () => settleCameraTowardCluster(lastWheelSX || W / 2, lastWheelSY || H / 2),
+    settleNow: () => {
+      zoomPivot = null;
+      zoom = targetZoom;
+      camX = tCamX;
+      camY = tCamY;
+      settleCameraTowardCluster(lastWheelSX || W / 2, lastWheelSY || H / 2);
+    },
+    particleCount: () => flowParticles.length,
+    sampleLabelOpacities: () => {
+      const out = [];
+      labelLayer.querySelectorAll('.cat-label, .group-label, .node-label').forEach((el) => {
+        const op = parseFloat(getComputedStyle(el).opacity || '0');
+        if (el.style.visibility === 'hidden' && op < 0.02) return;
+        out.push({ id: el.dataset.id || el.className, op, cls: el.className });
+      });
+      return out;
+    },
     wchevOpacity: () => {
       const el = document.getElementById('wchev-l');
       return el ? Number(getComputedStyle(el).opacity) : 0;
