@@ -18,13 +18,14 @@ mkdirSync(OUT, { recursive: true });
 
 async function waitMap(page) {
   const bust = Date.now();
-  await page.goto(`${BASE}/alerts.html?r17=1&_=${bust}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/alerts.html?v=19&_=${bust}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.body.classList.contains('map-ready')
     && window.LEET_ALERTS_MAP?.getMapState() === 'sky', null, { timeout: 15000 });
   await page.waitForFunction(() => {
     const t = window.LEET_ALERTS_MAP?.interactionConstants?.();
-    return t && t.plainWheelZooms && t.denseGroupForks && t.cameraSettle;
+    return t && t.plainWheelZooms && t.sparseOverview && t.cameraSettle;
   }, null, { timeout: 5000 });
+  await page.evaluate(() => window.LEET_ALERTS_MAP.setIdleRotate?.(false));
   await page.waitForTimeout(400);
 }
 
@@ -41,7 +42,10 @@ async function ensureSky(page) {
     await page.waitForTimeout(100);
   }
   await page.waitForFunction(() => window.LEET_ALERTS_MAP.getMapState() === 'sky', null, { timeout: 8000 });
-  await page.evaluate(() => window.LEET_ALERTS_MAP.recenter());
+  await page.evaluate(() => {
+    window.LEET_ALERTS_MAP.setIdleRotate?.(false);
+    window.LEET_ALERTS_MAP.recenter();
+  });
   await page.waitForTimeout(250);
 }
 
@@ -93,8 +97,8 @@ async function runSuite(browserType, name, viewport) {
       }));
     });
     results.push({
-      name: `${tag}/dense-spokes-7-10`,
-      ok: spokes.every((s) => s.n >= 7 && s.n <= 10),
+      name: `${tag}/sparse-spokes-3-4`,
+      ok: spokes.every((s) => s.n >= 3 && s.n <= 4),
       spokes,
     });
 

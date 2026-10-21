@@ -26,6 +26,7 @@ async function waitMap(page) {
     const t = window.LEET_ALERTS_MAP?.interactionConstants?.();
     return t && t.plainWheelZooms && t.aliveMotion && t.labelFade && t.pathParticles;
   }, null, { timeout: 5000 });
+  await page.evaluate(() => window.LEET_ALERTS_MAP.setIdleRotate?.(false));
   await page.waitForTimeout(400);
 }
 
@@ -42,7 +43,10 @@ async function ensureSky(page) {
     await page.waitForTimeout(100);
   }
   await page.waitForFunction(() => window.LEET_ALERTS_MAP.getMapState() === 'sky', null, { timeout: 8000 });
-  await page.evaluate(() => window.LEET_ALERTS_MAP.recenter());
+  await page.evaluate(() => {
+    window.LEET_ALERTS_MAP.setIdleRotate?.(false);
+    window.LEET_ALERTS_MAP.recenter();
+  });
   await page.waitForTimeout(250);
 }
 

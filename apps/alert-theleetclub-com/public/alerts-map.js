@@ -20,10 +20,15 @@
   // Interaction constants from skilltree INTERACTION-NOTES (ref is source of truth)
   const EASE_CAM = 0.13;
   const EASE_WHEEL = 0.11;
-  const DIM_OTHERS = 0.18;
+  const DIM_OTHERS = 0.18; // skilltree #sky:has(.mini:hover) .mini:not(:hover)
   const NODE_FADED = 0.25;
   const HOVER_NODE_SCALE = 1.12; // skilltree .node:hover scale(1.12)
   const HOVER_CAT_SCALE = 1.1; // category icon brighten/scale on hover (~1.1×)
+  // Overview leaf = solid ivory fill (default .jdot); hub = hollow .rootb
+  const LEAF_R = 2.15; // ~solid bright dot (buildSky joint r≈1.8–2.4 at display scale)
+  const LEAF_HOT_R = 2.6;
+  const GROUP_DOT_R = 4; // mini fork fill r=4
+  const IDLE_ROT_DEG_PER_S = 4; // video slow CW; map.html has no idle dial (hub hspin only)
   const FEATURED_SCALE = 1.05;
   const DRAG_CLICK_CANCEL = 8;
   const WHEEL_ZOOM_EXP = 0.0018; // plain-scroll feel (marketing video: smooth continuous)
@@ -56,15 +61,15 @@
   const DIVE_MORPH_MS = 1200; // ~1.2s ease-in-out (video + user r18)
   const DIVE_ZOOM_TARGET = 4.8; // ~4–6× overview
   const TRANSITIONING_MS = 1250;
-  const RISE_MS = 700;
+  const RISE_MS = 900; // reverse dive ~700–1000ms
   const HOVER_FADE_MS = 350; // ref CSS transitionMs
   // Stroke / node constants from skilltree map.html
   const STROKE_SPOKE = 1.5;
   const STROKE_SPOKE_OP = 0.14;
   const STROKE_BRANCH = 2;
   const STROKE_BRANCH_OP = 0.4;
-  const JDOT_R = 7.5; // 15×15px hollow jdot
-  const ROOTB_R = 22; // category ring (sky); fan hub larger
+  const JDOT_R = 7.5; // 15px hit/fan leaf base; drawn solid ivory (not hollow)
+  const ROOTB_R = 26; // category hollow ring (sky); fan group rings larger
   const COPPER = '#C4A574';
   const GRID_STEP = 14;
   const GRID_ALPHA = 0.035; // softer than stark .05 canvas dots (CSS uses .05; we under-paint)
@@ -91,6 +96,8 @@
   let lastWheelSX = 0;
   let lastWheelSY = 0;
   let zoomPivot = null; // {sx,sy,wx,wy} while wheel-zoom eases
+  let lastInteractTs = 0;
+  let idleRotateOn = true;
   let wheelCoasting = false;
   let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
@@ -124,6 +131,7 @@
   const labelEls = new Map();
   const nodeLabelEls = new Map();
   const groupLabelEls = new Map();
+  const labelOpSmooth = new Map(); // id → displayed opacity (0.5s ease)
   const ptrs = new Map();
   let pinchD0 = 0, pinchS0 = 1, pinchRatio = 1, pinchAX = 0, pinchAY = 0;
 
@@ -144,10 +152,11 @@
   function shortNodeLabel(site, leaf) {
     const s = String(site || '').trim().split(/\s+/)[0] || '';
     let m = String(leaf || '').trim();
-    m = m.replace(/^LT-KW-/i, '');
-    if (m.length > 8) m = m.slice(-5);
+    // Keep machine ids intact (avoid "KU · ering"); only shorten long LT-KW-#### pads
+    if (/^LT-KW-/i.test(m)) m = m.replace(/^LT-KW-/i, '');
+    if (m.length > 12) m = m.slice(0, 12);
     if (s && m) return s + ' · ' + m;
-    return (m || s || '·').slice(0, 14);
+    return (m || s || '·').slice(0, 18);
   }
 
   /** Category subline: lowercase descriptive (skilltree .wname .sb). */
@@ -232,20 +241,20 @@
 
   function computeOverviewGeom() {
     const m = Math.min(W, H);
-    const rHub = H * 0.19;
+    // r19: wider hub ring (ref_over) — more air between categories
+    const rHub = H * 0.235;
     const u = usable();
-    // Title centres: ≥40px below toolbar/toggle (r9 titlesClear)
     const TITLE_GAP = 40;
-    const topClear = toolbarBottomPx() + TITLE_GAP + 22; // + half title block
-    const botClear = 32;
+    const topClear = toolbarBottomPx() + TITLE_GAP + 28;
+    const botClear = 36;
     const rLabelMax = Math.min(u.cy - topClear, (H - botClear) - u.cy);
-    // Prefer ~1.05× hub chain length (ref gap mechanism); never eat title clearance
-    const minLabelGap = Math.max(80, H * 0.085);
-    const rTipPref = rHub + rHub * 1.05;
+    const minLabelGap = Math.max(88, H * 0.095);
+    // skilltree chain: r0=80 → Rmax=rb+3*rstep=314 on hub-local; longer spokes
+    const rTipPref = rHub + H * 0.28;
     const rTipMax = rLabelMax - minLabelGap;
-    const rTip = Math.max(rHub + rHub * 0.75, Math.min(rTipPref, rTipMax));
+    const rTip = Math.max(rHub + H * 0.20, Math.min(rTipPref, rTipMax));
     const rLabel = Math.min(rTip + minLabelGap, rLabelMax);
-    const rCore = m * 0.054; // keep r9 compact core
+    const rCore = m * 0.062;
     const segLen = H * 0.035;
     overviewGeom = { rHub, rTip, rLabel, rCore, segLen, titleGap: TITLE_GAP };
     return overviewGeom;
@@ -284,9 +293,8 @@
 
   /**
    * Build one department fan in LOCAL coords (hub at 0,0, outward +Y).
-   * r17: 3 subtitle groups; each group = short trunk → fork, then 2–4 job chains
-   * (r10 density ≈ 7–10 spokes / dept, straight-spoke zig-zag).
-   * layoutWheel() places these on the sky dial via wheelA.
+   * r19 / skilltree buildSky mini: SPAN 140°, 3 functions (= groups) = 3 chains,
+   * r0=80, rb=146, rstep=56 → Rmax=314; solid leaf dots; straight zig-zag.
    */
   function buildSectorLocal(cat, catIndex) {
     const { rHub, rTip } = overviewGeom;
@@ -300,28 +308,16 @@
 
     nodes.push({
       id: cat.id, kind: 'category', label: cat.label, color, icon: cat.icon,
-      alert: null, catId: cat.id, lx: 0, ly: 0, r: 8, depth: 0, hot: false,
+      alert: null, catId: cat.id, lx: 0, ly: 0, r: ROOTB_R, depth: 0, hot: false,
       chain: -1, morphKey: `${cat.id}:hub`,
     });
 
+    // Exact skilltree mini constants
     const SPAN = (140 * Math.PI) / 180;
-    const RmaxRef = 146 + 3 * 56;
-    const scale = (rTip - rHub) / RmaxRef;
-    const rTrunk = 78 * scale; // short shared trunk from hub → group fork (visible cluster)
-    const rStart = 118 * scale; // r18: slightly wider rings (ref spacing)
-    const rEnd = RmaxRef * scale * 1.08;
-    const maxJoints = 5;
-    const rstep = (rEnd - rStart) / (maxJoints - 1);
-
-    // 3 chains per group → 9 spokes (r10 density); nudge 8–10 via hash
-    const plans = groups.map((grp, gi) => ({
-      group: grp,
-      nChains: 3,
-    }));
-    let totalSpokes = 9;
-    const nudge = Math.floor(hash01(cat.id.length * 13 + catIndex * 2.1) * 3) - 1; // -1..1
-    if (nudge === 1) { plans[0].nChains = 4; totalSpokes = 10; }
-    if (nudge === -1) { plans[2].nChains = 2; totalSpokes = 8; }
+    const r0 = 80, rb = 146, rstep = 56;
+    const Rmax = rb + 3 * rstep; // 314
+    const scale = (rTip - rHub) / Rmax;
+    const nf = Math.max(1, groups.length); // 3 groups → 3 chains (sparse like ref)
 
     const SITE_PAD = [
       'Salmiya', 'Hawally', 'Sharq', 'Jabriya', 'Salwa', 'Rumaithiya',
@@ -336,8 +332,7 @@
       seenTips.add(key);
       tipPool.push(t);
     });
-    const need = totalSpokes * 5;
-    // Pad with UNIQUE site·machine pairs (never repeat the same label in a fan)
+    const need = nf * 4;
     while (tipPool.length < need) {
       const i = tipPool.length;
       tipPool.push({
@@ -349,82 +344,73 @@
       });
     }
     let tipCursor = 0;
-    const zigAng = Math.min((SPAN / Math.max(1, totalSpokes)) * 0.22, 0.075);
     const usedNodeLabels = new Set();
+    let cursor = -SPAN / 2;
 
-    // Even spoke angles across SPAN (r10), clustered into adjacent group slices
-    const spokeAngles = [];
-    for (let fi = 0; fi < totalSpokes; fi++) {
-      spokeAngles.push(totalSpokes === 1 ? 0 : -SPAN / 2 + (SPAN * fi) / (totalSpokes - 1));
-    }
-
-    let spokeCursor = 0;
-    let chainGlobal = 0;
-    plans.forEach((plan, planIndex) => {
-      const nCh = plan.nChains;
-      const slice = spokeAngles.slice(spokeCursor, spokeCursor + nCh);
-      spokeCursor += nCh;
-      const aGroup = slice.reduce((s, a) => s + a, 0) / Math.max(1, slice.length);
-      const groupId = plan.group.id;
-      const glx = rTrunk * Math.sin(aGroup);
-      const gly = rTrunk * Math.cos(aGroup);
+    groups.forEach((grp, planIndex) => {
+      const span = SPAN / nf;
+      const aC = cursor + span / 2;
+      const groupId = grp.id;
+      // Fork at r0 (skilltree)
+      const glx = (r0 * scale) * Math.sin(aC);
+      const gly = (r0 * scale) * Math.cos(aC);
       nodes.push({
-        id: groupId, kind: 'group', label: plan.group.label, color, icon: null,
-        alert: null, catId: cat.id, lx: glx, ly: gly, r: 3.2, depth: 1,
-        hot: false, tint: true, chain: chainGlobal, groupIndex: planIndex,
+        id: groupId, kind: 'group', label: grp.label, color, icon: null,
+        alert: null, catId: cat.id, lx: glx, ly: gly, r: GROUP_DOT_R,
+        depth: 1, hot: false, tint: true, chain: planIndex, groupIndex: planIndex,
         morphKey: `${cat.id}:${groupId}:fork`,
-        groupLabel: plan.group.label,
+        groupLabel: grp.label,
       });
       links.push({
         s: cat.id, t: groupId, color, depth: 1, straight: true,
-        chain: chainGlobal, morphKey: `${cat.id}:L:${groupId}:trunk`,
+        chain: planIndex, morphKey: `${cat.id}:L:${groupId}:trunk`,
       });
 
-      for (let ci = 0; ci < nCh; ci++) {
-        const aC = slice[ci];
-        const fi = chainGlobal++;
-        const nJobs = 3 + Math.floor(hash01(cat.id.length * 17 + fi * 3.7 + catIndex) * 3); // 3–5
-        const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
-        tipCursor += nJobs;
-        let prevId = groupId;
-        jobs.forEach((job, ji) => {
-          const r = rStart + ji * rstep;
-          const sign = (ji % 2 ? 1 : -1) * (ji ? 1 : 0.45);
-          const a = aC + zigAng * sign;
-          const lx = r * Math.sin(a);
-          const ly = r * Math.cos(a);
-          const id = `${cat.id}:n${seq++}`;
-          const site = job.site || '';
-          const leaf = job.label || '·';
-          let nodeLabel = shortNodeLabel(site, leaf);
-          if (usedNodeLabels.has(nodeLabel)) {
-            const SITE_PAD = [
-              'Salmiya', 'Hawally', 'Sharq', 'Jabriya', 'Salwa', 'Rumaithiya',
-              'Bayan', 'Mishref', 'Fahaheel', 'Mahboula', 'Egaila', 'Surra',
-            ];
-            nodeLabel = shortNodeLabel(SITE_PAD[seq % SITE_PAD.length], `LT-KW-${String(1100 + seq * 19).padStart(4, '0')}`);
-          }
-          usedNodeLabels.add(nodeLabel);
-          nodes.push({
-            id, kind: 'machine',
-            label: nodeLabel,
-            color, icon: null, alert: job.alert || null,
-            catId: cat.id, lx, ly, r: 2.4, depth: 2 + ji,
-            hot: !!job.hot, tint: ji === 0,
-            chain: fi, morphKey: `${cat.id}:c${fi}:j${ji + 1}`,
-            groupId,
-          });
-          links.push({
-            s: prevId, t: id, color, depth: 2 + ji, straight: true,
-            chain: fi, morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`,
-          });
-          prevId = id;
+      const nJobs = 3 + (hash01(cat.id.length * 17 + planIndex * 3.7 + catIndex) > 0.55 ? 1 : 0); // 3–4
+      const jobs = tipPool.slice(tipCursor, tipCursor + nJobs);
+      tipCursor += nJobs;
+      let prevId = groupId;
+      let plx = glx, ply = gly;
+      jobs.forEach((job, ji) => {
+        const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
+        const r = (rb + (nJobs > 1 ? ji * (Rmax - rb) / (nJobs - 1) : 0)) * scale;
+        const a = aC + zig;
+        const lx = r * Math.sin(a);
+        const ly = r * Math.cos(a);
+        const id = `${cat.id}:n${seq++}`;
+        const site = job.site || '';
+        const leaf = job.label || '·';
+        let nodeLabel = shortNodeLabel(site, leaf);
+        let guard = 0;
+        while (usedNodeLabels.has(nodeLabel) && guard < 40) {
+          guard += 1;
+          nodeLabel = shortNodeLabel(
+            SITE_PAD[(seq + guard) % SITE_PAD.length],
+            `LT-KW-${String(1200 + seq * 23 + guard * 7).padStart(4, '0')}`,
+          );
+        }
+        usedNodeLabels.add(nodeLabel);
+        nodes.push({
+          id, kind: 'machine',
+          label: nodeLabel,
+          color, icon: null, alert: job.alert || null,
+          catId: cat.id, lx, ly, r: LEAF_R, depth: 2 + ji,
+          hot: !!job.hot, tint: false,
+          chain: planIndex, morphKey: `${cat.id}:c${planIndex}:j${ji + 1}`,
+          groupId,
         });
-      }
+        links.push({
+          s: prevId, t: id, color, depth: 2 + ji, straight: true,
+          chain: planIndex, morphKey: `${cat.id}:L:c${planIndex}:j${ji + 1}`,
+          x0: plx, y0: ply, x1: lx, y1: ly,
+        });
+        prevId = id; plx = lx; ply = ly;
+      });
+      cursor += span;
     });
     return {
       cat, catIndex, nodes, links, rHub, groups,
-      spokeCount: totalSpokes,
+      spokeCount: nf,
     };
   }
 
@@ -584,122 +570,118 @@
       if (n.kind === 'machine' || (n.alert && (!n.children || !n.children.length))) tips.push(n);
     });
     const tipPool = tips.slice();
-    // r17: each group forks into 2–3 job chains (dense fan parity with overview)
-    const plans = groups.map((grp, gi) => ({
-      group: grp,
-      nChains: 2 + Math.floor(hash01(cat.id.length * 9 + gi * 4.1) * 2), // 2–3
-    }));
-    let tipCursor = 0;
-    const chainSpecs = [];
-    plans.forEach((plan) => {
-      const share = Math.max(1, Math.ceil(tipPool.length / Math.max(1, plans.length)));
-      const pool = tipPool.slice(tipCursor, tipCursor + share);
-      tipCursor += share;
-      const per = Math.max(1, Math.ceil(Math.max(pool.length, plan.nChains) / plan.nChains));
-      for (let ci = 0; ci < plan.nChains; ci++) {
-        let jobs = pool.slice(ci * per, ci * per + Math.min(5, per));
-        if (!jobs.length) {
-          const pad = tipPool[(ci + tipCursor) % Math.max(1, tipPool.length)];
-          if (pad) jobs = [pad];
+    const SITE_PAD = [
+      'Salmiya', 'Hawally', 'Sharq', 'Jabriya', 'Salwa', 'Rumaithiya',
+      'Bayan', 'Mishref', 'Fahaheel', 'Mahboula', 'Egaila', 'Surra',
+    ];
+    const usedLabels = new Set();
+    const takeJobs = (n, start) => {
+      const out = [];
+      let i = start;
+      while (out.length < n) {
+        let job = tipPool[i % Math.max(1, tipPool.length)];
+        if (!tipPool.length) {
+          job = {
+            id: `${catId}:pad${i}`, site: SITE_PAD[i % SITE_PAD.length],
+            label: `LT-KW-${String(2000 + i * 13).padStart(4, '0')}`, alert: null,
+          };
         }
-        chainSpecs.push({ group: plan.group, jobs });
+        i += 1;
+        let label = shortNodeLabel(job.site || job.alert?.machine?.site || '', job.label || '·');
+        let g = 0;
+        while (usedLabels.has(label) && g < 50) {
+          g += 1;
+          label = shortNodeLabel(SITE_PAD[(i + g) % SITE_PAD.length], `LT-KW-${String(2100 + i * 17 + g).padStart(4, '0')}`);
+        }
+        usedLabels.add(label);
+        out.push({ ...job, _label: label });
       }
-    });
+      return { jobs: out, next: i };
+    };
 
-    const totalJobs = Math.max(1, chainSpecs.reduce((s, c) => s + Math.max(1, c.jobs.length), 0));
-    const P = (r, a) => [r * Math.sin(a), -r * Math.cos(a)];
     const u = usable();
-    // Compact world so DIVE_ZOOM_TARGET (~4.8×) frames the fan (video + skilltree feel)
-    const fitBase = Math.min(u.w / 1700, u.h / 1500);
-    const fit = (fitBase / DIVE_ZOOM_TARGET) * 1.08;
-    const sR0 = R0_FAN * fit;
-    const sBase = R_BASE * fit * 1.06;
-    const sStep = R_STEP * fit * 1.12; // r18: wider rings → less label overlap
-    const sTrunk = sR0 * 0.42;
+    // World units sized so at DIVE_ZOOM_TARGET the 3 rings read as a clear row (ref_sales)
+    // Aim ~90–110px between ring centres at zoom≈4.8 → gap≈20–23 world
+    const ringGap = 22;
+    const ringR = 5.5;
+    const chainLen0 = 48;
+    const chainStep = 22;
+    const FAN = 100 * Math.PI / 180; // upward fan from each ring
 
+    // Category anchor under the row (title lives in focus-bar; node is back-target)
     nodes.push({
       id: cat.id, kind: 'category', label: cat.label, color: cat.color, icon: cat.icon,
-      alert: null, catId: cat.id, x: 0, y: 0, r: 20, depth: 0, hot: false,
+      alert: null, catId: cat.id, x: 0, y: ringGap * 0.55, r: ringR * 0.9, depth: 0, hot: false,
       chain: -1, morphKey: `${cat.id}:hub`,
     });
-    links.push({ s: '__core__', t: cat.id, color: cat.color, depth: 0, spine: true, morphKey: `${cat.id}:L:core` });
 
-    // Place forks first (one per group), then spokes from each fork
-    const byGroup = new Map();
-    chainSpecs.forEach((ch, fi) => {
-      const list = byGroup.get(ch.group.id) || [];
-      list.push({ ch, fi });
-      byGroup.set(ch.group.id, list);
-    });
-
-    let cursor = -FAN_SPAN / 2;
-    let maxR = sR0;
-    byGroup.forEach((list, groupId) => {
-      const nJobsGroup = list.reduce((s, x) => s + Math.max(1, x.ch.jobs.length), 0);
-      const groupSpan = FAN_SPAN * nJobsGroup / totalJobs;
-      const aGroup = cursor + groupSpan / 2;
-      const [ex, ey] = P(sTrunk, aGroup);
-      const grp = list[0].ch.group;
+    let tipCursor = 0;
+    let maxR = ringGap;
+    const ng = Math.max(1, groups.length);
+    groups.forEach((grp, gi) => {
+      const gx = (gi - (ng - 1) / 2) * ringGap;
+      const gy = 0;
+      const groupId = grp.id;
       nodes.push({
         id: groupId, kind: 'group', label: grp.label, color: cat.color,
-        icon: null, alert: null, catId: cat.id, x: ex, y: ey, r: 11,
-        depth: 1, hot: false, chain: list[0].fi, morphKey: `${cat.id}:${groupId}:fork`,
-        groupLabel: grp.label,
+        icon: cat.icon, alert: null, catId: cat.id, x: gx, y: gy, r: ringR,
+        depth: 1, hot: false, chain: gi, morphKey: `${cat.id}:${groupId}:fork`,
+        groupLabel: grp.label, groupIndex: gi, baseRow: true,
       });
       links.push({
-        s: cat.id, t: groupId, color: cat.color, depth: 1, chain: list[0].fi,
+        s: cat.id, t: groupId, color: cat.color, depth: 1, chain: gi, straight: true,
         morphKey: `${cat.id}:L:${groupId}:trunk`,
       });
 
-      let inner = cursor;
-      list.forEach(({ ch, fi }) => {
-        const nJobs = Math.max(1, ch.jobs.length);
-        const span = FAN_SPAN * nJobs / totalJobs;
-        const aC = inner + span / 2;
-        let px = ex, py = ey, prevId = groupId;
-        ch.jobs.forEach((job, ji) => {
-          const zig = (ji % 2 ? 1 : -1) * Math.min(span * 0.22, 0.075) * (ji ? 1 : 0.45);
-          const a = aC + zig;
-          const r = sBase + ji * sStep;
-          maxR = Math.max(maxR, r);
-          const [x, y] = P(r, a);
-          const id = job.id || `${cat.id}:f${fi}n${ji}`;
-          const mk = `${cat.id}:c${fi}:j${ji + 1}`;
-          const site = job.alert?.machine?.site || job.site || '';
-          const leaf = job.label || '·';
+      // 2 upward zig-zag chains per group ring
+      const nChains = 2;
+      const { jobs: pool, next } = takeJobs(nChains * 4, tipCursor);
+      tipCursor = next;
+      for (let ci = 0; ci < nChains; ci++) {
+        const a0 = -FAN / 2 + (FAN * (ci + 0.5)) / nChains; // upward-ish
+        // bias outward from center
+        const aBias = gx === 0 ? 0 : (gx > 0 ? 0.12 : -0.12);
+        let px = gx, py = gy, prevId = groupId;
+        const jobs = pool.slice(ci * 4, ci * 4 + 4);
+        jobs.forEach((job, ji) => {
+          const zig = (ji % 2 ? 1 : -1) * 0.07 * (ji ? 1 : 0.4);
+          const a = a0 + aBias + zig;
+          const r = chainLen0 + ji * chainStep;
+          const x = gx + r * Math.sin(a);
+          const y = gy - r * Math.cos(a); // up = -y
+          maxR = Math.max(maxR, Math.hypot(x, y));
+          const id = job.id || `${cat.id}:g${gi}c${ci}j${ji}`;
           nodes.push({
             id, kind: job.kind || 'machine',
-            label: shortNodeLabel(site, leaf),
+            label: job._label,
             color: cat.color,
-            icon: job.icon || null, alert: job.alert || null, catId: cat.id, x, y,
-            r: job.alert ? JDOT_R : JDOT_R * 0.85, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
-            chain: fi, morphKey: mk, groupId,
+            icon: null, alert: job.alert || null, catId: cat.id, x, y,
+            r: LEAF_R * 1.15, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
+            chain: gi * 10 + ci, morphKey: `${cat.id}:c${gi}_${ci}:j${ji + 1}`, groupId,
           });
           links.push({
-            s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: fi,
-            morphKey: `${cat.id}:L:c${fi}:j${ji + 1}`, x0: px, y0: py, x1: x, y1: y,
+            s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: gi * 10 + ci,
+            straight: true,
+            morphKey: `${cat.id}:L:c${gi}_${ci}:j${ji + 1}`, x0: px, y0: py, x1: x, y1: y,
           });
           px = x; py = y; prevId = id;
         });
-        inner += span;
-      });
-      cursor += groupSpan;
+      }
     });
 
     rebuildParentIndex(links);
 
     if (setCamera) {
-      // Fan world is pre-scaled for ~DIVE_ZOOM_TARGET framing
       targetZoom = clampZFan(DIVE_ZOOM_TARGET);
       tCamX = 0;
-      tCamY = maxR * 0.14;
+      // Frame the upward fan; base rings near bottom third
+      tCamY = maxR * 0.22;
     }
 
     focusLayout = { nodes, links, color: cat.color, cat, maxR };
     return focusLayout;
   }
 
-  /** After dive morph: fit fan so first rings fill the frame (skilltree fitCurrent). */
   function fitFanCamera() {
     if (!focusLayout) return;
     const u = usable();
@@ -936,15 +918,15 @@
   function hideDomLabel(el, instant) {
     if (!el) return;
     el.classList.remove('is-on');
-    el.style.opacity = '0';
+    el._opTarget = 0;
+    const lid = el.dataset.id;
     if (instant || reduceMotion) {
+      el.style.opacity = '0';
+      if (lid) labelOpSmooth.set(lid, 0);
       el.style.visibility = 'hidden';
       return;
     }
-    clearTimeout(el._hideT);
-    el._hideT = setTimeout(() => {
-      if (parseFloat(el.style.opacity || '0') < 0.04) el.style.visibility = 'hidden';
-    }, LABEL_FADE_MS + 40);
+    // smoothLabelOpacities eases to 0; visibility cleared when near 0
   }
 
   function clearPointerHover() {
@@ -1052,6 +1034,9 @@
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
+    // Keep centre web clear of top chrome
+    const minCy = toolbarBottomPx() + (overviewGeom.rCore || 40) + 8;
+    if (p.y < minCy) p.y = minCy;
     const coreR = focusCat ? 48 : (overviewGeom.rCore || Math.min(W, H) * 0.054);
     const scale = focusCat ? 1.1 : Math.max(0.85, Math.min(1.35, zoom));
     const colors = CATS.map((c) => c.color);
@@ -1317,20 +1302,19 @@
         ctx.stroke();
         return;
       }
-      const c = curvePts(a0.x, a0.y, a1.x, a1.y);
+      // r19: always straight segments (ref_sales / skilltree buildFan line())
       const col = L.color || '#e9e4d6';
-      // Soft glow
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
-      ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(col, 0.14 * op);
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
+      ctx.lineTo(a1.x, a1.y);
+      ctx.strokeStyle = hexAlpha(col, 0.12 * op);
+      ctx.lineWidth = 3.5;
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(a0.x, a0.y);
-      ctx.bezierCurveTo(c.c1x, c.c1y, c.c2x, c.c2y, a1.x, a1.y);
-      ctx.strokeStyle = hexAlpha(col, (focusCat || mapState === 'fan' ? STROKE_BRANCH_OP : 0.22) * op);
+      ctx.lineTo(a1.x, a1.y);
+      ctx.strokeStyle = hexAlpha(col, (focusCat || mapState === 'fan' ? 0.55 : 0.22) * op);
       ctx.lineWidth = STROKE_BRANCH;
       ctx.stroke();
     });
@@ -1408,112 +1392,90 @@
       const hoverBoost = (mapState === 'fan' && hoverNodeId === n.id) ? HOVER_NODE_SCALE
         : (isCat && catHover ? HOVER_CAT_SCALE
           : (featuredCatId && n.catId === featuredCatId && isCat ? FEATURED_SCALE : 1));
-      // Subtle pulse glow on nodes
-      const pulse = reduceMotion ? 1 : (0.92 + 0.08 * Math.sin(t * 1.4 + (n.x + n.y) * 0.01));
-      let r = (n.r + (selected ? 1.5 : 0)) * zScale * hoverBoost;
-      if (mapState === 'sky' && isCat) r = ROOTB_R * zScale * hoverBoost;
-      else if ((mapState === 'sky' || morph) && (n.kind === 'machine' || n.kind === 'site' || n.kind === 'group')) {
-        r = (n.kind === 'group' ? 5.5 : JDOT_R * (n.hot ? 1 : 0.75)) * zScale * hoverBoost;
-      }
+      const pulse = reduceMotion ? 1 : (0.96 + 0.04 * Math.sin(t * 1.2 + (n.x + n.y) * 0.01));
+      // Subtle per-node drift (canvas-space wobble)
+      const drift = (!reduceMotion && (mapState === 'sky' || mapState === 'fan'))
+        ? { x: 0.6 * Math.sin(t * 0.7 + n.x * 0.02), y: 0.6 * Math.cos(t * 0.55 + n.y * 0.02) }
+        : { x: 0, y: 0 };
+      const px = p.x + drift.x;
+      const py = p.y + drift.y;
+      let r = (n.r + (selected ? 1.2 : 0)) * zScale * hoverBoost;
+      if (isCat) r = (mapState === 'sky' ? ROOTB_R : ROOTB_R * 0.85) * zScale * hoverBoost;
+      else if (n.kind === 'group') r = (n.baseRow ? Math.max(14, n.r * zScale * 2.2) : (GROUP_DOT_R + 2) * zScale) * hoverBoost;
+      else r = (n.hot ? LEAF_HOT_R : LEAF_R) * zScale * Math.max(1, hoverBoost * 0.92);
 
-      if ((mapState === 'sky' || morph) && (n.kind === 'machine' || n.kind === 'site')) {
-        const lit = catHover;
-        // Hollow jdot (skilltree .jdot.dev): fill ~10% ivory, border 1.5px
+      if (n.kind === 'machine' || n.kind === 'site') {
+        // SOLID bright ivory/white dots (ref_over / default .jdot fill)
         const rr = r * pulse;
+        const lit = catHover || hoverNodeId === n.id;
         ctx.beginPath();
-        ctx.fillStyle = hexAlpha('#e9e4d6', (lit ? 0.18 : 0.08) * op);
-        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+        ctx.fillStyle = lit
+          ? hexAlpha(n.color, 0.92 * op)
+          : `rgba(245,243,238,${(n.hot ? 0.95 : 0.88) * op})`;
+        ctx.shadowColor = lit ? hexAlpha(n.color, 0.45) : 'rgba(233,228,214,0.25)';
+        ctx.shadowBlur = lit ? 6 : 2;
+        ctx.arc(px, py, rr, 0, Math.PI * 2);
         ctx.fill();
-        ctx.beginPath();
-        ctx.strokeStyle = hexAlpha(lit ? n.color : '#e9e4d6', (lit ? 0.85 : 0.55) * op);
-        ctx.lineWidth = 1.5;
-        ctx.shadowColor = hexAlpha(n.color, (lit ? 0.55 : 0.22) * op);
-        ctx.shadowBlur = lit ? 10 : 4;
-        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        ctx.stroke();
         ctx.shadowBlur = 0;
-        if (n.hot) {
-          ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, 0.85 * op);
-          ctx.arc(p.x, p.y, Math.max(1.2, rr * 0.28), 0, Math.PI * 2);
-          ctx.fill();
-        }
       } else if (isHub) {
-        // Category rootb / group ring — hollow with glowing outline
+        // Hollow glowing ring — category + group hubs only
         ctx.globalAlpha = op;
         ctx.beginPath();
         ctx.fillStyle = 'rgba(233,228,214,0.05)';
-        ctx.arc(p.x, p.y, r * pulse, 0, Math.PI * 2);
+        ctx.arc(px, py, r * pulse, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = isCat ? 1.5 : 1.35;
-        ctx.strokeStyle = hexAlpha(n.color, (isCat && catHover ? 0.95 : (isCat && mapState === 'sky' ? 0.65 : 0.85)));
-        ctx.shadowColor = hexAlpha(n.color, catHover || isCat ? 0.45 : 0.2);
-        ctx.shadowBlur = catHover ? 16 : (isCat ? 8 : 4);
+        ctx.lineWidth = isCat ? 1.5 : 1.5;
+        ctx.strokeStyle = hexAlpha(n.color, (isCat && catHover ? 0.95 : 0.75));
+        ctx.shadowColor = hexAlpha(n.color, catHover || isCat ? 0.45 : 0.25);
+        ctx.shadowBlur = catHover ? 14 : 7;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, r * pulse, 0, Math.PI * 2);
+        ctx.arc(px, py, r * pulse, 0, Math.PI * 2);
         ctx.stroke();
         ctx.shadowBlur = 0;
-        // Outer soft ring (rootb box-shadow 0 0 0 6px)
         if (isCat) {
           ctx.beginPath();
           ctx.strokeStyle = hexAlpha(n.color, 0.07 * op);
           ctx.lineWidth = 6;
-          ctx.arc(p.x, p.y, r * pulse + 3, 0, Math.PI * 2);
+          ctx.arc(px, py, r * pulse + 3, 0, Math.PI * 2);
           ctx.stroke();
         }
         if ((focusCat || mapState === 'fan') && isCat) {
-          drawBackChevron(p.x, p.y, n.color, r);
-        } else if (isCat) {
-          drawIcon(p.x, p.y, n.icon || 'unknown', n.color, catHover ? 1.05 : 0.9, isCat ? 0.95 : 0.85);
+          drawBackChevron(px, py, n.color, r);
+        } else if (isCat || (n.kind === 'group' && n.baseRow)) {
+          drawIcon(px, py, n.icon || 'unknown', n.color, catHover ? 1.05 : 0.85, 0.9);
         }
         ctx.globalAlpha = 1;
       } else {
-        // Fan leaves — hollow glowing outline (jdot)
-        const rr = Math.max(JDOT_R * 0.7, r) * pulse;
         ctx.beginPath();
-        ctx.fillStyle = hexAlpha('#e9e4d6', (n.hot ? 0.14 : 0.06) * op);
-        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(245,243,238,${0.88 * op})`;
+        ctx.arc(px, py, r * pulse, 0, Math.PI * 2);
         ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = hexAlpha(n.color, (n.hot || hoverNodeId === n.id ? 0.9 : 0.55) * op);
-        ctx.shadowColor = hexAlpha(n.color, 0.35 * op);
-        ctx.shadowBlur = hoverNodeId === n.id ? 12 : 5;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        if (n.hot) {
-          ctx.beginPath();
-          ctx.fillStyle = hexAlpha(n.color, 0.9 * op);
-          ctx.arc(p.x, p.y, Math.max(1.5, rr * 0.32), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        if (n.icon && (focusCat || mapState === 'fan')) {
-          drawIcon(p.x, p.y, n.icon, n.color, 0.55, 0.7);
-        }
       }
 
       hitNodes.push({
         id: n.id,
         kind: n.kind === 'category' ? 'category' : (n.alert ? 'alert' : n.kind),
-        x: p.x,
-        y: p.y,
+        x: px,
+        y: py,
         r: r + 6,
         vr: r,
         ref: n,
       });
 
-      // Group labels — distinct screen offsets so none sits on a trunk line
+      // Group labels — base-row: under each ring; overview: clear of spokes
       if (n.kind === 'group' && groupLod > 0.02) {
         const gi = typeof n.groupIndex === 'number' ? n.groupIndex : 0;
-        // Left / centre-right / right-down — clears the three trunks
-        // Centres are transform-translated; need ~half letter-spaced width clear of trunk
-        const off = inFan
-          ? [{ dx: -46, dy: 16 }, { dx: 78, dy: 8 }, { dx: 52, dy: 34 }]
-          : [{ dx: -52, dy: -12 }, { dx: 82, dy: -20 }, { dx: 48, dy: 14 }];
-        const o = off[Math.min(gi, off.length - 1)] || { dx: 24, dy: -10 };
-        const gx = p.x + o.dx;
-        const gy = p.y + o.dy;
+        let gx, gy;
+        if (n.baseRow || inFan) {
+          // Three rings in a row — label centered under each ring (no stack)
+          gx = px;
+          gy = py + Math.max(r + 18, 28);
+        } else {
+          const off = [{ dx: -56, dy: -14 }, { dx: 72, dy: -18 }, { dx: 40, dy: 16 }];
+          const o = off[Math.min(gi, off.length - 1)] || { dx: 24, dy: -10 };
+          gx = px + o.dx;
+          gy = py + o.dy;
+        }
         wantedGroupLabels.set(n.id, {
           text: n.groupLabel || n.label,
           x: gx,
@@ -1579,8 +1541,10 @@
         el.style.top = `${y}px`;
         el.style.visibility = 'visible';
         el.classList.add('is-on');
-        // Opacity from LOD scale — CSS 0.5s transition smooths (no 0→1 pop)
-        el.style.opacity = String(want.opacity);
+        const lid = el.dataset.id || want.text;
+        el._opTarget = want.opacity;
+        if (!labelOpSmooth.has(lid)) labelOpSmooth.set(lid, 0);
+        el.style.opacity = String(labelOpSmooth.get(lid));
         return el;
       }
       // Last resort for required group labels: keep searching wider offsets (no overlap)
@@ -1604,9 +1568,12 @@
           const el = makeEl();
           el.style.left = `${x}px`;
           el.style.top = `${y}px`;
-          el.style.opacity = String(want.opacity);
+          el._opTarget = want.opacity;
           el.style.visibility = 'visible';
           el.classList.add('is-on');
+          const lid2 = el.dataset.id || want.text;
+          if (!labelOpSmooth.has(lid2)) labelOpSmooth.set(lid2, 0);
+          el.style.opacity = String(labelOpSmooth.get(lid2));
           return el;
         }
       }
@@ -1701,9 +1668,10 @@
       placedBoxes.push(box);
       el.style.left = `${lx}px`;
       el.style.top = `${ly}px`;
-      el.style.opacity = String(op);
+      el._opTarget = op;
       el.style.visibility = 'visible';
       el.classList.add('is-on');
+      if (!labelOpSmooth.has(cat.id)) { labelOpSmooth.set(cat.id, 0); el.style.opacity = '0'; }
       const featured = CATS[focusedIdx()]?.id === cat.id;
       el.style.filter = (hoverCat && cat.id === hoverCat) || featured
         ? 'brightness(1.15)'
@@ -1858,8 +1826,7 @@
     tCamX = (wantHubSX - u.cx) / zoom - hub.x;
     tCamY = (wantHubSY - u.cy) / zoom - hub.y;
     clampPanToContent();
-    camX = tCamX;
-    camY = tCamY;
+    // r19: do not snap cam — let EASE_CAM interpolate (avoids wheel stutter)
   }
 
   function scheduleCameraSettle(sx, sy) {
@@ -1869,6 +1836,24 @@
     settleTimer = setTimeout(() => {
       settleCameraTowardCluster(lastWheelSX, lastWheelSY);
     }, SETTLE_MS);
+  }
+
+  function smoothLabelOpacities(dt) {
+    const k = reduceMotion ? 1 : (1 - Math.pow(0.05, dt / LABEL_FADE_MS));
+    labelLayer.querySelectorAll('.cat-label, .group-label, .node-label').forEach((el) => {
+      const lid = el.dataset.id || el.className + el.textContent;
+      const target = el.classList.contains('is-on')
+        ? (el._opTarget != null ? el._opTarget : parseFloat(el.style.opacity) || 0)
+        : 0;
+      const cur = labelOpSmooth.has(lid) ? labelOpSmooth.get(lid) : (parseFloat(el.style.opacity) || 0);
+      const next = cur + (target - cur) * k;
+      labelOpSmooth.set(lid, next);
+      el.style.opacity = String(next);
+      if (next < 0.02 && target < 0.02) {
+        el.style.visibility = 'hidden';
+        el.classList.remove('is-on');
+      }
+    });
   }
 
   function syncWchevOpacity() {
@@ -1894,6 +1879,8 @@
   }
 
   function zoomAtScreen(clientX, clientY, nextZoom, opts) {
+    lastInteractTs = performance.now();
+    // wheel activity pauses idle dial
     const immediate = !!(opts && opts.immediate) || reduceMotion;
     const u = usable();
     const ox = u.cx;
@@ -1923,6 +1910,16 @@
     const dt = lastTickTs ? Math.min(48, ts - lastTickTs) : 16;
     lastTickTs = ts;
     const ease = reduceMotion ? 1 : EASE_CAM;
+
+    // r19 idle: slow CW dial when sky + idle (map.html has no idle dial; video does ~4°/s)
+    if (idleRotateOn && mapState === 'sky' && !dragging && !morph && !hoverCat && !wheelCoasting
+      && Math.abs(wheelT - wheelA) < 0.05 && zoom <= 1.02 && Math.abs(targetZoom - zoom) < 0.01
+      && !reduceMotion && (performance.now() - lastInteractTs) > 1200) {
+      const d = IDLE_ROT_DEG_PER_S * (dt / 1000);
+      wheelA += d;
+      wheelT = wheelA;
+      layoutWheel();
+    }
 
     // Sky dial: coast with friction, then ease to detent (ref flick + snapWheel)
     if ((mapState === 'sky' || mapState === 'aligning') && !dragging) {
@@ -2028,6 +2025,7 @@
       }
     }
     clampPanSoft();
+    smoothLabelOpacities(dt);
     syncZoomPct();
     syncWchevOpacity();
 
@@ -2453,6 +2451,7 @@
       return;
     }
     dragging = true;
+    lastInteractTs = performance.now();
     lastX = e.clientX; lastY = e.clientY;
     lastMoveTs = performance.now();
     flickV = 0;
@@ -2789,6 +2788,8 @@
       WHEEL_FRICTION, FLICK_THRESH, fanInertia: false, skyDial: true, morphDive: true,
       dialCoast: true, cameraSettle: true, denseGroupForks: true,
       aliveMotion: true, pathParticles: true, organicCore: true, labelFade: true,
+      solidLeafDots: true, straightLinks: true, sparseOverview: true, idleRotate: true,
+      IDLE_ROT_DEG_PER_S, LEAF_R, LEAF_HOT_R, GROUP_DOT_R, RISE_MS,
       particleCount: () => flowParticles.length,
     }),
     getMorphProgress: () => (morph ? morphProgress() : (mapState === 'fan' || mapState === 'sky' ? (mapState === 'fan' ? 1 : 0) : 0)),
@@ -2820,7 +2821,8 @@
     closeCore: () => closeCore(),
     setView: (v) => document.querySelector(`.view-toggle button[data-view="${v}"]`)?.click(),
     waitForIdle: (ms = 480) => new Promise((r) => setTimeout(r, ms)),
-    setIdleSpin: () => {},
+    setIdleSpin: (on) => { idleRotateOn = on !== false; },
+    setIdleRotate: (on) => { idleRotateOn = !!on; },
     setHover: (id) => setHoverCat(id || null),
     setHoverNode: (nodeId) => {
       // Fan-only hover scale target (no path lighting — matches ref)
@@ -2939,16 +2941,55 @@
       camX = tCamX;
       camY = tCamY;
       settleCameraTowardCluster(lastWheelSX || W / 2, lastWheelSY || H / 2);
+      // Snap label opacities to targets (tests / capture after settle)
+      labelLayer.querySelectorAll('.cat-label, .group-label, .node-label').forEach((el) => {
+        const t = el._opTarget != null ? el._opTarget : (el.classList.contains('is-on') ? 1 : 0);
+        const lid = el.dataset.id || el.className;
+        labelOpSmooth.set(lid, t);
+        el.style.opacity = String(t);
+        if (t < 0.02) { el.style.visibility = 'hidden'; el.classList.remove('is-on'); }
+        else { el.style.visibility = 'visible'; }
+      });
     },
     particleCount: () => flowParticles.length,
     sampleLabelOpacities: () => {
       const out = [];
       labelLayer.querySelectorAll('.cat-label, .group-label, .node-label').forEach((el) => {
-        const op = parseFloat(getComputedStyle(el).opacity || '0');
-        if (el.style.visibility === 'hidden' && op < 0.02) return;
-        out.push({ id: el.dataset.id || el.className, op, cls: el.className });
+        const op = parseFloat(el.style.opacity || '0');
+        if (!el.classList.contains('is-on') && op < 0.02) return;
+        out.push({
+          id: el.dataset.id || el.className,
+          op,
+          target: el._opTarget != null ? el._opTarget : op,
+          cls: el.className,
+        });
       });
       return out;
+    },
+    sampleMotionFrame: () => {
+      let others = 0, n = 0;
+      CATS.forEach((c) => {
+        if (hoverCat && c.id !== hoverCat) { others += (hoverAlpha[c.id] ?? 1); n += 1; }
+        else if (morph && morph.focusId && c.id !== morph.focusId) {
+          others += (hoverAlpha[c.id] ?? 1); n += 1;
+        }
+      });
+      const labels = [];
+      labelLayer.querySelectorAll('.group-label.is-on, .node-label.is-on, .cat-label.is-on').forEach((el) => {
+        labels.push(parseFloat(el.style.opacity || '0'));
+      });
+      return {
+        t: performance.now(),
+        zoom,
+        targetZoom,
+        wheelA,
+        wheelT,
+        mapState,
+        othersMean: n ? others / n : 1,
+        labelOpMean: labels.length ? labels.reduce((a, b) => a + b, 0) / labels.length : 0,
+        labelOpMax: labels.length ? Math.max(...labels) : 0,
+        particles: flowParticles.length,
+      };
     },
     wchevOpacity: () => {
       const el = document.getElementById('wchev-l');

@@ -171,8 +171,8 @@ body:not(.map-ready) .wchev { opacity: 0; }
   transform: translate(-50%, -50%);
   text-align: center;
   white-space: nowrap;
-  /* r18: skilltree-like ~0.5s opacity fade driven by scale LOD */
-  transition: opacity 0.5s ease, filter 0.2s ease;
+  /* r19: opacity eased in JS (smoothLabelOpacities); CSS only filter */
+  transition: filter 0.2s ease;
   pointer-events: none;
   visibility: hidden;
   opacity: 0;
@@ -212,7 +212,7 @@ body:not(.map-ready) .wchev { opacity: 0; }
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.5s ease;
+  transition: none;
 }
 .node-label.is-on {
   visibility: visible;
@@ -229,7 +229,7 @@ body:not(.map-ready) .wchev { opacity: 0; }
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.5s ease;
+  transition: none;
 }
 .group-label.is-on {
   visibility: visible;
