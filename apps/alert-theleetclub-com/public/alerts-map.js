@@ -29,6 +29,14 @@
   const LEAF_HOT_R = 2.6;
   const GROUP_DOT_R = 4; // mini fork fill r=4
   const IDLE_ROT_DEG_PER_S = 4; // video slow CW; map.html has no idle dial (hub hspin only)
+  const CORE_SPIN_S = 170; // map.html #hub .spinslow hspin 170s
+  const CORE_DRIFT_S = 12; // map.html hdrift
+  const CORE_TWINKLE_S = 8.5; // soft twinkle (bpulse is 3.2s — too flashy on dense dust)
+  const PARTICLE_R_OUT = 3.1; // readable on 60fps screencast
+  const PARTICLE_R_BACK = 2.2;
+  const PARTICLE_OP_OUT = 1;
+  const PARTICLE_OP_BACK = 0.65;
+  const RISE_ZOOM_TRIGGER = 3.15; // wheel past dive focus scale → rise (not hard-cut at floor)
   const FEATURED_SCALE = 1.05;
   const DRAG_CLICK_CANCEL = 8;
   const WHEEL_ZOOM_EXP = 0.0018; // plain-scroll feel (marketing video: smooth continuous)
@@ -101,6 +109,7 @@
   let wheelCoasting = false;
   let mapState = 'sky'; // sky | aligning | diving | fan | rising
   let focusCat = null;
+  let pendingFocusId = null; // dive seat target (survives hover clear)
   let hoverCat = null;
   let hoverNodeId = null;
   let selectedChain = -1; // fan: fade sibling chains on select
@@ -537,21 +546,61 @@
 
   function seedFlowParticles() {
     flowParticles.length = 0;
-    // Skilltree buildSky: copper outward + ivory return on every spoke (desktop)
+    // Skilltree buildSky: copper outward + ivory return on every connector (desktop)
     const segs = layoutLinks.filter((L) => !L.stub && !L.virtual);
     segs.forEach((L, i) => {
       const catId = (layoutNodes.find((n) => n.id === L.t) || {}).catId;
-      const durOut = 2.6 + (i % 3) * 0.7; // animateMotion dur
+      const durOut = 2.6 + (i % 3) * 0.7; // animateMotion dur (seconds / loop)
       const durBack = 3.5 + (i % 2) * 0.9;
       flowParticles.push({
         link: L, u: hash01(i * 3.1), speed: 1 / durOut, dir: 1,
-        catId, color: COPPER, r: 2.4, op: 0.9,
+        catId, color: COPPER, r: PARTICLE_R_OUT, op: PARTICLE_OP_OUT,
       });
       flowParticles.push({
         link: L, u: hash01(i * 5.7 + 1.3), speed: 1 / durBack, dir: -1,
-        catId, color: '#e9e4d6', r: 1.7, op: 0.5,
+        catId, color: '#e9e4d6', r: PARTICLE_R_BACK, op: PARTICLE_OP_BACK,
       });
     });
+  }
+
+  /** Map dive-only morphKeys to overview chain tips so they don't all spawn at hub. */
+  function enrichMorphFrom(fromSnap, toSnap, focusId) {
+    const fromN = new Map(fromSnap.nmap);
+    const toN = toSnap.nmap;
+    const hub = fromN.get(`${focusId}:hub`) || { x: 0, y: 0, r: 8, color: '#e9e4d6', id: focusId };
+    const byChain = new Map();
+    fromN.forEach((n) => {
+      if (n.chain == null || n.chain < 0) return;
+      if (!byChain.has(n.chain)) byChain.set(n.chain, []);
+      byChain.get(n.chain).push(n);
+    });
+    byChain.forEach((arr) => arr.sort((a, b) => (a.depth || 0) - (b.depth || 0)));
+    toN.forEach((n, k) => {
+      if (fromN.has(k)) return;
+      let seed = null;
+      if (n.sideLeaf && k.includes(':L')) {
+        const parentKey = k.replace(/:L\d+$/, '');
+        seed = fromN.get(parentKey) || toN.get(parentKey);
+        if (seed && !fromN.has(parentKey)) {
+          // parent also dive-only — fall through to chain tip
+          seed = null;
+        } else if (seed) {
+          fromN.set(k, {
+            ...seed, morphKey: k, id: n.id, kind: n.kind, label: n.label,
+            r: 0, chain: n.chain, depth: n.depth,
+          });
+          return;
+        }
+      }
+      const chainArr = byChain.get(n.chain) || [];
+      seed = chainArr.length ? chainArr[chainArr.length - 1] : hub;
+      fromN.set(k, {
+        ...seed, morphKey: k, id: n.id, kind: n.kind || 'machine', label: n.label || '',
+        r: seed === hub ? 0 : (seed.r || LEAF_R), chain: n.chain, depth: n.depth,
+        color: n.color || seed.color,
+      });
+    });
+    return { nmap: fromN, lmap: fromSnap.lmap };
   }
 
   /**
@@ -766,7 +815,7 @@
     return { nmap, lmap };
   }
 
-  function beginMorph({ dir, focusId, from, to, duration, camFrom, camTo, otherFrom }) {
+  function beginMorph({ dir, focusId, from, to, duration, camFrom, camTo, otherFrom, coreFrom }) {
     morph = {
       dir, focusId,
       t0: performance.now(),
@@ -775,6 +824,8 @@
       camFrom: camFrom || { zoom, camX, camY },
       camTo: camTo || { zoom: targetZoom, camX: tCamX, camY: tCamY },
       otherFrom: otherFrom || [],
+      coreFrom: coreFrom != null ? coreFrom : (dir === 1 ? 1 : 0),
+      coreTo: dir === 1 ? 0 : 1,
     };
   }
 
@@ -814,6 +865,10 @@
         catId: morph.focusId, kind: src.kind || 'machine', label: src.label || '',
         morphKey: k, chain: src.chain != null ? src.chain : -1, hot: false, id: src.id,
       };
+      // Shared keys stay lit; overview-only fade out; dive-only fade in
+      let mop = 1;
+      if (A && !B) mop = 1 - e;
+      else if (!A && B) mop = e;
       nodes.push({
         id: src.id,
         kind: src.kind,
@@ -829,57 +884,70 @@
         x: lerp(a.x, b.x, e),
         y: lerp(a.y, b.y, e),
         r: lerp(a.r || 2, b.r || 2, e),
-        morphOp: 1,
+        morphOp: mop,
         morphing: true,
       });
     });
 
-    // Other departments: dive → fade/fly off; rise → fade back in from dim
+    // Other departments: crossfade over full morph (ease), gentle radial drift
     const otherNodes = [];
     const others = morph.otherFrom.length ? morph.otherFrom : [];
+    const otherOp = morph.dir === 1 ? (1 - e) : e;
     others.forEach((n) => {
       if (n.kind === 'stub') return;
       if (morph.dir === 1) {
         const fly = e * e;
         otherNodes.push({
           ...n,
-          x: lerp(n.x, n.x * 1.35, fly),
-          y: lerp(n.y, n.y * 1.35, fly),
-          morphOp: lerp(1, 0, e),
+          x: lerp(n.x, n.x * 1.22, fly),
+          y: lerp(n.y, n.y * 1.22, fly),
+          morphOp: otherOp,
           otherDim: true,
         });
       } else {
         otherNodes.push({
           ...n,
-          x: lerp(n.x * 1.25, n.x, e),
-          y: lerp(n.y * 1.25, n.y, e),
-          morphOp: lerp(0, 1, e),
+          x: lerp(n.x * 1.18, n.x, e),
+          y: lerp(n.y * 1.18, n.y, e),
+          morphOp: otherOp,
           otherDim: true,
         });
       }
     });
 
-    // Links from dive TO layout (parent→child), endpoints from interpolated nodes
+    // Crossfade link topologies: overview spokes → dive fan (not an instant TO swap)
     const links = [];
     const byMk = new Map(nodes.map((n) => [n.morphKey, n]));
     const byId = new Map(nodes.map((n) => [n.id, n]));
-    const toLinks = morph.to?.lmap ? [...morph.to.lmap.values()] : [];
-    toLinks.forEach((L) => {
-      if (L.otherDim) return;
-      // Resolve endpoints by morphKey first, then id
-      let a = null, b = null;
-      const tNode = morph.to.nmap && [...morph.to.nmap.values()].find((n) => n.id === L.t);
-      const sNode = morph.to.nmap && [...morph.to.nmap.values()].find((n) => n.id === L.s);
-      if (tNode) b = byMk.get(tNode.morphKey) || byId.get(tNode.id);
-      if (sNode) a = byMk.get(sNode.morphKey) || byId.get(sNode.id);
-      if (!a || !b) return;
-      links.push({
-        s: a.id, t: b.id, color: L.color || b.color, chain: L.chain, straight: true,
-        morphOp: 1, morphing: true, x0: a.x, y0: a.y, x1: b.x, y1: b.y,
-        morphKey: L.morphKey,
+    const resolveEnd = (id, mkHint, snap) => {
+      if (mkHint && byMk.has(mkHint)) return byMk.get(mkHint);
+      const sn = snap && snap.get && [...snap.values()].find((n) => n.id === id);
+      if (sn) return byMk.get(sn.morphKey) || byId.get(sn.id);
+      return byId.get(id) || null;
+    };
+    const pushSnapLinks = (lmap, nmap, linkOp) => {
+      if (!lmap || linkOp < 0.02) return;
+      lmap.forEach((L) => {
+        if (L.otherDim || L.virtual) return;
+        const tNode = nmap && [...nmap.values()].find((n) => n.id === L.t);
+        const sNode = nmap && [...nmap.values()].find((n) => n.id === L.s);
+        const a = resolveEnd(L.s, sNode && sNode.morphKey, nmap);
+        const b = resolveEnd(L.t, tNode && tNode.morphKey, nmap);
+        if (!a || !b) return;
+        const mop = linkOp * (a.morphOp != null ? a.morphOp : 1) * (b.morphOp != null ? b.morphOp : 1);
+        if (mop < 0.02) return;
+        links.push({
+          s: a.id, t: b.id, color: L.color || b.color, chain: L.chain, straight: true,
+          morphOp: mop, morphing: true, x0: a.x, y0: a.y, x1: b.x, y1: b.y,
+          morphKey: L.morphKey,
+        });
       });
-    });
-    // other-dept links (straight stubs between consecutive depths)
+    };
+    // Dive (dir=1): from overview → to fan; rise (dir=-1): from fan → to overview
+    pushSnapLinks(morph.from.lmap, morph.from.nmap, 1 - e);
+    pushSnapLinks(morph.to.lmap, morph.to.nmap, e);
+
+    // other-dept links (fade with otherOp)
     const otherByCat = new Map();
     otherNodes.forEach((n) => {
       if (!otherByCat.has(n.catId)) otherByCat.set(n.catId, []);
@@ -890,7 +958,6 @@
       if (!hubN) return;
       arr.forEach((n) => {
         if (n === hubN || n.kind === 'category') return;
-        // connect first-depth sites to hub
         if ((n.depth || 0) <= 1) {
           links.push({
             s: hubN.id, t: n.id, color: n.color, straight: true,
@@ -900,7 +967,12 @@
       });
     });
 
-    return { nodes: nodes.concat(otherNodes), links, e: raw, ease: e, done: raw >= 1 };
+    return {
+      nodes: nodes.concat(otherNodes), links, e: raw, ease: e, done: raw >= 1,
+      otherOp, focusSample: nodes.find((n) => n.morphKey === `${morph.focusId}:grp0:fork`)
+        || nodes.find((n) => n.kind === 'group')
+        || nodes.find((n) => n.morphKey && n.morphKey.endsWith(':hub')),
+    };
   }
 
   function activeNodes() {
@@ -1027,7 +1099,8 @@
     zoomAtScreen(sx, sy, next);
     scheduleCameraSettle(sx, sy);
     zoomIntent = 0;
-    if ((mapState === 'fan' || focusCat) && dir < 0 && next <= RISE_SCALE) {
+    // Wheel/button past dive focus scale → continuous rise (never hard-cut at floor)
+    if ((mapState === 'fan' || focusCat) && dir < 0 && next <= RISE_ZOOM_TRIGGER) {
       clearFocus();
     }
   }
@@ -1083,11 +1156,13 @@
   }
 
   function coreDrawOpacity() {
-    // ref_sales: hub hidden in dive; also hide when deep-zoomed into a branch
+    // Continuous crossfade with morph (no flash at dive start)
+    if (morph && (mapState === 'diving' || mapState === 'rising')) {
+      const e = easeInOutCubic(morphProgress());
+      return lerp(morph.coreFrom != null ? morph.coreFrom : (morph.dir === 1 ? 1 : 0), morph.coreTo != null ? morph.coreTo : (morph.dir === 1 ? 0 : 1), e);
+    }
     if (focusCat || mapState === 'fan') return 0;
-    if (mapState === 'diving') return morph ? Math.max(0, 1 - morphProgress() * 1.4) : 0;
-    if (mapState === 'rising') return morph ? Math.min(1, morphProgress() * 1.2) : 1;
-    if (mapState === 'aligning') return 0.35;
+    if (mapState === 'aligning') return 0.55; // still visible while seating; dive morph finishes the fade
     if (zoom >= LOD_GROUP_IN) {
       return Math.max(0, 1 - lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL));
     }
@@ -1174,10 +1249,10 @@
     ctx.arc(p.x, p.y, bloomR, 0, Math.PI * 2);
     ctx.fill();
 
-    // Slow spin (skilltree hspin 170s) + hdrift
-    const spin = reduceMotion ? 0 : (t / 170) * Math.PI * 2;
-    const driftX = reduceMotion ? 0 : 2.2 * Math.sin(t / 12 * Math.PI * 2);
-    const driftY = reduceMotion ? 0 : -2.6 * Math.cos(t / 12 * Math.PI * 2);
+    // Gentle drift: hspin 170s + hdrift 12s; soft twinkle (not frantic bpulse)
+    const spin = reduceMotion ? 0 : (t / CORE_SPIN_S) * Math.PI * 2;
+    const driftX = reduceMotion ? 0 : 2.2 * Math.sin((t / CORE_DRIFT_S) * Math.PI * 2);
+    const driftY = reduceMotion ? 0 : -2.6 * Math.cos((t / CORE_DRIFT_S) * Math.PI * 2);
     const hubScale = (coreR / 115) * scale;
     ctx.save();
     ctx.translate(p.x + driftX, p.y + driftY);
@@ -1188,12 +1263,15 @@
       ctx.beginPath();
       ctx.moveTo(e.x0, e.y0);
       ctx.lineTo(e.x1, e.y1);
-      ctx.strokeStyle = `rgba(233,228,214,${e.op})`;
+      ctx.strokeStyle = `rgba(233,228,214,${e.op * 0.85})`;
       ctx.lineWidth = 0.85;
       ctx.stroke();
     });
     coreDust.forEach((d, i) => {
-      const pulse = d.pulse && !reduceMotion ? (0.85 + 0.15 * Math.sin(t * (Math.PI * 2 / 3.2) + i)) : 1;
+      // Soft twinkle: ±12% over ~8.5s (dense dust + 3.2s bpulse reads as flashing)
+      const pulse = d.pulse && !reduceMotion
+        ? (0.92 + 0.08 * Math.sin((t / CORE_TWINKLE_S) * Math.PI * 2 + i * 0.35))
+        : 1;
       ctx.beginPath();
       ctx.fillStyle = d.fill.startsWith('#')
         ? hexAlpha(d.fill, d.op * pulse)
@@ -1204,10 +1282,11 @@
       ctx.globalAlpha = 1;
     });
     (coreDust.nucleus || []).forEach((n, i) => {
-      const pr = reduceMotion ? n.r : n.r * (0.92 + 0.08 * Math.sin(t * (Math.PI * 2 / 2.6) + i));
+      const pr = reduceMotion ? n.r
+        : n.r * (0.96 + 0.04 * Math.sin((t / CORE_TWINKLE_S) * Math.PI * 2 + i));
       ctx.beginPath();
       ctx.fillStyle = n.fill;
-      ctx.globalAlpha = 0.95;
+      ctx.globalAlpha = 0.92;
       ctx.arc(n.x, n.y, pr, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
@@ -1291,6 +1370,8 @@
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
     function catOpacity(catId) {
+      // Morph drives per-node morphOp / otherDim — don't double-multiply hoverAlpha
+      if (morph && (mapState === 'diving' || mapState === 'rising')) return 1;
       if (mapState === 'fan' || focusCat) return 1;
       const a = hoverAlpha[catId];
       let op = a == null ? 1 : a;
@@ -1399,25 +1480,35 @@
       ctx.stroke();
     });
 
-    // Flow particles along every branch (skilltree animateMotion copper↔ivory)
-    if ((mapState === 'sky' || morph || mapState === 'aligning') && !reduceMotion) {
+    // Flow particles along every connector (skilltree animateMotion copper↔ivory)
+    if ((mapState === 'sky' || mapState === 'aligning' || (morph && mapState === 'diving')) && !reduceMotion) {
+      const nowP = performance.now();
+      if (!seedFlowParticles._lastP) seedFlowParticles._lastP = nowP;
+      const pdt = Math.min(0.048, Math.max(0.008, (nowP - seedFlowParticles._lastP) / 1000));
+      seedFlowParticles._lastP = nowP;
       flowParticles.forEach((p) => {
         const L = p.link;
         const s = nodeMap.get(L.s) || nodeById(L.s) || (L.x0 != null ? { x: L.x0, y: L.y0 } : null);
         const tN = nodeMap.get(L.t) || nodeById(L.t) || (L.x1 != null ? { x: L.x1, y: L.y1 } : null);
         if (!s || !tN) return;
         const op = catOpacity(p.catId);
-        if (op < 0.15) return;
-        const du = p.speed * 0.016 * (p.dir || 1);
-        p.u = (p.u + du) % 1;
+        if (op < 0.08) return;
+        p.u = (p.u + p.speed * pdt * (p.dir || 1)) % 1;
         if (p.u < 0) p.u += 1;
         const u = p.dir < 0 ? (1 - p.u) : p.u;
         const x = s.x + (tN.x - s.x) * u;
         const y = s.y + (tN.y - s.y) * u;
+        p._x = x; p._y = y; p._sx = undefined;
         const scr = worldToScreen(x, y);
+        p._sx = scr.x; p._sy = scr.y;
         ctx.beginPath();
-        ctx.fillStyle = hexAlpha(p.color || COPPER, (p.op != null ? p.op : 0.7) * op);
-        ctx.arc(scr.x, scr.y, (p.r || 2) * Math.min(1.2, 0.7 + zoom * 0.2), 0, Math.PI * 2);
+        // Soft glow underlay so copper reads on dark charcoal video
+        ctx.fillStyle = hexAlpha(p.color || COPPER, 0.35 * op);
+        ctx.arc(scr.x, scr.y, (p.r || PARTICLE_R_OUT) * 1.65, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.fillStyle = hexAlpha(p.color || COPPER, (p.op != null ? p.op : PARTICLE_OP_OUT) * op);
+        ctx.arc(scr.x, scr.y, (p.r || PARTICLE_R_OUT) * Math.min(1.35, 0.85 + zoom * 0.25), 0, Math.PI * 2);
         ctx.fill();
       });
       if (!spokeMotes.length) {
@@ -2066,14 +2157,22 @@
       wheelA = wheelT;
     }
 
-    // Hover / dive dim — time-based ease (ref 350ms; dive fades others to 0)
-    if (mapState === 'sky' || mapState === 'aligning' || mapState === 'diving') {
+    // Hover dim (350ms). Dive/rise others: driven by morph ease (full 1200/900ms) — not 350ms snap.
+    if (morph && (mapState === 'diving' || mapState === 'rising')) {
+      const e = easeInOutCubic(morphProgress());
+      const fid = morph.focusId;
+      CATS.forEach((cat) => {
+        if (cat.id === fid) hoverAlpha[cat.id] = 1;
+        else hoverAlpha[cat.id] = morph.dir === 1 ? (1 - e) : e;
+      });
+    } else if (mapState === 'sky' || mapState === 'aligning') {
       const k = reduceMotion ? 1 : (1 - Math.pow(0.05, dt / HOVER_FADE_MS));
       CATS.forEach((cat) => {
         let target = 1;
-        if (mapState === 'diving' || mapState === 'aligning') {
-          const fid = (morph && morph.focusId) || hoverCat;
-          if (fid) target = cat.id === fid ? 1 : 0;
+        if (mapState === 'aligning') {
+          const fid = pendingFocusId || hoverCat;
+          // Soft hold during seat — full crossfade starts with morph
+          if (fid) target = cat.id === fid ? 1 : 0.45;
         } else if (hoverCat) {
           target = cat.id === hoverCat ? 1 : DIM_OTHERS;
         }
@@ -2095,6 +2194,7 @@
       if (u >= 1) {
         if (mapState === 'diving') {
           focusCat = morph.focusId;
+          pendingFocusId = null;
           mapState = 'fan';
           setFanMode(true);
           zoom = targetZoom = ct.zoom;
@@ -2118,6 +2218,7 @@
           camY = tCamY = ct.camY;
           morph = null;
           focusCat = null;
+          pendingFocusId = null;
           focusLayout = null;
           selectedChain = -1;
           mapState = 'sky';
@@ -2198,10 +2299,11 @@
     const wait = seatWheelTo(idx);
 
     const startMorph = () => {
-      mapState = 'diving';
+      // Capture core opacity while still aligning (avoid flash to 1)
+      const coreFrom = coreDrawOpacity();
       layoutWheel();
       const focusNodes = layoutNodes.filter((n) => n.catId === id);
-      const from = snapshotLayout(focusNodes, layoutLinks.filter((L) => {
+      const fromRaw = snapshotLayout(focusNodes, layoutLinks.filter((L) => {
         const tN = layoutNodes.find((n) => n.id === L.t);
         return tN && tN.catId === id;
       }));
@@ -2212,21 +2314,25 @@
       // Build TO (fan) + camera targets WITHOUT snapping current camera
       rebuildFocusLayout(id, { setCamera: true, diveZoom: true });
       const to = snapshotLayout(focusLayout.nodes, focusLayout.links);
+      const from = enrichMorphFrom(fromRaw, to, id);
       const camFrom = { zoom, camX, camY };
       const camTo = { zoom: targetZoom, camX: tCamX, camY: tCamY };
 
       // Keep drawing morph until complete — never flash raw focusLayout early
       focusCat = null;
+      mapState = 'diving';
       beginMorph({
         dir: 1, focusId: id, from, to, duration: DIVE_MORPH_MS,
-        camFrom, camTo, otherFrom,
+        camFrom, camTo, otherFrom, coreFrom,
       });
     };
 
-    // Soft dim toward focus during align — others fade out (skilltree .dim)
+    // Soft hold during align — full 1200ms crossfade starts with morph (not 350ms snap-out)
+    pendingFocusId = id;
     hoverCat = id;
     CATS.forEach((c) => {
-      if (c.id !== id) hoverAlpha[c.id] = Math.min(hoverAlpha[c.id] ?? 1, 0.12);
+      if (c.id !== id) hoverAlpha[c.id] = Math.min(hoverAlpha[c.id] ?? 1, 0.55);
+      else hoverAlpha[c.id] = 1;
     });
     const hub = layoutNodes.find((n) => n.id === id);
     if (hub) {
@@ -2257,6 +2363,7 @@
     if (immediate || reduceMotion) {
       morph = null;
       focusCat = null;
+      pendingFocusId = null;
       focusLayout = null;
       mapState = 'sky';
       setFanMode(false);
@@ -2269,8 +2376,9 @@
     }
 
     if (!focusLayout) rebuildFocusLayout(id, { setCamera: false });
-    const from = snapshotLayout(focusLayout.nodes, focusLayout.links);
+    const fromFan = snapshotLayout(focusLayout.nodes, focusLayout.links);
     const camFrom = { zoom, camX, camY };
+    const coreFrom = coreDrawOpacity();
     mapState = 'rising';
     focusCat = null;
     setFanMode(false);
@@ -2278,10 +2386,13 @@
     // Rebuild overview for TO + other departments (wheel stays seated)
     rebuildOverviewLayout();
     const toNodes = layoutNodes.filter((n) => n.catId === id);
-    const to = snapshotLayout(toNodes, layoutLinks.filter((L) => {
+    const toRaw = snapshotLayout(toNodes, layoutLinks.filter((L) => {
       const tn = layoutNodes.find((n) => n.id === L.t);
       return tn && tn.catId === id;
     }));
+    // Rise: from=fan, to=overview — enrich TO keys missing in fan so they grow from chain tips
+    const to = toRaw;
+    const from = enrichMorphFrom(fromFan, to, id);
     const otherFrom = layoutNodes
       .filter((n) => n.catId !== id && n.kind !== 'stub')
       .map((n) => ({ ...n }));
@@ -2291,7 +2402,7 @@
     tCamY = camTo.camY;
     beginMorph({
       dir: -1, focusId: id, from, to, duration: RISE_MS,
-      camFrom, camTo, otherFrom,
+      camFrom, camTo, otherFrom, coreFrom,
     });
   }
 
@@ -2663,7 +2774,7 @@
       ptrs.delete(e.pointerId);
       if (ptrs.size < 2 && pinchD0 > 0) {
         if (mapState === 'sky' && pinchRatio > 1.35) focusCategory(CATS[focusedIdx()].id);
-        else if ((mapState === 'fan' || focusCat) && pinchRatio < 0.62 && targetZoom <= RISE_SCALE + 0.02) clearFocus();
+        else if ((mapState === 'fan' || focusCat) && pinchRatio < 0.62 && targetZoom <= RISE_ZOOM_TRIGGER) clearFocus();
         pinchD0 = 0;
       }
     }
@@ -2734,13 +2845,13 @@
     zoomAtScreen(lx, ly, zn);
     scheduleCameraSettle(lx, ly);
 
-    // Fan: zooming out past floor still rises (Escape/back parity)
-    if ((mapState === 'fan' || focusCat) && e.deltaY > 0 && zn <= RISE_SCALE) {
+    // Fan: wheel past dive focus scale starts rise morph (ref — no hard-cut at zoom floor)
+    if ((mapState === 'fan' || focusCat) && e.deltaY > 0 && zn <= RISE_ZOOM_TRIGGER) {
       zoomIntent += -e.deltaY;
-      if (zoomIntent < -110) {
+      if (zoomIntent < -40 || zn <= RISE_ZOOM_TRIGGER * 0.92) {
         clearFocus();
         zoomIntent = 0;
-        zoomLockUntil = now + 900;
+        zoomLockUntil = now + RISE_MS;
       }
     } else if (e.deltaY < 0) {
       zoomIntent = 0;
@@ -2980,6 +3091,9 @@
       aliveMotion: true, pathParticles: true, organicCore: true, labelFade: true,
       solidLeafDots: true, straightLinks: true, sparseOverview: true, idleRotate: true,
       diveSectorFan: true, coreHiddenInDive: true, labelEdgeCollision: true, chromeLabelFade: true,
+      continuousDiveMorph: true, pathParticlesOutward: true, gentleCoreSpin: true,
+      CORE_SPIN_S, CORE_DRIFT_S, CORE_TWINKLE_S, RISE_ZOOM_TRIGGER,
+      PARTICLE_R_OUT, PARTICLE_OP_OUT,
       IDLE_ROT_DEG_PER_S, LEAF_R, LEAF_HOT_R, GROUP_DOT_R, RISE_MS,
       particleCount: () => flowParticles.length,
     }),
@@ -3115,6 +3229,53 @@
     coreDrawOpacity: () => coreDrawOpacity(),
     focusNodeCount: () => (focusLayout ? focusLayout.nodes.filter((n) => !n.hidden && !n.diveHub).length : 0),
     focusLinkCount: () => (focusLayout ? focusLayout.links.length : 0),
+    /** r21: sample dive/rise morph — opacity + a focus node (x,y) each call. */
+    sampleDiveMotion: () => {
+      const mp = morph ? morphProgress() : (mapState === 'fan' ? 1 : 0);
+      const e = easeInOutCubic(mp);
+      const md = morph ? morphDisplay() : null;
+      const sn = md && md.focusSample;
+      const others = [];
+      const skipId = (morph && morph.focusId) || focusCat || pendingFocusId;
+      CATS.forEach((c) => {
+        if (skipId && c.id === skipId) return;
+        others.push(hoverAlpha[c.id] ?? 1);
+      });
+      const othersMean = others.length ? others.reduce((a, b) => a + b, 0) / others.length : 1;
+      return {
+        t: performance.now(),
+        mapState,
+        morphProgress: mp,
+        ease: e,
+        zoom,
+        coreOpacity: coreDrawOpacity(),
+        othersMean,
+        otherOp: md ? md.otherOp : (mapState === 'fan' ? 0 : 1),
+        sampleNode: sn ? {
+          morphKey: sn.morphKey, kind: sn.kind,
+          x: sn.x, y: sn.y,
+          sx: worldToScreen(sn.x, sn.y).x, sy: worldToScreen(sn.x, sn.y).y,
+          morphOp: sn.morphOp,
+        } : null,
+        dur: morph ? morph.dur : 0,
+        dir: morph ? morph.dir : 0,
+      };
+    },
+    /** r21: path particles — prove u and world pos change along connectors. */
+    samplePathParticles: (limit = 12) => {
+      const out = [];
+      for (let i = 0; i < flowParticles.length && out.length < limit; i++) {
+        const p = flowParticles[i];
+        if (p.dir !== 1) continue; // outward only for proof
+        out.push({
+          i, u: p.u, dir: p.dir, catId: p.catId,
+          x: p._x, y: p._y, sx: p._sx, sy: p._sy,
+          r: p.r, op: p.op, speed: p.speed,
+        });
+      }
+      return { count: flowParticles.length, outward: out };
+    },
+    coreSpinPeriodS: () => CORE_SPIN_S,
     /** Per-category uniqueness of site·machine node labels in the overview. */
     nodeLabelsUniquePerCategory: () => {
       const byCat = new Map();
