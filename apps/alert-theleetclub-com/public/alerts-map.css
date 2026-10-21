@@ -208,7 +208,12 @@ body:not(.map-ready) .wchev { opacity: 0; }
   letter-spacing: 0.04em;
   color: rgba(244, 244, 245, 0.88);
   white-space: nowrap;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+  /* skilltree-style halo so edges don't strike through glyphs */
+  text-shadow:
+    0 0 6px #20242D,
+    0 0 12px #20242D,
+    0 1px 2px #20242D,
+    0 1px 8px rgba(0, 0, 0, 0.65);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
@@ -225,7 +230,11 @@ body:not(.map-ready) .wchev { opacity: 0; }
   text-transform: uppercase;
   color: rgba(242, 239, 232, 0.9);
   white-space: nowrap;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  text-shadow:
+    0 0 8px #20242D,
+    0 0 16px #20242D,
+    0 1px 3px #20242D,
+    0 1px 10px rgba(0, 0, 0, 0.7);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;

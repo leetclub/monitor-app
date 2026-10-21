@@ -575,110 +575,163 @@
       'Bayan', 'Mishref', 'Fahaheel', 'Mahboula', 'Egaila', 'Surra',
     ];
     const usedLabels = new Set();
-    const takeJobs = (n, start) => {
-      const out = [];
-      let i = start;
-      while (out.length < n) {
-        let job = tipPool[i % Math.max(1, tipPool.length)];
-        if (!tipPool.length) {
-          job = {
-            id: `${catId}:pad${i}`, site: SITE_PAD[i % SITE_PAD.length],
-            label: `LT-KW-${String(2000 + i * 13).padStart(4, '0')}`, alert: null,
-          };
-        }
-        i += 1;
-        let label = shortNodeLabel(job.site || job.alert?.machine?.site || '', job.label || '·');
-        let g = 0;
-        while (usedLabels.has(label) && g < 50) {
-          g += 1;
-          label = shortNodeLabel(SITE_PAD[(i + g) % SITE_PAD.length], `LT-KW-${String(2100 + i * 17 + g).padStart(4, '0')}`);
-        }
-        usedLabels.add(label);
-        out.push({ ...job, _label: label });
+    let tipCursor = 0;
+    function nextJob() {
+      let job;
+      if (tipCursor < tipPool.length) job = tipPool[tipCursor++];
+      else {
+        const i = tipCursor++;
+        job = {
+          id: `${catId}:pad${i}`, site: SITE_PAD[i % SITE_PAD.length],
+          label: `LT-KW-${String(2000 + i * 13).padStart(4, '0')}`, alert: null,
+        };
       }
-      return { jobs: out, next: i };
-    };
+      let label = shortNodeLabel(job.site || job.alert?.machine?.site || '', job.label || '·');
+      let g = 0;
+      while (usedLabels.has(label) && g < 60) {
+        g += 1;
+        label = shortNodeLabel(SITE_PAD[(tipCursor + g) % SITE_PAD.length], `LT-KW-${String(2100 + tipCursor * 17 + g).padStart(4, '0')}`);
+      }
+      usedLabels.add(label);
+      return { ...job, _label: label };
+    }
 
+    /**
+     * r20 dive (ref_sales):
+     * - 3 group rings in a horizontal base row (not a wide polar arc)
+     * - Each ring owns a non-overlapping upward angular sector
+     * - Short zig-zag steps + side leaves clamped inside that sector
+     * - Unique dive ids; no cross-group edges
+     */
     const u = usable();
-    // World units sized so at DIVE_ZOOM_TARGET the 3 rings read as a clear row (ref_sales)
-    // Aim ~90–110px between ring centres at zoom≈4.8 → gap≈20–23 world
-    const ringGap = 22;
-    const ringR = 5.5;
-    const chainLen0 = 48;
-    const chainStep = 22;
-    const FAN = 100 * Math.PI / 180; // upward fan from each ring
+    const ng = Math.max(1, groups.length);
+    const marginPx = 52;
+    const worldH = Math.max(90, (u.h - marginPx * 2) / DIVE_ZOOM_TARGET);
+    const worldW = Math.max(120, (u.w - marginPx * 2) / DIVE_ZOOM_TARGET);
+    const nJobsPerGroup = 6;
+    // Horizontal ring row (ref_sales); gap sized to leave air between sectors
+    const ringGap = Math.min(worldW * 0.28, worldH * 0.38);
+    // Keep tip of fan below chrome; short zig steps (not long spokes)
+    const chainH = worldH * 0.72;
+    const sBase = chainH * 0.12;
+    const sStep = (chainH - sBase) / Math.max(1, nJobsPerGroup - 0.15);
+    const ringR = Math.max(5.5, Math.min(8.5, worldH * 0.055));
+    // Per-group upward sector (no overlap between neighbours)
+    const sectorSpan = Math.min(48 * Math.PI / 180, (66 * Math.PI / 180) / ng + 0.1);
+    const padA = 0.04;
 
-    // Category anchor under the row (title lives in focus-bar; node is back-target)
+    // Hidden category back-target under the row (focus-bar shows title)
     nodes.push({
       id: cat.id, kind: 'category', label: cat.label, color: cat.color, icon: cat.icon,
-      alert: null, catId: cat.id, x: 0, y: ringGap * 0.55, r: ringR * 0.9, depth: 0, hot: false,
-      chain: -1, morphKey: `${cat.id}:hub`,
+      alert: null, catId: cat.id, x: 0, y: ringGap * 0.55, r: 7, opacity: 0, hot: false,
+      chain: -1, morphKey: `${cat.id}:hub`, diveHub: true, hidden: true,
     });
 
-    let tipCursor = 0;
-    let maxR = ringGap;
-    const ng = Math.max(1, groups.length);
+    let maxR = sBase;
     groups.forEach((grp, gi) => {
       const gx = (gi - (ng - 1) / 2) * ringGap;
       const gy = 0;
       const groupId = grp.id;
+      // Aim slightly outward so neighbouring fans diverge (no crossings)
+      const aMid = (gi - (ng - 1) / 2) * (sectorSpan * 0.35);
+      const a0 = aMid - sectorSpan / 2;
+      const a1 = aMid + sectorSpan / 2;
       nodes.push({
         id: groupId, kind: 'group', label: grp.label, color: cat.color,
         icon: cat.icon, alert: null, catId: cat.id, x: gx, y: gy, r: ringR,
         depth: 1, hot: false, chain: gi, morphKey: `${cat.id}:${groupId}:fork`,
         groupLabel: grp.label, groupIndex: gi, baseRow: true,
+        sectorA0: a0, sectorA1: a1,
       });
-      links.push({
-        s: cat.id, t: groupId, color: cat.color, depth: 1, chain: gi, straight: true,
-        morphKey: `${cat.id}:L:${groupId}:trunk`,
-      });
+      // No under-ring trunk: labels sit below rings; chains only grow upward
 
-      // 2 upward zig-zag chains per group ring
-      const nChains = 2;
-      const { jobs: pool, next } = takeJobs(nChains * 4, tipCursor);
-      tipCursor = next;
-      for (let ci = 0; ci < nChains; ci++) {
-        const a0 = -FAN / 2 + (FAN * (ci + 0.5)) / nChains; // upward-ish
-        // bias outward from center
-        const aBias = gx === 0 ? 0 : (gx > 0 ? 0.12 : -0.12);
-        let px = gx, py = gy, prevId = groupId;
-        const jobs = pool.slice(ci * 4, ci * 4 + 4);
-        jobs.forEach((job, ji) => {
-          const zig = (ji % 2 ? 1 : -1) * 0.07 * (ji ? 1 : 0.4);
-          const a = a0 + aBias + zig;
-          const r = chainLen0 + ji * chainStep;
-          const x = gx + r * Math.sin(a);
-          const y = gy - r * Math.cos(a); // up = -y
-          maxR = Math.max(maxR, Math.hypot(x, y));
-          const id = job.id || `${cat.id}:g${gi}c${ci}j${ji}`;
+      let px = gx, py = gy, prevId = groupId;
+      for (let ji = 0; ji < nJobsPerGroup; ji++) {
+        const job = nextJob();
+        const zigAmp = Math.min(sectorSpan * 0.22, 0.085);
+        const zig = (ji % 2 ? 1 : -1) * zigAmp * (ji ? 1 : 0.4);
+        let a = aMid + zig;
+        a = Math.max(a0 + padA, Math.min(a1 - padA, a));
+        const r = sBase + ji * sStep;
+        const x = gx + r * Math.sin(a);
+        const y = gy - r * Math.cos(a); // up = −Y
+        maxR = Math.max(maxR, Math.hypot(x - gx, y - gy), Math.hypot(x, y));
+        const id = `${cat.id}:dive:g${gi}:j${ji}`;
+        nodes.push({
+          id, kind: 'machine',
+          label: job._label,
+          color: cat.color,
+          icon: null, alert: job.alert || null, catId: cat.id, x, y,
+          r: LEAF_R * 1.1, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
+          chain: gi, morphKey: `${cat.id}:c${gi}:j${ji + 1}`, groupId,
+        });
+        links.push({
+          s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: gi,
+          straight: true,
+          morphKey: `${cat.id}:L:c${gi}:j${ji + 1}`,
+          x0: px, y0: py, x1: x, y1: y,
+        });
+        const nLeaves = ji === 0 ? 1 : 2;
+        for (let li = 0; li < nLeaves; li++) {
+          const side = (li === 0 ? 1 : -1);
+          let leafA = a + side * Math.min(sectorSpan * 0.18, 0.07);
+          leafA = Math.max(a0 + padA, Math.min(a1 - padA, leafA));
+          const leafR = sStep * 0.55;
+          const lx = x + leafR * Math.sin(leafA);
+          const ly = y - leafR * Math.cos(leafA);
+          maxR = Math.max(maxR, Math.hypot(lx, ly));
+          const lid = `${cat.id}:dive:g${gi}:j${ji}:L${li}`;
+          const leafJob = nextJob();
           nodes.push({
-            id, kind: job.kind || 'machine',
-            label: job._label,
+            id: lid, kind: 'machine',
+            label: leafJob._label,
             color: cat.color,
-            icon: null, alert: job.alert || null, catId: cat.id, x, y,
-            r: LEAF_R * 1.15, depth: 2 + ji, hot: !!(job.alert && job.alert.hot),
-            chain: gi * 10 + ci, morphKey: `${cat.id}:c${gi}_${ci}:j${ji + 1}`, groupId,
+            icon: null, alert: leafJob.alert || null, catId: cat.id, x: lx, y: ly,
+            r: LEAF_R * 0.95, depth: 3 + ji, hot: !!(leafJob.alert && leafJob.alert.hot),
+            chain: gi, morphKey: `${cat.id}:c${gi}:j${ji + 1}:L${li}`, groupId, sideLeaf: true,
           });
           links.push({
-            s: prevId, t: id, color: cat.color, depth: 2 + ji, chain: gi * 10 + ci,
+            s: id, t: lid, color: cat.color, depth: 3 + ji, chain: gi,
             straight: true,
-            morphKey: `${cat.id}:L:c${gi}_${ci}:j${ji + 1}`, x0: px, y0: py, x1: x, y1: y,
+            morphKey: `${cat.id}:L:c${gi}:j${ji + 1}:L${li}`,
+            x0: x, y0: y, x1: lx, y1: ly,
           });
-          px = x; py = y; prevId = id;
-        });
+        }
+        px = x; py = y; prevId = id;
       }
     });
 
     rebuildParentIndex(links);
 
     if (setCamera) {
-      targetZoom = clampZFan(DIVE_ZOOM_TARGET);
-      tCamX = 0;
-      // Frame the upward fan; base rings near bottom third
-      tCamY = maxR * 0.22;
+      // Frame entire fan inside usable rect with margin (no tips off top edge)
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      nodes.forEach((n) => {
+        if (n.diveHub || n.hidden) return;
+        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+        minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+      });
+      const padW = 36 / DIVE_ZOOM_TARGET;
+      const padH = 40 / DIVE_ZOOM_TARGET;
+      const bw = Math.max(40, maxX - minX + padW * 2);
+      const bh = Math.max(40, maxY - minY + padH * 2);
+      const topPx = toolbarBottomPx() + 28;
+      const botPx = 36;
+      const availW = u.w - 24;
+      const availH = Math.max(200, H - topPx - botPx);
+      const kz = Math.min(availW / bw, availH / bh);
+      targetZoom = clampZFan(Math.min(DIVE_ZOOM_TARGET, Math.max(2.8, kz * 0.96)));
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      // Screen centre of usable band (below chrome)
+      const bandCy = topPx + availH * 0.52;
+      const uCy = u.cy;
+      tCamX = -cx;
+      // worldToScreen: sy = u.cy + (y + camY) * z  →  camY = (bandCy - u.cy)/z - cy
+      tCamY = (bandCy - uCy) / Math.max(targetZoom, 0.01) - cy;
     }
 
-    focusLayout = { nodes, links, color: cat.color, cat, maxR };
+    focusLayout = { nodes, links, color: cat.color, cat, maxR, diveFan: true };
     return focusLayout;
   }
 
@@ -806,25 +859,24 @@
       }
     });
 
-    // Links from interpolated node positions (chain order — reliable during morph)
+    // Links from dive TO layout (parent→child), endpoints from interpolated nodes
     const links = [];
-    const byChain = new Map();
-    nodes.forEach((n) => {
-      if (n.chain == null || n.chain < 0) return;
-      if (!byChain.has(n.chain)) byChain.set(n.chain, []);
-      byChain.get(n.chain).push(n);
-    });
-    const hub = nodes.find((n) => n.morphKey === `${morph.focusId}:hub`);
-    byChain.forEach((arr) => {
-      arr.sort((a, b) => (a.depth || 0) - (b.depth || 0));
-      let prev = hub;
-      arr.forEach((n) => {
-        if (!prev) return;
-        links.push({
-          s: prev.id, t: n.id, color: n.color, chain: n.chain, straight: true,
-          morphOp: 1, morphing: true, x0: prev.x, y0: prev.y, x1: n.x, y1: n.y,
-        });
-        prev = n;
+    const byMk = new Map(nodes.map((n) => [n.morphKey, n]));
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const toLinks = morph.to?.lmap ? [...morph.to.lmap.values()] : [];
+    toLinks.forEach((L) => {
+      if (L.otherDim) return;
+      // Resolve endpoints by morphKey first, then id
+      let a = null, b = null;
+      const tNode = morph.to.nmap && [...morph.to.nmap.values()].find((n) => n.id === L.t);
+      const sNode = morph.to.nmap && [...morph.to.nmap.values()].find((n) => n.id === L.s);
+      if (tNode) b = byMk.get(tNode.morphKey) || byId.get(tNode.id);
+      if (sNode) a = byMk.get(sNode.morphKey) || byId.get(sNode.id);
+      if (!a || !b) return;
+      links.push({
+        s: a.id, t: b.id, color: L.color || b.color, chain: L.chain, straight: true,
+        morphOp: 1, morphing: true, x0: a.x, y0: a.y, x1: b.x, y1: b.y,
+        morphKey: L.morphKey,
       });
     });
     // other-dept links (straight stubs between consecutive depths)
@@ -1030,7 +1082,21 @@
     ctx.restore();
   }
 
+  function coreDrawOpacity() {
+    // ref_sales: hub hidden in dive; also hide when deep-zoomed into a branch
+    if (focusCat || mapState === 'fan') return 0;
+    if (mapState === 'diving') return morph ? Math.max(0, 1 - morphProgress() * 1.4) : 0;
+    if (mapState === 'rising') return morph ? Math.min(1, morphProgress() * 1.2) : 1;
+    if (mapState === 'aligning') return 0.35;
+    if (zoom >= LOD_GROUP_IN) {
+      return Math.max(0, 1 - lodAlpha(zoom, LOD_GROUP_IN, LOD_GROUP_FULL));
+    }
+    return 1;
+  }
+
   function drawCore(t) {
+    const coreOp = coreDrawOpacity();
+    if (coreOp < 0.02) return;
     const p = focusCat
       ? worldToScreen(0, -110)
       : worldToScreen(0, 0);
@@ -1040,6 +1106,8 @@
     const coreR = focusCat ? 48 : (overviewGeom.rCore || Math.min(W, H) * 0.054);
     const scale = focusCat ? 1.1 : Math.max(0.85, Math.min(1.35, zoom));
     const colors = CATS.map((c) => c.color);
+    ctx.save();
+    ctx.globalAlpha = coreOp;
 
     // Build organic hub graph once (skilltree buildSky hub)
     if (!coreDust.length || coreDust._gen !== 18) {
@@ -1155,7 +1223,10 @@
     ctx.letterSpacing = '0.3em';
     ctx.fillText('leet', p.x + driftX, p.y + driftY + coreR * 0.72 * scale);
     ctx.letterSpacing = '0px';
-    hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 32 * scale, vr: 32 * scale });
+    if (coreOp > 0.15) {
+      hitNodes.push({ id: '__core__', kind: 'core', x: p.x, y: p.y, r: 32 * scale, vr: 32 * scale });
+    }
+    ctx.restore();
   }
 
   function curvePts(x0, y0, x1, y1) {
@@ -1239,8 +1310,17 @@
     // links
     links.forEach((L) => {
       if (L.virtual) return; // overview core gap stays empty
-      const s = L.s === '__core__' ? { x: 0, y: 0, catId: null } : (nodeMap.get(L.s) || nodeById(L.s) || (L.x0 != null ? { x: L.x0, y: L.y0 } : null));
-      const tN = nodeMap.get(L.t) || nodeById(L.t) || (L.x1 != null ? { x: L.x1, y: L.y1, catId: L.catId, color: L.color } : null);
+      // Prefer explicit endpoints (dive trunks) so hidden hub at origin doesn't stretch edges
+      let s = L.s === '__core__' ? { x: 0, y: 0, catId: null } : null;
+      if (!s && L.x0 != null && (focusCat || mapState === 'fan' || mapState === 'diving')) {
+        s = { x: L.x0, y: L.y0, catId: L.catId };
+      }
+      if (!s) s = nodeMap.get(L.s) || nodeById(L.s) || (L.x0 != null ? { x: L.x0, y: L.y0 } : null);
+      let tN = null;
+      if (L.x1 != null && (focusCat || mapState === 'fan' || mapState === 'diving') && !nodeMap.has(L.t)) {
+        tN = { x: L.x1, y: L.y1, catId: L.catId, color: L.color };
+      }
+      if (!tN) tN = nodeMap.get(L.t) || nodeById(L.t) || (L.x1 != null ? { x: L.x1, y: L.y1, catId: L.catId, color: L.color } : null);
       if (!s || !tN) return;
       if (focusCat && L.s !== '__core__' && !nodeMap.has(L.s) && L.s !== focusCat && L.x0 == null) return;
       const catId = tN.catId || s.catId;
@@ -1467,14 +1547,17 @@
         const gi = typeof n.groupIndex === 'number' ? n.groupIndex : 0;
         let gx, gy;
         if (n.baseRow || inFan) {
-          // Three rings in a row — label centered under each ring (no stack)
+          // Under each ring — clear of upward chain (never on the spoke)
           gx = px;
-          gy = py + Math.max(r + 18, 28);
+          gy = py + Math.max(r + 34, 48);
         } else {
-          const off = [{ dx: -56, dy: -14 }, { dx: 72, dy: -18 }, { dx: 40, dy: 16 }];
-          const o = off[Math.min(gi, off.length - 1)] || { dx: 24, dy: -10 };
-          gx = px + o.dx;
-          gy = py + o.dy;
+          // Prefer tangential offsets so labels sit off the radial spoke
+          const ang = Math.atan2(n.x, -n.y);
+          const side = (gi % 2 ? 1 : -1);
+          const tx = Math.cos(ang) * 54 * side;
+          const ty = Math.sin(ang) * 54 * side;
+          gx = px + tx;
+          gy = py + ty - 6;
         }
         wantedGroupLabels.set(n.id, {
           text: n.groupLabel || n.label,
@@ -1500,8 +1583,45 @@
       }
     });
 
+    // Screen-space edges for label↔line collision (r20)
+    const edgeSegs = [];
+    links.forEach((L) => {
+      if (L.virtual || L.otherDim) return;
+      const sN = nodeMap.get(L.s) || (L.x0 != null ? { x: L.x0, y: L.y0 } : null);
+      const tN = nodeMap.get(L.t) || (L.x1 != null ? { x: L.x1, y: L.y1 } : null);
+      if (!sN || !tN) return;
+      if (sN.hidden || tN.hidden) return;
+      const a0 = worldToScreen(sN.x, sN.y);
+      const a1 = worldToScreen(tN.x, tN.y);
+      edgeSegs.push({ x0: a0.x, y0: a0.y, x1: a1.x, y1: a1.y });
+    });
+    function segHitsBox(seg, box, pad = 3) {
+      const minX = box.x - pad, maxX = box.x + box.w + pad;
+      const minY = box.y - pad, maxY = box.y + box.h + pad;
+      // Either endpoint inside, or segment crosses any edge of the AABB
+      const inBox = (x, y) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+      if (inBox(seg.x0, seg.y0) || inBox(seg.x1, seg.y1)) return true;
+      const edges = [
+        [minX, minY, maxX, minY], [maxX, minY, maxX, maxY],
+        [maxX, maxY, minX, maxY], [minX, maxY, minX, minY],
+      ];
+      for (let i = 0; i < edges.length; i++) {
+        const e = edges[i];
+        if (segIntersect(seg.x0, seg.y0, seg.x1, seg.y1, e[0], e[1], e[2], e[3])) return true;
+      }
+      return false;
+    }
+    function labelChromeFade(y, h) {
+      // Labels under top bar/search: fine to clip, but fade out (r20)
+      const top = toolbarBottomPx();
+      const mid = y + h * 0.5;
+      if (mid >= top + 6) return 1;
+      if (mid <= top - 28) return 0;
+      return Math.max(0, Math.min(1, (mid - (top - 28)) / 34));
+    }
+
     /**
-     * Place a DOM label with AABB cull. Groups (priority≥2) win over nodes;
+     * Place a DOM label with AABB + edge cull. Groups (priority≥2) win over nodes;
      * groups/nodes may 2D-offset; mustShow groups keep searching farther.
      */
     function placeLabel(want, makeEl, opts = {}) {
@@ -1513,27 +1633,34 @@
       const pad = priority >= 2 ? 12 : 14; // r18: wider cull so text never stacks
       const w = Math.max(28, (want.text || '').length * charW);
       const h = priority >= 2 ? 16 : 14;
-      const minY = toolbarBottomPx() + 8;
+      // Allow placing slightly under chrome (fade handles visibility)
+      const minY = 4;
       const deltas = tryOffset
         ? [
           [0, 0], [18, -6], [-18, -6], [0, -16], [0, 16],
           [28, 0], [-28, 0], [22, -18], [-22, -18], [0, -30],
           [36, -10], [-36, -10], [14, 22], [-14, 22], [0, 32],
+          [0, 40], [44, 12], [-44, 12], [20, 28], [-20, 28],
         ]
         : [[0, 0]];
-      for (let oi = 0; oi < deltas.length; oi++) {
-        const [dx, dy] = deltas[oi];
+      const tryPlace = (dx, dy) => {
         const x = want.x + dx;
         const y = want.y + dy;
-        const box = { x: x - w / 2, y, w, h, priority };
-        if (box.x < 4 || box.x + box.w > W - 4 || box.y < minY || box.y > H - 12) continue;
-        let clash = false;
+        // group-label CSS is translate(-50%,-50%); node-label is translate(-50%, 10px)
+        const box = priority >= 2
+          ? { x: x - w / 2, y: y - h / 2, w, h, priority }
+          : { x: x - w / 2, y: y + 8, w, h, priority };
+        if (box.x < 4 || box.x + box.w > W - 4 || box.y < minY || box.y > H - 12) return null;
+        const chrome = labelChromeFade(box.y, h);
+        if (chrome < 0.04) return null;
         for (let i = 0; i < placedBoxes.length; i++) {
           const other = placedBoxes[i];
           if (!labelBoxesOverlap(box, other, pad)) continue;
-          if (priority <= (other.priority || 0)) { clash = true; break; }
+          if (priority <= (other.priority || 0)) return null;
         }
-        if (clash) continue;
+        for (let i = 0; i < edgeSegs.length; i++) {
+          if (segHitsBox(edgeSegs[i], box, priority >= 2 ? 6 : 3)) return null;
+        }
         placedBoxes.push(box);
         const el = makeEl();
         clearTimeout(el._hideT);
@@ -1542,39 +1669,27 @@
         el.style.visibility = 'visible';
         el.classList.add('is-on');
         const lid = el.dataset.id || want.text;
-        el._opTarget = want.opacity;
+        const op = want.opacity * chrome;
+        el._opTarget = op;
         if (!labelOpSmooth.has(lid)) labelOpSmooth.set(lid, 0);
         el.style.opacity = String(labelOpSmooth.get(lid));
         return el;
+      };
+      for (let oi = 0; oi < deltas.length; oi++) {
+        const el = tryPlace(deltas[oi][0], deltas[oi][1]);
+        if (el) return el;
       }
-      // Last resort for required group labels: keep searching wider offsets (no overlap)
+      // Last resort for required group labels: wider offsets — still never on an edge
       if (mustShow) {
         const extra = [
           [55, -8], [-55, -8], [48, -28], [-48, -28], [70, 0], [-70, 0],
           [40, 24], [-40, 24], [0, -44], [60, -20], [-60, -20],
+          [0, 48], [80, 16], [-80, 16], [30, 36], [-30, 36],
+          [0, 56], [0, 68], [50, 44], [-50, 44], [90, 8], [-90, 8],
         ];
         for (let ei = 0; ei < extra.length; ei++) {
-          const [dx, dy] = extra[ei];
-          const x = want.x + dx;
-          const y = Math.max(minY + 4, want.y + dy);
-          const box = { x: x - w / 2, y, w, h, priority };
-          if (box.x < 4 || box.x + box.w > W - 4 || box.y > H - 12) continue;
-          let clash = false;
-          for (let i = 0; i < placedBoxes.length; i++) {
-            if (labelBoxesOverlap(box, placedBoxes[i], pad)) { clash = true; break; }
-          }
-          if (clash) continue;
-          placedBoxes.push(box);
-          const el = makeEl();
-          el.style.left = `${x}px`;
-          el.style.top = `${y}px`;
-          el._opTarget = want.opacity;
-          el.style.visibility = 'visible';
-          el.classList.add('is-on');
-          const lid2 = el.dataset.id || want.text;
-          if (!labelOpSmooth.has(lid2)) labelOpSmooth.set(lid2, 0);
-          el.style.opacity = String(labelOpSmooth.get(lid2));
-          return el;
+          const el = tryPlace(extra[ei][0], extra[ei][1]);
+          if (el) return el;
         }
       }
       return null;
@@ -1656,7 +1771,12 @@
       // Keep title block ≥40px below toolbar/toggle
       const minTitleCy = toolbarBottomPx() + 40 + 18;
       const ly = Math.max(minTitleCy, Math.min(H - 8, p.y));
-      const op = catOpacity(cat.id) * catLod;
+      const topChrome = toolbarBottomPx();
+      let chromeFade = 1;
+      if (ly < topChrome + 6) {
+        chromeFade = ly <= topChrome - 28 ? 0 : Math.max(0, Math.min(1, (ly - (topChrome - 28)) / 34));
+      }
+      const op = catOpacity(cat.id) * catLod * chromeFade;
       if (op < 0.04 || ly > H - 8) { hideDomLabel(el); return; }
       const w = Math.max(40, cat.label.length * 9);
       const box = { x: lx - w / 2, y: ly - 18, w, h: 36 };
@@ -2766,6 +2886,76 @@
     return ua > 0.02 && ua < 0.98 && ub > 0.02 && ub < 0.98;
   }
 
+  /** r20: dive geometry integrity — no cross-chain intersects, every node edged, in-viewport. */
+  function diveIntegrity(marginPx = 28) {
+    if (!focusLayout || !focusCat || (mapState !== 'fan' && mapState !== 'diving')) {
+      return { ok: false, reason: 'not-in-dive', crossChainHits: -1, orphans: [], offscreen: [] };
+    }
+    const nodes = focusLayout.nodes.filter((n) => !n.diveHub && !n.hidden && n.kind !== 'stub');
+    const links = focusLayout.links.filter((L) => !L.virtual);
+    const byId = new Map(focusLayout.nodes.map((n) => [n.id, n]));
+    const linked = new Set();
+    const segs = [];
+    links.forEach((L) => {
+      const a = (L.x0 != null) ? { x: L.x0, y: L.y0, chain: L.chain } : byId.get(L.s);
+      const b = (L.x1 != null && L.t && byId.get(L.t)) ? byId.get(L.t)
+        : (L.x1 != null ? { x: L.x1, y: L.y1, chain: L.chain } : byId.get(L.t));
+      const aN = a || byId.get(L.s);
+      const bN = b || byId.get(L.t);
+      if (!aN || !bN) return;
+      if (aN.diveHub || aN.hidden) {
+        // trunk: use explicit start if present
+        if (L.x0 == null) return;
+        segs.push({
+          x0: L.x0, y0: L.y0, x1: bN.x, y1: bN.y, chain: L.chain, s: L.s, t: L.t,
+        });
+        linked.add(L.t);
+        return;
+      }
+      linked.add(L.s);
+      linked.add(L.t);
+      segs.push({
+        x0: aN.x, y0: aN.y, x1: bN.x, y1: bN.y, chain: L.chain, s: L.s, t: L.t,
+      });
+    });
+    const orphans = nodes.filter((n) => !linked.has(n.id)).map((n) => n.id);
+    let crossChainHits = 0;
+    const crossSamples = [];
+    for (let i = 0; i < segs.length; i++) {
+      for (let j = i + 1; j < segs.length; j++) {
+        const A = segs[i], B = segs[j];
+        if (A.chain == null || B.chain == null || A.chain === B.chain) continue;
+        if (segmentsIntersect(A.x0, A.y0, A.x1, A.y1, B.x0, B.y0, B.x1, B.y1)) {
+          crossChainHits += 1;
+          if (crossSamples.length < 8) {
+            crossSamples.push({ a: [A.s, A.t], b: [B.s, B.t], chains: [A.chain, B.chain] });
+          }
+        }
+      }
+    }
+    const top = toolbarBottomPx() + marginPx;
+    const offscreen = [];
+    nodes.forEach((n) => {
+      const p = worldToScreen(n.x, n.y);
+      if (p.x < marginPx || p.x > W - marginPx || p.y < top || p.y > H - marginPx) {
+        offscreen.push({ id: n.id, x: Math.round(p.x), y: Math.round(p.y) });
+      }
+    });
+    const coreOp = coreDrawOpacity();
+    return {
+      ok: orphans.length === 0 && crossChainHits === 0 && offscreen.length === 0 && coreOp < 0.05,
+      orphans,
+      crossChainHits,
+      crossSamples,
+      offscreen,
+      nodeCount: nodes.length,
+      linkCount: links.length,
+      coreOpacity: coreOp,
+      zoom,
+      maxR: focusLayout.maxR,
+    };
+  }
+
   window.LEET_ALERTS_MAP = {
     snapshot: () => JSON.parse(JSON.stringify(SNAP)),
     getCounters: () => ({ ...SNAP.counters }),
@@ -2789,6 +2979,7 @@
       dialCoast: true, cameraSettle: true, denseGroupForks: true,
       aliveMotion: true, pathParticles: true, organicCore: true, labelFade: true,
       solidLeafDots: true, straightLinks: true, sparseOverview: true, idleRotate: true,
+      diveSectorFan: true, coreHiddenInDive: true, labelEdgeCollision: true, chromeLabelFade: true,
       IDLE_ROT_DEG_PER_S, LEAF_R, LEAF_HOT_R, GROUP_DOT_R, RISE_MS,
       particleCount: () => flowParticles.length,
     }),
@@ -2920,6 +3111,10 @@
       const sec = sectorLocal.find((s) => s.cat.id === catId);
       return sec ? sec.spokeCount : 0;
     },
+    diveIntegrity: (marginPx) => diveIntegrity(marginPx),
+    coreDrawOpacity: () => coreDrawOpacity(),
+    focusNodeCount: () => (focusLayout ? focusLayout.nodes.filter((n) => !n.hidden && !n.diveHub).length : 0),
+    focusLinkCount: () => (focusLayout ? focusLayout.links.length : 0),
     /** Per-category uniqueness of site·machine node labels in the overview. */
     nodeLabelsUniquePerCategory: () => {
       const byCat = new Map();
